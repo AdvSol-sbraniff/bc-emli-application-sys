@@ -1,0 +1,120 @@
+User record 1 (ground truth)
+DI schema Definition:
+
+Supported document fields
+Field	Type	Description	Example
+CustomerName	string	Customer being invoiced	Microsoft Corp
+CustomerId	string	Reference ID for the customer	CID-12345
+PurchaseOrder	string	A purchase order reference number	PO-3333
+InvoiceId	string	ID for this specific invoice (often 'Invoice Number')	INV-100
+InvoiceDate	date	Date the invoice was issued	11/15/2019
+DueDate	date	Date payment for this invoice is due	12/15/2019
+VendorName	string	Vendor who has created this invoice	CONTOSO LTD.
+VendorAddress	address	Mailing address for the Vendor	123 456th St, New York, NY 10001
+VendorAddressRecipient	string	Name associated with the VendorAddress	Contoso Headquarters
+CustomerAddress	address	Mailing address for the Customer	123 Other St, Redmond WA, 98052
+CustomerAddressRecipient	string	Name associated with the CustomerAddress	Microsoft Corp
+BillingAddress	address	Explicit billing address for the customer	123 Bill St, Redmond WA, 98052
+BillingAddressRecipient	string	Name associated with the BillingAddress	Microsoft Services
+ShippingAddress	address	Explicit shipping address for the customer	123 Ship St, Redmond WA, 98052
+ShippingAddressRecipient	string	Name associated with the ShippingAddress	Microsoft Delivery
+SubTotal	currency	Subtotal field identified on this invoice	$100.00
+TotalDiscount	currency	Total discount field identified on this invoice	$5.00
+TotalTax	currency	Total tax field identified on this invoice	$10.00
+InvoiceTotal	currency	Total new charges associated with this invoice	$110.00
+AmountDue	currency	Total Amount Due to the vendor	$610.00
+PreviousUnpaidBalance	currency	Explicit previously unpaid balance	$500.00
+RemittanceAddress	address	Explicit remittance or payment address for the customer	123 Remit St New York, NY, 10001
+RemittanceAddressRecipient	string	Name associated with the RemittanceAddress	Contoso Billing
+ServiceAddress	address	Explicit service address or property address for the customer	123 Service St, Redmond WA, 98052
+ServiceAddressRecipient	string	Name associated with the ServiceAddress	Microsoft Services
+ServiceStartDate	date	First date for the service period (for example, a utility bill service period)	10/14/2019
+ServiceEndDate	date	End date for the service period (for example, a utility bill service period)	11/14/2019
+VendorTaxId	string	The government ID number associated with the vendor	123456-7
+CustomerTaxId	string	The government ID number associated with the customer	765432-1
+PaymentTerm	string	The terms under which the payment is meant to be paid	Net90
+KVKNumber	string	A unique identifier for businesses registered in the Netherlands	12345678
+PaymentDetails	array	List of payment details	
+PaymentDetails.*	object	A single payment detail	
+PaymentDetails.*.IBAN	string	International bank account number	DE 94 700 700 100 029 49 00 00
+PaymentDetails.*.SWIFT	string	ISO9362, an international standard for Business Identifier Codes (BIC)	DEUTDEMMXXX
+PaymentDetails.*.BankAccountNumber	string	Bank account number, a unique identifier for a bank account	123456
+PaymentDetails.*.BPayBillerCode	string	Biller code for BPay, an alphanumeric identifier unique to a biller or their product/service	123456
+PaymentDetails.*.BPayReference	string	Reference number for BPay, a unique identifier for a specific customer's bill transaction	1234567
+TaxDetails	array	List of tax details	
+TaxDetails.*	object	A single tax detail	
+TaxDetails.*.Amount	currency	The amount of the tax detail	29,520.00
+TaxDetails.*.Rate	string	The rate of the tax detail	18 %
+PaidInFourInstallements	array	List of tax details	
+PaidInFourInstallements.*	object	A single tax detail	
+PaidInFourInstallements.*.Amount	currency	The installement amount due	29,520.00
+PaidInFourInstallements.*.DueDate	date	The installement due date	2024/01/01
+Items	array	List of line items	
+Items.*	object	A single line item	3/4/2021
+A123
+Consulting Services
+2 hours
+$30.00
+10%
+$60.00
+Items.*.Amount	currency	The amount of the line item	$60.00
+Items.*.Date	date	Date corresponding to each line item. Often it is a date the line item was shipped	3/4/2021
+Items.*.Description	string	The text description for the invoice line item	Consulting service
+Items.*.Quantity	number	The quantity for this invoice line item	2
+Items.*.ProductCode	string	Product code, product number, or SKU associated with the specific line item	A123
+Items.*.Tax	currency	Tax associated with each line item. Possible values include tax amount, tax %, and tax Y/N	$6.00
+Items.*.TaxRate	string	Tax rate associated with each line item	18 %
+Items.*.Unit	string	The unit of the line item, e.g, kg, lb etc.	hours
+Items.*.UnitPrice	currency	The net or gross price (depending on the gross invoice setting of the invoice) of one unit of this item	$30.00
+
+
+Official Rebate calculation:
+
+step 1: For each line in the invoice do these steps: 
+1) full_unit_subtotal = hardware price per Unit + labour price per unit
+Note: labour price per unit is often calculated as labour-total / quantity-of-units
+2) full_unit_after_tax_Subtotal = full_unit_subtotal * 1.05
+3) rebate_percentage set as either 95 or 60 depending on ESP1 or ESP2 
+4) rebate_subtotal = full_unit_after_tax_Subtotal * rebate_percentage
+5) rebate_per_line = rebate_subtotal * quantity of units
+6) rebate_per_line is capped at 950 per window or door 
+
+Step 2: 
+1) invoice_total_rebate_temp = Now sum all the rebate_per_line for the invoice
+2) capped_invoice_total_rebate = the invoice total rebate at 9500 (this is a per home cap)
+
+Official Customer portion calculation:
+
+afterrebate_invoicecost = total_invoice_cost - capped_invoice_total_rebate
+customer_portion = afterrebate_invoicecost – customer_deposit
+if positive then the homeowner / customer still owes the contractor
+If negative then the contractor owes the customer
+
+Location tasks:
+1 [field_key: contractor_gst_number] Locate contractor GST number within the invoice.
+2 [field_key: eligibility_code] Locate the eligibility code (starts with ESP1/ESP2/ESP3). Return a single value if present.
+3 [field_key: nrcan_number] Locate NRCan ENERGY STAR fenestration registration number (pattern like NR####-######-ES#) if present and singular.
+4 [field_key: cpd_number] Locate CPD (NFRC Certified Products Directory) identifier. looks like something-something-number. Locate if present and singular
+5 [field_key: product_brand_model] Locate brand and model of the windows/doors if present. Return a record of {brand, model, description} (empty allowed).
+6 [field_key: metric_u_factor] Locate the metric U-factor (numeric, metric) on the invoice if present.
+7 [field_key: customer_deposit] Locate the customer deposit (single amount) if present
+8 [field_key: labour_cost_total] Locate the total invoice labour cost (single amount) if present or derivable.
+9 [field_key: labour_cost_breakdown] Locate labour breakdown per line item/per unit (array). Each entry includes {description, qty, labour_total, labour_per_unit} (empty array allowed).
+
+Rulecheck tasks:
+
+1: Official guidance is that the vendor name on the invoice paper must match the expected name in our ESP database. So, check that di_ocr_vendor_name and di_ocr_vendor_address fuzzy match contractors.business_name and contractors.address.
+
+2: Official guidance is that the customer name on the invoice paper must match the expected name in our ESP database. So, check that di_ocr_customer_name and di_ocr_billing_address fuzzy match users.participant_name and users.participant_address
+
+3: official guidance is that "The rebate application and supporting documentation must be submitted by the Registered Contractor within six (6) months of the invoice date." So, check that sessions.submitted_at <= di_ocr_invoice_date + 6 months
+
+4: official guidance is that "Eligibility codes for applications received on or after June 18, 2024, are valid for upgrades completed within 6 months of the participants approval date." So, check that di_ocr_invoice_date <= users_eligibilitycodes.approved_at + 6 months
+
+5: A sufficiently detailed description of the work performed must be included in the invoice I order for the admins to validate a rebate. Locate the description in the DI JSON (using either the result.content or the first class fields from DI as you see fit) and check it is sufficiently detailed.
+
+6: Check that the rebate calculation on the invoice matches the official-rebate-calculation.
+
+7: Check that the customer-portion-calculation on the invoice matches the official-customer-portion-calculation 
+
+
