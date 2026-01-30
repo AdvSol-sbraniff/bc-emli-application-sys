@@ -54,6 +54,12 @@ Rails.application.routes.draw do
         to: "permit_type_submission_contacts#confirm",
         as: :permit_type_submission_contact_confirmation
 
+
+    #sbra20260129 add the api-route for the new invoice subsystem (will be tons)
+    resources :invoice_versions, only: %i[show]
+
+    #end sbra
+
     resources :requirement_blocks, only: %i[create show update destroy] do
       post "restore", on: :member, to: "requirement_blocks#restore"
       post "search", on: :collection, to: "requirement_blocks#index"

@@ -28,6 +28,11 @@ import { ContractorUnsuspendConfirmedScreen } from '../energy-savings-applicatio
 import { ContractorRemoveConfirmedScreen } from '../energy-savings-application/successful-action-screens';
 import { trackPageViewEvent } from '../../../utils/snowplow';
 
+
+const InvoiceVersionShowScreen = lazy(() =>
+  import('../invoice-versions').then((module) => ({ default: module.InvoiceVersionShowScreen })),
+);
+
 const ExternalApiKeysIndexScreen = lazy(() =>
   import('../external-api-key').then((module) => ({ default: module.ExternalApiKeysIndexScreen })),
 );
@@ -662,12 +667,15 @@ const AppRoutes = observer(() => {
           <Route path="/sys-admin" element={<AdminPortalLogin isSysAdmin />} />
         </Route>
         {/* Public Routes */}
+
         <Route path="/rejection-reason/:permitApplicationId" element={<RejectApplicationScreen />} />
         <Route path="/programs/:programId/accept-invitation" element={<AcceptInvitationScreen />} />
         {/* <Route path="/accept-invitation" element={<AcceptInvitationScreen />} /> */}
 
         <Route path="/contact" element={<ContactScreen />} />
         <Route path="/confirmed" element={<EmailConfirmedScreen />} />
+        <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
+
         <Route path="/welcome" element={<LandingScreen />} />
         <Route path="/welcome/contractor" element={<ContractorLandingScreen />} />
         <Route path="/terms" element={<EULAScreen withClose />} />
