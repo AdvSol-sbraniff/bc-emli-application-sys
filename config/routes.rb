@@ -55,10 +55,14 @@ Rails.application.routes.draw do
         as: :permit_type_submission_contact_confirmation
 
 
-    #sbra20260129 add the api-route for the new invoice subsystem (will be tons)
-    resources :invoice_versions, only: %i[show]
+#sbra20260130 add the api-route for the new claims subsystem
+  # Nav bar list for a session (current CIV projection)
+  get "sessions/:session_id/current_invoices", to: "invoice_versions#current_invoices"
 
-    #end sbra
+  # Read-screen payload for one invoice (current invoice_version + header fields + lineitems + pdf pointer)
+  get "sessions/:session_id/invoices/:invoice_id/read", to: "invoice_versions#read"
+#end sbra
+
 
     resources :requirement_blocks, only: %i[create show update destroy] do
       post "restore", on: :member, to: "requirement_blocks#restore"

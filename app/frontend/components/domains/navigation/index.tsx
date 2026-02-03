@@ -29,9 +29,11 @@ import { ContractorRemoveConfirmedScreen } from '../energy-savings-application/s
 import { trackPageViewEvent } from '../../../utils/snowplow';
 
 
+// sbra20260130 addijng url-routes for the claims subsytem (aka new the genai subsystem)
 const InvoiceVersionShowScreen = lazy(() =>
   import('../invoice-versions').then((module) => ({ default: module.InvoiceVersionShowScreen })),
 );
+// end sbra20260130
 
 const ExternalApiKeysIndexScreen = lazy(() =>
   import('../external-api-key').then((module) => ({ default: module.ExternalApiKeysIndexScreen })),
@@ -674,7 +676,12 @@ const AppRoutes = observer(() => {
 
         <Route path="/contact" element={<ContactScreen />} />
         <Route path="/confirmed" element={<EmailConfirmedScreen />} />
+
+        {/* sbra20260130 claims subsytem route info */}
         <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
+        <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
+        {/* end sbra20260130 */}
+
 
         <Route path="/welcome" element={<LandingScreen />} />
         <Route path="/welcome/contractor" element={<ContractorLandingScreen />} />
