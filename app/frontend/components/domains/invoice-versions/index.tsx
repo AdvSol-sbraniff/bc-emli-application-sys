@@ -1,7 +1,14 @@
 import { Box, Button, Heading, Text } from '@chakra-ui/react';
 import React, { useEffect, useState } from 'react';
-
 import { useNavigate, useParams } from 'react-router-dom';
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
 
 export const InvoiceVersionShowScreen = () => {
 
@@ -24,6 +31,7 @@ export const InvoiceVersionShowScreen = () => {
 const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
 const [readData, setReadData] = useState<any>(null);
 const [readError, setReadError] = useState<string | null>(null);
+const [numPages, setNumPages] = useState<number>(0);
 
 
 useEffect(() => {
@@ -162,8 +170,6 @@ navigate(`/sessions/${sessionId}/invoices/${invoiceIds[idx + 1]}/read`);
     - Right-side PDF stays in the flex="1" box
     ============================ */}
 
-
-{/* LEFT PANEL */}
 <Box
   width="360px"
   borderWidth="1px"
@@ -186,17 +192,23 @@ navigate(`/sessions/${sessionId}/invoices/${invoiceIds[idx + 1]}/read`);
 </Box>
 
 
+{/* ============================
+    SECTION 6B — RIGHT PANEL the pdf
+    ============================ */}
 
-          {/* PDF panel */}
-          <Box flex="1" minH={0} borderWidth="1px" borderRadius="md" overflow="hidden">
-            <iframe
-              title="Invoice PDF"
-              src="https://stsbraniffvi128678601575.blob.core.windows.net/inv-pdfs-dev/sessions/1/pdfs/2/original.PDF?sp=r&st=2026-01-09T18:09:08Z&se=2026-04-01T01:24:08Z&spr=https&sv=2024-11-04&sr=b&sig=As6UnrCq86KEHqJHuFYJQfqUaOGyck4XrMvKk1u8yUw%3D"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-            />
-          </Box>
+<Box flex="1" minH={0} borderWidth="1px" borderRadius="md" overflow="auto">
+  <Document
+    file="https://stsbraniffvi128678601575.blob.core.windows.net/inv-pdfs-dev/sessions/1/pdfs/2/original.PDF?sp=r&st=2026-01-09T18:09:08Z&se=2026-04-01T01:24:08Z&spr=https&sv=2024-11-04&sr=b&sig=As6UnrCq86KEHqJHuFYJQfqUaOGyck4XrMvKk1u8yUw%3D"
+    onLoadSuccess={({ numPages }) => console.log("PDF loaded, pages:", numPages)}
+    onLoadError={(err) => console.error("PDF load error:", err)}
+  >
+    <Page pageNumber={1} />
+  </Document>
+</Box>
+
+
+
+
         </Box>
       </Box>
     </Box>
