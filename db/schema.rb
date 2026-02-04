@@ -11,7 +11,7 @@
 # It's strongly recommended that you check this file into your version control system.
 
 ActiveRecord::Schema[7.1].define(version: 2026_01_22_175531) do
-  create_schema "invoice"
+  create_schema "claims"
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
