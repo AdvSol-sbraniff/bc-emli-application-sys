@@ -55,13 +55,29 @@ Rails.application.routes.draw do
         as: :permit_type_submission_contact_confirmation
 
 
-#sbra20260130 add the api-route for the new claims subsystem
-  # Nav bar list for a session (current CIV projection)
-  get "sessions/:session_id/current_invoices", to: "invoice_versions#current_invoices"
+# sbra20260130 claims subsystem (stable bookmark = invoice_id)
+scope module: :claims, path: "claims" do
 
-  # Read-screen payload for one invoice (current invoice_version + header fields + lineitems + pdf pointer)
-  get "sessions/:session_id/invoices/:invoice_id/read", to: "invoice_versions#read"
-#end sbra
+# Nav bar list for a session (returns invoice_ids in display order)
+get "sessions/:session_id/current_invoices", to: "invoice_versions#current_invoices"
+
+# Read-screen payload for one invoice (resolves to *current* invoice_version)
+get "sessions/:session_id/invoices/:invoice_id/read", to: "invoice_versions#read"
+
+# GenAI located fields for the *current* invoice_version of an invoice
+get "sessions/:session_id/invoices/:invoice_id/read_genai", to: "invoice_versions#read_genai"
+
+# route for the endpoint that will be used in the AI Admin POC to test out GenAI functionality on the invoice data;
+# these routes will be used in both the admin screen and also in the other enduser screens
+post "sessions", to: "sessions#create"
+
+# New upload button (POST PDFs for an existing session_id)
+post "sessions/:session_id/upload", to: "ingest#upload"
+
+
+end
+# end sbra
+
 
 
     resources :requirement_blocks, only: %i[create show update destroy] do

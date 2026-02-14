@@ -1,0 +1,11 @@
+# app/models/claims/invoice.rb
+module Claims
+  class Invoice < ApplicationRecord
+    self.table_name = "claims.invoices"
+
+    has_many :invoice_versions,
+             class_name: "Claims::InvoiceVersion",
+             foreign_key: :invoice_id,
+             dependent: :destroy
+  end
+end
