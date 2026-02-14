@@ -33,6 +33,9 @@ import { trackPageViewEvent } from '../../../utils/snowplow';
 const InvoiceVersionShowScreen = lazy(() =>
   import('../invoice-versions').then((module) => ({ default: module.InvoiceVersionShowScreen })),
 );
+const AIAdminScreen = lazy(() =>
+  import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })),
+);
 // end sbra20260130
 
 const ExternalApiKeysIndexScreen = lazy(() =>
@@ -680,6 +683,7 @@ const AppRoutes = observer(() => {
         {/* sbra20260130 claims subsytem route info */}
         <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
         <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
+        <Route path="/ai-admin" element={<AIAdminScreen />} />       
         {/* end sbra20260130 */}
 
 

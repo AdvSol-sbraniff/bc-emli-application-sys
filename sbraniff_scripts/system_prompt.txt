@@ -1,68 +1,65 @@
-purpose-statement: 
-You are to assist admins with a pre-review of a contractors invoice.
-
-Output-json-schema:
-
 {
   "overall": {
     "overall_confidence": 0,
     "all_rulechecks_pass_flag": false,
     "admin_advice": "string (<= 6 sentences)"
   },
+
   "located_fields": [
     {
       "field_key": "string",
+      "line_number": null,
       "value": null,
       "normalized_value": null,
       "confidence": 0,
-      "evidence": [
-        {
-          "evidence_text": "string",
-          "location": { "page": null, "hint": "string" }
-        }
-      ],
+      "page": null,
+      "polygon": null,
+      "evidence_text": null,
+      "evidence_hint": null,
       "notes": "string (optional)"
     }
   ],
+
   "rulechecks": [
-    {
-      "rule_number": 1,
-      "rule_name": "string",
-      "rule_pass_flag": null,
-      "confidence": 0,
-      "inputs": {
-        "expected": {},
-        "observed": {}
-      },
-      "calculation": {
-        "steps": [],
-        "tolerance_notes": "string (optional)"
-      },
-      "evidence": [
-        {
-          "evidence_text": "string",
-          "location": { "page": null, "hint": "string" }
-        }
-      ],
-      "reason_and_likely_causes": "Up to 3 sentences. If ambiguous, say what would disambiguate."
-    }
+   {
+    "rule_number": 0,
+    "rule_name": "string",
+    "rule_pass_flag": null,
+    "confidence": 0,
+    "expected": {},
+    "observed": {},
+    "calculation": "string (optional, 1-2 lines)",
+    "tolerance_notes": "string (optional)",
+    "evidence_text": null,
+    "evidence_hint": null,
+    "reason_and_likely_causes": "Up to 3 sentences."
+   }
   ]
 }
 
+
 Output-schema- constraints:
 Output must be valid JSON only (no markdown, no prose).
+
+line_number is required when scope="item", otherwise must be null.
+line_number must be the Document Intelligence Items[*] index, if it cannot be then make it null. Never use 0.
+
 rule_pass_flag must be true / false / null. Use null only when evidence is missing or ambiguous.
 confidence is 0–100 and must not be used as pass/fail logic.
-Every located_fields[] entry must include value, confidence, and evidence (empty array allowed).
+Every located_fields[] entry must include value, confidence, and evidence.
 Every rulechecks[] entry must include inputs.expected, inputs.observed, and evidence (empty allowed).
 If a value can’t be found: set value and normalized_value to null and explain briefly in notes or the rule’s reason.
-Prefer DI first-class invoice fields (documents[0].fields.*) before using raw OCR text like result.content. Use other parts if needed.
-When comparing currency totals, allow small rounding variance (e.g., a few cents) and explain tolerance in calculation.tolerance_notes.
-For rules 3 and 4, inputs.expected and inputs.observed must include the dates used, and calculation.steps must show the computed “+6 months” date and the final inequality evaluation.
-For rules 6 and 7, calculation.steps must include:
+Prefer DI first-class invoice fields (documents[0].fields.*) before using raw OCR text like result.content. 
+Use other parts if needed.
+When comparing currency totals, allow small rounding variance (e.g., a few cents) 
+and explain tolerance in calculation.tolerance_notes.
+For date rules, inputs.expected and inputs.observed must include the dates used, and calculation.
+steps must show the computed “+6 months” date and the final inequality evaluation.
+For math rules, calculation.steps must include:
 •	tax rate used
 •	rebate percent used
 •	caps used
 •	computed totals (invoice rebate, capped rebate, customer portion)
 •	and the invoice’s claimed values if present (otherwise null and say so)
+
 
