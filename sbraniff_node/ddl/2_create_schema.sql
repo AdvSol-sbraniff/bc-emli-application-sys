@@ -69,14 +69,20 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
 
 CONSTRAINT invoices_status_chk
 CHECK (status IN (
-  'draft',
-
+  'upload_queued',    -- not used as currently not using sidekiq for uploads
   'upload_in_progress',
   'upload_failed',
+  'upload_complete',
+
+  'ocr_queued',
   'ocr_in_progress',
   'ocr_failed',
-  'validation_in_progress',
-  'validation_failed',
+  'ocr_complete',
+
+  'genai_queued',
+  'genai_in_progress',
+  'genai_failed',
+  'genai_complete',
 
   'awaiting_contractor_submit',
   'awaiting_admin_review',
@@ -430,13 +436,94 @@ CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_created_at
 
 
 
---
--- validation_runs
---
-CREATE TABLE IF NOT EXISTS claims.validation_runs (
+
+  -- ============================================================
+-- ingest_runs
+-- One row per "Run end-to-end" click (batch)
+-- Parent = sessions
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.ingest_runs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  session_id uuid NOT NULL,
+
+  status text NOT NULL DEFAULT 'queued',  -- queued|running|succeeded|failed|partial
+
+  total_files     integer NOT NULL DEFAULT 0,
+  completed_files integer NOT NULL DEFAULT 0,
+  failed_files    integer NOT NULL DEFAULT 0,
+
+  messages jsonb NULL, -- array of strings, optional
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  completed_at timestamp(6) without time zone NULL,
+
+  CONSTRAINT ingest_runs_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_ingest_runs_session
+    FOREIGN KEY (session_id)
+    REFERENCES claims.sessions(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT ingest_runs_status_chk
+    CHECK (status IN ('queued','running','succeeded','failed','partial')),
+
+  CONSTRAINT ingest_runs_counts_chk
+    CHECK (
+      total_files >= 0
+      AND completed_files >= 0
+      AND failed_files >= 0
+      AND completed_files <= total_files
+      AND failed_files <= total_files
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_session_created
+  ON claims.ingest_runs (session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_status
+  ON claims.ingest_runs (status);
+
+
+
+-- ============================================================
+-- ingest_step_runs
+-- PURPOSE: Single table combining upload_runs + ocr_runs + genai_runs
+-- DESIGN: Keep ALL former validation_runs fields (nullable as needed)
+-- NOTE:
+-- - session_id is REQUIRED so orphan/manual steps can always be filtered.
+-- - ok is NULL for queued/in-progress, TRUE for success, FALSE for failure.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  -- Parent batch run (nullable so 1-off troubleshooting steps can exist)
+  ingest_run_id uuid NULL,
+
+  -- Session is ALWAYS known (even for orphans)
+  session_id uuid NOT NULL,
+
+  -- Target invoice version (always required)
   invoice_version_id uuid NOT NULL,
-  validationgenai_ruleset_id uuid NOT NULL,
+
+  -- Which step this attempt represents
+  step_type text NOT NULL,  -- 'ocr' | 'genai'
+
+  -- Generic outcome:
+  -- NULL = queued/in_progress (no final outcome yet)
+  -- TRUE = succeeded
+  -- FALSE = failed (must have error_text)
+  ok boolean NULL,
+  error_text text NULL,
+
+  -- ============================================================
+  -- GENAI RUN FIELDS (kept from former validation_runs; now nullable)
+  -- ============================================================
+  validationgenai_ruleset_id uuid NULL,
+
   -- genAI artifacts (retention indefinite for now)
   genai_results_json  jsonb NULL,
   context_window_json jsonb NULL,
@@ -444,74 +531,71 @@ CREATE TABLE IF NOT EXISTS claims.validation_runs (
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
-  CONSTRAINT validation_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT ingest_step_runs_pkey PRIMARY KEY (id),
 
-  CONSTRAINT fk_validation_runs_invoice_version
-    FOREIGN KEY (invoice_version_id) REFERENCES claims.invoice_versions(id),
+  CONSTRAINT fk_ingest_step_runs_ingest_run
+    FOREIGN KEY (ingest_run_id)
+    REFERENCES claims.ingest_runs(id)
+    ON DELETE SET NULL,
 
-  CONSTRAINT fk_validation_runs_ruleset
-    FOREIGN KEY (validationgenai_ruleset_id) REFERENCES claims.validationgenai_rulesets(id)
+  CONSTRAINT fk_ingest_step_runs_session
+    FOREIGN KEY (session_id)
+    REFERENCES claims.sessions(id)
+    ON DELETE CASCADE,
 
-);
-
-CREATE INDEX IF NOT EXISTS index_claims_validation_runs_on_invoice_version_id
-  ON claims.validation_runs (invoice_version_id);
-
-CREATE INDEX IF NOT EXISTS index_claims_validation_runs_on_ruleset_id
-  ON claims.validation_runs (validationgenai_ruleset_id);
-
-
-
-
-  --
--- upload_runs
--- Tracks attempts to upload/store the PDF blob for a given invoice_version.
---
-CREATE TABLE IF NOT EXISTS claims.upload_runs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  invoice_version_id uuid NOT NULL,
-  error_text text NULL,
-  created_at timestamp(6) without time zone NOT NULL,
-  updated_at timestamp(6) without time zone NOT NULL,
-
-  CONSTRAINT upload_runs_pkey PRIMARY KEY (id),
-
-  CONSTRAINT fk_upload_runs_invoice_version
+  CONSTRAINT fk_ingest_step_runs_invoice_version
     FOREIGN KEY (invoice_version_id)
     REFERENCES claims.invoice_versions(id)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
 
+  CONSTRAINT ingest_step_runs_step_type_chk
+    CHECK (step_type IN ('ocr','genai')),
+
+  -- Allow queued/in-progress (ok NULL), success (ok TRUE), failure (ok FALSE + error_text)
+  CONSTRAINT ingest_step_runs_ok_error_chk
+    CHECK (
+      (ok IS NULL AND error_text IS NULL)
+      OR
+      (ok = true AND error_text IS NULL)
+      OR
+      (ok = false AND error_text IS NOT NULL)
+    ),
+
+  -- Only require ruleset_id when step_type='genai'
+  CONSTRAINT ingest_step_runs_ruleset_required_for_genai_chk
+    CHECK (
+      (step_type <> 'genai')
+      OR
+      (validationgenai_ruleset_id IS NOT NULL)
+    ),
+
+  CONSTRAINT fk_ingest_step_runs_ruleset
+    FOREIGN KEY (validationgenai_ruleset_id)
+    REFERENCES claims.validationgenai_rulesets(id)
 );
 
-CREATE INDEX IF NOT EXISTS index_claims_upload_runs_on_invoice_version_id
-  ON claims.upload_runs (invoice_version_id);
+-- ============================================================
+-- INDEXES
+-- ============================================================
 
+-- Batch run drill-down
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_run_id
+  ON claims.ingest_step_runs (ingest_run_id, created_at DESC);
 
+-- Session filtering (works for BOTH pipeline + orphan steps)
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_session_id
+  ON claims.ingest_step_runs (session_id, created_at DESC);
 
-  --
--- di_runs
--- Tracks attempts to run Azure Document Intelligence for a given invoice_version.
---
-CREATE TABLE IF NOT EXISTS claims.di_runs (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  invoice_version_id uuid NOT NULL,
-  error_text text NULL,
-  created_at timestamp(6) without time zone NOT NULL,
-  updated_at timestamp(6) without time zone NOT NULL,
+-- Invoice-version drill-down
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_invoice_version_id
+  ON claims.ingest_step_runs (invoice_version_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_invoice_version_step
+  ON claims.ingest_step_runs (invoice_version_id, step_type, created_at DESC);
 
-  CONSTRAINT di_runs_pkey PRIMARY KEY (id),
-
-  CONSTRAINT fk_di_runs_invoice_version
-    FOREIGN KEY (invoice_version_id)
-    REFERENCES claims.invoice_versions(id)
-    ON DELETE CASCADE
-
-);
-
-CREATE INDEX IF NOT EXISTS index_claims_di_runs_on_invoice_version_id
-  ON claims.di_runs (invoice_version_id);
-
+-- GenAI filtering
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ruleset_id
+  ON claims.ingest_step_runs (validationgenai_ruleset_id);
 
 
 

@@ -1,0 +1,44 @@
+C:\00_inv\testdata\3 htr>curl.exe -X POST "http://127.0.0.1:3001/inv/retry-ocr-with-sasurl"   -H "Content-Type: application/json"   --data-binary "@body.json"  1>output-di-call.json
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  621k  100  621k  100   289  20583      9  0:00:32  0:00:30  0:00:02  145k
+
+C:\00_inv\testdata\3 htr>
+
+
+
+and in the cmd:
+[DI] analyze complete. modelId: prebuilt-invoice
+[DI] canonical header: {
+  di_ocr_invoice_id: '1229013',
+  di_ocr_invoice_date: '2024-12-16',
+  di_ocr_vendor_name: 'HTR\nWINDOWS AND DOORS',
+  di_ocr_vendor_address: '202 Balmoral PI\nPort Moody BC, V3H 4B9',
+  di_ocr_customer_name: 'Maria Zumarraga',
+  di_ocr_billing_address: null,
+  di_ocr_sub_total: 11861.64,
+  di_ocr_total_tax: 593.08,
+  di_ocr_invoice_total: 12.454,
+  di_ocr_amount_due: null
+}
+[DI] Item 1: {
+  description: 'Window:',
+  quantity: null,
+  unitPrice: null,
+  amount: 817.01
+}
+[DI] Item 2: {
+  description: 'Installation:',
+  quantity: null,
+  unitPrice: null,
+  amount: 150
+}
+[DI] Item 3: { description: null, quantity: null, unitPrice: null, amount: 150 }
+[DI] Item 4: { description: null, quantity: null, unitPrice: null, amount: 1110.79 }
+[DI] Item 5: { description: null, quantity: null, unitPrice: null, amount: 150 }
+[DI] Item 6: { description: null, quantity: null, unitPrice: null, amount: 150 }
+[DI] Item 7: { description: null, quantity: null, unitPrice: null, amount: 834.63 }
+[DI] Item 8: { description: null, quantity: null, unitPrice: null, amount: 150 }
+[DI] Item 9: { description: null, quantity: null, unitPrice: null, amount: 914.82 }
+[DI] Item 10: { description: null, quantity: null, unitPrice: null, amount: 150 }
+retryOcrWithSasUrl exiting

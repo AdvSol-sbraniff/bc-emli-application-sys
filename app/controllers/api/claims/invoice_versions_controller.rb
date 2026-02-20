@@ -3,9 +3,11 @@ module Api
   module Claims
     class InvoiceVersionsController < Api::ApplicationController
       # For the POC: don’t require login + don’t require policy checks
-      skip_before_action :authenticate_user!, only: %i[current_invoices read read_genai]
-      skip_before_action :require_confirmation, only: %i[current_invoices read read_genai]
-      skip_after_action  :verify_authorized,   only: %i[current_invoices read read_genai]
+
+skip_before_action :authenticate_user!,   only: %i[current_invoices read read_genai pdf_url]
+skip_before_action :require_confirmation, only: %i[current_invoices read read_genai pdf_url]
+skip_after_action  :verify_authorized,    only: %i[current_invoices read read_genai pdf_url]
+
 
       # ============================================================
       # GET /api/claims/sessions/:session_id/current_invoices
@@ -45,6 +47,46 @@ module Api
 
         render json: { read: ::Claims::CurrentInvoiceVersionBlueprint.render_as_hash(row, view: :read_screen) }
       end
+
+
+def node_mint_sas!(storage_key:, container: nil)
+  base = ENV["INV_NODE_BASE_URL"].to_s.strip
+  raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
+  base = base.sub(%r{/\z}, "")
+
+  uri = URI("#{base}/inv/mint-sas")
+  req = Net::HTTP::Post.new(uri)
+  req["Content-Type"] = "application/json"
+
+  req.body = {
+    storageKey: storage_key,
+    container: container
+  }.compact.to_json
+
+  res = Net::HTTP.start(uri.host, uri.port, use_ssl: (uri.scheme == "https"), read_timeout: 60) { |http| http.request(req) }
+
+  body = res.body.to_s
+  raise "Node mint-sas failed HTTP=#{res.code} body=#{body}" unless res.is_a?(Net::HTTPSuccess)
+
+  JSON.parse(body)
+end
+
+
+# GET /api/claims/sessions/:session_id/invoices/:invoice_id/pdf_url
+def pdf_url
+  civ = ::Claims::CurrentInvoiceVersion.find_by(
+    session_id: params[:session_id],
+    invoice_id: params[:invoice_id]
+  )
+
+  if civ.nil?
+    render json: { error: "Not found" }, status: :not_found
+    return
+  end
+
+  node_resp = node_mint_sas!(storage_key: civ.storage_key, container: ENV["AZURE_BLOB_CONTAINER"])
+  render json: { sas_url: node_resp["sas_url"] }
+end
 
       # ============================================================
       # GET /api/claims/sessions/:session_id/invoices/:invoice_id/read_genai

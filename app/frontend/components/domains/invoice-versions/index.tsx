@@ -192,6 +192,8 @@ const [fitMode, setFitMode] = useState<FitMode>("width");
 const [rotate, setRotate] = useState<number>(0);       // degrees: 0, 90, 180, 270
 const [pageInput, setPageInput] = useState<string>("1");
 
+const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
 
 // ============================================================
 // SECTION 05.01.01 — ACTIVE HIGHLIGHT (SINGLE SOURCE OF TRUTH)
@@ -234,6 +236,57 @@ useEffect(() => {
   };
   run();
 }, [sessionId]);
+
+
+// ============================================================
+// SECTION 06.01.02 — LOAD PDF SAS URL (STRICT + DEBUG)
+// PURPOSE: Fetch signed SAS URL for current invoice PDF
+// ============================================================
+useEffect(() => {
+  const run = async () => {
+    if (!sessionId || !invoiceId) return;
+
+    try {
+      setPdfUrlError(null);
+
+      const resp = await fetch(
+        `/api/claims/sessions/${sessionId}/invoices/${invoiceId}/pdf_url`,
+        { headers: { Accept: "application/json" }, credentials: "include" }
+      );
+
+      const bodyText = await resp.text();
+
+      if (!resp.ok) {
+        setPdfUrl(null);
+        setPdfUrlError(`pdf_url failed (${resp.status}): ${bodyText}`);
+        return;
+      }
+
+      let json: any;
+      try {
+        json = JSON.parse(bodyText);
+      } catch {
+        setPdfUrl(null);
+        setPdfUrlError(`pdf_url returned non-JSON: ${bodyText}`);
+        return;
+      }
+
+      const url = String(json?.sas_url ?? "").trim();
+      if (!url) {
+        setPdfUrl(null);
+        setPdfUrlError(`pdf_url returned empty sas_url. full response: ${bodyText}`);
+        return;
+      }
+
+      setPdfUrl(url);
+    } catch (e: any) {
+      setPdfUrl(null);
+      setPdfUrlError(String(e?.message ?? e));
+    }
+  };
+
+  run();
+}, [sessionId, invoiceId]);
 
 
 // ============================================================
@@ -852,82 +905,103 @@ bg={
     <Button
       size="sm"
       variant="outline"
-      onClick={() => window.open(
-        "https://stsbraniffvi128678601575.blob.core.windows.net/inv-pdfs-dev/sessions/1/pdfs/2/original.PDF?sp=r&st=2026-01-09T18:09:08Z&se=2026-04-01T01:24:08Z&spr=https&sv=2024-11-04&sr=b&sig=As6UnrCq86KEHqJHuFYJQfqUaOGyck4XrMvKk1u8yUw%3D",
-        "_blank",
-        "noopener,noreferrer"
-      )}
+onClick={() => {
+  if (!pdfUrl) return;
+  window.open(pdfUrl, "_blank", "noopener,noreferrer");
+}}
     >
       Open
     </Button>
   </Box>
 </Box>
 
-    {/* ============================================================
-        SECTION 07.08 — PDF DOCUMENT + OVERLAY RENDER
-        PURPOSE: Render the PDF page and draw the DI polygon overlay
-        ============================================================ */}
+{/* ============================================================
+    SECTION 07.08 — PDF DOCUMENT + OVERLAY RENDER (DYNAMIC)
+    PURPOSE: Render the PDF page + draw polygon overlay
+    NOTES:
+    - ONLY ONE Document should exist in this pane
+    - We render Document only when pdfUrl is present
+    ============================================================ */}
 
-    <Document
-      file="https://stsbraniffvi128678601575.blob.core.windows.net/inv-pdfs-dev/sessions/1/pdfs/2/original.PDF?sp=r&st=2026-01-09T18:09:08Z&se=2026-04-01T01:24:08Z&spr=https&sv=2024-11-04&sr=b&sig=As6UnrCq86KEHqJHuFYJQfqUaOGyck4XrMvKk1u8yUw%3D"
-      onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-      onLoadError={(err) => console.error("PDF load error:", err)}
-    >
+{/* 1) pdf_url error */}
+{/* ============================================================
+    SECTION 07.08.10 — DEBUG PDF URL
+    PURPOSE: show whether pdfUrl is actually being set
+   ============================================================ */}
+<Text fontSize="xs" opacity={0.6} mb="6px">
+  pdfUrl: {pdfUrl ? pdfUrl.slice(0, 140) + "..." : "(null)"} 
+</Text>
 
-      {/* ============================================================
-          SECTION 07.09 — PAGE WRAPPER GEOMETRY + SVG OVERLAY
-          PURPOSE: Keep SVG overlay and react-pdf Page in identical coordinate space
-          ============================================================ */}
+{pdfUrlError && (
+  <Text fontSize="sm" color="red.500" mb="8px">
+    PDF URL error: {pdfUrlError}
+  </Text>
+)}
 
-      {/* Wrapper so SVG and Page share same geometry */}
-<Box position="relative" width={`${overlayWidthPx}px`} height={`${overlayHeightPx}px`}>
-        {/* SVG overlay */}
-        <svg
-width={overlayWidthPx}
-          height={overlayHeightPx}
-          style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
-        >
-          {svgPolygonPoints && (
-            <polygon
-              points={svgPolygonPoints}
-              fill="rgba(255,0,0,0.20)"
-              stroke="red"
-              strokeWidth={2}
-            />
-          )}
-        </svg>
+{/* 2) loading state */}
+{!pdfUrl && !pdfUrlError && (
+  <Text fontSize="sm" opacity={0.7} mb="8px">
+    Loading PDF URL...
+  </Text>
+)}
 
-        {/* Actual PDF page */}
-        <Box style={{ position: 'absolute', top: 0, left: 0 }}>
-{/*  ============================================================
-   SECTION 07.09.01 — FORCE PAGE RERENDER ON ZOOM/ROTATE/PAGE
-PURPOSE: react-pdf sometimes caches the canvas; key forces remount
- ============================================================ */}
+{/* 3) render PDF only when url exists */}
+{pdfUrl && (
+  <Document
+    key={pdfUrl}                 // force reload when url changes
+    file={pdfUrl}                // IMPORTANT: dynamic URL here
+    onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+    onLoadError={(err) => console.error("PDF load error:", err)}
+  >
+    {/* Wrapper so SVG and Page share identical geometry */}
+    <Box position="relative" width={`${overlayWidthPx}px`} height={`${overlayHeightPx}px`}>
 
-<Page
-  key={`p${activePageNumber}-w${renderWidthPx}-r${rotate}`}
-  pageNumber={activePageNumber}
-  width={renderWidthPx}
-  rotate={rotate}
-/>
+      {/* SVG overlay */}
+      <svg
+        width={overlayWidthPx}
+        height={overlayHeightPx}
+        style={{ position: "absolute", top: 0, left: 0, zIndex: 10, pointerEvents: "none" }}
+      >
+        {svgPolygonPoints && (
+          <polygon
+            points={svgPolygonPoints}
+            fill="rgba(255,0,0,0.20)"
+            stroke="red"
+            strokeWidth={2}
+          />
+        )}
+      </svg>
 
-        </Box>
+      {/* Actual PDF page */}
+      <Box style={{ position: "absolute", top: 0, left: 0 }}>
+        <Page
+          key={`p${activePageNumber}-w${renderWidthPx}-r${rotate}`} // force remount on zoom/rotate/page
+          pageNumber={activePageNumber}
+          width={renderWidthPx}
+          rotate={rotate}
+        />
       </Box>
-    </Document>
 
-    <Text fontSize="xs" opacity={0.6} mt="8px">
-      Active highlight: {activeHighlightKey} | page {activePageNumber} / {numPages || "?"} | unit {activePageMeta?.unit ?? "-"}
-    </Text>
-  </Box>
-</Box>
+    </Box>
+  </Document>
+)}
 
-
-
+<Text fontSize="xs" opacity={0.6} mt="8px">
+  Active highlight: {activeHighlightKey} | page {activePageNumber} / {numPages || "?"} | unit {activePageMeta?.unit ?? "-"}
+</Text>
 
 
-        </Box>
-      </Box>
-    </Flex>
+
+
+
+
+        </Box>  {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
+      </Box>    {/* closes SECTION 07.06 PDF panel <Box ref={pdfWrapRef} ...> */}
+
+    </Box>      {/* ✅ ADD: closes SECTION 07.04 main split view <Box display="flex" ...> */}
+  </Box>        {/* ✅ ADD: closes SECTION 07.02 page layout <Box display="flex" flexDirection="column" ...> */}
+
+</Flex>
 
   );
 };
