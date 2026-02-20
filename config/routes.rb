@@ -58,25 +58,52 @@ Rails.application.routes.draw do
 # sbra20260130 claims subsystem (stable bookmark = invoice_id)
 scope module: :claims, path: "claims" do
 
-# Nav bar list for a session (returns invoice_ids in display order)
-get "sessions/:session_id/current_invoices", to: "invoice_versions#current_invoices"
+  # ============================================================
+  # SECTION 10 — READ / NAV (existing)
+  # ============================================================
 
-# Read-screen payload for one invoice (resolves to *current* invoice_version)
-get "sessions/:session_id/invoices/:invoice_id/read", to: "invoice_versions#read"
+  # Nav bar list for a session (returns invoice_ids in display order)
+  get "sessions/:session_id/current_invoices", to: "invoice_versions#current_invoices"
 
-# GenAI located fields for the *current* invoice_version of an invoice
-get "sessions/:session_id/invoices/:invoice_id/read_genai", to: "invoice_versions#read_genai"
+  # Read-screen payload for one invoice (resolves to *current* invoice_version)
+  get "sessions/:session_id/invoices/:invoice_id/read", to: "invoice_versions#read"
 
-# route for the endpoint that will be used in the AI Admin POC to test out GenAI functionality on the invoice data;
-# these routes will be used in both the admin screen and also in the other enduser screens
-post "sessions", to: "sessions#create"
+  # GenAI located fields for the *current* invoice_version of an invoice
+  get "sessions/:session_id/invoices/:invoice_id/read_genai", to: "invoice_versions#read_genai"
 
-# New upload button (POST PDFs for an existing session_id)
-post "sessions/:session_id/upload", to: "ingest#upload"
+  get "sessions/:session_id/invoices/:invoice_id/pdf_url", to: "invoice_versions#pdf_url"
+
+  # ============================================================
+  # SECTION 20 — SESSION CRUD (AI Admin / POC)
+  # ============================================================
+
+  # Create new session (AI Admin screen)
+  post "sessions", to: "sessions#create"
+
+
+  # ============================================================
+  # SECTION 30 — INGEST (AI Admin / POC)
+  # ============================================================
+
+  # New upload button (POST PDFs for an existing session_id)
+  post "sessions/:session_id/upload", to: "ingest#upload"
+
+# ============================================================
+# SECTION 40 — RUN TRACKER (AI Admin / POC)
+# ============================================================
+
+# List ingest runs (optionally filter by session_id)
+get "ingest/runs", to: "ingest#runs_index"
+get "ingest/runs/:ingest_run_id/steps", to: "ingest#steps_index"
+get "ingest/steps", to: "ingest#steps_by_session_index"
+
+post "ingest/run_ocr", to: "ingest#run_ocr"
+
 
 
 end
 # end sbra
+
 
 
 

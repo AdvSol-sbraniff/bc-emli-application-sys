@@ -1,0 +1,38 @@
+in the runner:
+C:\00_inv\testdata\2 centra>curl.exe -X POST "http://127.0.0.1:3001/inv/retry-ocr-with-sasurl"   -H "Content-Type: application/json"   --data-binary "@body.json"  1>output-di-call.json
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 82212  100 81925  100   287   6212     21  0:00:13  0:00:13 --:--:-- 16856
+
+
+
+and in the cmd
+
+[DI] canonical header: {
+  di_ocr_invoice_id: 'SI25-001017',
+  di_ocr_invoice_date: '2025-03-31',
+  di_ocr_vendor_name: 'Centra®\nWINDOWS',
+  di_ocr_vendor_address: '4705 102 Ave SE\nCalgary, AB T2C 2X7',
+  di_ocr_customer_name: 'EBY, JESSE & ERIN',
+  di_ocr_billing_address: '561 6 AVENUE\nCAMPBELL RIVER, BC V9W 3Z6\nCanada',
+  di_ocr_sub_total: 4923.42,
+  di_ocr_total_tax: 246.17,
+  di_ocr_invoice_total: 5169.59,
+  di_ocr_amount_due: 3269.59
+}
+[DI] Item 1: {
+  description: 'Model: 6800 U-factor: 1.14 ENERGY STAR: 1| 2| 3 NRCan: NR5707-46721659-ES5\n' +
+    'Size:\n' +
+    '72.0000w x 48.0000h',
+  quantity: 1,
+  unitPrice: 3080.7,
+  amount: 3080.7
+}
+[DI] Item 2: {
+  description: 'Model: 6800 U-factor: 1.14 ENERGY STAR: 1| 2| 3 NRCan: NR5707-46721659-ES5\n' +
+    'Size:\n' +
+    '36.0000w x 42.0000h',
+  quantity: 1,
+  unitPrice: 1842.72,
+  amount: 1842.72
+}

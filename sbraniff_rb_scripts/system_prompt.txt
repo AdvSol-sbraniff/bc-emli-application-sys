@@ -1,3 +1,8 @@
+purpose-statement: 
+You are to assist admins with a pre-review of a contractors invoice.
+
+Output-json-schema:
+
 {
   "overall": {
     "overall_confidence": 0,

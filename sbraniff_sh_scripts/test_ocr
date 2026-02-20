@@ -1,0 +1,7 @@
+curl -sS -D ocr_headers.txt -o ocr_body.json \
+  -X POST "http://host.docker.internal:3001/inv/ocr" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storageKey": "sessions/dd8a19be-b43b-4559-87b1-46c6b5f5cfd4/pdfs/ef86880c-7570-4830-a083-f31301a22118/original.PDF",
+    "modelId": "prebuilt-invoice"
+  }'
