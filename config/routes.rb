@@ -73,6 +73,11 @@ scope module: :claims, path: "claims" do
 
   get "sessions/:session_id/invoices/:invoice_id/pdf_url", to: "invoice_versions#pdf_url"
 
+# ============================================================
+# SECTION 12 — ADMIN GRID (POC)
+# ============================================================
+get "sessions/:session_id/invoices", to: "invoices#index_by_session"
+
   # ============================================================
   # SECTION 20 — SESSION CRUD (AI Admin / POC)
   # ============================================================
@@ -99,8 +104,17 @@ get "ingest/steps", to: "ingest#steps_by_session_index"
 
 post "ingest/run_ocr", to: "ingest#run_ocr"
 
+post "ingest/run_genai", to: "ingest#run_genai"
 
+# ============================================================
+# SECTION 50 — ADMIN / POC (claims)
+# ============================================================
 
+# Screen B: list ALL invoice_versions for an invoice_id (grid)
+get "admin/invoices/:invoice_id/invoice_versions", to: "invoice_versions_admin#index_by_invoice"
+
+# Screen B: fetch raw JSON blobs for one invoice_version (tabs)
+get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
 end
 # end sbra
 

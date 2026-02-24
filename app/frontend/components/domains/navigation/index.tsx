@@ -37,6 +37,19 @@ const InvoiceVersionShowScreen = lazy(() =>
 const AIAdminScreen = lazy(() =>
   import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })),
 );
+
+// the invoicesadmin is in ../invoices-admin/
+// below is the code for it
+const InvoicesAdminScreen = lazy(() =>
+  import('../invoices-admin').then((module) => ({ default: module.InvoicesAdminScreen })),
+);
+
+// below is the new code for the invoice-versions admin screen
+const InvoiceVersionsAdminScreen = lazy(() =>
+  import('../invoice-versions-admin').then((module) => ({ default: module.InvoiceVersionsAdminScreen })),
+);  
+
+
 // end sbra20260130
 
 const ExternalApiKeysIndexScreen = lazy(() =>
@@ -730,7 +743,9 @@ const AppRoutes = observer(() => {
         {/* sbra20260130 claims subsytem route info */}
         <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
         <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
-        <Route path="/ai-admin" element={<AIAdminScreen />} />       
+        <Route path="/ai-admin" element={<AIAdminScreen />} />    
+        <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
+        <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} /> 
         {/* end sbra20260130 */}
 
 
