@@ -13,6 +13,8 @@ module Claims
     # - invoice_version_id (required)
     # - ingest_run_id (optional)  => link to batch run
     def perform(invoice_version_id, ingest_run_id = nil)
+Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
+
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
       sess = Claims::Session.find(inv.session_id)

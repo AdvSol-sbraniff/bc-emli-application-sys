@@ -89,6 +89,8 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
   // PURPOSE: Admin can type/paste ids; handlers may populate them.
   // ============================================================
 
+  const DEFAULT_RULESET_ID = '4bf85215-6bb3-4533-b0a2-f73e0d9b6cd6';
+
   const [contractorId, setContractorId] = useState<string>('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
   // Editable session id
@@ -97,6 +99,12 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
 // Editable ids (populated from responses, but admin can override)
 const [invoiceId, setInvoiceId] = useState<string>('');
 const [invoiceVersionId, setInvoiceVersionId] = useState<string>('');
+
+// x.03.01.01.25 — Editable ruleset id (admin can paste a fresh UUID)
+// PURPOSE: Avoid stale hardcoded DEFAULT_RULESET_ID when rulesets are reloaded.
+const [validationGenaiRulesetId, setValidationGenaiRulesetId] =
+  useState<string>(DEFAULT_RULESET_ID);
+
 
   // ============================================================
   // SECTION 03.01.02 — CREATE SESSION UI STATE
@@ -138,6 +146,13 @@ const [isRunningOcr, setIsRunningOcr] = useState<boolean>(false);
 const [ocrError, setOcrError] = useState<string>('');
 const [ocrOkMsg, setOcrOkMsg] = useState<string>('');
 
+// ============================================================
+// SECTION 03.01.03.03 — GENAI UI STATE
+// ============================================================
+
+const [isRunningGenai, setIsRunningGenai] = useState<boolean>(false);
+const [genaiError, setGenaiError] = useState<string>('');
+const [genaiOkMsg, setGenaiOkMsg] = useState<string>('');
 
   // ============================================================
   // SECTION 03.01.04 — RUN OUTPUT PANEL STATE
@@ -648,6 +663,112 @@ const handleRunOcr = async () => {
   }
 };
 
+// ============================================================
+// SECTION 03.02.05.50 — GENAI HANDLER (Run GenAI button)
+// PURPOSE:
+// - Milestone 1 only: call Rails stub endpoint
+// - Use session_id + invoice_version_id (from textboxes)
+// - Capture Run Output JSON
+// ============================================================
+
+const handleRunGenai = async () => {
+  setIsRunningGenai(true);
+  setGenaiError('');
+  setGenaiOkMsg('');
+  clearRunOutput();
+
+  try {
+    if (!sessionId.trim()) {
+      throw new Error('Please enter a session_id first.');
+    }
+    if (!invoiceVersionId.trim()) {
+      throw new Error('Please enter an invoice_version_id first (upload populates it).');
+    }
+
+    // Milestone 1 stub endpoint (Rails)
+    const endpoint = `/api/claims/ingest/run_genai`;
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        session_id: sessionId.trim(),
+        invoice_version_id: invoiceVersionId.trim(),
+validationgenai_ruleset_id: validationGenaiRulesetId.trim(),
+      }),
+    });
+
+    setLastHttpStatus(res.status);
+
+    let data: any = null;
+    let textFallback = '';
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await res.json();
+    } else {
+      textFallback = await res.text().catch(() => '');
+    }
+
+    // Always capture output (success or failure)
+    captureRunOutput('Run GenAI', res.status, data, textFallback);
+
+    if (!res.ok) {
+      const errText =
+        (data && (data.error || data.message)) ||
+        textFallback ||
+        `HTTP ${res.status} ${res.statusText}`;
+      throw new Error(String(errText));
+    }
+
+    const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
+    const msg =
+      data?.message ||
+      data?.summary ||
+      `GenAI queued/started for invoice_version_id=${invoiceVersionId.trim()}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`;
+
+    setGenaiOkMsg(String(msg));
+
+    // optional: refresh step grid (if your stub endpoint also writes a step row later)
+    // await fetchStepsBySession();
+  } catch (err: any) {
+    setGenaiError(err?.message || 'Run GenAI failed.');
+  } finally {
+    setIsRunningGenai(false);
+  }
+};
+
+// ============================================================
+// SECTION 03.02.06 — OPEN READ SCREEN (NEW TAB)
+// PURPOSE:
+// - Opens the Rails read screen in a NEW browser tab
+// - Uses the editable sessionId + invoiceId fields from the screen
+// - Example target format:
+//   http://localhost:3000/sessions/:session_id/invoices/:invoice_id/read
+// ============================================================
+
+const handleOpenReadScreen = () => {
+  // basic validation
+  if (!sessionId.trim()) {
+    setUploadError('Please enter a session_id first (needed to open read screen).');
+    return;
+  }
+  if (!invoiceId.trim()) {
+    setUploadError('Please enter an invoice_id first (needed to open read screen).');
+    return;
+  }
+
+  // build URL
+  const url = `http://localhost:3000/sessions/${encodeURIComponent(
+    sessionId.trim()
+  )}/invoices/${encodeURIComponent(invoiceId.trim())}/read`;
+
+  // open new tab
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
 
   // ============================================================
   // SECTION 04 — RENDER
@@ -660,7 +781,7 @@ const handleRunOcr = async () => {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="AI Admin" />
+      <BlueTitleBar title="Admin - 1 off reruns" />
 
       <Container maxW="container.lg" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -785,6 +906,20 @@ const handleRunOcr = async () => {
   />
 </Box>
 
+{/* x.04.02.02.40 — validationgenai_ruleset_id (editable) */}
+<Box mb={4}>
+  <Text fontSize="xs" opacity={0.7} mb={1}>
+    validationgenai_ruleset_id (editable)
+  </Text>
+  <Input
+    value={validationGenaiRulesetId}
+    onChange={(e) => setValidationGenaiRulesetId(e.target.value)}
+    placeholder="paste ruleset UUID here"
+    bg="white"
+    fontFamily="mono"
+  />
+</Box>
+
 
 {/* ============================================================
     SECTION 04.03 — UPLOAD PANEL
@@ -848,11 +983,34 @@ const handleRunOcr = async () => {
 
 
 
-      <Button variant="outline" isDisabled>
-        Run GenAI
-      </Button>
+<Button
+  colorScheme="blue"
+  onClick={handleRunGenai}
+  isLoading={isRunningGenai}
+  loadingText="Running..."
+  isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
+>
+  Run GenAI
+</Button>
+
     </Flex>
   </Box>
+
+
+{/* ============================================================
+    SECTION 04.03.01.25 — OPEN READ SCREEN BUTTON (NEW TAB)
+    PURPOSE:
+    - Opens the Rails read screen for the typed session_id + invoice_id
+============================================================ */}
+
+<Button
+  colorScheme="purple"
+  variant="outline"
+  onClick={handleOpenReadScreen}
+  isDisabled={!sessionId.trim() || !invoiceId.trim()}
+>
+  Open Confirm Details Screen
+</Button>
 
   {/* ============================================================
       SECTION 04.03.02 — SELECTED FILE (ADMIN)
@@ -924,6 +1082,25 @@ const handleRunOcr = async () => {
   </Box>
 </Box>
 
+{/* ============================================================
+    SECTION 04.03.03.30 — GENAI MESSAGES
+============================================================ */}
+
+{genaiError && (
+  <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+    <Text fontSize="sm" color="red.700">
+      {genaiError}
+    </Text>
+  </Box>
+)}
+
+{genaiOkMsg && (
+  <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
+    <Text fontSize="sm" color="green.800">
+      {genaiOkMsg}
+    </Text>
+  </Box>
+)}
 
 {/* ============================================================
     SECTION 04.03.50 — RUN TRACKER (SINGLE GRID)

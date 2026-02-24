@@ -24,12 +24,10 @@ module Api
       # PURPOSE: Allow testing without login/policy/CSRF friction.
       # ============================================================
 
-
-skip_before_action :authenticate_user!, only: %i[upload runs_index steps_index steps_by_session_index run_ocr]
-skip_before_action :require_confirmation, only: %i[upload runs_index steps_index steps_by_session_index run_ocr]
-skip_after_action  :verify_authorized,   only: %i[upload runs_index steps_index steps_by_session_index run_ocr]
-skip_forgery_protection only: %i[upload runs_index steps_index steps_by_session_index run_ocr]
-
+skip_before_action :authenticate_user!, only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_before_action :require_confirmation, only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_after_action  :verify_authorized,   only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_forgery_protection only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
 
 
 # ============================================================
@@ -230,6 +228,54 @@ def run_ocr
 
 rescue => e
   Rails.logger.error("[claims][ingest][run_ocr] ERROR: #{e.class}: #{e.message}")
+  render json: { ok: false, error: e.message }, status: :unprocessable_entity
+end
+
+# ============================================================
+# SECTION 02.20 — ACTION: run_genai
+# ROUTE: POST /api/claims/ingest/run_genai
+# BODY: { session_id: "uuid", invoice_version_id: "uuid", validationgenai_ruleset_id?: "uuid", ingest_run_id?: "uuid" }
+# PURPOSE (milestone 1):
+# - enqueue Sidekiq job that calls Node /inv/genai
+# - job will create ingest_step_runs row (step_type='genai')
+# ============================================================
+def run_genai
+  session_id = params[:session_id].to_s.strip
+  raise "Missing session_id" if session_id.empty?
+
+  invoice_version_id = params[:invoice_version_id].to_s.strip
+  raise "Missing invoice_version_id" if invoice_version_id.empty?
+
+  validationgenai_ruleset_id = params[:validationgenai_ruleset_id].to_s.strip
+  validationgenai_ruleset_id = nil if validationgenai_ruleset_id.empty?
+
+  ingest_run_id = params[:ingest_run_id].to_s.strip
+  ingest_run_id = nil if ingest_run_id.empty?
+
+  # milestone 1: allow nil ruleset id if you want; BUT your DB constraint requires it for step_type='genai'
+  # So: either require it here OR choose a default ruleset inside the job.
+  # I recommend: require it here for now.
+  raise "Missing validationgenai_ruleset_id" if validationgenai_ruleset_id.nil?
+
+  jid = ::Claims::RunGenaiJob.perform_async(
+    session_id,
+    invoice_version_id,
+    validationgenai_ruleset_id,
+    ingest_run_id
+  )
+
+  render json: {
+    ok: true,
+    enqueued: true,
+    job_id: jid,
+    session_id: session_id,
+    invoice_version_id: invoice_version_id,
+    validationgenai_ruleset_id: validationgenai_ruleset_id,
+    ingest_run_id: ingest_run_id
+  }, status: :ok
+
+rescue => e
+  Rails.logger.error("[claims][ingest][run_genai] ERROR: #{e.class}: #{e.message}")
   render json: { ok: false, error: e.message }, status: :unprocessable_entity
 end
 
