@@ -7,7 +7,7 @@ require "json"
 module Claims
   class RunGenaiJob
     include Sidekiq::Job
-    sidekiq_options retry: 5
+    sidekiq_options retry: 0
 
     # args must match controller perform_async call order:
     # perform(session_id, invoice_version_id, validationgenai_ruleset_id, ingest_run_id=nil)
@@ -69,7 +69,12 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
       # 3) build context window JSON (GenAI must use DI RAW JSON + case facts + ruleset)
       # NOTE: for now, the "case facts" can be hardcoded sample data per your milestone.
       # Later milestone: replace with DB joins (contractors, users, users_eligibilitycodes, etc.)
-      case_facts = build_case_facts(sess: sess, invoice_version: iv)
+case_facts = Claims::GenaiCaseFacts::Build.call(sess: sess, invoice_version: iv)
+
+Claims::GenaiCaseFacts::Build.persist_code_located_fields!(
+  invoice_version_id: iv.id,
+  case_facts: case_facts
+)
 
       contextwindowjson = build_contextwindowjson(
         ruleset: ruleset,
@@ -94,12 +99,29 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
 
       payload = JSON.parse(resp.body) # should already match your strict output schema
 
-     # 4.5) persist located_fields -> claims.invoice_version_located_fields
-::Claims::InvoiceVersionLocatedFields::ApplyGenaiLocatedFields.call(
+
+      
+::Claims::InvoiceVersionRulechecks::ApplyGenaiRulechecks.call(
   invoice_version_id: iv.id,
   genai_payload: payload
 )
 
+
+# 4.5) persist located_fields -> claims.invoice_version_located_fields
+res = ::Claims::InvoiceVersionLocatedFields::ApplyGenaiLocatedFields.call(
+  invoice_version_id: iv.id,
+  genai_payload: payload
+)
+
+Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] ApplyGenaiLocatedFields=#{res.inspect}")
+raise "ApplyGenaiLocatedFields failed: #{res.inspect}" unless res[:ok]
+
+
+#4.6) persist overall/confidence/advice -> claims.invoice_versions
+::Claims::InvoiceVersions::ApplyGenaiOverall.call(
+  invoice_version_id: iv.id,
+  genai_payload: payload
+)
       # 5) persist artifacts on the STEP (per-run history)
       step.update!(
         ok: true,
@@ -108,8 +130,7 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
         updated_at: Time.current
       )
 
-      # 6) persist latest on invoice_versions (per-version latest only)
-      iv.update!(genai_raw_json: payload)
+
 
       # 7) finalize invoice status
       inv.update!(status: "genai_complete", status_updated_at: Time.current)
@@ -132,53 +153,6 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
 
     private
 
-    # ============================================================
-    # SECTION A — CASE FACTS (milestone 1)
-    # PURPOSE:
-    # - Provide the “ESP database values” as a single JSON blob
-    # - Hardcoded/sample now; later replaced with DB joins
-    # ============================================================
-    def build_case_facts(sess:, invoice_version:)
-      {
-        esp_database_values: {
-          # from DB (or nil if not submitted yet)
-          sessions: {
-            submitted_at: sess.submitted_at
-          },
-
-          # hardcoded sample data (milestone 1)
-          invoice_versions: {
-            # NOTE: you previously listed these as “ESP database values”
-            # They are NOT DI-flat fields in the prompt; they’re just “case facts”
-            # you want the model to compare against. Keep them here.
-            di_ocr_invoice_date: "2025-03-31",
-            di_ocr_vendor_name: "Centra®\nWINDOWS",
-            di_ocr_vendor_address: "4705 102 Ave SE\nCalgary, AB T2C 2X7",
-            di_ocr_customer_name: "EBY, JESSE & ERIN",
-            di_ocr_billing_address: "561 6 AVENUE\nCAMPBELL RIVER, BC V9W 3Z6\nCanada"
-          },
-
-          contractors: {
-            business_name: "Centra",
-            address: "4705 102 Ave SE, Cal Canada"
-          },
-
-          validationgenai_rulesets: {
-            env_esp1_rebate: 95,
-            env_esp2_rebate: 60
-          },
-
-          users_eligibilitycodes: {
-            approved_at: "2025-01-01"
-          },
-
-          users: {
-            participant_name: "stuff",
-            participant_address: "stuff"
-          }
-        }
-      }
-    end
 
     # ============================================================
     # SECTION B — CONTEXT WINDOW JSON BUILDER
@@ -214,11 +188,11 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
           role: "user",
           content: [{ type: "input_text", text: <<~TEXT }]
             User record 2 (the case)
-            Esp database values:
-            #{JSON.pretty_generate(case_facts)}
+Esp database values:
+#{case_facts.to_json}
 
-            Document intelligence raw json:
-            #{JSON.pretty_generate(di_raw_json)}
+Document intelligence raw json:
+#{di_raw_json.to_json}
           TEXT
         },
         {

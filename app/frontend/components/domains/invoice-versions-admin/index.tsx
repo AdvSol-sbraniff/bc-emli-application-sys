@@ -253,7 +253,31 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               {loadingJson && <Spinner size="sm" />}
             </Flex>
 
-            <Tabs variant="enclosed" isFitted>
+ 
+<Tabs
+  variant="line"
+  isFitted
+  colorScheme="gray"
+  sx={{
+    // ============================================================
+    // SECTION 04.02.01.01 — BOLDER LINE TAB STYLE
+    // PURPOSE: Make the underline + baseline thicker/darker
+    // ============================================================
+
+    // the baseline under all tabs
+    ".chakra-tabs__tablist": {
+      borderBottomWidth: "2px",
+      borderColor: "gray.300",
+    },
+
+    // the active tab underline
+    ".chakra-tabs__tab[aria-selected=true]": {
+      borderBottomWidth: "4px",
+      borderColor: "gray.800",
+    },
+  }}
+>
+
               <TabList>
                 <Tab>DI JSON</Tab>
                 <Tab>GenAI JSON</Tab>

@@ -1,3 +1,4 @@
+# /app/services/claims/invoice_version_located_fields/apply_genai_located_fields.rb]
 # frozen_string_literal: true
 
 module Claims
@@ -52,9 +53,8 @@ end
         field_key = (f["field_key"] || f[:field_key]).to_s.strip
         return nil if field_key.empty?
 
-        # IMPORTANT: your system constraints say: never use 0
-        line_number = coerce_int_or_nil(f["line_number"] || f[:line_number])
-        line_number = nil if line_number == 0
+line_number = coerce_int_or_nil(f["line_number"] || f[:line_number])
+line_number = 0 if line_number.nil? || line_number < 0
 
         value = f.key?("value") ? f["value"] : f[:value]
         value_type, value_text, value_json = coerce_value(value)

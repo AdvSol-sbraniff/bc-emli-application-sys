@@ -36,6 +36,10 @@ const InvoiceVersionShowScreen = lazy(() =>
 const AIAdminScreen = lazy(() =>
   import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })),
 );
+const RulesetEditorScreen = lazy(() =>
+  import('../ruleset-editor').then((module) => ({ default: module.default })),
+);
+
 
 // the invoicesadmin is in ../invoices-admin/
 // below is the code for it
@@ -699,6 +703,7 @@ const AppRoutes = observer(() => {
         <Route path="/ai-admin" element={<AIAdminScreen />} />    
         <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
         <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} /> 
+        <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
         {/* end sbra20260130 */}
 
 

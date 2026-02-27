@@ -30,23 +30,44 @@ skip_after_action  :verify_authorized,    only: %i[current_invoices read read_ge
         render json: { invoice_ids: invoice_ids }
       end
 
-      # ============================================================
-      # GET /api/claims/sessions/:session_id/invoices/:invoice_id/read
-      # PURPOSE: Read-screen payload for one invoice (resolves to *current* invoice_version)
-      # ============================================================
-      def read
-        row = ::Claims::CurrentInvoiceVersion.find_by(
-          session_id: params[:session_id],
-          invoice_id: params[:invoice_id]
-        )
+# ============================================================
+# GET /api/claims/sessions/:session_id/invoices/:invoice_id/read
+# PURPOSE: Read-screen payload for one invoice (resolves to *current* invoice_version)
+# ============================================================
+def read
 
-        if row.nil?
-          render json: { error: "Not found", session_id: params[:session_id], invoice_id: params[:invoice_id] }, status: :not_found
-          return
-        end
+  row = ::Claims::CurrentInvoiceVersion.find_by(
+    session_id: params[:session_id],
+    invoice_id: params[:invoice_id]
+  )
+      
+  if row.nil?
+    render json: { error: "Not found", session_id: params[:session_id], invoice_id: params[:invoice_id] }, status: :not_found
+    return
+  end
 
-        render json: { read: ::Claims::CurrentInvoiceVersionBlueprint.render_as_hash(row, view: :read_screen) }
-      end
+civ_id = row.id  # current invoice_version_id
+
+lineitems = ::Claims::Lineitem
+  .where(invoice_version_id: civ_id)
+  .order(:lineitem_seqno)
+  .as_json(
+    only: [
+      :id, :invoice_version_id, :lineitem_seqno,
+      :ocr_description, :ocr_description_page, :ocr_description_polygon,
+      :ocr_quantity, :ocr_quantity_page, :ocr_quantity_polygon,
+      :ocr_unit_price, :ocr_unit_price_page, :ocr_unit_price_polygon,
+      :ocr_amount, :ocr_amount_page, :ocr_amount_polygon,
+      :created_at, :updated_at
+    ]
+  )
+
+render json: {
+  read: ::Claims::CurrentInvoiceVersionBlueprint.render_as_hash(row, view: :read_screen),
+  lineitems: lineitems
+}
+end
+
 
 
 def node_mint_sas!(storage_key:, container: nil)
@@ -88,38 +109,77 @@ def pdf_url
   render json: { sas_url: node_resp["sas_url"] }
 end
 
-      # ============================================================
-      # GET /api/claims/sessions/:session_id/invoices/:invoice_id/read_genai
-      # PURPOSE: GenAI located fields for the *current* invoice_version of an invoice
-      # ============================================================
-      def read_genai
-        civ = ::Claims::CurrentInvoiceVersion.find_by(
-          session_id: params[:session_id],
-          invoice_id: params[:invoice_id]
-        )
 
-        if civ.nil?
-          render json: { error: "Not found", session_id: params[:session_id], invoice_id: params[:invoice_id] }, status: :not_found
-          return
-        end
+# ============================================================
+# GET /api/claims/sessions/:session_id/invoices/:invoice_id/read_genai
+# PURPOSE: GenAI located fields for the *current* invoice_version of an invoice
+# ============================================================
 
-        rows = ::Claims::InvoiceVersionLocatedField
-          .where(invoice_version_id: civ.id, source_engine: "genai")
-          .order(:field_key, :line_number, :created_at)
+def read_genai
+  civ = ::Claims::CurrentInvoiceVersion.find_by(
+    session_id: params[:session_id],
+    invoice_id: params[:invoice_id]
+  )
 
-        render json: {
-          invoice_version_id: civ.id,
-          located_fields: rows.as_json(
-            only: [
-              :id, :field_key, :line_number,
-              :value_type, :value_text, :value_json, :normalized_value,
-              :confidence, :page, :polygon,
-              :evidence_text, :evidence_hint, :notes,
-              :created_at, :updated_at
-            ]
-          )
-        }
-      end
+  if civ.nil?
+    render json: { error: "Not found", session_id: params[:session_id], invoice_id: params[:invoice_id] }, status: :not_found
+    return
+  end
+
+  located_rows = ::Claims::InvoiceVersionLocatedField
+    .where(invoice_version_id: civ.id, source_engine: "genai")
+    .order(:field_key, :line_number, :created_at)
+
+code_located_rows = ::Claims::InvoiceVersionLocatedField
+  .where(invoice_version_id: civ.id, source_engine: "code")
+  .order(:field_key, :line_number, :created_at)
+
+  rule_rows = ::Claims::InvoiceVersionRulecheck
+    .where(invoice_version_id: civ.id, source_engine: "genai") # remove source_engine filter if you don't have it
+    .order(:rule_number, :created_at)
+
+  render json: {
+    invoice_version_id: civ.id,
+
+    located_fields: located_rows.as_json(
+      only: [
+        :id, :field_key, :line_number,
+        :value_type, :value_text, :value_json, :normalized_value,
+        :confidence, :page, :polygon,
+        :evidence_text, :evidence_hint, :notes,
+        :created_at, :updated_at
+      ]
+    ),
+
+code_located_fields: code_located_rows.as_json(
+  only: [
+    :id, :field_key, :line_number,
+    :value_type, :value_text, :value_json, :normalized_value,
+    :confidence, :page, :polygon,
+    :evidence_text, :evidence_hint, :notes,
+    :created_at, :updated_at
+  ]
+),
+
+    rulechecks: rule_rows.as_json(
+      only: [
+        :id,
+        :rule_number, :rule_name,
+        :rule_pass_flag,
+        :confidence,
+        :expected_text, :observed_text, # <- your “make them strings” decision
+        :calculation,
+        :tolerance_notes,
+        :evidence_text, :evidence_hint,
+        :reason_and_likely_causes,
+        :created_at, :updated_at
+      ]
+    )
+  }
+end
+
+
+
     end
   end
 end

@@ -89,18 +89,48 @@ INSERT INTO public.contractors (
 ) VALUES
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
    '22222222-2222-2222-2222-222222222222',
-   'Acme Windows Ltd',
-   'https://acmewindows.example',
+   'Centra Windows Ltd',
+   'https://centrawindows.example',
    '250-555-0100',
    'office@acmewindows.example',
    true,
    'C-0001',
    '250-555-0199',
    '123 Main St',
-   'Victoria',
-   'V8V 1A1',
+   'Calgary',
+   'T2C 2X7',
    now(),
    now());
+
+-- ============================================================
+-- INSERT USERS_ELIGIBILITYCODES (claims)
+-- ============================================================
+
+-- cleanup (repeatable)
+DELETE FROM claims.users_eligibilitycodes
+WHERE eligibility_code IN ('ESP1-136a31ba')
+   OR user_id = '33333333-3333-3333-3333-333333333333';
+
+INSERT INTO claims.users_eligibilitycodes (
+  id,
+  user_id,
+  eligibility_code,
+  applied_at,
+  approved_at,
+  expires_at,
+  created_at,
+  updated_at
+) VALUES (
+  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', -- fixed ID for repeatability
+  '33333333-3333-3333-3333-333333333333', -- participant user
+  'ESP1-136a31ba',
+  now() - interval '10 days',
+  now() - interval '7 days',
+  now() + interval '173 days', -- > applied_at (passes CHECK)
+  now(),
+  now()
+);
+
 
 COMMIT;
 
