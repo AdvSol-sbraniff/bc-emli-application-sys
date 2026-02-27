@@ -1,6 +1,7 @@
+// /app/frontend/components/domains/invoice-versions/index.tsx
 import { fmtDate, fmtMoney, fmtText } from "./display";
 
-import { Box, Button, Heading, Text, Flex, Container, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
+import { Box, Button, Heading, Text, Flex, Container, Accordion, AccordionItem, Badge, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar'; // adjust path
 
 
@@ -8,21 +9,6 @@ import { BlueTitleBar } from '../../shared/base/blue-title-bar'; // adjust path
 // SECTION 00 — FILE OVERVIEW
 // PURPOSE: Invoice read screen with left fields + PDF viewer + DI polygon highlight
 // ============================================================
-
-/*
-import {
-  Box,
-  Button,
-  Heading,
-  Text,
-
-  Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
-} from '@chakra-ui/react';
-*/
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -195,6 +181,9 @@ const [pageInput, setPageInput] = useState<string>("1");
 const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
 
+const [codeFields, setCodeFields] = useState<any[]>([]);
+const [codeFieldsError, setCodeFieldsError] = useState<string | null>(null);
+
 // ============================================================
 // SECTION 05.01.01 — ACTIVE HIGHLIGHT (SINGLE SOURCE OF TRUTH)
 // PURPOSE: BOTH header fields and GenAI rows set this (page + polygon)
@@ -217,6 +206,22 @@ const [activeHighlight, setActiveHighlight] = useState<{
 const [genAiFields, setGenAiFields] = useState<any[]>([]);
 const [genAiError, setGenAiError] = useState<string | null>(null);
 
+
+
+// ============================================================
+// SECTION 05.03 — GENAI RULECHECKS STATE
+// PURPOSE: Store GenAI rulechecks (from /read_genai_rulechecks endpoint)
+// ============================================================
+
+const [genAiRulechecks, setGenAiRulechecks] = useState<any[]>([]);
+const [genAiRulechecksError, setGenAiRulechecksError] = useState<string | null>(null);
+
+// ============================================================
+// SECTION 05.04 — LINEITEMS STATE
+// PURPOSE: Store OCR lineitems (from /read response)
+// ============================================================
+const [lineitems, setLineitems] = useState<any[]>([]);
+const [lineitemsError, setLineitemsError] = useState<string | null>(null);
 
 // ============================================================
 // SECTION 06.01 — LOAD INVOICE NAV LIST
@@ -302,16 +307,18 @@ useEffect(() => {
       { headers: { Accept: 'application/json' }, credentials: 'include' }
     );
     const json = await resp.json();
-    setReadData(json.read ?? null);
+
+setReadData(json.read ?? null);
+setLineitems(Array.isArray(json.lineitems) ? json.lineitems : []);
+
   };
   run();
 }, [sessionId, invoiceId]);
 
 
 // ============================================================
-// SECTION 06.02.01 — LOAD GENAI LOCATED FIELDS
+// SECTION 06.02.01 — LOAD GENAI LOCATED FIELDS (+ optional rulechecks)
 // PURPOSE: Fetch GenAI located fields for the current invoice_version
-// ENDPOINT: /api/sessions/:session_id/invoices/:invoice_id/read_genai
 // ============================================================
 
 useEffect(() => {
@@ -323,7 +330,7 @@ useEffect(() => {
 
       const resp = await fetch(
         `/api/claims/sessions/${sessionId}/invoices/${invoiceId}/read_genai`,
-        { headers: { Accept: 'application/json' }, credentials: 'include' }
+        { headers: { Accept: "application/json" }, credentials: "include" }
       );
 
       if (!resp.ok) {
@@ -334,7 +341,21 @@ useEffect(() => {
       }
 
       const json = await resp.json();
-      setGenAiFields(json.located_fields ?? []);
+
+      // ============================================================
+      // SECTION 06.02.01.01 — LOCATED FIELDS
+      // ============================================================
+setGenAiFields(Array.isArray(json?.located_fields) ? json.located_fields : []);
+setCodeFields(Array.isArray(json?.code_located_fields) ? json.code_located_fields : []);
+
+      // ============================================================
+      // SECTION 06.02.01.10 — RULECHECKS (ONLY IF PRESENT)
+      // ============================================================
+      if ("rulechecks" in (json ?? {})) {
+        setGenAiRulechecks(Array.isArray(json?.rulechecks) ? json.rulechecks : []);
+        setGenAiRulechecksError(null);
+      }
+
     } catch (e: any) {
       setGenAiFields([]);
       setGenAiError(`read_genai error: ${String(e?.message ?? e)}`);
@@ -343,7 +364,6 @@ useEffect(() => {
 
   run();
 }, [sessionId, invoiceId]);
-
 
 
 // ============================================================
@@ -377,7 +397,7 @@ useEffect(() => {
   const el = pdfWrapRef.current;
   if (!el) return;
 
-  const MAX_PDF_WIDTH = 950;
+  const MAX_PDF_WIDTH = 750;
 
   const ro = new ResizeObserver(() => {
     const w = Math.max(300, Math.floor(el.clientWidth));
@@ -542,7 +562,14 @@ const overlayHeightPx = useMemo(() => {
   return renderWidthPx * (activePageMeta.height / activePageMeta.width);
 }, [activePageMeta, renderWidthPx]);
 
-
+// ============================================================
+// SECTION 06.07.10 — SYNC PAGE INPUT TO ACTIVE PAGE
+// PURPOSE: Keep the page textbox updated when page changes via
+//          highlights, Prev/Next, or manual nav
+// ============================================================
+useEffect(() => {
+  setPageInput(String(activePageNumber));
+}, [activePageNumber]);
 
 // ------------------------------------------------------------
 // SECTION 06.08.01 — OVERLAY WIDTH SOURCE OF TRUTH
@@ -564,9 +591,15 @@ const renderHeightPx = useMemo(() => {
 // PURPOSE: JSX layout tree (header + nav + split panes)
 // ============================================================
 
-  return (
+return (
+  <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
+    <BlueTitleBar title="Admin Full Details" />
 
-<Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
+<Container maxW="full" px={6} pb={4} flex="1" pt={6}>
+      <Box display="flex" flexDirection="column" height="100%">
+
+        {/* keep your existing content, but REMOVE your old <Heading ...>Admin Full Details</Heading>
+            (BlueTitleBar replaces it) */}
 
     {/* ============================================================
         SECTION 07.02 — PAGE LAYOUT
@@ -574,9 +607,7 @@ const renderHeightPx = useMemo(() => {
         ============================================================ */}
 
       <Box display="flex" flexDirection="column" height="100%">
-<Heading size="lg" color="theme.blueAlt" mb="12px">
-  Confirm Your Details
-</Heading>
+
 
 
 
@@ -601,6 +632,15 @@ const renderHeightPx = useMemo(() => {
             →
           </Button>
 
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => {
+              console.log('[STUB] Draft revision request', { invoice_version_id: id ?? null });
+            }}
+          >
+            Auto populate a draft revision request
+          </Button>
 
         </Box>
 
@@ -618,12 +658,22 @@ const renderHeightPx = useMemo(() => {
     ============================================================ */}
 
 <Box
-  width="360px"
   borderWidth="1px"
   borderRadius="md"
   p="12px"
-  overflow="auto"
+
+  // IMPORTANT: overflow must NOT be "visible" for resize to show
+  sx={{
+    resize: "horizontal",
+    overflow: "auto",
+  }}
+
+  minW="360px"
+  maxW="820px"
+  w="520px"
+  flexShrink={0}
 >
+
   {/* ============================================================
       SECTION 07.05.01 — FIELDS ACCORDION
       PURPOSE: Collapsible container for the DI header fields list
@@ -644,13 +694,16 @@ const renderHeightPx = useMemo(() => {
     <h2>
       <AccordionButton px="0" py="6px" _hover={{ bg: "transparent" }}>
         <Box flex="1" textAlign="left">
-          <Heading size="sm">General Invoice Fields</Heading>
+          <Text size="sm">Invoice</Text>
         </Box>
         <AccordionIcon />
       </AccordionButton>
     </h2>
 
     <AccordionPanel px="0" pt="8px">
+
+<Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+
       {DI_FIELDS.map((f) => {
         const raw = readData?.[f.valueKey];
         const display = f.formatter ? f.formatter(raw) : String(raw ?? "-");
@@ -667,8 +720,125 @@ const renderHeightPx = useMemo(() => {
           />
         );
       })}
+
+</Box>
+
     </AccordionPanel>
   </AccordionItem>
+
+
+{/* ============================================================
+    SECTION 07.05.15 — ACCORDION ITEM: LINE ITEMS (OCR)
+    PURPOSE: Show claims.lineitems + click to highlight polygon
+    ============================================================ */}
+<AccordionItem borderTopWidth="1px" borderColor="gray.200">
+  <h2>
+    <AccordionButton px="0" py="6px" _hover={{ bg: "transparent" }}>
+      <Box flex="1" textAlign="left">
+        <Text size="sm">Line Items</Text>
+      </Box>
+      <AccordionIcon />
+    </AccordionButton>
+  </h2>
+
+  <AccordionPanel px="0" pt="8px">
+    {lineitemsError && (
+      <Text fontSize="xs" color="red.500" mb="8px">
+        {lineitemsError}
+      </Text>
+    )}
+
+    {!lineitemsError && lineitems.length === 0 && (
+      <Text fontSize="sm" opacity={0.7}>
+        No line items found.
+      </Text>
+    )}
+
+<Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+
+{lineitems.map((li: any) => {
+  const seq = li.lineitem_seqno ?? li.seqno ?? "?";
+
+  // helper to build a FieldRow-like entry
+  const makeRow = (opts: {
+    subKey: string;
+    label: string;
+    value: any;
+    page: any;
+    polygon: any;
+  }) => {
+    const clickable = opts.page != null && opts.polygon != null;
+
+    const isActive =
+      activeHighlight?.source === "di" &&
+      activeHighlight?.key === `lineitem_${seq}_${opts.subKey}`;
+
+    return (
+      <FieldRow
+        key={`${li.id ?? `li-${seq}`}-${opts.subKey}`}
+        label={`Line ${seq} — ${opts.label}`}
+        value={opts.value}
+        active={isActive}
+        disabled={!clickable}
+        onClick={
+          clickable
+            ? () => {
+                setActiveHighlight({
+                  source: "di",
+                  key: `lineitem_${seq}_${opts.subKey}`,
+                  pageNumber: Number(opts.page),
+                  polygon: opts.polygon,
+                });
+                setActiveHighlightKey(`lineitem_${seq}_${opts.subKey}`);
+              }
+            : undefined
+        }
+      />
+    );
+  };
+
+  return (
+    <Box key={li.id ?? `li-${seq}`} mb="10px">
+      {makeRow({
+        subKey: "desc",
+        label: "Description",
+        value: li.ocr_description ?? "-",
+        page: li.ocr_description_page,
+        polygon: li.ocr_description_polygon,
+      })}
+
+      {makeRow({
+        subKey: "qty",
+        label: "Quantity",
+        value: li.ocr_quantity != null ? String(li.ocr_quantity) : "-",
+        page: li.ocr_quantity_page,
+        polygon: li.ocr_quantity_polygon,
+      })}
+
+      {makeRow({
+        subKey: "unit",
+        label: "Unit price",
+        value: li.ocr_unit_price != null ? fmtMoney(li.ocr_unit_price) : "-",
+        page: li.ocr_unit_price_page,
+        polygon: li.ocr_unit_price_polygon,
+      })}
+
+      {makeRow({
+        subKey: "amt",
+        label: "Amount",
+        value: li.ocr_amount != null ? fmtMoney(li.ocr_amount) : "-",
+        page: li.ocr_amount_page,
+        polygon: li.ocr_amount_polygon,
+      })}
+    </Box>
+  );
+})}
+
+</Box>
+
+  </AccordionPanel>
+</AccordionItem>
+
 
   {/* ============================================================
       SECTION 07.05.20 — ACCORDION ITEM: GENAI LOCATED FIELDS
@@ -678,7 +848,7 @@ const renderHeightPx = useMemo(() => {
     <h2>
       <AccordionButton px="0" py="6px" _hover={{ bg: "transparent" }}>
         <Box flex="1" textAlign="left">
-          <Heading size="sm">Energy Savings Program Fields</Heading>
+          <Text size="sm">Energy Savings Program</Text>
         </Box>
         <AccordionIcon />
       </AccordionButton>
@@ -710,6 +880,8 @@ const renderHeightPx = useMemo(() => {
           SECTION 07.05.23 — GENAI LIST
           PURPOSE: minimal list: field_key + value + (page/confidence)
           ============================================================ */}
+  <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+
       {genAiFields.map((r: any) => {
         const label = `${r.field_key}${r.line_number != null ? ` (line ${r.line_number})` : ""}`;
 
@@ -774,7 +946,294 @@ bg={
 
         );
       })}
+</Box>
+    </AccordionPanel>
+  </AccordionItem>
 
+
+
+
+<AccordionItem borderTopWidth="1px" borderColor="gray.200">
+  <h2>
+    <AccordionButton px="0" py="6px" _hover={{ bg: "transparent" }}>
+      <Box flex="1" textAlign="left">
+        <Text size="sm">Pre-existing info on file</Text>
+      </Box>
+      <AccordionIcon />
+    </AccordionButton>
+  </h2>
+
+  <AccordionPanel px="0" pt="8px">
+    {/* error (reuse genAiError because same endpoint) */}
+    {genAiError && (
+      <Text fontSize="xs" color="red.500" mb="8px">
+        {genAiError}
+      </Text>
+    )}
+
+    {/* empty */}
+    {!genAiError && codeFields.length === 0 && (
+      <Text fontSize="sm" opacity={0.7}>
+        No pre-existing fields on file.
+      </Text>
+    )}
+
+<Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+
+    {/* list */}
+    {codeFields.map((r: any) => {
+      const label = `${r.field_key}${r.line_number != null ? ` (line ${r.line_number})` : ""}`;
+
+      const value =
+        (r.normalized_value != null && r.normalized_value !== "")
+          ? String(r.normalized_value)
+          : (r.value_text != null && r.value_text !== "")
+            ? String(r.value_text)
+            : (r.value_json != null)
+              ? JSON.stringify(r.value_json)
+              : "-";
+
+      const meta = [
+        r.page != null ? `p${r.page}` : null,
+        r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null,
+      ].filter(Boolean).join(" • ");
+
+      return (
+        <Box
+          key={r.id}
+          role="button"
+          cursor="pointer"
+          px="10px"
+          py="8px"
+          mb="6px"
+          borderRadius="md"
+          borderWidth="1px"
+          borderColor={
+            activeHighlight?.source === "code" && activeHighlight?.genaiId === Number(r.id)
+              ? "blue.400"
+              : "gray.200"
+          }
+          bg={
+            activeHighlight?.source === "code" && activeHighlight?.genaiId === Number(r.id)
+              ? "blue.50"
+              : "white"
+          }
+          _hover={{ bg: "gray.50", borderColor: "gray.300" }}
+          onClick={() => {
+            setActiveHighlight({
+              source: "code" as any, // <-- see note below
+              genaiId: Number(r.id),
+              pageNumber: r.page != null ? Number(r.page) : null,
+              polygon: r.polygon ?? null,
+            });
+          }}
+        >
+          <Text fontSize="xs" opacity={0.7}>{label}</Text>
+          <Text fontSize="sm" noOfLines={3}>{value}</Text>
+          {meta && <Text fontSize="xs" opacity={0.6}>{meta}</Text>}
+        </Box>
+      );
+    })}
+
+</Box>
+
+  </AccordionPanel>
+</AccordionItem>
+
+
+  {/* ============================================================
+      SECTION 07.05.30 — ACCORDION ITEM: GENAI RULECHECKS
+      PURPOSE: Display rules from claims.invoice_version_rulechecks
+      ============================================================ */}
+  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+    <h2>
+      <AccordionButton px="0" py="6px" _hover={{ bg: "transparent" }}>
+        <Box flex="1" textAlign="left">
+          <Text size="sm">Rule Checks</Text>
+        </Box>
+        <AccordionIcon />
+      </AccordionButton>
+    </h2>
+
+    <AccordionPanel px="0" pt="8px">
+
+
+{/* ============================================================
+    SECTION 07.05.30.05 — GENAI OVERALL SUMMARY (from /read)
+    PURPOSE: Quiet summary at top of Rule Checks panel
+    REQUIRES: readData includes these invoice_versions columns:
+      - genai_overall_confidence
+      - genai_all_rulechecks_pass_flag
+      - genai_admin_advice
+   ============================================================ */}
+<Box
+  mb="10px"
+  px="10px"
+  py="10px"
+  borderWidth="1px"
+  borderRadius="md"
+  borderColor="gray.200"
+  bg="gray.50"
+>
+  <Flex justify="space-between" align="center" mb="6px">
+    <Text fontSize="xs" opacity={0.7}>
+      Overall (GenAI)
+    </Text>
+
+    <Flex gap="10px" align="center">
+      <Text fontSize="xs" opacity={0.75}>
+        conf{" "}
+        <Text as="span" fontWeight="semibold" opacity={0.95}>
+          {readData?.genai_overall_confidence ?? 0}
+        </Text>
+      </Text>
+
+
+
+<Flex align="center" gap="6px">
+  <Text fontSize="xs" opacity={0.75}>
+    pass or fail:
+  </Text>
+
+<Box
+  as="span"
+  w="10px"
+  h="10px"
+  borderRadius="full"
+  display="inline-block"
+  bg={readData?.genai_all_rulechecks_pass_flag === true ? "green.400" : "red.400"}
+/>
+
+  <Text as="span" fontSize="xs" fontWeight="semibold" opacity={0.95}>
+    {readData?.genai_all_rulechecks_pass_flag === true
+      ? "TRUE"
+      : readData?.genai_all_rulechecks_pass_flag === false
+        ? "FALSE"
+        : "—"}
+  </Text>
+</Flex>
+
+    </Flex>
+  </Flex>
+
+  {String(readData?.genai_admin_advice ?? "").trim() ? (
+    <Text fontSize="sm" whiteSpace="pre-wrap">
+      {String(readData.genai_admin_advice)}
+    </Text>
+  ) : (
+    <Text fontSize="sm" opacity={0.7}>
+      No admin advice.
+    </Text>
+  )}
+</Box>
+
+      {/* error */}
+      {genAiRulechecksError && (
+        <Text fontSize="xs" color="red.500" mb="8px">
+          {genAiRulechecksError}
+        </Text>
+      )}
+
+      {/* empty */}
+      {!genAiRulechecksError && genAiRulechecks.length === 0 && (
+        <Text fontSize="sm" opacity={0.7}>
+          No rulechecks found.
+        </Text>
+      )}
+
+
+      {/* list */}
+      {genAiRulechecks.map((r: any) => {
+        const num = r.rule_number != null ? Number(r.rule_number) : null;
+        const title = `${num != null ? `Rule ${num}` : "Rule"} — ${String(r.rule_name ?? "")}`.trim();
+
+        const pass =
+          r.rule_pass_flag === true ? "PASS" :
+          r.rule_pass_flag === false ? "FAIL" :
+          "UNKNOWN";
+
+        const conf =
+          r.confidence != null && r.confidence !== ""
+            ? `conf ${Number(r.confidence).toFixed(0)}`
+            : "";
+
+        const meta = [pass, conf].filter(Boolean).join(" • ");
+
+        // you said you want strings: expected/observed/calculation etc.
+        const expected = r.expected_text ?? r.expected ?? "";
+        const observed = r.observed_text ?? r.observed ?? "";
+        const calc = r.calculation ?? "";
+        const tol = r.tolerance_notes ?? "";
+        const reason = r.reason_and_likely_causes ?? "";
+        const evText = r.evidence_text ?? "";
+        const evHint = r.evidence_hint ?? "";
+
+        return (
+          <Box
+            key={r.id ?? `${r.rule_number}-${r.rule_name}`}
+            px="10px"
+            py="8px"
+            mb="8px"
+            borderRadius="md"
+            borderWidth="1px"
+            borderColor="gray.200"
+            bg="white"
+          >
+            <Text fontSize="xs" opacity={0.7}>
+              {title}
+            </Text>
+
+            {meta && (
+              <Text fontSize="xs" opacity={0.6} mb="6px">
+                {meta}
+              </Text>
+            )}
+
+            {expected && (
+              <Box mb="6px">
+                <Text fontSize="xs" opacity={0.7}>expected</Text>
+                <Text fontSize="sm" whiteSpace="pre-wrap">{String(expected)}</Text>
+              </Box>
+            )}
+
+            {observed && (
+              <Box mb="6px">
+                <Text fontSize="xs" opacity={0.7}>observed</Text>
+                <Text fontSize="sm" whiteSpace="pre-wrap">{String(observed)}</Text>
+              </Box>
+            )}
+
+            {calc && (
+              <Box mb="6px">
+                <Text fontSize="xs" opacity={0.7}>calculation</Text>
+                <Text fontSize="sm" whiteSpace="pre-wrap">{String(calc)}</Text>
+              </Box>
+            )}
+
+            {tol && (
+              <Box mb="6px">
+                <Text fontSize="xs" opacity={0.7}>tolerance</Text>
+                <Text fontSize="sm" whiteSpace="pre-wrap">{String(tol)}</Text>
+              </Box>
+            )}
+
+            {reason && (
+              <Box mb="6px">
+                <Text fontSize="xs" opacity={0.7}>reason</Text>
+                <Text fontSize="sm" whiteSpace="pre-wrap">{String(reason)}</Text>
+              </Box>
+            )}
+
+            {(evText || evHint) && (
+              <Box>
+                <Text fontSize="xs" opacity={0.7}>evidence</Text>
+                {evText && <Text fontSize="sm" whiteSpace="pre-wrap">{String(evText)}</Text>}
+                {evHint && <Text fontSize="xs" opacity={0.6} whiteSpace="pre-wrap">{String(evHint)}</Text>}
+              </Box>
+            )}
+          </Box>
+        );
+      })}
     </AccordionPanel>
   </AccordionItem>
 
@@ -795,6 +1254,7 @@ bg={
 <Box
   ref={pdfWrapRef}
   flex="1"
+  minW={0}
   minH={0}
   borderWidth="1px"
   borderRadius="md"
@@ -986,8 +1446,13 @@ onClick={() => {
   </Document>
 )}
 
+
 <Text fontSize="xs" opacity={0.6} mt="8px">
-  Active highlight: {activeHighlightKey} | page {activePageNumber} / {numPages || "?"} | unit {activePageMeta?.unit ?? "-"}
+  Active highlight: {activeHighlight?.source ?? "-"}{" "}
+  {activeHighlight?.source === "di"
+    ? (activeHighlight?.key ?? "-")
+    : `genai ${activeHighlight?.genaiId ?? "-"}`}
+  {" "} | page {activePageNumber} / {numPages || "?"} | unit {activePageMeta?.unit ?? "-"}
 </Text>
 
 
@@ -1000,7 +1465,9 @@ onClick={() => {
 
     </Box>      {/* ✅ ADD: closes SECTION 07.04 main split view <Box display="flex" ...> */}
   </Box>        {/* ✅ ADD: closes SECTION 07.02 page layout <Box display="flex" flexDirection="column" ...> */}
+</Box>          {/* ✅ ADD THIS: closes the first Box inside Container (Box A) */}
 
+</Container>    {/* ✅ THIS is the closecontainer line */}
 </Flex>
 
   );

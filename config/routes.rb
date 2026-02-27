@@ -78,6 +78,8 @@ scope module: :claims, path: "claims" do
 # ============================================================
 get "sessions/:session_id/invoices", to: "invoices#index_by_session"
 
+get "admin/invoices", to: "invoice_grid#index"
+
   # ============================================================
   # SECTION 20 — SESSION CRUD (AI Admin / POC)
   # ============================================================
@@ -115,6 +117,14 @@ get "admin/invoices/:invoice_id/invoice_versions", to: "invoice_versions_admin#i
 
 # Screen B: fetch raw JSON blobs for one invoice_version (tabs)
 get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
+
+# ============================================================
+# SECTION 60 — RULESET EDITOR (admin)
+# ============================================================
+
+get  "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#show"
+patch "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#update"
+
 end
 # end sbra
 

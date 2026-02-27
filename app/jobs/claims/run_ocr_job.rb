@@ -55,26 +55,35 @@ Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
       payload = JSON.parse(resp.body)
       di_raw  = payload.fetch("di_raw_json")
 
-      # 4) persist DI payload
-      iv.update!(di_raw_json: di_raw)
 
+Claims::InvoiceVersion.transaction do
+  # 4) persist DI payload
+  iv.update!(di_raw_json: di_raw)
 
-# 4b) populate first-class fields on invoice_versions from di_raw_json
-result = ::Claims::InvoiceVersions::ApplyDiResult.call(
-  invoice_version_id: iv.id,
-  di_json: di_raw
-)
+  # 4b) populate first-class fields on invoice_versions from di_raw_json
+  result = ::Claims::InvoiceVersions::ApplyDiResult.call(
+    invoice_version_id: iv.id,
+    di_json: di_raw
+  )
 
-# 4c) IMPORTANT: fail the job if mapping failed (otherwise it fails silently)
-unless result[:ok] || result["ok"]
-  raise "ApplyDiResult failed: #{result[:error] || result['error'] || 'unknown error'}"
+  # 4c) fail if mapping failed
+  unless result[:ok] || result["ok"]
+    raise "ApplyDiResult failed: #{result[:error] || result['error'] || 'unknown error'}"
+  end
+
+  # 4d) populate lineitems from di_raw_json
+  li_result = ::Claims::Lineitems::ApplyDiLineitems.call(
+    invoice_version_id: iv.id,
+    di_json: di_raw
+  )
+
+  unless li_result[:ok] || li_result["ok"]
+    raise "ApplyDiLineitems failed: #{li_result[:error] || li_result['error'] || 'unknown error'}"
+  end
 end
 
-
-
-
       # 5) mark succeeded
-      step.update!(ok: true, updated_at: Time.current)
+      step.update!(ok: true, di_results_json: payload, updated_at: Time.current)
       inv.update!(status: "ocr_complete", status_updated_at: Time.current)
     rescue => e
       # mark failed (best-effort)

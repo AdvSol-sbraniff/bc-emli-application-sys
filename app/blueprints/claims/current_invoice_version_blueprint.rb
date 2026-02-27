@@ -7,6 +7,9 @@ class Claims::CurrentInvoiceVersionBlueprint < Blueprinter::Base
     fields :session_id, :invoice_id, :invoice_status,
            :id, :invoice_versionno
 
+    # ---- GenAI fields ----
+       fields :genai_overall_confidence, :genai_all_rulechecks_pass_flag, :genai_admin_advice
+
     # ---- storage pointer ----
     fields :storage_provider, :storage_key, :original_filename,
            :content_type, :byte_size, :sha256

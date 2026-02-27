@@ -1,8 +1,32 @@
-import { Box, Button, Container, Flex, Heading, Input, Text } from '@chakra-ui/react';
-import { Table, Thead, Tbody, Tr, Th, Td, Spinner } from '@chakra-ui/react';
+
+
+import {
+  Box,
+  Button,
+  Container,
+  Flex,
+  Heading,
+  Input,
+  Text,
+  Spinner,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+} from '@chakra-ui/react';
+
+
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { useLocation } from 'react-router-dom';
 
 // ============================================================
 // SECTION 00 — FILE OVERVIEW
@@ -126,7 +150,6 @@ const [validationGenaiRulesetId, setValidationGenaiRulesetId] =
   const [uploadError, setUploadError] = useState<string>('');
   const [uploadOkMsg, setUploadOkMsg] = useState<string>('');
 
-  
 
 
 // ============================================================
@@ -220,6 +243,73 @@ const [selectedRunId, setSelectedRunId] = useState<string>('');
 const [stepsLoading, setStepsLoading] = useState<boolean>(false);
 const [stepsError, setStepsError] = useState<string>('');
 const [steps, setSteps] = useState<IngestStepRow[]>([]);
+
+
+
+
+
+const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+const [lastAutoRefreshAt, setLastAutoRefreshAt] = useState<string>('');
+
+// any step still "running"?
+const hasRunningStep = useMemo(() => {
+  return steps.some((s) => s.ok === null || typeof s.ok === 'undefined');
+}, [steps]);
+
+// guard: only if we actually have a session_id
+const canAutoRefresh = !!sessionId.trim();
+
+useEffect(() => {
+  if (!autoRefresh) return;
+  if (!canAutoRefresh) return;
+
+  // If you haven’t loaded anything yet, don’t hammer.
+  // (User clicks Refresh once to “start tracking”.)
+  if (steps.length === 0) return;
+
+  // Only poll while something is still running (ok is null)
+  if (!hasRunningStep) return;
+
+  let cancelled = false;
+
+  const tick = async () => {
+    if (cancelled) return;
+    await fetchStepsBySession();
+    if (!cancelled) setLastAutoRefreshAt(new Date().toLocaleTimeString());
+  };
+
+  // poll every 2s (tweak to taste)
+  const id = window.setInterval(tick, 2000);
+
+  // do one immediate tick so it feels snappy
+  tick();
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(id);
+  };
+}, [autoRefresh, canAutoRefresh, hasRunningStep, sessionId, steps.length]);
+
+
+
+const location = useLocation();
+
+useEffect(() => {
+  const params = new URLSearchParams(location.search);
+
+  const sid = params.get('session_id');
+  const iid = params.get('invoice_id');
+  const ivid = params.get('invoice_version_id');
+  const rid = params.get('validationgenai_ruleset_id');
+
+  // Only set if present (so manual typing still works)
+  if (sid) setSessionId(sid);
+  if (iid) setInvoiceId(iid);
+  if (ivid) setInvoiceVersionId(ivid);
+  if (rid) setValidationGenaiRulesetId(rid);
+}, [location.search]);
+
+
 
 const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
 
@@ -324,7 +414,7 @@ setInvoiceVersionId('');
 const fetchStepsBySession = async () => {
   setStepsLoading(true);
   setStepsError('');
-  setSteps([]);
+  //setSteps([]);
 
   try {
     if (!sessionId.trim()) {
@@ -741,34 +831,7 @@ validationgenai_ruleset_id: validationGenaiRulesetId.trim(),
   }
 };
 
-// ============================================================
-// SECTION 03.02.06 — OPEN READ SCREEN (NEW TAB)
-// PURPOSE:
-// - Opens the Rails read screen in a NEW browser tab
-// - Uses the editable sessionId + invoiceId fields from the screen
-// - Example target format:
-//   http://localhost:3000/sessions/:session_id/invoices/:invoice_id/read
-// ============================================================
 
-const handleOpenReadScreen = () => {
-  // basic validation
-  if (!sessionId.trim()) {
-    setUploadError('Please enter a session_id first (needed to open read screen).');
-    return;
-  }
-  if (!invoiceId.trim()) {
-    setUploadError('Please enter an invoice_id first (needed to open read screen).');
-    return;
-  }
-
-  // build URL
-  const url = `http://localhost:3000/sessions/${encodeURIComponent(
-    sessionId.trim()
-  )}/invoices/${encodeURIComponent(invoiceId.trim())}/read`;
-
-  // open new tab
-  window.open(url, '_blank', 'noopener,noreferrer');
-};
 
   // ============================================================
   // SECTION 04 — RENDER
@@ -781,144 +844,401 @@ const handleOpenReadScreen = () => {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Admin - 1 off reruns" />
+      <BlueTitleBar title="Job Admin" />
 
       <Container maxW="container.lg" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Heading size="md" mb={2}>
-            Ingest Manual Tools
-          </Heading>
 
-          <Text fontSize="sm" opacity={0.8} mb={4}>
-            Create a new <code>claims.sessions</code> record (status <code>OPENBUTNOTSUBMITTED</code>) and then optionally
-            upload PDF(s) into Azure for that session.
+
+
+{/* ============================================================
+    SECTION 04.02 — TABBED ADMIN ACTIONS
+    PURPOSE:
+    - Convert the 4 action "boxes" into a tabbed layout
+    - Keep existing handlers/state unchanged (just reorganize UI)
+============================================================ */}
+
+<Box mt={6} mb={6}>
+
+  {/* ============================================================
+      SECTION 04.02.01 — TABS SHELL
+      PURPOSE: Four admin tabs (create, upload, upload-fix, run)
+  ============================================================ */}
+<Tabs
+  variant="line"
+  isFitted
+  colorScheme="gray"
+  sx={{
+    // ============================================================
+    // SECTION 04.02.01.01 — BOLDER LINE TAB STYLE
+    // PURPOSE: Make the underline + baseline thicker/darker
+    // ============================================================
+
+    // the baseline under all tabs
+    ".chakra-tabs__tablist": {
+      borderBottomWidth: "2px",
+      borderColor: "gray.300",
+    },
+
+    // the active tab underline
+    ".chakra-tabs__tab[aria-selected=true]": {
+      borderBottomWidth: "4px",
+      borderColor: "gray.800",
+    },
+  }}
+>
+    {/* ============================================================
+        SECTION 04.02.01.10 — TAB HEADERS
+    ============================================================ */}
+    <TabList mb="1em">
+      <Tab>Create new session</Tab>
+      <Tab>Upload new invoice</Tab>
+      <Tab>Upload fix +1 version</Tab>
+      <Tab>Run OCR/GenAI</Tab>
+      <Tab>End to end</Tab>
+    </TabList>
+
+    {/* ============================================================
+        SECTION 04.02.01.20 — TAB PANELS
+    ============================================================ */}
+
+    
+    <TabPanels>
+
+      {/* ============================================================
+          TAB 1 — CREATE NEW SESSION
+      ============================================================ */}
+      <TabPanel px={0}>
+
+
+          <Text fontSize="xs" opacity={0.75} mb={2}>
+            contractor_id is only used for creating a session.
           </Text>
 
+          <Box mb={3}>
+            <Text fontSize="xs" opacity={0.7} mb={1}>
+              contractor_id (UUID)
+            </Text>
+            <Input
+              value={contractorId}
+              onChange={(e) => setContractorId(e.target.value)}
+              placeholder="e.g. aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+              bg="white"
+              fontFamily="mono"
+            />
+          </Box>
+
+          <Button
+            colorScheme="blue"
+            onClick={handleCreateNewSession}
+            isLoading={isCreatingSession}
+            loadingText="Creating..."
+            isDisabled={isUploading || isRunningEndToEnd}
+          >
+            Create new session
+          </Button>
+        
+      </TabPanel>
+
+      {/* ============================================================
+          TAB 2 — UPLOAD NEW INVOICE
+      ============================================================ */}
+      <TabPanel px={0}>
+
+
+          <Text fontSize="xs" opacity={0.75} mb={2}>
+            session_id is only used for uploading a PDF to a session.
+          </Text>
+
+          <Box mb={3}>
+            <Text fontSize="xs" opacity={0.7} mb={1}>
+              session_id (editable)
+            </Text>
+            <Input
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              placeholder="session UUID (created above or paste one)"
+              bg="white"
+              fontFamily="mono"
+            />
+          </Box>
+
+          <Button
+            colorScheme="blue"
+            onClick={openFileChooser}
+            isLoading={isUploading}
+            loadingText="Uploading..."
+            isDisabled={isCreatingSession || isRunningEndToEnd || !sessionId.trim()}
+          >
+            Upload New invoice
+          </Button>
+
+          {selectedFiles.length > 0 && (
+            <Box mt={3}>
+              <Text fontSize="xs" opacity={0.7}>
+                Selected file
+              </Text>
+              <Text fontFamily="mono" fontSize="sm">
+                {selectedFiles[0].name} ({Math.round(selectedFiles[0].size / 1024)} KB)
+              </Text>
+            </Box>
+          )}
+
+      </TabPanel>
+
+      {/* ============================================================
+          TAB 3 — UPLOAD FIX +1 VERSION (STUB)
+      ============================================================ */}
+      <TabPanel px={0}>
+
+
+          <Text fontSize="xs" opacity={0.75} mb={2}>
+            invoice_id is only used for the upload-fix action.
+          </Text>
+
+          <Box mb={3}>
+            <Text fontSize="xs" opacity={0.7} mb={1}>
+              invoice_id (editable)
+            </Text>
+            <Input
+              value={invoiceId}
+              onChange={(e) => setInvoiceId(e.target.value)}
+              placeholder="invoice UUID (upload populates it, or paste one)"
+              bg="white"
+              fontFamily="mono"
+            />
+          </Box>
+
+          <Button variant="outline" isDisabled>
+            Upload-fix +1 version
+          </Button>
+        
+      </TabPanel>
+
+      {/* ============================================================
+          TAB 4 — RUN OCR / GENAI  (includes the step-run tracker)
+      ============================================================ */}
+      <TabPanel px={0}>
+
+        {/* ============================================================
+            SECTION 04.02.T4.10 — RUN OCR / RUN GENAI INPUTS + BUTTONS
+        ============================================================ */}
+ 
+          <Text fontSize="xs" opacity={0.75} mb={3}>
+            invoice_version_id + ruleset_id are only used for OCR/GenAI runs.
+          </Text>
+
+          <Box mb={3}>
+            <Text fontSize="xs" opacity={0.7} mb={1}>
+              invoice_version_id (editable)
+            </Text>
+            <Input
+              value={invoiceVersionId}
+              onChange={(e) => setInvoiceVersionId(e.target.value)}
+              placeholder="invoice_version UUID (upload populates it, or paste one)"
+              bg="white"
+              fontFamily="mono"
+            />
+          </Box>
+
+          <Box mb={3}>
+            <Text fontSize="xs" opacity={0.7} mb={1}>
+              validationgenai_ruleset_id (editable)
+            </Text>
+            <Input
+              value={validationGenaiRulesetId}
+              onChange={(e) => setValidationGenaiRulesetId(e.target.value)}
+              placeholder="paste ruleset UUID here"
+              bg="white"
+              fontFamily="mono"
+            />
+          </Box>
+
+          <Flex gap={3} wrap="wrap">
+            <Button
+              colorScheme="blue"
+              onClick={handleRunOcr}
+              isLoading={isRunningOcr}
+              loadingText="Running..."
+              isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
+            >
+              Run OCR
+            </Button>
+
+            <Button
+              colorScheme="blue"
+              onClick={handleRunGenai}
+              isLoading={isRunningGenai}
+              loadingText="Running..."
+              isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
+            >
+              Run GenAI
+            </Button>
+          </Flex>
+    
+
+        {/* ============================================================
+            SECTION 04.02.T4.20 — STEP RUN TRACKER (MOVED INTO TAB 4)
+            PURPOSE: Combines "run dashboard" + run buttons in one tab
+        ============================================================ */}
+        <Box mt={6} p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
+          <Flex align="center" justify="space-between" mb={3} wrap="wrap" gap={3}>
+            <Box>
+              <Heading size="sm">Step Run Tracker</Heading>
+              <Text fontSize="xs" opacity={0.7}>
+                Single grid: ingest_step_runs filtered by <code>session_id</code> (paste a session id in Upload tab, then Refresh).
+              </Text>
+            </Box>
+
+            <Flex gap={2}>
+              <Button size="sm" onClick={fetchStepsBySession} isLoading={stepsLoading}>
+                Refresh
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setSteps([]);
+                  setStepsError('');
+                }}
+                isDisabled={steps.length === 0}
+              >
+                Clear
+              </Button>
+            </Flex>
+          </Flex>
+
+          {stepsError && (
+            <Box mb={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+              <Text fontSize="sm" color="red.700">
+                {stepsError}
+              </Text>
+            </Box>
+          )}
+
+          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
+            <Flex align="center" justify="space-between" mb={2}>
+              <Text fontSize="sm" fontWeight="bold">
+                Steps (filtered by session_id)
+              </Text>
+              {stepsLoading && <Spinner size="sm" />}
+            </Flex>
+
+            <Table size="sm">
+              <Thead>
+                <Tr>
+                  <Th>created</Th>
+                  <Th>step_id</Th>
+                  <Th>type</Th>
+                  <Th>ok</Th>
+                  <Th>invoice_version_id</Th>
+                  <Th>ruleset</Th>
+                  <Th>error</Th>
+                </Tr>
+              </Thead>
+
+              <Tbody>
+                {steps.map((s) => (
+                  <Tr key={s.id}>
+                    <Td fontFamily="mono" fontSize="xs">
+                      {fmtTs(s.created_at)}
+                    </Td>
+                    <Td fontFamily="mono" fontSize="xs">
+                      {s.id}
+                    </Td>
+                    <Td fontFamily="mono" fontSize="xs">
+                      {s.step_type ?? ''}
+                    </Td>
+
+                    <Td fontSize="xs">
+                      {s.ok === null || typeof s.ok === 'undefined' ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <Box
+                          w="10px"
+                          h="10px"
+                          borderRadius="full"
+                          display="inline-block"
+                          bg={s.ok ? 'green.500' : 'red.500'}
+                        />
+                      )}
+                    </Td>
+
+                    <Td fontFamily="mono" fontSize="xs">
+                      {s.invoice_version_id ?? ''}
+                    </Td>
+                    <Td fontFamily="mono" fontSize="xs">
+                      {s.validationgenai_ruleset_id ?? ''}
+                    </Td>
+                    <Td fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap">
+                      {s.error_text ?? ''}
+                    </Td>
+                  </Tr>
+                ))}
+
+                {!stepsLoading && steps.length === 0 && (
+                  <Tr>
+                    <Td colSpan={7}>
+                      <Text fontSize="sm" opacity={0.7}>
+                        Paste a session_id (Upload tab) and click Refresh.
+                      </Text>
+                    </Td>
+                  </Tr>
+                )}
+              </Tbody>
+            </Table>
+          </Box>
+        </Box>
+      </TabPanel>
+
 {/* ============================================================
-    SECTION 04.01.50 — END-TO-END BUTTON (PRIMARY)
-    PURPOSE: Run full ingest chain in one click (prod-style).
+    TAB 5 — END-TO-END
 ============================================================ */}
+<TabPanel px={0}>
+  {/* ============================================================
+      SECTION 04.01.50 — END-TO-END BUTTON (PRIMARY)
+      PURPOSE: Run full ingest chain in one click (prod-style).
+  ============================================================ */}
+ 
 
-<Box mt={6} mb={6} p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-  <Heading size="sm" mb={2}>
-    End-to-end ingest
-  </Heading>
+    <Text fontSize="sm" opacity={0.8} mb={3}>
+      Creates a new session and runs the full pipeline (upload → OCR → GenAI) in one action.
+    </Text>
 
-  <Text fontSize="sm" opacity={0.8} mb={3}>
-    Creates a new session and runs the full pipeline (upload → OCR → GenAI) in one action.
-  </Text>
+    <Button
+      colorScheme="green"
+      onClick={handleRunEndToEnd}
+      isLoading={isRunningEndToEnd}
+      loadingText="Running..."
+      isDisabled={isCreatingSession || isUploading}
+    >
+      Run end to end
+    </Button>
 
-  <Button
-    colorScheme="green"
-    onClick={handleRunEndToEnd}
-    isLoading={isRunningEndToEnd}
-    loadingText="Running..."
-    isDisabled={isCreatingSession || isUploading}
-  >
-    Run end-to-end
-  </Button>
+    {endToEndError && (
+      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+        <Text fontSize="sm" color="red.700">
+          {endToEndError}
+        </Text>
+      </Box>
+    )}
 
-  {endToEndError && (
-    <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-      <Text fontSize="sm" color="red.700">
-        {endToEndError}
-      </Text>
-    </Box>
-  )}
+    {endToEndOkMsg && (
+      <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
+        <Text fontSize="sm" color="green.800">
+          {endToEndOkMsg}
+        </Text>
+      </Box>
+    )}
 
-  {endToEndOkMsg && (
-    <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-      <Text fontSize="sm" color="green.800">
-        {endToEndOkMsg}
-      </Text>
-    </Box>
-  )}
+</TabPanel>
+
+
+    </TabPanels>
+  </Tabs>
 </Box>
 
-
-
-{/* ============================================================
-    SECTION 04.02 — CREATE SESSION INPUT
-    PURPOSE: contractor_id input only (button is in the admin buttons row)
-============================================================ */}
-
-<Box mb={4}>
-  <Text fontSize="xs" opacity={0.7} mb={1}>
-    contractor_id (UUID)
-  </Text>
-  <Input
-    value={contractorId}
-    onChange={(e) => setContractorId(e.target.value)}
-    placeholder="e.g. aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-    bg="white"
-    fontFamily="mono"
-  />
-</Box>
-
-
-{/* ============================================================
-    SECTION 04.02.02 — IDS (EDITABLE)
-    PURPOSE: session_id / invoice_id / invoice_version_id
-============================================================ */}
-
-{/* session_id (editable) */}
-<Box mt={5} mb={4}>
-  <Text fontSize="xs" opacity={0.7} mb={1}>
-    session_id (editable)
-  </Text>
-  <Input
-    value={sessionId}
-    onChange={(e) => setSessionId(e.target.value)}
-    placeholder="session UUID will appear here (or type one)"
-    bg="white"
-    fontFamily="mono"
-  />
-  <Text fontSize="xs" opacity={0.6} mt={2}>
-    Tip: you can paste an existing session id here if you want to upload to it.
-  </Text>
-</Box>
-
-{/* invoice_id (editable) */}
-<Box mb={4}>
-  <Text fontSize="xs" opacity={0.7} mb={1}>
-    invoice_id (editable)
-  </Text>
-  <Input
-    value={invoiceId}
-    onChange={(e) => setInvoiceId(e.target.value)}
-    placeholder="invoice UUID will appear here after upload (or type one)"
-    bg="white"
-    fontFamily="mono"
-  />
-</Box>
-
-{/* invoice_version_id (editable) */}
-<Box mb={4}>
-  <Text fontSize="xs" opacity={0.7} mb={1}>
-    invoice_version_id (editable)
-  </Text>
-  <Input
-    value={invoiceVersionId}
-    onChange={(e) => setInvoiceVersionId(e.target.value)}
-    placeholder="invoice_version UUID will appear here after upload (or type one)"
-    bg="white"
-    fontFamily="mono"
-  />
-</Box>
-
-{/* x.04.02.02.40 — validationgenai_ruleset_id (editable) */}
-<Box mb={4}>
-  <Text fontSize="xs" opacity={0.7} mb={1}>
-    validationgenai_ruleset_id (editable)
-  </Text>
-  <Input
-    value={validationGenaiRulesetId}
-    onChange={(e) => setValidationGenaiRulesetId(e.target.value)}
-    placeholder="paste ruleset UUID here"
-    bg="white"
-    fontFamily="mono"
-  />
-</Box>
 
 
 {/* ============================================================
@@ -935,99 +1255,9 @@ const handleOpenReadScreen = () => {
     onChange={handleFilesChosen}
   />
 
-  {/* ============================================================
-      SECTION 04.03.01 — ADMIN BUTTONS ROW
-      PURPOSE: One-off admin buttons, laid out side-by-side.
-  ============================================================ */}
-
-  <Box mt={3}>
-    <Flex gap={3} wrap="wrap">
-      <Button
-        colorScheme="blue"
-        onClick={handleCreateNewSession}
-        isLoading={isCreatingSession}
-        loadingText="Creating..."
-        isDisabled={isUploading || isRunningEndToEnd}
-      >
-        Create new session
-      </Button>
-
-      <Button
-        colorScheme="blue"
-        onClick={openFileChooser}
-        isLoading={isUploading}
-        loadingText="Uploading..."
-        isDisabled={isCreatingSession || isRunningEndToEnd}
-      >
-        Upload New invoice
-      </Button>
-
-      <Button variant="outline" isDisabled>
-        Upload-fix +1 version
-      </Button>
-
-{/* ============================================================
-    SECTION 04.03.01.20 — RUN OCR BUTTON
-    PURPOSE: Calls Rails OCR endpoint and queues Sidekiq work
-============================================================ */}
-
-<Button
-  colorScheme="blue"
-  onClick={handleRunOcr}
-  isLoading={isRunningOcr}
-  loadingText="Running..."
-  isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
->
-  Run OCR
-</Button>
 
 
 
-<Button
-  colorScheme="blue"
-  onClick={handleRunGenai}
-  isLoading={isRunningGenai}
-  loadingText="Running..."
-  isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
->
-  Run GenAI
-</Button>
-
-    </Flex>
-  </Box>
-
-
-{/* ============================================================
-    SECTION 04.03.01.25 — OPEN READ SCREEN BUTTON (NEW TAB)
-    PURPOSE:
-    - Opens the Rails read screen for the typed session_id + invoice_id
-============================================================ */}
-
-<Button
-  colorScheme="purple"
-  variant="outline"
-  onClick={handleOpenReadScreen}
-  isDisabled={!sessionId.trim() || !invoiceId.trim()}
->
-  Open Confirm Details Screen
-</Button>
-
-  {/* ============================================================
-      SECTION 04.03.02 — SELECTED FILE (ADMIN)
-      PURPOSE: New upload is single-file only.
-  ============================================================ */}
-
-  {selectedFiles.length > 0 && (
-    <Box mt={3}>
-      <Text fontSize="xs" opacity={0.7}>
-        Selected file
-      </Text>
-
-      <Text fontFamily="mono" fontSize="sm">
-        {selectedFiles[0].name} ({Math.round(selectedFiles[0].size / 1024)} KB)
-      </Text>
-    </Box>
-  )}
 
   {/* ============================================================
       SECTION 04.03.03 — MESSAGES
@@ -1102,223 +1332,10 @@ const handleOpenReadScreen = () => {
   </Box>
 )}
 
-{/* ============================================================
-    SECTION 04.03.50 — RUN TRACKER (SINGLE GRID)
-    PURPOSE:
-    - Show ingest_step_runs only
-    - Filter by session_id textbox (sessionId state)
-    - Use Run Output panel to show raw JSON from refresh
-============================================================ */}
-
-<Box mt={8} p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-  <Flex align="center" justify="space-between" mb={3} wrap="wrap" gap={3}>
-    <Box>
-      <Heading size="sm">Step Run Tracker</Heading>
-      <Text fontSize="xs" opacity={0.7}>
-        Single grid: ingest_step_runs filtered by <code>session_id</code> (paste a session id above, then Refresh).
-      </Text>
-    </Box>
-
-    <Flex gap={2}>
-      {/* NOTE: Step 2.02 will wire this button to a new fetchStepsForSession() function.
-          For now it just keeps your existing fetchRuns() so the section compiles. */}
-<Button size="sm" onClick={fetchStepsBySession} isLoading={stepsLoading}>
-        Refresh
-      </Button>
-
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => {
-          setSteps([]);
-          setStepsError('');
-        }}
-        isDisabled={steps.length === 0}
-      >
-        Clear
-      </Button>
-    </Flex>
-  </Flex>
-
-  {/* show errors (we will use stepsError going forward) */}
-  {stepsError && (
-    <Box mb={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-      <Text fontSize="sm" color="red.700">
-        {stepsError}
-      </Text>
-    </Box>
-  )}
-
-  {/* GRID: STEPS ONLY */}
-  <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
-    <Flex align="center" justify="space-between" mb={2}>
-      <Text fontSize="sm" fontWeight="bold">
-        Steps (filtered by session_id)
-      </Text>
-      {stepsLoading && <Spinner size="sm" />}
-    </Flex>
-
-    <Table size="sm">
-      <Thead>
-        <Tr>
-          <Th>created</Th>
-          <Th>step_id</Th>
-          <Th>type</Th>
-          <Th>ok</Th>
-          <Th>invoice_version_id</Th>
-          <Th>ruleset</Th>
-          <Th>error</Th>
-        </Tr>
-      </Thead>
-
-      <Tbody>
-        {steps.map((s) => (
-          <Tr key={s.id}>
-            <Td fontFamily="mono" fontSize="xs">
-              {fmtTs(s.created_at)}
-            </Td>
-            <Td fontFamily="mono" fontSize="xs">
-              {s.id}
-            </Td>
-            <Td fontFamily="mono" fontSize="xs">
-              {s.step_type ?? ''}
-            </Td>
-            <Td fontFamily="mono" fontSize="xs">
-              {String(s.ok ?? '')}
-            </Td>
-            <Td fontFamily="mono" fontSize="xs">
-              {s.invoice_version_id ?? ''}
-            </Td>
-            <Td fontFamily="mono" fontSize="xs">
-              {s.validationgenai_ruleset_id ?? ''}
-            </Td>
-            <Td fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap">
-              {s.error_text ?? ''}
-            </Td>
-          </Tr>
-        ))}
-
-        {!stepsLoading && steps.length === 0 && (
-          <Tr>
-            <Td colSpan={7}>
-              <Text fontSize="sm" opacity={0.7}>
-                Paste a session_id above and click Refresh.
-              </Text>
-            </Td>
-          </Tr>
-        )}
-      </Tbody>
-    </Table>
-  </Box>
-</Box>
 
 
 
-          {/* ============================================================
-              SECTION 04.04 — RUN OUTPUT (DEBUG)
-              PURPOSE: Show last server response on-screen for phone support
-          ============================================================ */}
 
-          <Box mt={8} borderTopWidth="1px" borderTopColor="greys.grey20" pt={5}>
-            <Flex align="center" justify="space-between" mb={2}>
-              <Heading size="sm">Run Output</Heading>
-
-              <Flex gap={2}>
-                <Button size="sm" variant="ghost" onClick={() => setShowRunOutput((v) => !v)}>
-                  {showRunOutput ? 'Hide' : 'Show'}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={clearRunOutput} isDisabled={!lastResponsePretty}>
-                  Clear
-                </Button>
-              </Flex>
-            </Flex>
-
-            <Text fontSize="xs" opacity={0.7} mb={3}>
-              Shows the last JSON returned by the server for troubleshooting (useful for phone support). This does not
-              replace server logs; it just exposes a safe, structured “run report”.
-            </Text>
-
-            {showRunOutput && (
-              <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="gray.50">
-                <Flex mb={3} gap={6} wrap="wrap">
-                  <Box>
-                    <Text fontSize="xs" opacity={0.7}>
-                      last_action
-                    </Text>
-                    <Text fontFamily="mono" fontSize="sm">
-                      {lastActionLabel}
-                    </Text>
-                  </Box>
-
-                  <Box>
-                    <Text fontSize="xs" opacity={0.7}>
-                      http_status
-                    </Text>
-                    <Text fontFamily="mono" fontSize="sm">
-                      {lastHttpStatus ?? ''}
-                    </Text>
-                  </Box>
-
-                  {lastResponseJson?.run_id && (
-                    <Box>
-                      <Text fontSize="xs" opacity={0.7}>
-                        run_id
-                      </Text>
-                      <Text fontFamily="mono" fontSize="sm">
-                        {String(lastResponseJson.run_id)}
-                      </Text>
-                    </Box>
-                  )}
-
-                  {lastResponseJson?.correlation_id && (
-                    <Box>
-                      <Text fontSize="xs" opacity={0.7}>
-                        correlation_id
-                      </Text>
-                      <Text fontFamily="mono" fontSize="sm">
-                        {String(lastResponseJson.correlation_id)}
-                      </Text>
-                    </Box>
-                  )}
-                </Flex>
-
-                {derivedMessages.length > 0 && (
-                  <Box mb={3}>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>
-                      messages
-                    </Text>
-                    {derivedMessages.map((m, i) => (
-                      <Text key={`${i}-${m}`} fontFamily="mono" fontSize="sm">
-                        • {m}
-                      </Text>
-                    ))}
-                  </Box>
-                )}
-
-                <Text fontSize="xs" opacity={0.7} mb={1}>
-                  raw_response
-                </Text>
-
-                <Box
-                  as="pre"
-                  fontFamily="mono"
-                  fontSize="xs"
-                  whiteSpace="pre-wrap"
-                  wordBreak="break-word"
-                  m={0}
-                  p={3}
-                  bg="white"
-                  borderWidth="1px"
-                  borderColor="greys.grey20"
-                  borderRadius="md"
-                  maxH="360px"
-                  overflow="auto"
-                >
-                  {lastResponsePretty || '(no response captured yet)'}
-                </Box>
-              </Box>
-            )}
-          </Box>
         </Box>
       </Container>
     </Flex>

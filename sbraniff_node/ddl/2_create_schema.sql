@@ -5,6 +5,7 @@ CREATE SCHEMA claims;
 --
 -- sessions
 --
+
 CREATE TABLE IF NOT EXISTS claims.sessions (
   id            uuid NOT NULL DEFAULT gen_random_uuid(),
 
@@ -44,20 +45,15 @@ CREATE INDEX IF NOT EXISTS index_claims_sessions_on_status
 
 
 
-  -- note the participant_id is only figured out AFTER we ocr the pdf and get the eligibility code and then 
-  -- lookup up the unique matching users_eligibilitycodes record and then take the users_eligibilitycodes.user_id
   --
   -- invoices
   --
+
 CREATE TABLE IF NOT EXISTS claims.invoices (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   session_id     uuid NOT NULL,
 
-  -- contractors can add help notes at the invoice (parent) level
   system_help_notes text NULL,
-
-  -- cache pointer (always = max version); add FK later after invoice_versions exists
-  -- current_invoice_version_id uuid NULL,
 
   status character varying NOT NULL DEFAULT 'session_not_submitted',
   status_updated_at timestamp(6) without time zone NULL,
@@ -69,7 +65,7 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
 
 CONSTRAINT invoices_status_chk
 CHECK (status IN (
-  'upload_queued',    -- not used as currently not using sidekiq for uploads
+  'upload_queued',    -- not used as currently not using sidekiq for uploads but leaving incase we decide its too laggy and needs to be sidekiqed out
   'upload_in_progress',
   'upload_failed',
   'upload_complete',
@@ -106,6 +102,7 @@ CREATE INDEX IF NOT EXISTS index_claims_invoices_on_session_id
   -- 
   -- invoice_versions
   --
+
 CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
@@ -120,11 +117,19 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   byte_size         bigint NULL,
   sha256            character varying NULL,
 
-  -- Azure DI raw output (retention indefinite for now)
+  -- from the genai
+  genai_raw_json jsonb NULL,
+  genai_overall_confidence  smallint NOT NULL DEFAULT 0,
+  genai_all_rulechecks_pass_flag boolean NULL,
+  genai_admin_advice text NULL,
+
+  -- any parent level genai outputs such as overall conf and overall pass flags
+  -- TBD
+
+  -- from the DI (retention indefinite for now)
   di_raw_json jsonb NULL,
   di_page_map jsonb NULL,
 
-  -- Minimal canonical header OCR fields... ie in this table
   -- the first class di fields stright from the firstclass section
   di_ocr_invoice_id     character varying NULL,  -- paper invoice number (NOT DB invoice id)
   di_ocr_invoice_id_page integer NULL,
@@ -194,30 +199,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoice_versions_id_invoice_id
 
 
 
-  -- 
-  --
-  --
-  -- in code i need to insert a record for these code located fields...
-  --
-  --
-  --
+-- 
+-- invoice_version_located_fields
+--
 
-  -- fields found via regex on the ocr data like result.content for example
-  -- regex_eligibility_code character varying NULL,
-  -- postregex_ec_lookup_participantname character varying NULL,
-  --  postregex_ec_lookup_participantaddress character varying NULL,
-
--- at this point in time i have the firstclass (aka di firstclass) fields in non- 3nf so this table is SOLELY for secondclass fields
--- as such it currently makes no sense to have the sourceengine = di since this di can only return first class fields by definition
 CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_version_id uuid NOT NULL,
 
-  source_engine text NOT NULL,   -- 'code' | 'genai' | 'di'
+  source_engine text NOT NULL,   -- 'code' | 'genai'
   field_key     text NOT NULL,
 
-  line_number   integer NULL,  
+  line_number   integer NOT NULL DEFAULT 0,  
 
   value_type text NOT NULL,      -- 'text' | 'currency' | 'number' | 'date' | 'bool' | 'json'
   value_text text NULL,
@@ -245,7 +239,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
     ON DELETE CASCADE,
 
   CONSTRAINT invoice_version_located_fields_source_engine_chk
-    CHECK (source_engine IN ('code','genai','di')),
+    CHECK (source_engine IN ('code','genai')),
 
 
   CONSTRAINT invoice_version_located_fields_confidence_chk
@@ -278,11 +272,69 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   ON claims.invoice_version_located_fields(invoice_version_id, source_engine);
 
 
+--
+-- invoice_version_rulechecks
+--
+
+  CREATE TABLE IF NOT EXISTS claims.invoice_version_rulechecks (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_version_id uuid NOT NULL,
+
+  source_engine text NOT NULL,   -- 'code' | 'genai'
+
+  rule_number integer NOT NULL,
+  rule_name   text NOT NULL,
+
+  rule_pass_flag boolean NULL,   -- null = unknown / not evaluated
+  confidence smallint NOT NULL DEFAULT 0,  -- 0..100
+
+  expected_text text NULL,
+  observed_text text NULL,
+
+  calculation text NULL,
+  tolerance_notes text NULL,
+
+  evidence_text text NULL,
+  evidence_hint text NULL,
+
+  reason_and_likely_causes text NULL,
+
+  notes text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT invoice_version_rulechecks_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_invoice_version_rulechecks_invoice_version
+    FOREIGN KEY (invoice_version_id)
+    REFERENCES claims.invoice_versions(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT invoice_version_rulechecks_source_engine_chk
+    CHECK (source_engine IN ('code','genai')),
+
+  CONSTRAINT invoice_version_rulechecks_confidence_chk
+    CHECK (confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT invoice_version_rulechecks_rule_number_chk
+    CHECK (rule_number >= 0),
+
+  CONSTRAINT invoice_version_rulechecks_uniq
+    UNIQUE (invoice_version_id, source_engine, rule_number)
+);
+
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_id
+  ON claims.invoice_version_rulechecks (invoice_version_id);
+
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_id_se
+  ON claims.invoice_version_rulechecks (invoice_version_id, source_engine);
 
 
 
   -- 
-  -- lineitems (firstclass di fields only)
+  -- lineitems 
   --
   CREATE TABLE IF NOT EXISTS claims.lineitems (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -519,12 +571,13 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   ok boolean NULL,
   error_text text NULL,
 
-  -- ============================================================
+  -- unlike invoice_versions this is a per run record which can be multiple
+  di_results_json  jsonb NULL,
+
   -- GENAI RUN FIELDS (kept from former validation_runs; now nullable)
-  -- ============================================================
   validationgenai_ruleset_id uuid NULL,
 
-  -- genAI artifacts (retention indefinite for now)
+  -- unlike invoice_versions table this is a per run genAI artifacts (retention indefinite for now)
   genai_results_json  jsonb NULL,
   context_window_json jsonb NULL,
 
@@ -574,10 +627,6 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     REFERENCES claims.validationgenai_rulesets(id)
 );
 
--- ============================================================
--- INDEXES
--- ============================================================
-
 -- Batch run drill-down
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_run_id
   ON claims.ingest_step_runs (ingest_run_id, created_at DESC);
@@ -600,6 +649,7 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ruleset_id
 
 
   --
+  -- users_eligibilitycodes
   -- how we get the participant_id
   --
   CREATE TABLE IF NOT EXISTS claims.users_eligibilitycodes (

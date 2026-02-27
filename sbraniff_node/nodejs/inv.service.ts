@@ -1,6 +1,7 @@
 
 // 2023 standard - old
 // import { AzureKeyCredential, DocumentAnalysisClient } from '@azure/ai-form-recognizer';
+import { HttpException, HttpStatus } from "@nestjs/common";
 
 import { Injectable } from '@nestjs/common';
 import DocumentIntelligence, {
@@ -10,6 +11,15 @@ import DocumentIntelligence, {
 import { AzureKeyCredential } from "@azure/core-auth";
 import OpenAI from "openai";
 
+import { BlobServiceClient } from '@azure/storage-blob';
+import * as crypto from 'crypto';
+
+import {
+  BlobSASPermissions,
+  generateBlobSASQueryParameters,
+  SASProtocol,
+  StorageSharedKeyCredential,
+} from "@azure/storage-blob";
 
 @Injectable()
 export class InvService {
@@ -19,6 +29,10 @@ export class InvService {
 
   private readonly genaiClient: OpenAI;
   private readonly genaiDeployment: string;
+
+private readonly blobSvc: BlobServiceClient;
+private readonly defaultContainer: string;
+
 
   constructor() {
     const endpoint = process.env.DOCINTEL_ENDPOINT;
@@ -49,87 +63,200 @@ export class InvService {
       baseURL: genaiBaseUrl,
     });
 
-  }
+// ---- Azure Blob (Node owns Azure) ----
+const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const container = process.env.AZURE_BLOB_CONTAINER || 'inv-pdfs-dev';
 
-  async retryOcrWithSasUrl(sasUrl: string, modelId: string = "prebuilt-invoice") {
-    // Start analyze from URL (SAS URL is perfect for this)
-    const initialResponse = await this.client
-      .path("/documentModels/{modelId}:analyze", modelId)
-      .post({
-        body: { urlSource: sasUrl },
-        contentType: "application/json",
-      });
-
-    if (isUnexpected(initialResponse)) {
-      // initialResponse.body usually contains the service error payload
-      throw new Error(`Document Intelligence error: ${JSON.stringify(initialResponse.body)}`);
-    }
-
-    // Poll until done
-    const poller = getLongRunningPoller(this.client, initialResponse);
-    const finalResponse = await poller.pollUntilDone();
-
-    // The finalResponse.body typically contains the analyze result payload
-    const result = (finalResponse as any)?.body?.analyzeResult ?? (finalResponse as any)?.body;
-    console.log("[DI] analyze complete. modelId:", modelId);
-
-    // Minimal “documents[0].fields” equivalent (same concept as your old code)
-    const recDocuments0 = (result as any)?.documents?.[0];
-    if (!recDocuments0) {
-      console.log("No documents[0] found");
-      return result;
-    }
-
-    const recFields = recDocuments0.fields as any;
-    if (!recFields) {
-      console.log("No fields found");
-      return result;
-    }
-
-   const canonical_hdr = {
-     di_ocr_invoice_id: recFields?.["InvoiceId"]?.valueString ?? recFields?.["InvoiceId"]?.content ?? null,
-     di_ocr_invoice_date: recFields?.["InvoiceDate"]?.valueDate ?? recFields?.["InvoiceDate"]?.content ?? null,
-     di_ocr_vendor_name: recFields?.["VendorName"]?.valueString ?? recFields?.["VendorName"]?.content ?? null,
-     di_ocr_vendor_address: recFields?.["VendorAddress"]?.valueString ?? recFields?.["VendorAddress"]?.content ?? null,
-     di_ocr_customer_name: recFields?.["CustomerName"]?.valueString ?? recFields?.["CustomerName"]?.content ?? null,
-     di_ocr_billing_address: recFields?.["BillingAddress"]?.valueString ?? recFields?.["BillingAddress"]?.content ?? null,
-     di_ocr_sub_total: recFields?.["SubTotal"]?.valueCurrency?.amount ?? recFields?.["SubTotal"]?.valueNumber ?? null,
-     di_ocr_total_tax: recFields?.["TotalTax"]?.valueCurrency?.amount ?? recFields?.["TotalTax"]?.valueNumber ?? null,
-     di_ocr_invoice_total: recFields?.["InvoiceTotal"]?.valueCurrency?.amount ?? recFields?.["InvoiceTotal"]?.valueNumber ?? null,
-     di_ocr_amount_due: recFields?.["AmountDue"]?.valueCurrency?.amount ?? recFields?.["AmountDue"]?.valueNumber ?? null,
-   };
-   console.log("[DI] canonical header:", canonical_hdr);
-
-
-const items = recFields?.["Items"]?.valueArray;
-if (!items?.length) {
-  console.log("[DI] No Items found");
-} else {
-  for (let i = 0; i < items.length; i++) {
-    const obj = items[i]?.valueObject;
-    if (!obj) continue;
-
-    const description =
-      obj?.["Description"]?.valueString ?? obj?.["Description"]?.content ?? null;
-
-    const quantity =
-      obj?.["Quantity"]?.valueNumber ?? (obj?.["Quantity"]?.content ? Number(obj["Quantity"].content) : null);
-
-    const unitPrice =
-      obj?.["UnitPrice"]?.valueCurrency?.amount ?? obj?.["UnitPrice"]?.valueNumber ?? null;
-
-    const amount =
-      obj?.["Amount"]?.valueCurrency?.amount ?? obj?.["Amount"]?.valueNumber ?? null;
-
-    console.log(`[DI] Item ${i + 1}:`, { description, quantity, unitPrice, amount });
-  }
+if (!conn) {
+  throw new Error('Missing AZURE_STORAGE_CONNECTION_STRING');
 }
 
-    console.log("service.retryOcrWithSasUrl: exiting");
-    return result; // BIG JSON
-
+this.blobSvc = BlobServiceClient.fromConnectionString(conn);
+this.defaultContainer = container;
 
   }
+
+
+async uploadPdfToBlob(args: {
+  sessionId: string;
+  invoiceVersionId: string;
+  container?: string;
+  filename?: string;
+  buffer: Buffer;
+  contentType: string;
+  originalName?: string;
+}) {
+
+  const containerName = (args.container || this.defaultContainer).trim();
+  const filename = (args.filename || 'original.PDF').trim();
+
+  // enforce your convention exactly
+const storageKey = `sessions/${args.sessionId}/pdfs/${args.invoiceVersionId}/${filename}`;
+
+
+  const sha256 = crypto.createHash('sha256').update(args.buffer).digest('hex');
+
+  const containerClient = this.blobSvc.getContainerClient(containerName);
+  // optional: ensure container exists (safe for dev; you can remove later)
+  await containerClient.createIfNotExists();
+
+  const blobClient = containerClient.getBlockBlobClient(storageKey);
+
+  const uploadResp = await blobClient.uploadData(args.buffer, {
+    blobHTTPHeaders: {
+      blobContentType: args.contentType || 'application/pdf',
+    },
+    metadata: {
+      original_name: (args.originalName || '').slice(0, 200),
+      sha256,
+    },
+  });
+
+  // eTag is usually quoted; normalize
+  const etag = (uploadResp.etag || '').replace(/"/g, '');
+
+  return {
+    ok: true,
+    container: containerName,
+    storage_key: storageKey,
+    byte_size: args.buffer.length,
+    sha256,
+    etag,
+    url: blobClient.url, // NOTE: this is NOT a SAS url; just the base blob URL
+  };
+}
+
+
+
+// ============================================================
+// SECTION 30 — Azure Blob SAS helpers (NO SAS INPUT FROM CLIENT)
+// PURPOSE:
+// - Mint a short-lived read-only SAS URL for a blob
+// - Used by Document Intelligence urlSource
+// ============================================================
+
+
+
+// ============================================================
+// SECTION 30.01 — Parse connection string for shared key cred
+// NOTES:
+// - We already require AZURE_STORAGE_CONNECTION_STRING
+// - DI needs a SAS URL; easiest is shared key SAS
+// ============================================================
+
+private parseConnStringForSharedKey(conn: string): { accountName: string; accountKey: string } {
+  const parts = conn.split(";").map((s) => s.trim()).filter(Boolean);
+  const map: Record<string, string> = {};
+  for (const p of parts) {
+    const idx = p.indexOf("=");
+    if (idx > 0) map[p.slice(0, idx)] = p.slice(idx + 1);
+  }
+
+  const accountName = map["AccountName"];
+  const accountKey = map["AccountKey"];
+
+  if (!accountName || !accountKey) {
+    throw new Error("AZURE_STORAGE_CONNECTION_STRING missing AccountName/AccountKey (required for SAS minting)");
+  }
+
+  return { accountName, accountKey };
+}
+
+// ============================================================
+// SECTION 30.02 — Mint SAS URL for a blob
+// DEFAULTS:
+// - read-only permissions
+// - short TTL (10 minutes)
+// ============================================================
+
+private async buildBlobSasUrl(container: string, storageKey: string): Promise<string> {
+  const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
+  if (!conn) throw new Error("Missing AZURE_STORAGE_CONNECTION_STRING");
+
+  const { accountName, accountKey } = this.parseConnStringForSharedKey(conn);
+  const sharedKey = new StorageSharedKeyCredential(accountName, accountKey);
+
+  // Use existing client to build blob URL reliably
+  const containerClient = this.blobSvc.getContainerClient(container);
+  const blobClient = containerClient.getBlockBlobClient(storageKey);
+
+  const startsOn = new Date(Date.now() - 2 * 60 * 1000); // backdate 2 min (clock skew)
+  const expiresOn = new Date(Date.now() + 10 * 60 * 1000); // 10 min TTL
+
+  const sas = generateBlobSASQueryParameters(
+    {
+      containerName: container,
+      blobName: storageKey,
+      permissions: BlobSASPermissions.parse("r"), // read-only
+      startsOn,
+      expiresOn,
+      protocol: SASProtocol.Https,
+    },
+    sharedKey
+  ).toString();
+
+  return `${blobClient.url}?${sas}`;
+}
+
+
+private async runDiAnalyzeFromUrl(sasUrl: string, modelId: string) {
+  const initialResponse = await this.client
+    .path("/documentModels/{modelId}:analyze", modelId)
+    .post({
+      body: { urlSource: sasUrl },
+      contentType: "application/json",
+    });
+
+  if (isUnexpected(initialResponse)) {
+    throw new Error(`Document Intelligence error: ${JSON.stringify(initialResponse.body)}`);
+  }
+
+  const poller = getLongRunningPoller(this.client, initialResponse);
+  const finalResponse = await poller.pollUntilDone();
+
+  const di_raw_json = (finalResponse as any)?.body?.analyzeResult ?? (finalResponse as any)?.body;
+  return { di_raw_json };
+}
+
+
+
+async ocrByBlob(args: { container?: string; storageKey: string; modelId: string }) {
+  const container =
+    (args.container ?? process.env.AZURE_BLOB_CONTAINER ?? this.defaultContainer ?? "inv-pdfs-dev").trim();
+
+  const storageKey = (args.storageKey ?? "").trim();
+  if (!storageKey) throw new Error("Missing storageKey");
+
+  const sasUrl = await this.buildBlobSasUrl(container, storageKey);
+
+  // just call DI and return raw
+  const { di_raw_json } = await this.runDiAnalyzeFromUrl(sasUrl, args.modelId);
+
+  return {
+    ok: true,
+    container,
+    storage_key: storageKey,
+    di_raw_json,
+  };
+}
+
+async mintSasUrl(args: { container?: string; storageKey: string }) {
+  const container =
+    (args.container ?? process.env.AZURE_BLOB_CONTAINER ?? this.defaultContainer ?? "inv-pdfs-dev").trim();
+
+  const storageKey = (args.storageKey ?? "").trim();
+  if (!storageKey) throw new Error("Missing storageKey");
+
+  const sasUrl = await this.buildBlobSasUrl(container, storageKey);
+
+  return {
+    ok: true,
+    container,
+    storage_key: storageKey,
+    sas_url: sasUrl,
+  };
+}
+
   
   
   // start HelloWorld
@@ -164,17 +291,28 @@ async genaiHelloWorld(): Promise<{ message: string }> {
   return { message: resp.output_text };
 }
 
-// Rails sends the context window JSON; we pass it through.
-// We return parsed JSON from the model.
+
 async genai(contextwindowjson: any): Promise<any> {
   const resp = await this.genaiClient.responses.create({
     model: this.genaiDeployment,
-    input: contextwindowjson, // pass-through
+    input: contextwindowjson,
   });
 
-  // Model returns JSON text (because you told it to)
-  const raw = (resp.output_text ?? '').trim();
-  return JSON.parse(raw); // controller will return this as JSON
+  const raw = (resp.output_text ?? "").trim();
+
+  // Return the model JSON verbatim
+  try {
+    return JSON.parse(raw);
+  } catch (e: any) {
+    // Thin, but not silent: tell Rails exactly what happened
+    throw new HttpException(
+      {
+        message: "Model output was not valid JSON",
+        snippet: raw.slice(0, 2000), // keep it bounded
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY // 422
+    );
+  }
 }
 
 
