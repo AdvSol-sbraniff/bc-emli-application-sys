@@ -1,4 +1,8 @@
-import { Box, Button, Container, Flex, Heading, Input, Spinner, Text, Textarea } from '@chakra-ui/react';
+import {
+  Box, Button, Container, Flex, Heading, Input, Spinner, Text, Textarea,
+  Tabs, TabList, TabPanels, Tab, TabPanel, Badge
+} from '@chakra-ui/react';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
@@ -163,19 +167,65 @@ export default function RulesetEditorScreen() {
                   <Input value={shortname} onChange={(e) => setShortname(e.target.value)} />
                 </Box>
 
-                <Box mb={4}>
-                  <Text fontWeight="bold" mb={1}>
-                    system_record
-                  </Text>
-                  <Textarea value={systemRecord} onChange={(e) => setSystemRecord(e.target.value)} minH="240px" />
-                </Box>
+<Box
+  borderWidth="1px"
+  borderRadius="lg"
+  p={3}
+  mb={4}
+  bg="white"
+>
 
-                <Box mb={4}>
-                  <Text fontWeight="bold" mb={1}>
-                    user_record1
-                  </Text>
-                  <Textarea value={userRecord1} onChange={(e) => setUserRecord1(e.target.value)} minH="240px" />
-                </Box>
+
+
+<Tabs
+  variant="line"
+  isFitted
+  colorScheme="gray"
+  sx={{
+    // ============================================================
+    // SECTION 04.02.01.01 — BOLDER LINE TAB STYLE
+    // PURPOSE: Make the underline + baseline thicker/darker
+    // ============================================================
+
+    // the baseline under all tabs
+    ".chakra-tabs__tablist": {
+      borderBottomWidth: "2px",
+      borderColor: "gray.300",
+    },
+
+    // the active tab underline
+    ".chakra-tabs__tab[aria-selected=true]": {
+      borderBottomWidth: "4px",
+      borderColor: "gray.800",
+    },
+  }}
+>
+
+
+    <TabList>
+      <Tab>system_record</Tab>
+      <Tab>user_record1</Tab>
+    </TabList>
+
+    <TabPanels>
+      <TabPanel px={0} pt={3}>
+        <Textarea
+          value={systemRecord}
+          onChange={(e) => setSystemRecord(e.target.value)}
+          minH="360px"
+        />
+      </TabPanel>
+
+      <TabPanel px={0} pt={3}>
+        <Textarea
+          value={userRecord1}
+          onChange={(e) => setUserRecord1(e.target.value)}
+          minH="360px"
+        />
+      </TabPanel>
+    </TabPanels>
+  </Tabs>
+</Box>
 
                 <Flex justify="space-between" mt={2}>
                   <Text fontSize="sm" opacity={0.8}>

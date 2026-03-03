@@ -183,21 +183,24 @@ module Claims
 
       # Pull eligibility code from the deep/raw OCR blob.
       # Examples: ESP1-136a31ba (yours), could also be ESP2/ESP3.
-      def self.extract_eligibility_code(di_raw_json)
-        return nil if di_raw_json.blank?
+def self.extract_eligibility_code(di_raw_json)
+  return nil if di_raw_json.blank?
 
-        # Cheapest reliable approach: regex scan the JSON-as-string.
-        s = di_raw_json.to_json
+  s = di_raw_json.to_json
 
-        # Match "ESP1-xxxxxxxx" etc (8 hex chars)
-        m = s.match(/\bESP[123]-[0-9a-fA-F]{8}\b/)
-        return m[0] if m
+  # Accept OCR confusion: 1 <-> I, allow whitespace + different dash chars
+  m = s.match(/\bESP(?:[123]|I)\s*[-–—]\s*([0-9a-fA-F]{8})\b/)
+  return "ESP1-#{m[1]}" if m && m[0].match?(/\bESPI\b/)   # normalize ESPI -> ESP1
+  return "ESP#{m[0][3]}-#{m[1]}" if m                    # ESP1/2/3
 
-        # Fallback: allow longer IDs if they change format later
-        m2 = s.match(/\bESP[123]-[A-Za-z0-9]{6,}\b/)
-        m2 ? m2[0] : nil
-      end
+  # Fallback: longer IDs (still allow I)
+  m2 = s.match(/\bESP(?:[123]|I)\s*[-–—]\s*([A-Za-z0-9]{6,})\b/)
+  return nil unless m2
 
+  prefix = m2[0][0,4] # "ESP1" / "ESP2" / "ESP3" / "ESPI"
+  prefix = "ESP1" if prefix == "ESPI"
+  "#{prefix}-#{m2[1]}"
+end
       def self.participant_name_from_user(user)
         return nil if user.nil?
 

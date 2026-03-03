@@ -1,0 +1,14 @@
+FROM node:20-bookworm-slim
+
+WORKDIR /claims_ai_service
+
+# Install deps first (cached if package files unchanged)
+COPY claims_ai_service/package.json claims_ai_service/package-lock.json ./
+RUN npm ci
+
+# Copy the rest (only used for initial build; bind-mount will override in dev)
+COPY claims_ai_service/ ./
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start:dev"]
