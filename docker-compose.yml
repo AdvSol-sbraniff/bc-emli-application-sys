@@ -62,6 +62,25 @@ services:
     ports:
       - '3036:3036'
 
+  claims-ai:
+    image: claims-ai-dev:latest
+    pull_policy: 'never'
+    tty: true
+    stdin_open: true
+    build:
+      context: .
+      dockerfile: ./devops/docker/claims-ai/Dockerfile.dev
+    env_file: .env.docker_compose
+    working_dir: /claims_ai_service
+    volumes:
+      - ./claims_ai_service:/claims_ai_service
+      - /claims_ai_service/node_modules
+    ports:
+      - '3001:3001'
+    environment:
+      PORT: "3001"
+
+
   sidekiq:
     image: hous-permit-portal-dev:latest
     pull_policy: 'never'

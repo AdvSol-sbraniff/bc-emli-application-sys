@@ -55,6 +55,10 @@ node_modules
 
 /spec/support/real-arch-signed.pdf
 
+# Nest build output
+/claims_ai_service/dist/
+/claims_ai_service/.nestjs_cache/
+
 # scratchpad
 deleteme.*
 

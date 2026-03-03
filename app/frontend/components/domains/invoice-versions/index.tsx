@@ -71,6 +71,31 @@ const FieldRow = ({ label, value, active, disabled, onClick }: FieldRowProps) =>
   );
 };
 
+// ============================================================
+// SECTION 01.02 — UI COMPONENTS (STATUS DOT)
+// PURPOSE: Small red/green/gray dot for pass/fail/unknown
+// ============================================================
+
+type StatusDotProps = { pass: boolean | null | undefined };
+
+const StatusDot = ({ pass }: StatusDotProps) => {
+  const bg =
+    pass === true ? "green.400" :
+    pass === false ? "red.400" :
+    "red.400";
+
+  return (
+    <Box
+      as="span"
+      w="10px"
+      h="10px"
+      borderRadius="full"
+      display="inline-block"
+      bg={bg}
+      flexShrink={0}
+    />
+  );
+};
 
 // ============================================================
 // SECTION 02.02 — FIELD CATALOG
@@ -157,6 +182,8 @@ const navigate = useNavigate();
 // SECTION 05.01 — STATE
 // PURPOSE: invoiceIds + readData + pdf viewer state + highlight state
 // ============================================================
+
+const [showPdf, setShowPdf] = useState<boolean>(true);
 
 const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
 const [readData, setReadData] = useState<any>(null);
@@ -392,14 +419,19 @@ const idx = idxRaw >= 0 ? idxRaw : 0;
 // SECTION 06.04 — PDF PANE SIZE OBSERVER
 // PURPOSE: Measure PDF container width/height so fit/zoom math stays correct
 // ============================================================
-
 useEffect(() => {
+  // If PDF is hidden, do nothing (and importantly: detach any prior observer).
+  if (!showPdf) return;
+
   const el = pdfWrapRef.current;
   if (!el) return;
 
   const MAX_PDF_WIDTH = 750;
 
   const ro = new ResizeObserver(() => {
+    // Ignore "collapse to 0" measurements during hide/unmount transitions
+    if (el.clientWidth <= 0 || el.clientHeight <= 0) return;
+
     const w = Math.max(300, Math.floor(el.clientWidth));
     const h = Math.max(300, Math.floor(el.clientHeight));
     setPageWidthPx(Math.min(w, MAX_PDF_WIDTH));
@@ -407,8 +439,17 @@ useEffect(() => {
   });
 
   ro.observe(el);
+
+  // Also do one immediate measurement right after attach
+  if (el.clientWidth > 0 && el.clientHeight > 0) {
+    const w = Math.max(300, Math.floor(el.clientWidth));
+    const h = Math.max(300, Math.floor(el.clientHeight));
+    setPageWidthPx(Math.min(w, MAX_PDF_WIDTH));
+    setPdfPaneHeightPx(h);
+  }
+
   return () => ro.disconnect();
-}, []);
+}, [showPdf]);
 
 // ============================================================
 // SECTION 06.05 — NAV ACTIONS
@@ -632,6 +673,14 @@ return (
             →
           </Button>
 
+<Button
+  size="xs"
+  variant="outline"
+  onClick={() => setShowPdf(v => !v)}
+>
+  {showPdf ? "Hide PDF" : "Show PDF"}
+</Button>
+
           <Button
             size="xs"
             variant="outline"
@@ -640,6 +689,16 @@ return (
             }}
           >
             Auto populate a draft revision request
+          </Button>
+
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => {
+              console.log('[STUB] Draft revision request', { invoice_version_id: id ?? null });
+            }}
+          >
+            Lets Chat
           </Button>
 
         </Box>
@@ -668,10 +727,10 @@ return (
     overflow: "auto",
   }}
 
-  minW="360px"
-  maxW="820px"
-  w="520px"
-  flexShrink={0}
+minW="360px"
+maxW={showPdf ? "820px" : "100%"}
+w={showPdf ? "520px" : "100%"}
+flexShrink={0}
 >
 
   {/* ============================================================
@@ -1075,46 +1134,27 @@ bg={
   borderColor="gray.200"
   bg="gray.50"
 >
-  <Flex justify="space-between" align="center" mb="6px">
-    <Text fontSize="xs" opacity={0.7}>
-      Overall (GenAI)
+<Flex direction="column" align="flex-start" gap="4px" mb="6px">
+  <Text fontSize="xs" opacity={0.7}>
+    Overall (GenAI)
+  </Text>
+
+  <Flex align="center" gap="8px">
+    <Box
+      as="span"
+      w="10px"
+      h="10px"
+      borderRadius="full"
+      display="inline-block"
+      bg={readData?.genai_all_rulechecks_pass_flag === true ? "green.400" : "red.400"}
+    />
+
+    <Text fontSize="xs" opacity={0.6}>
+      {(readData?.genai_all_rulechecks_pass_flag === true ? "PASS" : "FAIL")} • conf{" "}
+      {readData?.genai_overall_confidence ?? 0}
     </Text>
-
-    <Flex gap="10px" align="center">
-      <Text fontSize="xs" opacity={0.75}>
-        conf{" "}
-        <Text as="span" fontWeight="semibold" opacity={0.95}>
-          {readData?.genai_overall_confidence ?? 0}
-        </Text>
-      </Text>
-
-
-
-<Flex align="center" gap="6px">
-  <Text fontSize="xs" opacity={0.75}>
-    pass or fail:
-  </Text>
-
-<Box
-  as="span"
-  w="10px"
-  h="10px"
-  borderRadius="full"
-  display="inline-block"
-  bg={readData?.genai_all_rulechecks_pass_flag === true ? "green.400" : "red.400"}
-/>
-
-  <Text as="span" fontSize="xs" fontWeight="semibold" opacity={0.95}>
-    {readData?.genai_all_rulechecks_pass_flag === true
-      ? "TRUE"
-      : readData?.genai_all_rulechecks_pass_flag === false
-        ? "FALSE"
-        : "—"}
-  </Text>
-</Flex>
-
-    </Flex>
   </Flex>
+</Flex>
 
   {String(readData?.genai_admin_advice ?? "").trim() ? (
     <Text fontSize="sm" whiteSpace="pre-wrap">
@@ -1150,7 +1190,7 @@ bg={
         const pass =
           r.rule_pass_flag === true ? "PASS" :
           r.rule_pass_flag === false ? "FAIL" :
-          "UNKNOWN";
+          "FAIL";
 
         const conf =
           r.confidence != null && r.confidence !== ""
@@ -1179,9 +1219,12 @@ bg={
             borderColor="gray.200"
             bg="white"
           >
-            <Text fontSize="xs" opacity={0.7}>
-              {title}
-            </Text>
+<Flex align="center" gap="8px">
+  <StatusDot pass={r.rule_pass_flag} />
+  <Text fontSize="xs" opacity={0.7}>
+    {title}
+  </Text>
+</Flex>
 
             {meta && (
               <Text fontSize="xs" opacity={0.6} mb="6px">
@@ -1251,6 +1294,7 @@ bg={
         PURPOSE: PDF viewer + overlay highlight + toolbar
         ============================================================ */}
 
+{showPdf ? (
 <Box
   ref={pdfWrapRef}
   flex="1"
@@ -1461,8 +1505,8 @@ onClick={() => {
 
 
         </Box>  {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
-      </Box>    {/* closes SECTION 07.06 PDF panel <Box ref={pdfWrapRef} ...> */}
-
+      </Box>    
+) : null}
     </Box>      {/* ✅ ADD: closes SECTION 07.04 main split view <Box display="flex" ...> */}
   </Box>        {/* ✅ ADD: closes SECTION 07.02 page layout <Box display="flex" flexDirection="column" ...> */}
 </Box>          {/* ✅ ADD THIS: closes the first Box inside Container (Box A) */}

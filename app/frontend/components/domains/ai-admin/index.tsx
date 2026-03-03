@@ -821,7 +821,7 @@ validationgenai_ruleset_id: validationGenaiRulesetId.trim(),
       `GenAI queued/started for invoice_version_id=${invoiceVersionId.trim()}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`;
 
     setGenaiOkMsg(String(msg));
-
+   await fetchStepsBySession();
     // optional: refresh step grid (if your stub endpoint also writes a step row later)
     // await fetchStepsBySession();
   } catch (err: any) {
