@@ -69,21 +69,18 @@ CHECK (status IN (
   'upload_in_progress',
   'upload_failed',
   'upload_complete',
-
   'ocr_queued',
   'ocr_in_progress',
   'ocr_failed',
   'ocr_complete',
-
   'genai_queued',
   'genai_in_progress',
   'genai_failed',
-  'genai_complete',
-
-  'awaiting_contractor_submit',
-  'awaiting_admin_review',
-  'contractor_revision_required',
-  'closed'
+  'genai_complete',   -- this also means the invoice is with the contractor in review.
+  'admin_review_inbox',    -- this also means being actively reviewed. if admin finds a problem they send the status to the revision_required
+  'contractor_revision_inbox',   -- the next state after this is typically back to the upload_in_progress. In thoery a phone call or supplement-upload could allow the state to go to admin_review_inbox
+  'closed_success'
+  'closed_reject'
 )),
 
   CONSTRAINT fk_claims_invoices_session

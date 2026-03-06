@@ -13,6 +13,29 @@ ORDER BY
   iv.id DESC;
 
 
+
+-- View: sessions + contractor core fields
+-- Naming: underscores (per your convention)
+
+DROP VIEW IF EXISTS claims.v_sessions_with_contractors;
+
+CREATE VIEW claims.v_sessions_with_contractors AS
+SELECT
+  s.*,
+
+  -- contractor “denormalized” fields for grids/search
+  c.business_name      AS contractor_business_name,
+  c.number             AS contractor_number,
+  c.email              AS contractor_email,
+  c.phone_number       AS contractor_phone_number,
+  c.cellphone_number   AS contractor_cellphone_number,
+  c.city               AS contractor_city,
+  c.postal_code        AS contractor_postal_code,
+  c.onboarded          AS contractor_onboarded
+FROM claims.sessions s
+JOIN public.contractors c
+  ON c.id = s.contractor_id;
+
 -- ============================================================
 -- INVOICE GRID (admin read model)
 -- one row per claims.invoices row

@@ -124,7 +124,7 @@ const DI_FIELDS: FieldCatalogItem[] = [
     key: "invoice_date",    label: "Invoice date",    valueKey: "di_ocr_invoice_date",    formatter: fmtDate,    pageKey: "di_ocr_invoice_date_page",    polygonKey: "di_ocr_invoice_date_polygon",
   },
   {
-    key: "vendor_name",    label: "Vendor",    valueKey: "di_ocr_vendor_name",    formatter: fmtText,
+    key: "vendor_name",    label: "BUSINESS NAME",    valueKey: "di_ocr_vendor_name",    formatter: fmtText,
     pageKey: "di_ocr_vendor_name_page",    polygonKey: "di_ocr_vendor_name_polygon",
   },
   {
