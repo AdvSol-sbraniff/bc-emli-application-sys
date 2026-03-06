@@ -1,1341 +1,982 @@
-
-
+// /app/frontend/components/domains/ai-admin/index.tsx
 import {
+  Badge,
   Box,
   Button,
   Container,
   Flex,
   Heading,
+  HStack,
   Input,
-  Text,
+  Select,
   Spinner,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Tabs,
-  TabList,
-  TabPanels,
   Tab,
+  TabList,
   TabPanel,
+  TabPanels,
+  Tabs,
+  Table,
+  Tbody,
+  Td,
+  Text,
+  Th,
+  Thead,
+  Tr,
 } from '@chakra-ui/react';
 
-
 import { observer } from 'mobx-react-lite';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // ============================================================
 // SECTION 00 — FILE OVERVIEW
-// PURPOSE: AI Admin screen (manual admin actions for Claims/GenAI subsystem)
-// ============================================================
-//
-// Phase 1 goal:
-// - Button: "Create new session"
-// - Admin types contractor_id (UUID) into a textbox (default provided)
-// - Calls backend endpoint (POST /api/claims/sessions)
-// - Receives { session_id: "uuid" } (or similar)
-// - Displays the created session id on-screen for the admin
-//
-// Added:
-// - session_id is editable (Input)
-// - Button: "New upload" opens file chooser for PDFs, then POSTs to:
-//     POST /api/claims/sessions/:session_id/upload
-//   passing session_id + PDF(s) in multipart/form-data.
-//
-// Added (support/troubleshooting-friendly):
-// - "Run Output" panel that shows the LAST response JSON returned by create/upload.
-// - If backend returns messages[] / run_id / correlation_id etc, it will show it.
-//   This helps phone support without needing docker logs.
+// PURPOSE: AI Admin (simpler + correct endpoints for business context)
+// - Tab 1: Choose GenAI Ruleset (grid)  GET /api/claims/admin/validationgenai_rulesets
+// - Tab 2: Run OCR / Run GenAI + Step Run Tracker + Context details
+//   - POST /api/claims/ingest/run_ocr
+//   - POST /api/claims/ingest/run_genai
+//   - GET  /api/claims/ingest/steps?session_id=...
+//   - Context (business-friendly) uses INVOICE GRID endpoint (not /read):
+//     - GET /api/claims/admin/invoices?session_id=...
+//       (select row by invoice_id; this includes contractor_business_name, etc.)
+// NOTE: Upload is now handled by /upload-invoice-admin (separate screen).
 // ============================================================
 
-// ============================================================
-// SECTION 01 — API CONTRACT (TEMP)
-// PURPOSE: Keep response parsing in one place so backend changes are easy
-// ============================================================
-
-type CreateSessionResponse =
-  | { session_id: string }
-  | { id: string }
-  | { sessionId: string }
-  | { session?: { id?: string } }
-  | any;
-
-// ============================================================
-// SECTION 02 — HELPERS
-// ============================================================
-
-function safeJsonStringify(obj: any): string {
-  try {
-    return JSON.stringify(obj, null, 2);
-  } catch (e) {
-    return String(obj);
-  }
-}
-
-function tryGetSessionIdFromCreateResponse(data: CreateSessionResponse): string {
-  const sid = data?.session_id ?? data?.id ?? data?.sessionId ?? data?.session?.id ?? '';
-  return sid ? String(sid) : '';
-}
-
-function guessMessagesFromResponse(data: any): string[] {
-  // If backend provides messages already, use it.
-  const msgs = data?.messages ?? data?.logs ?? data?.debug_lines ?? data?.debug ?? null;
-  if (Array.isArray(msgs)) return msgs.map((x) => String(x));
-  if (typeof msgs === 'string') return [msgs];
-
-  // Otherwise, try a few common shapes:
-  if (Array.isArray(data?.results)) {
-    return [`results: ${data.results.length} item(s)`];
-  }
-
-  return [];
-}
-
-
-
-
-
-// ============================================================
-// SECTION 03 — SCREEN COMPONENT
-// ============================================================
-
-export const AIAdminScreen = observer(function AIAdminScreen() {
-  // ============================================================
-  // SECTION 03.01 — STATE
-  // ============================================================
-
-  // ============================================================
-  // SECTION 03.01.01 — INPUT FIELDS (EDITABLE)
-  // PURPOSE: Admin can type/paste ids; handlers may populate them.
-  // ============================================================
-
-  const DEFAULT_RULESET_ID = '4bf85215-6bb3-4533-b0a2-f73e0d9b6cd6';
-
-  const [contractorId, setContractorId] = useState<string>('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
-
-  // Editable session id
-  const [sessionId, setSessionId] = useState<string>('');
-
-// Editable ids (populated from responses, but admin can override)
-const [invoiceId, setInvoiceId] = useState<string>('');
-const [invoiceVersionId, setInvoiceVersionId] = useState<string>('');
-
-// x.03.01.01.25 — Editable ruleset id (admin can paste a fresh UUID)
-// PURPOSE: Avoid stale hardcoded DEFAULT_RULESET_ID when rulesets are reloaded.
-const [validationGenaiRulesetId, setValidationGenaiRulesetId] =
-  useState<string>(DEFAULT_RULESET_ID);
-
-
-  // ============================================================
-  // SECTION 03.01.02 — CREATE SESSION UI STATE
-  // ============================================================
-
-  // Create session
-  const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
-  const [createSessionError, setCreateSessionError] = useState<string>('');
-
-  // ============================================================
-  // SECTION 03.01.03 — UPLOAD UI STATE and other 1 off buttons
-  // ============================================================
-
-
-  // Upload
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [uploadError, setUploadError] = useState<string>('');
-  const [uploadOkMsg, setUploadOkMsg] = useState<string>('');
-
-
-
-// ============================================================
-// SECTION 03.01.03.01 — END-TO-END UI STATE
-// PURPOSE: Track the end-to-end ingest button progress + messages.
-// ============================================================
-
-const [isRunningEndToEnd, setIsRunningEndToEnd] = useState<boolean>(false);
-const [endToEndError, setEndToEndError] = useState<string>('');
-const [endToEndOkMsg, setEndToEndOkMsg] = useState<string>('');
-
-// ============================================================
-// SECTION 03.01.03.02 — OCR UI STATE
-// ============================================================
-
-const [isRunningOcr, setIsRunningOcr] = useState<boolean>(false);
-const [ocrError, setOcrError] = useState<string>('');
-const [ocrOkMsg, setOcrOkMsg] = useState<string>('');
-
-// ============================================================
-// SECTION 03.01.03.03 — GENAI UI STATE
-// ============================================================
-
-const [isRunningGenai, setIsRunningGenai] = useState<boolean>(false);
-const [genaiError, setGenaiError] = useState<string>('');
-const [genaiOkMsg, setGenaiOkMsg] = useState<string>('');
-
-  // ============================================================
-  // SECTION 03.01.04 — RUN OUTPUT PANEL STATE
-  // PURPOSE: Show last response JSON for troubleshooting.
-  // ============================================================
-
-  // Run Output panel
-  const [lastActionLabel, setLastActionLabel] = useState<string>('(none)');
-  const [lastHttpStatus, setLastHttpStatus] = useState<number | null>(null);
-  const [lastResponseJson, setLastResponseJson] = useState<any>(null);
-  const [lastResponseTextFallback, setLastResponseTextFallback] = useState<string>('');
-  const [showRunOutput, setShowRunOutput] = useState<boolean>(true);
-
-  // ============================================================
-  // SECTION 03.01.05 — DERIVED DISPLAY VALUES
-  // PURPOSE: Pretty-print JSON + extract messages list.
-  // ============================================================
-
-
-  const lastResponsePretty = useMemo(() => {
-    if (lastResponseJson != null) return safeJsonStringify(lastResponseJson);
-    if (lastResponseTextFallback) return lastResponseTextFallback;
-    return '';
-  }, [lastResponseJson, lastResponseTextFallback]);
-
-  const derivedMessages = useMemo(() => {
-    if (!lastResponseJson) return [];
-    return guessMessagesFromResponse(lastResponseJson);
-  }, [lastResponseJson]);
-
-// ============================================================
-// SECTION 03.01.06 — RUN TRACKER (2 GRIDS)
-// ============================================================
-
-type IngestRunRow = {
+type RulesetRow = {
   id: string;
-  session_id: string;
-  status?: string;
-  total_files?: number;
-  completed_files?: number;
-  failed_files?: number;
-  created_at?: string;
-  updated_at?: string;
-  completed_at?: string | null;
+  ruleset_shortname?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type RulesetSearchResponse = {
+  rows: RulesetRow[];
+  meta?: { total?: number; page?: number; per?: number; sort?: string; filters?: any };
 };
 
 type IngestStepRow = {
   id: string;
   ingest_run_id: string;
   invoice_version_id?: string | null;
-  step_type?: string;
-  ok?: boolean;
+  step_type?: string | null;
+  ok?: boolean | null;
   error_text?: string | null;
   validationgenai_ruleset_id?: string | null;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
-const [runsLoading, setRunsLoading] = useState<boolean>(false);
-const [runsError, setRunsError] = useState<string>('');
-const [runs, setRuns] = useState<IngestRunRow[]>([]);
+type InvoiceGridRow = {
+  invoice_id: string;
+  session_id: string;
 
-const [selectedRunId, setSelectedRunId] = useState<string>('');
+  invoice_status?: string | null;
+  invoice_status_updated_at?: string | null;
 
-const [stepsLoading, setStepsLoading] = useState<boolean>(false);
-const [stepsError, setStepsError] = useState<string>('');
-const [steps, setSteps] = useState<IngestStepRow[]>([]);
+  session_status?: string | null;
+  session_submitted_at?: string | null;
 
+  contractor_id?: string | null;
+  contractor_business_name?: string | null;
+  contractor_number?: string | null;
+  contractor_email?: string | null;
+  contractor_phone_number?: string | null;
+  contractor_city?: string | null;
 
+  latest_invoice_version_id?: string | null;
+  latest_invoice_versionno?: number | null;
+  latest_original_filename?: string | null;
 
+  latest_di_ocr_invoice_total?: string | null;
+  latest_di_ocr_invoice_date?: string | null;
+  latest_di_ocr_vendor_name?: string | null;
+  latest_di_ocr_invoice_id?: string | null;
 
+  latest_genai_all_rulechecks_pass_flag?: boolean | null;
+  latest_genai_overall_confidence?: number | null;
+};
 
-const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-const [lastAutoRefreshAt, setLastAutoRefreshAt] = useState<string>('');
+type InvoiceGridResponse = {
+  rows: InvoiceGridRow[];
+  meta?: any;
+};
 
-// any step still "running"?
-const hasRunningStep = useMemo(() => {
-  return steps.some((s) => s.ok === null || typeof s.ok === 'undefined');
-}, [steps]);
+function getParam(search: string, key: string): string {
+  return new URLSearchParams(search).get(key) ?? '';
+}
 
-// guard: only if we actually have a session_id
-const canAutoRefresh = !!sessionId.trim();
-
-useEffect(() => {
-  if (!autoRefresh) return;
-  if (!canAutoRefresh) return;
-
-  // If you haven’t loaded anything yet, don’t hammer.
-  // (User clicks Refresh once to “start tracking”.)
-  if (steps.length === 0) return;
-
-  // Only poll while something is still running (ok is null)
-  if (!hasRunningStep) return;
-
-  let cancelled = false;
-
-  const tick = async () => {
-    if (cancelled) return;
-    await fetchStepsBySession();
-    if (!cancelled) setLastAutoRefreshAt(new Date().toLocaleTimeString());
-  };
-
-  // poll every 2s (tweak to taste)
-  const id = window.setInterval(tick, 2000);
-
-  // do one immediate tick so it feels snappy
-  tick();
-
-  return () => {
-    cancelled = true;
-    window.clearInterval(id);
-  };
-}, [autoRefresh, canAutoRefresh, hasRunningStep, sessionId, steps.length]);
-
-
-
-const location = useLocation();
-
-useEffect(() => {
+function setParams(navigate: any, location: any, patch: Record<string, string>) {
   const params = new URLSearchParams(location.search);
 
-  const sid = params.get('session_id');
-  const iid = params.get('invoice_id');
-  const ivid = params.get('invoice_version_id');
-  const rid = params.get('validationgenai_ruleset_id');
+  Object.entries(patch).forEach(([k, v]) => {
+    if (v === '' || v == null) params.delete(k);
+    else params.set(k, v);
+  });
 
-  // Only set if present (so manual typing still works)
-  if (sid) setSessionId(sid);
-  if (iid) setInvoiceId(iid);
-  if (ivid) setInvoiceVersionId(ivid);
-  if (rid) setValidationGenaiRulesetId(rid);
-}, [location.search]);
+  const qs = params.toString();
+  navigate(`${location.pathname}${qs ? `?${qs}` : ''}`, { replace: true });
+}
+
+function sanitizeDisplayTs(s?: string | null) {
+  if (!s) return '';
+  return String(s).replace('T', ' ').replace('Z', '');
+}
+
+function shortGuid(s?: string | null) {
+  const v = (s || '').trim();
+  if (!v) return '—';
+  return v.length <= 12 ? v : `${v.slice(0, 8)}…${v.slice(-4)}`;
+}
 
 
-
-const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
-
-
-
-  // ============================================================
-  // SECTION 03.02 — EVENT HANDLERS
-  // ============================================================
-
-  // ============================================================
-  // SECTION 03.02.01 — RUN OUTPUT HELPERS
-  // ============================================================
-
-  const clearRunOutput = () => {
-    setLastActionLabel('(none)');
-    setLastHttpStatus(null);
-    setLastResponseJson(null);
-    setLastResponseTextFallback('');
-  };
-
-  const captureRunOutput = (label: string, status: number, json: any, textFallback: string = '') => {
-    setLastActionLabel(label);
-    setLastHttpStatus(status);
-    setLastResponseJson(json);
-    setLastResponseTextFallback(textFallback);
-  };
+  export const AIAdminScreen = observer(function AIAdminScreen() {
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // ============================================================
-  // SECTION 03.02.02 — CREATE SESSION HANDLERS
+  // SECTION 01 — URL-DRIVEN STATE
   // ============================================================
 
-  const handleCreateNewSession = async () => {
-    setIsCreatingSession(true);
-    setCreateSessionError('');
-    setUploadError('');
-    setUploadOkMsg('');
-    setSelectedFiles([]);
-    clearRunOutput();
-setInvoiceId('');
-setInvoiceVersionId('');
+  // ruleset chooser
+  const rulesetQ = getParam(location.search, 'ruleset_q');
+  const rulesetSort = getParam(location.search, 'ruleset_sort') || 'updated_at:desc';
+  const rulesetPageStr = getParam(location.search, 'ruleset_page') || '1';
+  const rulesetPerStr = getParam(location.search, 'ruleset_per') || '25';
+
+  // run tab (and shared)
+  const sessionIdFromUrl = getParam(location.search, 'session_id');
+  const invoiceIdFromUrl = getParam(location.search, 'invoice_id');
+  const invoiceVersionIdFromUrl = getParam(location.search, 'invoice_version_id');
+  const rulesetIdFromUrl = getParam(location.search, 'validationgenai_ruleset_id');
+
+  const rulesetPage = Math.max(1, parseInt(rulesetPageStr || '1', 10) || 1);
+  const rulesetPer = [25, 50, 100].includes(parseInt(rulesetPerStr, 10)) ? parseInt(rulesetPerStr, 10) : 25;
+
+  // ============================================================
+  // SECTION 02 — TAB 1: RULESET GRID
+  // ============================================================
+
+  const [rulesetLoading, setRulesetLoading] = useState(false);
+  const [rulesetError, setRulesetError] = useState('');
+  const [rulesetRows, setRulesetRows] = useState<RulesetRow[]>([]);
+  const [rulesetTotal, setRulesetTotal] = useState(0);
+
+  const [rulesetQDraft, setRulesetQDraft] = useState(rulesetQ);
+  useEffect(() => setRulesetQDraft(rulesetQ), [rulesetQ]);
+
+  const fetchRulesets = async () => {
+    setRulesetLoading(true);
+    setRulesetError('');
 
     try {
-      if (!contractorId.trim()) {
-        throw new Error('Please enter a contractor_id (UUID) first.');
-      }
+      const params = new URLSearchParams();
+      if (rulesetQ.trim()) params.set('q', rulesetQ.trim());
+      params.set('sort', rulesetSort);
+      params.set('page', String(rulesetPage));
+      params.set('per', String(rulesetPer));
 
-      const res = await fetch('/api/claims/sessions', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          contractor_id: contractorId.trim(),
-        }),
-      });
+      const url = `/api/claims/admin/validationgenai_rulesets?${params.toString()}`;
+      const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include' });
+      const data: RulesetSearchResponse = await res.json().catch(() => ({ rows: [] }));
 
-      setLastHttpStatus(res.status);
+      if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
 
-      // Try JSON first, then fallback to text
-      let data: any = null;
-      let textFallback = '';
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        textFallback = await res.text().catch(() => '');
-      }
-
-      if (!res.ok) {
-        captureRunOutput('Create session', res.status, data, textFallback);
-        const errText =
-          (data && (data.error || data.message)) ||
-          textFallback ||
-          `HTTP ${res.status} ${res.statusText}`;
-        throw new Error(String(errText));
-      }
-
-      captureRunOutput('Create session', res.status, data, textFallback);
-
-      const sid = tryGetSessionIdFromCreateResponse(data);
-      if (!sid) {
-        throw new Error('Endpoint returned JSON but no session id field was found.');
-      }
-
-      setSessionId(sid);
-    } catch (err: any) {
-      setCreateSessionError(err?.message || 'Failed to create session.');
+      setRulesetRows(Array.isArray(data?.rows) ? data.rows : []);
+      setRulesetTotal(Number(data?.meta?.total ?? 0));
+    } catch (e: any) {
+      setRulesetError(e?.message || 'Failed to load rulesets.');
+      setRulesetRows([]);
+      setRulesetTotal(0);
     } finally {
-      setIsCreatingSession(false);
+      setRulesetLoading(false);
     }
   };
 
-// ============================================================
-// SECTION 03.02.02.01 — RUN TRACKER HANDLERS (INSIDE COMPONENT)
-// PURPOSE:
-// - Fetch ingest_step_runs filtered by session_id (single-grid screen)
-// - Uses Run Output panel for debugging
-// ============================================================
+  useEffect(() => {
+    fetchRulesets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rulesetQ, rulesetSort, rulesetPage, rulesetPer]);
 
-const fetchStepsBySession = async () => {
-  setStepsLoading(true);
-  setStepsError('');
-  //setSteps([]);
+  const selectedRuleset = useMemo(() => {
+    if (!rulesetIdFromUrl) return null;
+    return rulesetRows.find((r) => String(r.id) === String(rulesetIdFromUrl)) ?? null;
+  }, [rulesetRows, rulesetIdFromUrl]);
 
-  try {
-    if (!sessionId.trim()) {
-      throw new Error('Please enter a session_id first.');
+  const rulesetTotalPages = Math.max(1, Math.ceil((rulesetTotal || 0) / rulesetPer));
+
+  // ============================================================
+  // SECTION 03 — TAB 2: RUN + TRACK + CONTEXT (SIMPLER)
+  // ============================================================
+
+  const [sessionId, setSessionId] = useState(sessionIdFromUrl || '');
+  const [invoiceId, setInvoiceId] = useState(invoiceIdFromUrl || '');
+  const [invoiceVersionId, setInvoiceVersionId] = useState(invoiceVersionIdFromUrl || '');
+
+  useEffect(() => setSessionId(sessionIdFromUrl || ''), [sessionIdFromUrl]);
+  useEffect(() => setInvoiceId(invoiceIdFromUrl || ''), [invoiceIdFromUrl]);
+  useEffect(() => setInvoiceVersionId(invoiceVersionIdFromUrl || ''), [invoiceVersionIdFromUrl]);
+
+  // Business context fetched from invoice grid endpoint
+  const [ctxLoading, setCtxLoading] = useState(false);
+  const [ctxError, setCtxError] = useState('');
+  const [ctxRow, setCtxRow] = useState<InvoiceGridRow | null>(null);
+
+  const fetchBusinessContext = async () => {
+    setCtxLoading(true);
+    setCtxError('');
+    setCtxRow(null);
+
+    try {
+      const sid = sessionId.trim();
+      const iid = invoiceId.trim();
+      if (!sid) throw new Error('Missing session_id.');
+      if (!iid) throw new Error('Missing invoice_id.');
+
+      const params = new URLSearchParams();
+      params.set('session_id', sid);
+      params.set('per', '200');
+      params.set('page', '1');
+      // if your invoices endpoint supports sort, keep this stable:
+      params.set('sort', 'latest_invoice_version_updated_at:desc');
+
+      const url = `/api/claims/admin/invoices?${params.toString()}`;
+
+      const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include' });
+      const data: InvoiceGridResponse = await res.json().catch(() => ({ rows: [] }));
+
+      if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      const row = rows.find((r) => String(r.invoice_id) === String(iid)) ?? null;
+
+      if (!row) {
+        throw new Error(`Invoice not found in session. session_id=${sid} invoice_id=${iid}`);
+      }
+
+      setCtxRow(row);
+
+      // best-effort: if invoice_version_id missing, fill from grid’s latest_invoice_version_id
+      if (!invoiceVersionId.trim() && row.latest_invoice_version_id) {
+        setInvoiceVersionId(String(row.latest_invoice_version_id));
+      }
+    } catch (e: any) {
+      setCtxError(e?.message || 'Failed to load business context.');
+    } finally {
+      setCtxLoading(false);
     }
+  };
 
-    const params = new URLSearchParams();
-    params.set('session_id', sessionId.trim());
-    params.set('limit', '200');
+  // auto-refresh business context when IDs change (but only when both are present)
+  useEffect(() => {
+    if (!sessionId.trim() || !invoiceId.trim()) return;
+    fetchBusinessContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, invoiceId]);
 
-    const url = `/api/claims/ingest/steps?${params.toString()}`;
+  // Step tracker
+  const [stepsLoading, setStepsLoading] = useState(false);
+  const [stepsError, setStepsError] = useState('');
+  const [steps, setSteps] = useState<IngestStepRow[]>([]);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastAutoRefreshAt, setLastAutoRefreshAt] = useState('');
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-    });
+  const hasRunningStep = useMemo(() => steps.some((s) => s.ok === null || typeof s.ok === 'undefined'), [steps]);
 
-    const data = await res.json().catch(() => ({}));
+  const fetchStepsBySession = async () => {
+    setStepsLoading(true);
+    setStepsError('');
 
-    // Reuse your existing Run Output panel
-    captureRunOutput('Refresh steps', res.status, data, '');
+    try {
+      const sid = sessionId.trim();
+      if (!sid) throw new Error('Enter a session_id first.');
 
-    if (!res.ok) {
-      throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      const params = new URLSearchParams();
+      params.set('session_id', sid);
+      params.set('limit', '200');
+
+      const url = `/api/claims/ingest/steps?${params.toString()}`;
+      const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+
+      setSteps(Array.isArray(data?.steps) ? data.steps : []);
+    } catch (e: any) {
+      setStepsError(e?.message || 'Failed to load steps.');
+    } finally {
+      setStepsLoading(false);
     }
+  };
 
-    setSteps(Array.isArray(data?.steps) ? data.steps : []);
-  } catch (e: any) {
-    setStepsError(e?.message || 'Failed to load steps.');
-  } finally {
-    setStepsLoading(false);
-  }
-};
+  useEffect(() => {
+    if (!autoRefresh) return;
+    if (!sessionId.trim()) return;
+    if (steps.length === 0) return;
+    if (!hasRunningStep) return;
 
+    let cancelled = false;
 
+    const tick = async () => {
+      if (cancelled) return;
+      await fetchStepsBySession();
+      if (!cancelled) setLastAutoRefreshAt(new Date().toLocaleTimeString());
+    };
 
+    const id = window.setInterval(tick, 2000);
+    tick();
 
-// ============================================================
-// SECTION 03.02.03 — UPLOAD HANDLERS
-// PURPOSE: Admin-only “New upload” for testing.
-// RULES:
-// - Single-file ONLY (no multi-select, no loop mental-map confusion)
-// - Requires session_id to be provided (paste/create first)
-// ============================================================
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, hasRunningStep, sessionId, steps.length]);
 
-// ============================================================
-// SECTION 03.02.03.01 — OPEN FILE CHOOSER
-// ============================================================
+  // Run buttons
+  const [isRunningOcr, setIsRunningOcr] = useState(false);
+  const [ocrError, setOcrError] = useState('');
+  const [ocrOkMsg, setOcrOkMsg] = useState('');
 
-const openFileChooser = () => {
-  setUploadError('');
-  setUploadOkMsg('');
-  if (!sessionId.trim()) {
-    setUploadError('Please enter a session_id first (or create one).');
-    return;
-  }
-  fileInputRef.current?.click();
-};
+  const [isRunningGenai, setIsRunningGenai] = useState(false);
+  const [genaiError, setGenaiError] = useState('');
+  const [genaiOkMsg, setGenaiOkMsg] = useState('');
 
-// ============================================================
-// SECTION 03.02.03.02 — FILE PICKED (SINGLE-FILE ONLY)
-// PURPOSE:
-// - Force exactly one file
-// - Clear <input> so same file can be re-selected
-// ============================================================
+  const handleRunOcr = async () => {
+    setIsRunningOcr(true);
+    setOcrError('');
+    setOcrOkMsg('');
 
-const handleFilesChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  setUploadError('');
-  setUploadOkMsg('');
+    try {
+      const sid = sessionId.trim();
+      const ivid = invoiceVersionId.trim();
 
-  const files = Array.from(e.target.files || []);
-  const firstFile = files[0] ?? null;
+      if (!sid) throw new Error('Enter a session_id first.');
+      if (!ivid) throw new Error('Enter an invoice_version_id first (or load context).');
 
-  // let the same file be selected again later
-  e.target.value = '';
+      const res = await fetch(`/api/claims/ingest/run_ocr`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ session_id: sid, invoice_version_id: ivid }),
+      });
 
-  if (!firstFile) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
 
-  // ADMIN RULE: New upload is single-file only (testing tool)
-  setSelectedFiles([firstFile]);
+      const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
+      setOcrOkMsg(
+        String(
+          data?.message ||
+            data?.summary ||
+            `OCR queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
+        ),
+      );
 
-  if (!sessionId.trim()) {
-    setUploadError('Please enter a session_id first (or create one).');
-    return;
-  }
-
-  await uploadFiles(sessionId.trim(), firstFile);
-};
-
-// ============================================================
-// SECTION 03.02.03.03 — DO UPLOAD (SINGLE FILE)
-// PURPOSE: Calls Rails upload endpoint using multipart/form-data.
-// NOTE: End-to-end pipeline will do looping elsewhere (NOT here).
-// ============================================================
-
-const uploadFiles = async (sid: string, file: File) => {
-  setIsUploading(true);
-  setUploadError('');
-  setUploadOkMsg('');
-  clearRunOutput();
-
-// ============================================================
-// SECTION 03.02.03.03.05 — CLEAR OCR STATUS ON NEW UPLOAD
-// PURPOSE: New upload changes invoice_version_id; clear stale OCR messages.
-// ============================================================
-
-setOcrError('');
-setOcrOkMsg('');
-
-
-
-  try {
-    const endpoint = `/api/claims/sessions/${encodeURIComponent(sid)}/upload`;
-
-    const form = new FormData();
-    form.append('session_id', sid);
-    form.append('pdfs[]', file, file.name); // single file
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      credentials: 'include',
-      body: form,
-    });
-
-    setLastHttpStatus(res.status);
-
-    let data: any = null;
-    let textFallback = '';
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      textFallback = await res.text().catch(() => '');
+      await fetchStepsBySession();
+    } catch (e: any) {
+      setOcrError(e?.message || 'Run OCR failed.');
+    } finally {
+      setIsRunningOcr(false);
     }
+  };
 
-    if (!res.ok) {
-      captureRunOutput('New upload', res.status, data, textFallback);
-      const errText =
-        (data && (data.error || data.message)) ||
-        textFallback ||
-        `HTTP ${res.status} ${res.statusText}`;
-      throw new Error(String(errText));
+  const handleRunGenai = async () => {
+    setIsRunningGenai(true);
+    setGenaiError('');
+    setGenaiOkMsg('');
+
+    try {
+      const sid = sessionId.trim();
+      const ivid = invoiceVersionId.trim();
+      const rid = rulesetIdFromUrl.trim();
+
+      if (!sid) throw new Error('Enter a session_id first.');
+      if (!ivid) throw new Error('Enter an invoice_version_id first (or load context).');
+      if (!rid) throw new Error('Select a ruleset first (Tab: Choose Ruleset).');
+
+      const res = await fetch(`/api/claims/ingest/run_genai`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ session_id: sid, invoice_version_id: ivid, validationgenai_ruleset_id: rid }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+
+      const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
+      setGenaiOkMsg(
+        String(
+          data?.message ||
+            data?.summary ||
+            `GenAI queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
+        ),
+      );
+
+      await fetchStepsBySession();
+    } catch (e: any) {
+      setGenaiError(e?.message || 'Run GenAI failed.');
+    } finally {
+      setIsRunningGenai(false);
     }
-
-    captureRunOutput('New upload', res.status, data, textFallback);
-
-    // Populate editable ids if backend returned them
-    const newInvoiceId = data?.invoice_id ?? data?.invoice?.id ?? '';
-    const newInvoiceVersionId = data?.invoice_version_id ?? data?.invoice_version?.id ?? '';
-
-    if (newInvoiceId) setInvoiceId(String(newInvoiceId));
-    if (newInvoiceVersionId) setInvoiceVersionId(String(newInvoiceVersionId));
-
-    // Prefer backend-provided summary if it exists
-    const runId = data?.run_id ?? data?.upload_run_id ?? data?.correlation_id ?? '';
-    const msg =
-      data?.message ||
-      data?.summary ||
-      `Upload accepted for session ${sid} (1 file).${runId ? ` run_id=${runId}` : ''}`;
-
-    setUploadOkMsg(String(msg));
-  } catch (err: any) {
-    setUploadError(err?.message || 'Upload failed.');
-  } finally {
-    setIsUploading(false);
-  }
-};
-
-
-// ============================================================
-// SECTION 03.02.04 — END-TO-END HANDLERS
-// PURPOSE: One button that will create session + upload + OCR + GenAI.
-// NOTE: For now this is a stub that calls a placeholder endpoint.
-// ============================================================
-
-const handleRunEndToEnd = async () => {
-  setIsRunningEndToEnd(true);
-  setEndToEndError('');
-  setEndToEndOkMsg('');
-  clearRunOutput();
-
-  // optional: clear ids so you can see what got populated
-  setSessionId('');
-  setInvoiceId('');
-  setInvoiceVersionId('');
-
-  try {
-    if (!contractorId.trim()) {
-      throw new Error('Please enter a contractor_id (UUID) first.');
-    }
-
-    // STUB endpoint for now (we will implement in Rails next)
-    const endpoint = `/api/claims/ingest/end_to_end`;
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        contractor_id: contractorId.trim(),
-      }),
-    });
-
-    setLastHttpStatus(res.status);
-
-    let data: any = null;
-    let textFallback = '';
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      textFallback = await res.text().catch(() => '');
-    }
-
-    if (!res.ok) {
-      captureRunOutput('End-to-end', res.status, data, textFallback);
-      const errText =
-        (data && (data.error || data.message)) ||
-        textFallback ||
-        `HTTP ${res.status} ${res.statusText}`;
-      throw new Error(String(errText));
-    }
-
-    captureRunOutput('End-to-end', res.status, data, textFallback);
-
-    // Populate ids if returned
-    const newSessionId = data?.session_id ?? data?.session?.id ?? '';
-    const newInvoiceId = data?.invoice_id ?? data?.invoice?.id ?? '';
-    const newInvoiceVersionId = data?.invoice_version_id ?? data?.invoice_version?.id ?? '';
-
-    if (newSessionId) setSessionId(String(newSessionId));
-    if (newInvoiceId) setInvoiceId(String(newInvoiceId));
-    if (newInvoiceVersionId) setInvoiceVersionId(String(newInvoiceVersionId));
-
-    const runId = data?.run_id ?? data?.correlation_id ?? '';
-    const msg =
-      data?.message ||
-      data?.summary ||
-      `End-to-end run started.${runId ? ` run_id=${runId}` : ''}`;
-
-    setEndToEndOkMsg(String(msg));
-  } catch (err: any) {
-    setEndToEndError(err?.message || 'End-to-end failed.');
-  } finally {
-    setIsRunningEndToEnd(false);
-  }
-};
-
-
-// ============================================================
-// SECTION 03.02.05 — OCR HANDLER (Run OCR button)
-// PURPOSE:
-// - Calls Rails: POST /api/claims/ingest/run_ocr
-// - Uses session_id + invoice_version_id (from textboxes)
-// - Captures Run Output panel JSON for phone-support style debugging
-// ============================================================
-
-const handleRunOcr = async () => {
-  // 3.2.5.1 — UI state reset
-  setIsRunningOcr(true);
-  setOcrError('');
-  setOcrOkMsg('');
-  clearRunOutput();
-
-  try {
-    // 3.2.5.2 — Basic validation (these are required for OCR step)
-    if (!sessionId.trim()) {
-      throw new Error('Please enter a session_id first.');
-    }
-    if (!invoiceVersionId.trim()) {
-      throw new Error('Please enter an invoice_version_id first (upload populates it).');
-    }
-
-    // 3.2.5.3 — Call Rails OCR endpoint
-    const endpoint = `/api/claims/ingest/run_ocr`;
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        // 3.2.5.4 — Payload fields (match your Rails controller params)
-        session_id: sessionId.trim(),
-        invoice_version_id: invoiceVersionId.trim(),
-
-        // optional: include model override if you want (otherwise omit)
-        // model_id: 'prebuilt-invoice',
-      }),
-    });
-
-    setLastHttpStatus(res.status);
-
-    // 3.2.5.5 — Parse JSON (fallback to text if needed)
-    let data: any = null;
-    let textFallback = '';
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      textFallback = await res.text().catch(() => '');
-    }
-
-    // 3.2.5.6 — Capture into Run Output panel (success or failure)
-    captureRunOutput('Run OCR', res.status, data, textFallback);
-
-    if (!res.ok) {
-      const errText =
-        (data && (data.error || data.message)) ||
-        textFallback ||
-        `HTTP ${res.status} ${res.statusText}`;
-      throw new Error(String(errText));
-    }
-
-    // 3.2.5.7 — Success message for the OCR panel
-    const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
-    const msg =
-      data?.message ||
-      data?.summary ||
-      `OCR queued/started for invoice_version_id=${invoiceVersionId.trim()}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`;
-
-    setOcrOkMsg(String(msg));
-
-    // 3.2.5.8 — Optional: auto-refresh the step grid so you see the new row
-    await fetchStepsBySession();
-  } catch (err: any) {
-    setOcrError(err?.message || 'Run OCR failed.');
-  } finally {
-    setIsRunningOcr(false);
-  }
-};
-
-// ============================================================
-// SECTION 03.02.05.50 — GENAI HANDLER (Run GenAI button)
-// PURPOSE:
-// - Milestone 1 only: call Rails stub endpoint
-// - Use session_id + invoice_version_id (from textboxes)
-// - Capture Run Output JSON
-// ============================================================
-
-const handleRunGenai = async () => {
-  setIsRunningGenai(true);
-  setGenaiError('');
-  setGenaiOkMsg('');
-  clearRunOutput();
-
-  try {
-    if (!sessionId.trim()) {
-      throw new Error('Please enter a session_id first.');
-    }
-    if (!invoiceVersionId.trim()) {
-      throw new Error('Please enter an invoice_version_id first (upload populates it).');
-    }
-
-    // Milestone 1 stub endpoint (Rails)
-    const endpoint = `/api/claims/ingest/run_genai`;
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        session_id: sessionId.trim(),
-        invoice_version_id: invoiceVersionId.trim(),
-validationgenai_ruleset_id: validationGenaiRulesetId.trim(),
-      }),
-    });
-
-    setLastHttpStatus(res.status);
-
-    let data: any = null;
-    let textFallback = '';
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      textFallback = await res.text().catch(() => '');
-    }
-
-    // Always capture output (success or failure)
-    captureRunOutput('Run GenAI', res.status, data, textFallback);
-
-    if (!res.ok) {
-      const errText =
-        (data && (data.error || data.message)) ||
-        textFallback ||
-        `HTTP ${res.status} ${res.statusText}`;
-      throw new Error(String(errText));
-    }
-
-    const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
-    const msg =
-      data?.message ||
-      data?.summary ||
-      `GenAI queued/started for invoice_version_id=${invoiceVersionId.trim()}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`;
-
-    setGenaiOkMsg(String(msg));
-   await fetchStepsBySession();
-    // optional: refresh step grid (if your stub endpoint also writes a step row later)
-    // await fetchStepsBySession();
-  } catch (err: any) {
-    setGenaiError(err?.message || 'Run GenAI failed.');
-  } finally {
-    setIsRunningGenai(false);
-  }
-};
-
-
+  };
 
   // ============================================================
   // SECTION 04 — RENDER
   // ============================================================
 
-  // ============================================================
-  // SECTION 04.01 — PAGE SHELL
-  // ============================================================
-
-
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <BlueTitleBar title="Job Admin" />
 
-      <Container maxW="container.lg" pb={4} flex="1" pt={6}>
+      <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
+          <Tabs variant="line" isFitted colorScheme="gray">
+            <TabList mb="1em">
+              <Tab>Choose ruleset</Tab>
+              <Tab>Run OCR / GenAI</Tab>
+            </TabList>
 
+            <TabPanels>
+              {/* ============================================================
+                  TAB 1 — RULESET CHOOSER
+              ============================================================ */}
+              <TabPanel px={0}>
+                <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
+                  <Box>
+                    <Heading size="sm">Validation GenAI Rulesets</Heading>
+                    <Text as="div" fontSize="xs" opacity={0.7}>
+                      Select a ruleset. Selection is stored in the URL as{' '}
+                      <Box as="code">validationgenai_ruleset_id</Box>.
+                    </Text>
+                  </Box>
 
+                  <HStack spacing={2}>
+                    <Select
+                      size="sm"
+                      value={rulesetPer}
+                      onChange={(e) => setParams(navigate, location, { ruleset_per: e.target.value, ruleset_page: '1' })}
+                      width="110px"
+                    >
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </Select>
 
-{/* ============================================================
-    SECTION 04.02 — TABBED ADMIN ACTIONS
-    PURPOSE:
-    - Convert the 4 action "boxes" into a tabbed layout
-    - Keep existing handlers/state unchanged (just reorganize UI)
-============================================================ */}
+                    <Select
+                      size="sm"
+                      value={rulesetSort}
+                      onChange={(e) =>
+                        setParams(navigate, location, { ruleset_sort: e.target.value, ruleset_page: '1' })
+                      }
+                      width="220px"
+                    >
+                      <option value="updated_at:desc">updated_at:desc</option>
+                      <option value="updated_at:asc">updated_at:asc</option>
+                      <option value="created_at:desc">created_at:desc</option>
+                      <option value="created_at:asc">created_at:asc</option>
+                      <option value="ruleset_shortname:asc">ruleset_shortname:asc</option>
+                      <option value="ruleset_shortname:desc">ruleset_shortname:desc</option>
+                    </Select>
 
-<Box mt={6} mb={6}>
+                    <Button size="sm" onClick={fetchRulesets} isLoading={rulesetLoading}>
+                      Refresh
+                    </Button>
+                  </HStack>
+                </Flex>
 
-  {/* ============================================================
-      SECTION 04.02.01 — TABS SHELL
-      PURPOSE: Four admin tabs (create, upload, upload-fix, run)
-  ============================================================ */}
-<Tabs
-  variant="line"
-  isFitted
-  colorScheme="gray"
-  sx={{
-    // ============================================================
-    // SECTION 04.02.01.01 — BOLDER LINE TAB STYLE
-    // PURPOSE: Make the underline + baseline thicker/darker
-    // ============================================================
+                <Flex gap={2} mb={3} wrap="wrap">
+                  <Input
+                    value={rulesetQDraft}
+                    onChange={(e) => setRulesetQDraft(e.target.value)}
+                    placeholder="Search (shortname, id, system_record, user_record1)…"
+                    maxW="640px"
+                  />
+                  <Button
+                    onClick={() => setParams(navigate, location, { ruleset_q: rulesetQDraft.trim(), ruleset_page: '1' })}
+                    isDisabled={rulesetQDraft.trim() === rulesetQ.trim()}
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRulesetQDraft('');
+                      setParams(navigate, location, { ruleset_q: '', ruleset_page: '1' });
+                    }}
+                    isDisabled={!rulesetQ.trim() && !rulesetQDraft.trim()}
+                  >
+                    Clear
+                  </Button>
+                </Flex>
 
-    // the baseline under all tabs
-    ".chakra-tabs__tablist": {
-      borderBottomWidth: "2px",
-      borderColor: "gray.300",
-    },
-
-    // the active tab underline
-    ".chakra-tabs__tab[aria-selected=true]": {
-      borderBottomWidth: "4px",
-      borderColor: "gray.800",
-    },
-  }}
->
-    {/* ============================================================
-        SECTION 04.02.01.10 — TAB HEADERS
-    ============================================================ */}
-    <TabList mb="1em">
-      <Tab>Create new session</Tab>
-      <Tab>Upload new invoice</Tab>
-      <Tab>Upload fix +1 version</Tab>
-      <Tab>Run OCR/GenAI</Tab>
-      <Tab>End to end</Tab>
-    </TabList>
-
-    {/* ============================================================
-        SECTION 04.02.01.20 — TAB PANELS
-    ============================================================ */}
-
-    
-    <TabPanels>
-
-      {/* ============================================================
-          TAB 1 — CREATE NEW SESSION
-      ============================================================ */}
-      <TabPanel px={0}>
-
-
-          <Text fontSize="xs" opacity={0.75} mb={2}>
-            contractor_id is only used for creating a session.
-          </Text>
-
-          <Box mb={3}>
-            <Text fontSize="xs" opacity={0.7} mb={1}>
-              contractor_id (UUID)
-            </Text>
-            <Input
-              value={contractorId}
-              onChange={(e) => setContractorId(e.target.value)}
-              placeholder="e.g. aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-              bg="white"
-              fontFamily="mono"
-            />
-          </Box>
-
-          <Button
-            colorScheme="blue"
-            onClick={handleCreateNewSession}
-            isLoading={isCreatingSession}
-            loadingText="Creating..."
-            isDisabled={isUploading || isRunningEndToEnd}
-          >
-            Create new session
-          </Button>
-        
-      </TabPanel>
-
-      {/* ============================================================
-          TAB 2 — UPLOAD NEW INVOICE
-      ============================================================ */}
-      <TabPanel px={0}>
-
-
-          <Text fontSize="xs" opacity={0.75} mb={2}>
-            session_id is only used for uploading a PDF to a session.
-          </Text>
-
-          <Box mb={3}>
-            <Text fontSize="xs" opacity={0.7} mb={1}>
-              session_id (editable)
-            </Text>
-            <Input
-              value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
-              placeholder="session UUID (created above or paste one)"
-              bg="white"
-              fontFamily="mono"
-            />
-          </Box>
-
-          <Button
-            colorScheme="blue"
-            onClick={openFileChooser}
-            isLoading={isUploading}
-            loadingText="Uploading..."
-            isDisabled={isCreatingSession || isRunningEndToEnd || !sessionId.trim()}
-          >
-            Upload New invoice
-          </Button>
-
-          {selectedFiles.length > 0 && (
-            <Box mt={3}>
-              <Text fontSize="xs" opacity={0.7}>
-                Selected file
-              </Text>
-              <Text fontFamily="mono" fontSize="sm">
-                {selectedFiles[0].name} ({Math.round(selectedFiles[0].size / 1024)} KB)
-              </Text>
-            </Box>
-          )}
-
-      </TabPanel>
-
-      {/* ============================================================
-          TAB 3 — UPLOAD FIX +1 VERSION (STUB)
-      ============================================================ */}
-      <TabPanel px={0}>
-
-
-          <Text fontSize="xs" opacity={0.75} mb={2}>
-            invoice_id is only used for the upload-fix action.
-          </Text>
-
-          <Box mb={3}>
-            <Text fontSize="xs" opacity={0.7} mb={1}>
-              invoice_id (editable)
-            </Text>
-            <Input
-              value={invoiceId}
-              onChange={(e) => setInvoiceId(e.target.value)}
-              placeholder="invoice UUID (upload populates it, or paste one)"
-              bg="white"
-              fontFamily="mono"
-            />
-          </Box>
-
-          <Button variant="outline" isDisabled>
-            Upload-fix +1 version
-          </Button>
-        
-      </TabPanel>
-
-      {/* ============================================================
-          TAB 4 — RUN OCR / GENAI  (includes the step-run tracker)
-      ============================================================ */}
-      <TabPanel px={0}>
-
-        {/* ============================================================
-            SECTION 04.02.T4.10 — RUN OCR / RUN GENAI INPUTS + BUTTONS
-        ============================================================ */}
- 
-          <Text fontSize="xs" opacity={0.75} mb={3}>
-            invoice_version_id + ruleset_id are only used for OCR/GenAI runs.
-          </Text>
-
-          <Box mb={3}>
-            <Text fontSize="xs" opacity={0.7} mb={1}>
-              invoice_version_id (editable)
-            </Text>
-            <Input
-              value={invoiceVersionId}
-              onChange={(e) => setInvoiceVersionId(e.target.value)}
-              placeholder="invoice_version UUID (upload populates it, or paste one)"
-              bg="white"
-              fontFamily="mono"
-            />
-          </Box>
-
-          <Box mb={3}>
-            <Text fontSize="xs" opacity={0.7} mb={1}>
-              validationgenai_ruleset_id (editable)
-            </Text>
-            <Input
-              value={validationGenaiRulesetId}
-              onChange={(e) => setValidationGenaiRulesetId(e.target.value)}
-              placeholder="paste ruleset UUID here"
-              bg="white"
-              fontFamily="mono"
-            />
-          </Box>
-
-          <Flex gap={3} wrap="wrap">
-            <Button
-              colorScheme="blue"
-              onClick={handleRunOcr}
-              isLoading={isRunningOcr}
-              loadingText="Running..."
-              isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
-            >
-              Run OCR
-            </Button>
-
-            <Button
-              colorScheme="blue"
-              onClick={handleRunGenai}
-              isLoading={isRunningGenai}
-              loadingText="Running..."
-              isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
-            >
-              Run GenAI
-            </Button>
-          </Flex>
-    
-
-        {/* ============================================================
-            SECTION 04.02.T4.20 — STEP RUN TRACKER (MOVED INTO TAB 4)
-            PURPOSE: Combines "run dashboard" + run buttons in one tab
-        ============================================================ */}
-        <Box mt={6} p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-          <Flex align="center" justify="space-between" mb={3} wrap="wrap" gap={3}>
-            <Box>
-              <Heading size="sm">Step Run Tracker</Heading>
-              <Text fontSize="xs" opacity={0.7}>
-                Single grid: ingest_step_runs filtered by <code>session_id</code> (paste a session id in Upload tab, then Refresh).
-              </Text>
-            </Box>
-
-            <Flex gap={2}>
-              <Button size="sm" onClick={fetchStepsBySession} isLoading={stepsLoading}>
-                Refresh
-              </Button>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setSteps([]);
-                  setStepsError('');
-                }}
-                isDisabled={steps.length === 0}
-              >
-                Clear
-              </Button>
-            </Flex>
-          </Flex>
-
-          {stepsError && (
-            <Box mb={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-              <Text fontSize="sm" color="red.700">
-                {stepsError}
-              </Text>
-            </Box>
-          )}
-
-          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
-            <Flex align="center" justify="space-between" mb={2}>
-              <Text fontSize="sm" fontWeight="bold">
-                Steps (filtered by session_id)
-              </Text>
-              {stepsLoading && <Spinner size="sm" />}
-            </Flex>
-
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>created</Th>
-                  <Th>step_id</Th>
-                  <Th>type</Th>
-                  <Th>ok</Th>
-                  <Th>invoice_version_id</Th>
-                  <Th>ruleset</Th>
-                  <Th>error</Th>
-                </Tr>
-              </Thead>
-
-              <Tbody>
-                {steps.map((s) => (
-                  <Tr key={s.id}>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {fmtTs(s.created_at)}
-                    </Td>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {s.id}
-                    </Td>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {s.step_type ?? ''}
-                    </Td>
-
-                    <Td fontSize="xs">
-                      {s.ok === null || typeof s.ok === 'undefined' ? (
-                        <Spinner size="sm" />
-                      ) : (
-                        <Box
-                          w="10px"
-                          h="10px"
-                          borderRadius="full"
-                          display="inline-block"
-                          bg={s.ok ? 'green.500' : 'red.500'}
-                        />
-                      )}
-                    </Td>
-
-                    <Td fontFamily="mono" fontSize="xs">
-                      {s.invoice_version_id ?? ''}
-                    </Td>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {s.validationgenai_ruleset_id ?? ''}
-                    </Td>
-                    <Td fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap">
-                      {s.error_text ?? ''}
-                    </Td>
-                  </Tr>
-                ))}
-
-                {!stepsLoading && steps.length === 0 && (
-                  <Tr>
-                    <Td colSpan={7}>
-                      <Text fontSize="sm" opacity={0.7}>
-                        Paste a session_id (Upload tab) and click Refresh.
-                      </Text>
-                    </Td>
-                  </Tr>
+                {rulesetError && (
+                  <Box mb={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                    <Text as="div" fontSize="sm" color="red.700">
+                      {rulesetError}
+                    </Text>
+                  </Box>
                 )}
-              </Tbody>
-            </Table>
-          </Box>
-        </Box>
-      </TabPanel>
 
-{/* ============================================================
-    TAB 5 — END-TO-END
-============================================================ */}
-<TabPanel px={0}>
-  {/* ============================================================
-      SECTION 04.01.50 — END-TO-END BUTTON (PRIMARY)
-      PURPOSE: Run full ingest chain in one click (prod-style).
-  ============================================================ */}
- 
+                <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflow="hidden">
+                  <Box bg="gray.50" px={3} py={2}>
+                    <Flex justify="space-between" align="center">
+                      <Flex align="center" gap={2}>
+                        <Text as="div" fontSize="sm" fontWeight="bold">
+                          Rows
+                        </Text>
+                        {rulesetLoading ? <Spinner size="sm" /> : null}
+                      </Flex>
 
-    <Text fontSize="sm" opacity={0.8} mb={3}>
-      Creates a new session and runs the full pipeline (upload → OCR → GenAI) in one action.
-    </Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        total: {rulesetTotal}
+                      </Text>
+                    </Flex>
+                  </Box>
 
-    <Button
-      colorScheme="green"
-      onClick={handleRunEndToEnd}
-      isLoading={isRunningEndToEnd}
-      loadingText="Running..."
-      isDisabled={isCreatingSession || isUploading}
-    >
-      Run end to end
-    </Button>
+                  <Box bg="white" p={0}>
+                    <Table size="sm">
+                      <Thead>
+                        <Tr>
+                          <Th>shortname</Th>
+                          <Th>updated</Th>
+                          <Th>id</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {rulesetRows.map((r) => {
+                          const isSelected = String(r.id) === String(rulesetIdFromUrl);
+                          return (
+                            <Tr
+                              key={r.id}
+                              cursor="pointer"
+                              bg={isSelected ? 'blue.50' : 'transparent'}
+                              _hover={{ bg: isSelected ? 'blue.100' : 'gray.50' }}
+                              onClick={() => setParams(navigate, location, { validationgenai_ruleset_id: String(r.id) })}
+                            >
+                              <Td fontSize="sm" fontWeight={isSelected ? 'bold' : 'normal'}>
+                                {r.ruleset_shortname ?? '—'}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {sanitizeDisplayTs(r.updated_at) || '—'}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {r.id}
+                              </Td>
+                            </Tr>
+                          );
+                        })}
 
-    {endToEndError && (
-      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-        <Text fontSize="sm" color="red.700">
-          {endToEndError}
-        </Text>
-      </Box>
-    )}
+                        {!rulesetLoading && rulesetRows.length === 0 && (
+                          <Tr>
+                            <Td colSpan={3}>
+                              <Text as="div" fontSize="sm" opacity={0.7} p={3}>
+                                No rulesets found.
+                              </Text>
+                            </Td>
+                          </Tr>
+                        )}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                </Box>
 
-    {endToEndOkMsg && (
-      <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-        <Text fontSize="sm" color="green.800">
-          {endToEndOkMsg}
-        </Text>
-      </Box>
-    )}
+                <Flex mt={3} justify="space-between" align="center" wrap="wrap" gap={2}>
+                  <Text as="div" fontSize="xs" opacity={0.7}>
+                    page {rulesetPage} of {rulesetTotalPages}
+                  </Text>
 
-</TabPanel>
+                  <HStack>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setParams(navigate, location, { ruleset_page: String(Math.max(1, rulesetPage - 1)) })}
+                      isDisabled={rulesetPage <= 1}
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setParams(navigate, location, { ruleset_page: String(Math.min(rulesetTotalPages, rulesetPage + 1)) })
+                      }
+                      isDisabled={rulesetPage >= rulesetTotalPages}
+                    >
+                      Next
+                    </Button>
+                  </HStack>
+                </Flex>
 
+                <Box mt={4} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
+                  <Text as="div" fontSize="xs" opacity={0.7}>
+                    Selected ruleset
+                  </Text>
+                  <Text as="div" fontSize="sm" fontWeight="bold">
+                    {selectedRuleset?.ruleset_shortname ?? '(none selected)'}
+                  </Text>
+                  <Text as="div" fontSize="xs" fontFamily="mono" opacity={0.9}>
+                    validationgenai_ruleset_id: {rulesetIdFromUrl || '—'}
+                  </Text>
+                </Box>
+              </TabPanel>
 
-    </TabPanels>
-  </Tabs>
-</Box>
+              {/* ============================================================
+                  TAB 2 — RUN OCR / GENAI + TRACKER + CONTEXT
+              ============================================================ */}
+              <TabPanel px={0}>
+                <Flex direction="column" gap={4}>
+                  {/* WORKING CONTEXT */}
+                  <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="white">
+                    <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
+                      <Box>
+                        <Heading size="sm">Working context</Heading>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          Context is populated via the Invoice Grid Admin screen (paste the IDs from there). Uploads happen
+                          in <Box as="code">/upload-invoice-admin</Box>.
+                        </Text>
+                      </Box>
 
+                      <HStack spacing={2}>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setParams(navigate, location, {
+                              session_id: sessionId.trim(),
+                              invoice_id: invoiceId.trim(),
+                              invoice_version_id: invoiceVersionId.trim(),
+                            })
+                          }
+                        >
+                          Save to URL
+                        </Button>
 
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={fetchBusinessContext}
+                          isLoading={ctxLoading}
+                          isDisabled={!sessionId.trim() || !invoiceId.trim()}
+                        >
+                          Refresh context
+                        </Button>
+                      </HStack>
+                    </Flex>
 
-{/* ============================================================
-    SECTION 04.03 — UPLOAD PANEL
-============================================================ */}
+                    {ctxError && (
+                      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                        <Text as="div" fontSize="sm" color="red.700">
+                          {ctxError}
+                        </Text>
+                      </Box>
+                    )}
 
-<Box>
-  {/* hidden file input (ADMIN: single file only) */}
-  <input
-    ref={fileInputRef}
-    type="file"
-    accept="application/pdf,.pdf"
-    style={{ display: 'none' }}
-    onChange={handleFilesChosen}
-  />
+                    <Flex mt={3} gap={3} wrap="wrap">
+                      <Box flex="1" minW="320px">
+                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                          session_id
+                        </Text>
+                        <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} fontFamily="mono" />
+                      </Box>
 
+                      <Box flex="1" minW="320px">
+                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                          invoice_id
+                        </Text>
+                        <Input value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} fontFamily="mono" />
+                      </Box>
 
+                      <Box flex="1" minW="320px">
+                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                          invoice_version_id
+                        </Text>
+                        <Input
+                          value={invoiceVersionId}
+                          onChange={(e) => setInvoiceVersionId(e.target.value)}
+                          placeholder="(required for runs)"
+                          fontFamily="mono"
+                        />
+                      </Box>
+                    </Flex>
 
+                    <Box mt={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
+                      {ctxLoading ? (
+                        <Spinner size="sm" />
+                      ) : ctxRow ? (
+                        <>
+                          <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>
+                                Contractor
+                              </Text>
+                              <Text as="div" fontSize="sm" fontWeight="bold">
+                                {ctxRow.contractor_business_name || '—'}
+                              </Text>
+                              <Text as="div" fontSize="xs" opacity={0.75}>
+                                {ctxRow.contractor_city || '—'} • {ctxRow.contractor_email || '—'}
+                              </Text>
+                            </Box>
 
+                            <Box textAlign="right">
+                              <Text as="div" fontSize="xs" opacity={0.7}>
+                                Invoice
+                              </Text>
+                              <Text as="div" fontSize="sm" fontWeight="bold">
+                                status: {ctxRow.invoice_status || '—'}
+                              </Text>
+                              <Text as="div" fontSize="xs" opacity={0.75}>
+                                file: {ctxRow.latest_original_filename || '—'}
+                              </Text>
+                            </Box>
+                          </Flex>
 
-  {/* ============================================================
-      SECTION 04.03.03 — MESSAGES
-  ============================================================ */}
+                          <Flex mt={3} wrap="wrap" gap={6}>
+                            <Box minW="260px">
+                              <Text fontSize="xs" opacity={0.7}>
+                                DI (latest)
+                              </Text>
+                              <Text fontSize="sm" fontWeight="bold">
+                                total: {ctxRow.latest_di_ocr_invoice_total || '—'}
+                              </Text>
+                              <Text fontSize="xs" opacity={0.75}>
+                                date: {ctxRow.latest_di_ocr_invoice_date || '—'} • vendor:{' '}
+                                {ctxRow.latest_di_ocr_vendor_name || '—'}
+                              </Text>
+                            </Box>
 
-  <Box mt={4}>
-    {createSessionError && (
-      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-        <Text fontSize="sm" color="red.700">
-          {createSessionError}
-        </Text>
-      </Box>
-    )}
+                            <Box minW="260px">
+                              <Text fontSize="xs" opacity={0.7}>
+                                GenAI (latest)
+                              </Text>
+                              <Text fontSize="sm" fontWeight="bold">
+                                conf: {ctxRow.latest_genai_overall_confidence ?? '—'}
+                              </Text>
+                              <Text fontSize="xs" opacity={0.75}>
+                                pass: {ctxRow.latest_genai_all_rulechecks_pass_flag == null
+                                  ? '—'
+                                  : ctxRow.latest_genai_all_rulechecks_pass_flag
+                                    ? 'true'
+                                    : 'false'}
+                              </Text>
+                            </Box>
 
-    {uploadError && (
-      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-        <Text fontSize="sm" color="red.700">
-          {uploadError}
-        </Text>
-      </Box>
-    )}
+                            <Box minW="260px">
+                              <Text fontSize="xs" opacity={0.7}>
+                                IDs (short)
+                              </Text>
+                              <Text fontFamily="mono" fontSize="xs">
+                                session: {shortGuid(ctxRow.session_id)}
+                              </Text>
+                              <Text fontFamily="mono" fontSize="xs">
+                                invoice: {shortGuid(ctxRow.invoice_id)}
+                              </Text>
+                              <Text fontFamily="mono" fontSize="xs">
+                                version: {shortGuid(invoiceVersionId || ctxRow.latest_invoice_version_id || '')}
+                              </Text>
+                            </Box>
+                          </Flex>
+                        </>
+                      ) : (
+                        <Text as="div" fontSize="sm" opacity={0.7}>
+                          (no context yet — enter session_id + invoice_id, then click “Refresh context”)
+                        </Text>
+                      )}
+                    </Box>
 
-    {uploadOkMsg && (
-      <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-        <Text fontSize="sm" color="green.800">
-          {uploadOkMsg}
-        </Text>
-      </Box>
-    )}
+                    <Box mt={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Selected GenAI ruleset (Tab: Choose ruleset)
+                      </Text>
+                      <Text as="div" fontSize="sm" fontWeight="bold">
+                        {selectedRuleset?.ruleset_shortname ?? '(none selected)'}
+                      </Text>
+                      <Text as="div" fontSize="xs" fontFamily="mono" opacity={0.9}>
+                        validationgenai_ruleset_id: {rulesetIdFromUrl || '—'}
+                      </Text>
+                    </Box>
+                  </Box>
 
-{/* ============================================================
-    SECTION 04.03.03.20 — OCR MESSAGES
-============================================================ */}
+                  {/* RUN */}
+                  <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="white">
+                    <Heading size="sm" mb={2}>
+                      Run
+                    </Heading>
+                    <Text as="div" fontSize="xs" opacity={0.7} mb={3}>
+                      These enqueue Sidekiq jobs. Step tracker below shows progress.
+                    </Text>
 
-{ocrError && (
-  <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-    <Text fontSize="sm" color="red.700">
-      {ocrError}
-    </Text>
-  </Box>
-)}
+                    <Flex gap={3} wrap="wrap">
+                      <Button
+                        colorScheme="blue"
+                        onClick={handleRunOcr}
+                        isLoading={isRunningOcr}
+                        loadingText="Running..."
+                        isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
+                      >
+                        Run OCR
+                      </Button>
 
-{ocrOkMsg && (
-  <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-    <Text fontSize="sm" color="green.800">
-      {ocrOkMsg}
-    </Text>
-  </Box>
-)}
+                      <Button
+                        colorScheme="blue"
+                        onClick={handleRunGenai}
+                        isLoading={isRunningGenai}
+                        loadingText="Running..."
+                        isDisabled={!sessionId.trim() || !invoiceVersionId.trim() || !rulesetIdFromUrl.trim()}
+                      >
+                        Run GenAI
+                      </Button>
 
+                      <Button variant="outline" onClick={fetchStepsBySession} isLoading={stepsLoading} isDisabled={!sessionId.trim()}>
+                        Refresh steps
+                      </Button>
+                    </Flex>
 
-  </Box>
-</Box>
+                    {ocrError && (
+                      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                        <Text as="div" fontSize="sm" color="red.700">
+                          {ocrError}
+                        </Text>
+                      </Box>
+                    )}
+                    {ocrOkMsg && (
+                      <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
+                        <Text as="div" fontSize="sm" color="green.800">
+                          {ocrOkMsg}
+                        </Text>
+                      </Box>
+                    )}
+                    {genaiError && (
+                      <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                        <Text as="div" fontSize="sm" color="red.700">
+                          {genaiError}
+                        </Text>
+                      </Box>
+                    )}
+                    {genaiOkMsg && (
+                      <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
+                        <Text as="div" fontSize="sm" color="green.800">
+                          {genaiOkMsg}
+                        </Text>
+                      </Box>
+                    )}
+                  </Box>
 
-{/* ============================================================
-    SECTION 04.03.03.30 — GENAI MESSAGES
-============================================================ */}
+                  {/* STEP RUN TRACKER */}
+                  <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="gray.50">
+                    <Flex align="center" justify="space-between" mb={3} wrap="wrap" gap={3}>
+                      <Box>
+                        <Heading size="sm">Step Run Tracker</Heading>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          ingest_step_runs filtered by <Box as="code">session_id</Box>
+                        </Text>
+                        {autoRefresh && lastAutoRefreshAt ? (
+                          <Text as="div" fontSize="xs" opacity={0.6}>
+                            auto-refresh: {lastAutoRefreshAt}
+                          </Text>
+                        ) : null}
+                      </Box>
 
-{genaiError && (
-  <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-    <Text fontSize="sm" color="red.700">
-      {genaiError}
-    </Text>
-  </Box>
-)}
+                      <Flex gap={2} wrap="wrap">
+                        <Button size="sm" onClick={fetchStepsBySession} isLoading={stepsLoading} isDisabled={!sessionId.trim()}>
+                          Refresh
+                        </Button>
 
-{genaiOkMsg && (
-  <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-    <Text fontSize="sm" color="green.800">
-      {genaiOkMsg}
-    </Text>
-  </Box>
-)}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSteps([]);
+                            setStepsError('');
+                          }}
+                          isDisabled={steps.length === 0}
+                        >
+                          Clear
+                        </Button>
 
+                        <Button size="sm" variant="ghost" onClick={() => setAutoRefresh((v) => !v)}>
+                          auto: {autoRefresh ? 'on' : 'off'}
+                        </Button>
+                      </Flex>
+                    </Flex>
 
+                    {stepsError && (
+                      <Box mb={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                        <Text as="div" fontSize="sm" color="red.700">
+                          {stepsError}
+                        </Text>
+                      </Box>
+                    )}
 
+                    <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
+                      <Flex align="center" justify="space-between" mb={2}>
+                        <Text as="div" fontSize="sm" fontWeight="bold">
+                          Steps
+                        </Text>
+                        {stepsLoading ? <Spinner size="sm" /> : null}
+                      </Flex>
 
+                      <Table size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>created</Th>
+                            <Th>step_id</Th>
+                            <Th>type</Th>
+                            <Th>ok</Th>
+                            <Th>invoice_version_id</Th>
+                            <Th>ruleset</Th>
+                            <Th>error</Th>
+                          </Tr>
+                        </Thead>
 
+                        <Tbody>
+                          {steps.map((s) => (
+                            <Tr key={s.id}>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {sanitizeDisplayTs(s.created_at)}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {s.id}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {s.step_type ?? ''}
+                              </Td>
+                              <Td fontSize="xs">
+                                {s.ok === null || typeof s.ok === 'undefined' ? (
+                                  <Spinner size="sm" />
+                                ) : (
+                                  <Badge colorScheme={s.ok ? 'green' : 'red'}>{s.ok ? 'OK' : 'FAIL'}</Badge>
+                                )}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {s.invoice_version_id ?? ''}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {s.validationgenai_ruleset_id ?? ''}
+                              </Td>
+                              <Td fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap">
+                                {s.error_text ?? ''}
+                              </Td>
+                            </Tr>
+                          ))}
+
+                          {!stepsLoading && steps.length === 0 && (
+                            <Tr>
+                              <Td colSpan={7}>
+                                <Text as="div" fontSize="sm" opacity={0.7}>
+                                  Paste a session_id and click Refresh.
+                                </Text>
+                              </Td>
+                            </Tr>
+                          )}
+                        </Tbody>
+                      </Table>
+                    </Box>
+                  </Box>
+                </Flex>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         </Box>
       </Container>
     </Flex>

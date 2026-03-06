@@ -52,6 +52,17 @@ const InvoiceVersionsAdminScreen = lazy(() =>
   import('../invoice-versions-admin').then((module) => ({ default: module.InvoiceVersionsAdminScreen })),
 );  
 
+const AdminCreateSessionScreen = lazy(() =>
+  import('../admin-create-session').then((module) => ({ default: module.default })),
+);
+
+const UploadInvoiceAdminScreen = lazy(() =>
+  import('../upload-invoice-admin').then((module) => ({ default: module.default })),
+);
+
+const SessionsAdminScreen = lazy(() =>
+  import('../sessions-admin').then((module) => ({ default: module.default })),
+);
 
 // end sbra20260130
 
@@ -704,6 +715,9 @@ const AppRoutes = observer(() => {
         <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
         <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} /> 
         <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
+        <Route path="/admin-create-session" element={<AdminCreateSessionScreen />} />
+        <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
+        <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
         {/* end sbra20260130 */}
 
 

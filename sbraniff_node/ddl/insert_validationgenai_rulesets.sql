@@ -30,7 +30,7 @@ Output-json-schema:
   "overall": {
     "overall_confidence": 0,
     "all_rulechecks_pass_flag": false,
-    "admin_advice": "string (<= 6 sentences)"
+    "admin_advice": "string (COPY/PASTE EMAIL TO CONTRACTOR. Write directly to the contractor in second person. <= 30 sentences total. Must include: (1) 1–2 sentence friendly intro, (2) BULLET LIST of issues + requested fixes, each bullet referencing rule_number and any relevant field_key, (3) brief closing. No internal-only notes. Plain language.)"
   },
   "located_fields": [
     {

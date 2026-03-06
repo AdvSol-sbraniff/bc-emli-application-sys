@@ -125,6 +125,11 @@ get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
 get  "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#show"
 patch "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#update"
 
+get "admin/contractors", to: "contractors_admin#index"
+
+get "admin/sessions_with_contractors", to: "sessions_with_contractors_admin#index"
+get "admin/validationgenai_rulesets", to: "validationgenai_rulesets#index"
+
 end
 # end sbra
 

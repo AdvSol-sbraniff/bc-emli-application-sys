@@ -91,8 +91,8 @@ Claims::GenaiCaseFacts::Build.persist_code_located_fields!(
       req.body = JSON.generate(contextwindowjson: contextwindowjson)
 
       http = Net::HTTP.new(uri.host, uri.port)
-      http.open_timeout = 5
-      http.read_timeout = 180
+      http.open_timeout = 10
+      http.read_timeout = 300
 
       resp = http.request(req)
       raise "Node GenAI failed #{resp.code}: #{resp.body.to_s[0, 500]}" unless resp.is_a?(Net::HTTPSuccess)
