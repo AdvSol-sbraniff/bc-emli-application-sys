@@ -21,7 +21,7 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, Info, PencilSimple, PlusCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, Info, PencilSimple, PlusCircle, Trash } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
@@ -93,6 +93,7 @@ export default function RevisionRequestsAdminScreen() {
   const [gridError, setGridError] = useState('');
   const [rows, setRows] = useState<RevisionRequestGridRow[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [deletingId, setDeletingId] = useState<string>('');
 
   const fetchRows = async () => {
     setGridLoading(true);
@@ -197,6 +198,37 @@ export default function RevisionRequestsAdminScreen() {
     if (row.invoice_versionno !== null && row.invoice_versionno !== undefined) params.set('invoice_versionno', String(row.invoice_versionno));
     if (row.di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(row.di_ocr_invoice_id));
     navigate(`/revision-request-editor?${params.toString()}`);
+  };
+
+  const handleDelete = async (row: RevisionRequestGridRow) => {
+    const rrid = String(row.revision_request_id || '').trim();
+    if (!rrid) return;
+
+    const ok = window.confirm(`Delete revision request ${rrid}? This cannot be undone.`);
+    if (!ok) return;
+
+    setGridError('');
+    setDeletingId(rrid);
+    try {
+      const res = await fetch(`/api/claims/admin/revision_requests/${encodeURIComponent(rrid)}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `Delete failed (${res.status}).`);
+
+      if (selected?.revision_request_id && String(selected.revision_request_id) === rrid) {
+        closeDrawer();
+      }
+
+      await fetchRows();
+    } catch (e: any) {
+      setGridError(e?.message || 'Failed to delete revision request.');
+    } finally {
+      setDeletingId('');
+    }
   };
 
   return (
@@ -317,6 +349,19 @@ export default function RevisionRequestsAdminScreen() {
                             size="sm"
                             variant="ghost"
                             onClick={() => openUpdate(r)}
+                            isDisabled={!r.revision_request_id}
+                          />
+                        </Tooltip>
+
+                        <Tooltip label="Delete revision request">
+                          <IconButton
+                            aria-label="Delete revision request"
+                            icon={<Trash size={16} />}
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="red"
+                            onClick={() => handleDelete(r)}
+                            isLoading={!!r.revision_request_id && deletingId === String(r.revision_request_id).trim()}
                             isDisabled={!r.revision_request_id}
                           />
                         </Tooltip>

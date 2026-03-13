@@ -29,7 +29,7 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, Info, XCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretLeft, CaretRight, Info, Question, Trash, XCircle } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -139,6 +139,7 @@ export default function SessionsAdminScreen() {
 
   const [gridLoading, setGridLoading] = useState(false);
   const [gridError, setGridError] = useState('');
+  const [deletingSessionId, setDeletingSessionId] = useState('');
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [total, setTotal] = useState<number>(0);
 
@@ -191,6 +192,11 @@ export default function SessionsAdminScreen() {
   // ============================================================
 
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isHelpOpen,
+    onOpen: onHelpOpen,
+    onClose: onHelpClose,
+  } = useDisclosure();
   const [selected, setSelected] = useState<SessionRow | null>(null);
 
   const openDrawer = (row: SessionRow) => {
@@ -210,6 +216,39 @@ export default function SessionsAdminScreen() {
   const openInvoicesGrid = (sessionId: string) => {
     const url = `/invoices-admin?session_id=${encodeURIComponent(sessionId)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    const confirmed = window.confirm(
+      'Delete this session and all child claim records (invoices, versions, runs, step runs, and related artifacts)? This cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    setDeletingSessionId(sessionId);
+    setGridError('');
+
+    try {
+      const res = await fetch(`/api/claims/admin/sessions_with_contractors/${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+      }
+
+      if (selected?.id === sessionId) {
+        closeDrawer();
+      }
+
+      await fetchSessions();
+    } catch (e: any) {
+      setGridError(e?.message || 'Failed to delete session.');
+    } finally {
+      setDeletingSessionId('');
+    }
   };
 
   // ============================================================
@@ -286,6 +325,15 @@ export default function SessionsAdminScreen() {
             </Box>
 
             <HStack spacing={2} pb={1}>
+              <Tooltip label="Help: what sessions are and why this screen exists">
+                <IconButton
+                  aria-label="Open sessions help"
+                  icon={<Question size={18} />}
+                  variant="outline"
+                  onClick={onHelpOpen}
+                />
+              </Tooltip>
+
               <Tooltip label="Clear filters">
                 <IconButton
                   aria-label="Clear filters"
@@ -386,6 +434,18 @@ export default function SessionsAdminScreen() {
                               onClick={() => openDrawer(r)}
                             />
                           </Tooltip>
+                          <Tooltip label="Delete session and all child claim records">
+                            <IconButton
+                              aria-label="Delete session"
+                              size="xs"
+                              variant="outline"
+                              colorScheme="red"
+                              icon={<Trash size={14} />}
+                              onClick={() => deleteSession(r.id)}
+                              isLoading={deletingSessionId === r.id}
+                              isDisabled={gridLoading || (!!deletingSessionId && deletingSessionId !== r.id)}
+                            />
+                          </Tooltip>
                           <Button size="xs" variant="outline" onClick={() => openInvoicesGrid(r.id)}>
                             Open invoices
                           </Button>
@@ -446,6 +506,67 @@ export default function SessionsAdminScreen() {
           </Flex>
         </Box>
       </Container>
+
+      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Sessions Admin Help</DrawerHeader>
+          <DrawerBody>
+            <Text fontSize="sm" mb={3}>
+              A session is a folder that groups multiple invoice submissions together. Contractors can see and use this folder in their workflow, so admins also need to see it and understand it.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Why admins need this screen
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Even if many admin users do not work with sessions every day, they still need a mental map of this structure. When contractor-side information needs correction or investigation, sessions are part of how records are organized and traced.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Important design tradeoff
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Needing to upload multiple invoices at once does not automatically require exposing a session object in the user interface. If contractors only had a simple multi-click upload flow with no visible session concept, this complexity would be much less visible in both contractor and admin UX.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Why we still use sessions
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              The session pattern is useful for larger contractor organizations and for broader government use cases where grouped submission tracking, review context, and auditability matter. Because it scales well, it is being adopted as a reusable pattern.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Day-to-day operations vs testing
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Admins may rarely create sessions in routine daily work. However, session behavior is still a core technical construct and must be tested in UAT and integration flows.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Why this is in the GUI
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Testing cannot be only a technical activity. Business staff also need to run realistic scenarios. A GUI for sessions allows both technical and business teams to validate the same workflow, using the same screen, before release.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Simple examples
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 1: A contractor submits several invoices in one work package. The session groups those records so reviewers can follow them together.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 2: UAT team needs to prove status transitions from open to submitted to closed. Sessions Admin gives one place to verify those state changes.
+            </Text>
+            <Text fontSize="sm">
+              Example 3: A support issue references a contractor upload day. Session grouping helps admins narrow the investigation quickly.
+            </Text>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
       {/* Drawer */}
       <Drawer isOpen={isOpen} placement="right" onClose={closeDrawer} size="lg">

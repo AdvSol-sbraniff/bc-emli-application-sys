@@ -457,7 +457,8 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
       <MenuGroup title={t('home.claimsAdminSectionTitle')}>
         <NavMenuItem label={t('home.sessionsAdminTitle')} to={'/sessions-admin'} />
         <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
-        <NavMenuItem label={t('home.uploadInvoiceAdminTitle')} to={'/upload-invoice-admin'} />
+        <NavMenuItem label={'Reports'} to={'/reports-volume-value'} />
+        <NavMenuItem label={'Submission Simulator'} to={'/submission-simulator-admin'} />
         <NavMenuItem label={t('home.rulesetsAdminTitle')} to={'/rulesets-admin'} />
         <NavMenuItem label={t('home.eligibilityAdminTitle')} to={'/eligibilitycodes-admin'} />
       </MenuGroup>

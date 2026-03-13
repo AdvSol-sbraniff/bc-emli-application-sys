@@ -66,6 +66,11 @@ The app uses the [Sidekiq](https://github.com/sidekiq/sidekiq) library for backg
 - Set ENV var `REDIS_URL=localhost:6379/0`
 - Run `bundle exec sidekiq` (add a `-q queue_name`) to start that particular queue, you can see which queues are currently in the app in `config/initializers/sidekiq.rb` under `config.queues`
 
+Recommended queue split for claims pipeline debugging:
+
+- General worker: `SIDEKIQ_CONCURRENCY=10 bundle exec sidekiq -q default -q virus_scan -q file_processing -q webhooks -q websocket -q model_callbacks`
+- Claims worker: `SIDEKIQ_CONCURRENCY=1 bundle exec sidekiq -q claims_ocr -q claims_genai`
+
 * Note that the Openshift deployed versions make use of HA-Redis via Sentinels so the environment variables required for that are different
 
 ### Websockets (Anycable)

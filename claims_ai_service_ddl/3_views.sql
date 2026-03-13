@@ -17,13 +17,10 @@ ORDER BY
 -- View: sessions + contractor core fields
 -- Naming: underscores (per your convention)
 
-DROP VIEW IF EXISTS claims.v_sessions_with_contractors;
-
-CREATE VIEW claims.v_sessions_with_contractors AS
+CREATE OR REPLACE VIEW claims.v_sessions_with_contractors AS
 SELECT
   s.*,
 
-  -- contractor �denormalized� fields for grids/search
   c.business_name      AS contractor_business_name,
   c.number             AS contractor_number,
   c.email              AS contractor_email,
@@ -355,3 +352,6 @@ JOIN claims.sessions s
   ON s.id = i.session_id
 LEFT JOIN claims.admin_revision_requests rr
   ON rr.invoice_version_id = iv.id;  
+
+
+  

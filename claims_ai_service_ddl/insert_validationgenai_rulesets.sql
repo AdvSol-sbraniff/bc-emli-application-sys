@@ -18,7 +18,7 @@ INSERT INTO claims.validationgenai_rulesets (
   -- ============================================================
   $system$
 purpose-statement:
-You are to assist admins with a pre-review of a contractor’s invoice for the Energy Savings Program (ESP).
+You are to assist admins with a pre-review of a contractor's invoice for the Energy Savings Program (ESP).
 
 - REQUIRED EXECUTION ORDER:
   Step 1: Build located_fields[] first (all location tasks). Do NOT decide rulechecks until you have attempted all locations.
@@ -30,7 +30,7 @@ Output-json-schema:
   "overall": {
     "overall_confidence": 0,
     "all_rulechecks_pass_flag": false,
-    "admin_advice": "string (COPY/PASTE EMAIL TO CONTRACTOR. Write directly to the contractor in second person. <= 30 sentences total. Must include: (1) 1–2 sentence friendly intro, (2) BULLET LIST of issues + requested fixes, each bullet referencing rule_number and any relevant field_key, (3) brief closing. No internal-only notes. Plain language.)"
+    "admin_advice": "string (COPY/PASTE EMAIL TO CONTRACTOR. Write directly to the contractor in second person. <= 30 sentences total. Must include: (1) 1-2 sentence friendly intro, (2) BULLET LIST of issues + requested fixes, each bullet referencing rule_number and any relevant field_key, (3) brief closing. No internal-only notes. Plain language.)"
   },
   "located_fields": [
     {
@@ -67,11 +67,11 @@ Output-schema-constraints:
 - Output must be valid JSON only (no markdown, no prose).
 - line_number must be the Document Intelligence Items[*] index, if it cannot be found in the item array, then make it 0.
 - rule_pass_flag must be true / false / null. Use null only when evidence is missing or ambiguous.
-- confidence is 0–100.
+- confidence is 0-100.
 - Every located_fields[] entry must include value, confidence, polygon and evidence (empty allowed).
 - For located_fields, polygon/page MUST come from DI pages[*].words[*] polygons (leave null only if no match).
 - Every rulechecks[] entry must include expected, observed, and evidence (empty allowed).
-- If a value can’t be found: set value and normalized_value to null and explain briefly in notes or reason.
+- If a value can't be found: set value and normalized_value to null and explain briefly in notes or reason.
 - when you need a Document Intelligence first-class field, preference is you use the documents[0].fields section
 - When comparing currency totals, allow small rounding variance (e.g., a few cents) and explain tolerance.
 - For date rules, expected and observed must include the dates used, and calculation must show "+6 months" and the inequality evaluation.
@@ -84,63 +84,63 @@ $system$,
   $gt$
 DI schema definition (supported document Intelligence first class fields and these are available generic and worldwide unlike fields in vancouver invoices only):
 
-CustomerName (string) — Customer being invoiced — Example: Microsoft Corp
-CustomerId (string) — Reference ID for the customer — Example: CID-12345
-PurchaseOrder (string) — Purchase order reference — Example: PO-3333
-InvoiceId (string) — Invoice Number — Example: INV-100
-InvoiceDate (date) — Date issued — Example: 11/15/2019
-DueDate (date) — Due date — Example: 12/15/2019
-VendorName (string) — Vendor name — Example: CONTOSO LTD.
-VendorAddress (address) — Vendor mailing address — Example: 123 456th St, New York, NY 10001
-VendorAddressRecipient (string) — Vendor address recipient — Example: Contoso Headquarters
-CustomerAddress (address) — Customer address — Example: 123 Other St, Redmond WA, 98052
-CustomerAddressRecipient (string) — Customer address recipient — Example: Microsoft Corp
-BillingAddress (address) — Billing address — Example: 123 Bill St, Redmond WA, 98052
-BillingAddressRecipient (string) — Billing recipient — Example: Microsoft Services
-ShippingAddress (address) — Shipping address — Example: 123 Ship St, Redmond WA, 98052
-ShippingAddressRecipient (string) — Shipping recipient — Example: Microsoft Delivery
-SubTotal (currency) — Subtotal — Example: $100.00
-TotalDiscount (currency) — Total discount — Example: $5.00
-TotalTax (currency) — Total tax — Example: $10.00
-InvoiceTotal (currency) — Total charges — Example: $110.00
-AmountDue (currency) — Total amount due — Example: $610.00
-PreviousUnpaidBalance (currency) — Previous unpaid balance — Example: $500.00
-RemittanceAddress (address) — Remittance/payment address — Example: 123 Remit St New York, NY, 10001
-RemittanceAddressRecipient (string) — Remittance recipient — Example: Contoso Billing
-ServiceAddress (address) — Service/property address — Example: 123 Service St, Redmond WA, 98052
-ServiceAddressRecipient (string) — Service recipient — Example: Microsoft Services
-ServiceStartDate (date) — Service period start — Example: 10/14/2019
-ServiceEndDate (date) — Service period end — Example: 11/14/2019
-VendorTaxId (string) — Vendor government ID — Example: 123456-7
-CustomerTaxId (string) — Customer government ID — Example: 765432-1
-PaymentTerm (string) — Payment terms — Example: Net90
-KVKNumber (string) — Netherlands business ID — Example: 12345678
+CustomerName (string) - Customer being invoiced - Example: Microsoft Corp
+CustomerId (string) - Reference ID for the customer - Example: CID-12345
+PurchaseOrder (string) - Purchase order reference - Example: PO-3333
+InvoiceId (string) - Invoice Number - Example: INV-100
+InvoiceDate (date) - Date issued - Example: 11/15/2019
+DueDate (date) - Due date - Example: 12/15/2019
+VendorName (string) - Vendor name - Example: CONTOSO LTD.
+VendorAddress (address) - Vendor mailing address - Example: 123 456th St, New York, NY 10001
+VendorAddressRecipient (string) - Vendor address recipient - Example: Contoso Headquarters
+CustomerAddress (address) - Customer address - Example: 123 Other St, Redmond WA, 98052
+CustomerAddressRecipient (string) - Customer address recipient - Example: Microsoft Corp
+BillingAddress (address) - Billing address - Example: 123 Bill St, Redmond WA, 98052
+BillingAddressRecipient (string) - Billing recipient - Example: Microsoft Services
+ShippingAddress (address) - Shipping address - Example: 123 Ship St, Redmond WA, 98052
+ShippingAddressRecipient (string) - Shipping recipient - Example: Microsoft Delivery
+SubTotal (currency) - Subtotal - Example: $100.00
+TotalDiscount (currency) - Total discount - Example: $5.00
+TotalTax (currency) - Total tax - Example: $10.00
+InvoiceTotal (currency) - Total charges - Example: $110.00
+AmountDue (currency) - Total amount due - Example: $610.00
+PreviousUnpaidBalance (currency) - Previous unpaid balance - Example: $500.00
+RemittanceAddress (address) - Remittance/payment address - Example: 123 Remit St New York, NY, 10001
+RemittanceAddressRecipient (string) - Remittance recipient - Example: Contoso Billing
+ServiceAddress (address) - Service/property address - Example: 123 Service St, Redmond WA, 98052
+ServiceAddressRecipient (string) - Service recipient - Example: Microsoft Services
+ServiceStartDate (date) - Service period start - Example: 10/14/2019
+ServiceEndDate (date) - Service period end - Example: 11/14/2019
+VendorTaxId (string) - Vendor government ID - Example: 123456-7
+CustomerTaxId (string) - Customer government ID - Example: 765432-1
+PaymentTerm (string) - Payment terms - Example: Net90
+KVKNumber (string) - Netherlands business ID - Example: 12345678
 
 PaymentDetails (array)
-- PaymentDetails.*.IBAN (string) — Example: DE 94 700 700 100 029 49 00 00
-- PaymentDetails.*.SWIFT (string) — Example: DEUTDEMMXXX
-- PaymentDetails.*.BankAccountNumber (string) — Example: 123456
-- PaymentDetails.*.BPayBillerCode (string) — Example: 123456
-- PaymentDetails.*.BPayReference (string) — Example: 1234567
+- PaymentDetails.*.IBAN (string) - Example: DE 94 700 700 100 029 49 00 00
+- PaymentDetails.*.SWIFT (string) - Example: DEUTDEMMXXX
+- PaymentDetails.*.BankAccountNumber (string) - Example: 123456
+- PaymentDetails.*.BPayBillerCode (string) - Example: 123456
+- PaymentDetails.*.BPayReference (string) - Example: 1234567
 
 TaxDetails (array)
-- TaxDetails.*.Amount (currency) — Example: 29,520.00
-- TaxDetails.*.Rate (string) — Example: 18 %
+- TaxDetails.*.Amount (currency) - Example: 29,520.00
+- TaxDetails.*.Rate (string) - Example: 18 %
 
 PaidInFourInstallements (array)
-- PaidInFourInstallements.*.Amount (currency) — Example: 29,520.00
-- PaidInFourInstallements.*.DueDate (date) — Example: 2024/01/01
+- PaidInFourInstallements.*.Amount (currency) - Example: 29,520.00
+- PaidInFourInstallements.*.DueDate (date) - Example: 2024/01/01
 
 Items (array)
-- Items.*.Amount (currency) — Example: $60.00
-- Items.*.Date (date) — Example: 3/4/2021
-- Items.*.Description (string) — Example: Consulting service
-- Items.*.Quantity (number) — Example: 2
-- Items.*.ProductCode (string) — Example: A123
-- Items.*.Tax (currency/string) — Example: $6.00
-- Items.*.TaxRate (string) — Example: 18 %
-- Items.*.Unit (string) — Example: hours
-- Items.*.UnitPrice (currency) — Example: $30.00
+- Items.*.Amount (currency) - Example: $60.00
+- Items.*.Date (date) - Example: 3/4/2021
+- Items.*.Description (string) - Example: Consulting service
+- Items.*.Quantity (number) - Example: 2
+- Items.*.ProductCode (string) - Example: A123
+- Items.*.Tax (currency/string) - Example: $6.00
+- Items.*.TaxRate (string) - Example: 18 %
+- Items.*.Unit (string) - Example: hours
+- Items.*.UnitPrice (currency) - Example: $30.00
 
 Location tasks:
 This information will merely be displayed for the admins to assist them in finding useful data using the polygons.
@@ -186,7 +186,7 @@ check: total invoice rebate (ie per home) is capped at 9500
 
 rule 9: Check that the customer-portion-calculation on the invoice matches the official-customer-portion-calculation 
 afterrebate_invoicecost = total_invoice_cost - capped_invoice_total_rebate
-customer_portion = afterrebate_invoicecost – customer_deposit
+customer_portion = afterrebate_invoicecost - customer_deposit
 Rule:
 if positive then the homeowner / customer still owes the contractor
 If negative then the contractor owes the customer

@@ -3,6 +3,8 @@ require "sidekiq-unique-jobs"
 
 # Shared configuration for all environments
 SHARED_QUEUES = %w[
+  claims_ocr
+  claims_genai
   virus_scan
   file_processing
   webhooks
@@ -10,6 +12,12 @@ SHARED_QUEUES = %w[
   model_callbacks
   default
 ].freeze
+
+def sidekiq_queues_from_env
+  raw = ENV["SIDEKIQ_QUEUES"].to_s
+  queues = raw.split(",").map(&:strip).reject(&:empty?)
+  queues.empty? ? SHARED_QUEUES : queues
+end
 
 def configure_sidekiq_client(config, redis_cfg = nil)
   config.redis = redis_cfg if redis_cfg
@@ -21,7 +29,7 @@ end
 
 def configure_sidekiq_server(config, redis_cfg = nil, concurrency = nil)
   config.redis = redis_cfg if redis_cfg
-  config.queues = SHARED_QUEUES
+  config.queues = sidekiq_queues_from_env
   config.concurrency = concurrency || 10 # Default to 10 workers for better throughput
 
   config.client_middleware do |chain|

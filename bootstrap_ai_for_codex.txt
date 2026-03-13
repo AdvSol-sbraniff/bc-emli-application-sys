@@ -1,0 +1,41 @@
+BOOTSTRAP FOR CODEX - LOCAL DB/WORKFLOW QUICKSTART
+
+Purpose
+- Use this note after agent reboot to quickly restore context and run commands reliably.
+
+Workspace
+- Repo path: \\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys
+- Main compose file: \\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml
+
+Important Environment Quirk
+- Running docker compose from WSL-style cwd in this terminal can fail with path translation errors.
+- Reliable workaround: run docker compose from a Windows-local cwd and pass explicit -f UNC path.
+
+Known-Good Pattern (PowerShell)
+1) Set-Location C:\
+2) docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" <compose-command>
+
+Known-Good DB Sanity Query
+- docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -tAc "select count(*) from claims.invoices;"
+
+Local Dev DB Details (from compose)
+- Service: postgres
+- User: postgres
+- Password: password
+- Database: app_development
+- Port: 5432
+
+When user asks to run DDL
+- Prefer command shape:
+  docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -f /workspace/<path-from-repo-root>.sql
+- Note: postgres service mounts repo as /workspace inside container.
+
+Suggested First Checks After Reboot
+1) Confirm compose services:
+   docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" ps
+2) Run DB sanity select (invoice count)
+3) If needed, read this file again and proceed.
+
+Notes
+- If command output is missing, prefer non-interactive forms (-T and -tAc for psql).
+- Keep changes minimal and FK-safe when adding delete endpoints.

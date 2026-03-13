@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  HStack,
   Box,
   Button,
   Container,
@@ -26,7 +27,7 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { Info, PencilSimple, Plus } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretLeft, CaretRight, Info, PencilSimple, Plus, Question, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
@@ -116,6 +117,11 @@ export default function EligibilitycodesAdminScreen() {
   const [total, setTotal] = useState<number>(0);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isHelpOpen,
+    onOpen: onHelpOpen,
+    onClose: onHelpClose,
+  } = useDisclosure();
   const [selected, setSelected] = useState<EligibilityGridRow | null>(null);
 
   const didInitFromUrl = useRef(false);
@@ -283,7 +289,7 @@ export default function EligibilitycodesAdminScreen() {
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Flex gap={3} align="end" wrap="wrap" mb={4}>
+          <Flex gap={3} align="end" wrap="nowrap" mb={4} overflowX="auto">
             <Box flex="1" minW="280px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 Search (user id, name, email, role, provider, eligibility code)
@@ -345,18 +351,41 @@ export default function EligibilitycodesAdminScreen() {
               </Select>
             </Box>
 
-            <Button
-              variant="outline"
-              onClick={() => {
-                setQ('');
-                setSort('users_eligibilitycode_updated_at:desc');
-                setPage(1);
-                setPer(25);
-                pushUrl({ q: '', sort: 'users_eligibilitycode_updated_at:desc', page: 1, per: 25 });
-              }}
-            >
-              Reset
-            </Button>
+            <HStack spacing={2} pb={1} flexShrink={0}>
+              <Tooltip label="Help: how eligibility data is used in OCR and GenAI checks">
+                <IconButton
+                  aria-label="Open eligibility help"
+                  icon={<Question size={18} />}
+                  variant="outline"
+                  onClick={onHelpOpen}
+                />
+              </Tooltip>
+
+              <Tooltip label="Refresh grid">
+                <IconButton
+                  aria-label="Refresh grid"
+                  icon={<ArrowsClockwise size={18} />}
+                  variant="outline"
+                  onClick={fetchRows}
+                  isLoading={loading}
+                />
+              </Tooltip>
+
+              <Tooltip label="Clear filters">
+                <IconButton
+                  aria-label="Clear filters"
+                  icon={<XCircle size={18} />}
+                  variant="outline"
+                  onClick={() => {
+                    setQ('');
+                    setSort('users_eligibilitycode_updated_at:desc');
+                    setPage(1);
+                    setPer(25);
+                    pushUrl({ q: '', sort: 'users_eligibilitycode_updated_at:desc', page: 1, per: 25 });
+                  }}
+                />
+              </Tooltip>
+            </HStack>
           </Flex>
 
           {error && (
@@ -449,40 +478,105 @@ export default function EligibilitycodesAdminScreen() {
               Total: {total}
             </Text>
 
-            <Flex gap={2} align="center">
-              <Button
-                size="sm"
-                variant="outline"
+            <HStack spacing={2}>
+              <Tooltip label="Previous page">
+                <IconButton
+                  aria-label="Previous page"
+                  size="sm"
+                  variant="outline"
+                  icon={<CaretLeft size={16} />}
                 isDisabled={page <= 1 || loading}
                 onClick={() => {
                   const next = Math.max(1, page - 1);
                   setPage(next);
                   pushUrl({ page: next });
                 }}
-              >
-                Previous
-              </Button>
+                />
+              </Tooltip>
 
               <Text fontSize="sm">
                 Page {page} of {totalPages}
               </Text>
 
-              <Button
-                size="sm"
-                variant="outline"
+              <Tooltip label="Next page">
+                <IconButton
+                  aria-label="Next page"
+                  size="sm"
+                  variant="outline"
+                  icon={<CaretRight size={16} />}
                 isDisabled={page >= totalPages || loading}
                 onClick={() => {
                   const next = Math.min(totalPages, page + 1);
                   setPage(next);
                   pushUrl({ page: next });
                 }}
-              >
-                Next
-              </Button>
-            </Flex>
+                />
+              </Tooltip>
+            </HStack>
           </Flex>
         </Box>
       </Container>
+
+      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Eligibility Admin Help</DrawerHeader>
+          <DrawerBody>
+            <Text fontSize="sm" mb={3}>
+              This page combines two sets of information so staff can see them together in one place: person details and that person’s eligibility code details.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              What this page is showing
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Think of this as a combined view. One side is the person record (name, email, account details), and the other side is the eligibility-code record (code, approval date, expiry date). The person information is managed elsewhere; this screen helps you review and maintain the eligibility part in context.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              How this is used during invoice processing
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              First, OCR reads the invoice PDF and extracts values such as the eligibility code. Next, the system looks up that code in this eligibility list. Then it follows that record back to the matching person to get the participant name and related details. Those known values are then shown in the PDF viewer section called Pre-existing info on file.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Why participant name matters in rules
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              A GenAI validation rule checks whether the participant name and address seen on the invoice are consistent with the participant name and address on file. This helps catch invoices that may have the wrong customer details.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              What fuzzy matching means
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Fuzzy matching means we allow small, normal differences instead of requiring exact character-by-character matches. For example, shortened first names, abbreviations, punctuation differences, or minor spelling differences can still be treated as a match when appropriate.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Ruleset tuning
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              If name or address checks are too strict, staff can adjust the ruleset to soften matching behavior. After updating a ruleset, you can re-run GenAI to evaluate the same invoice version again without needing to re-upload the PDF.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Operational examples
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 1: Eligibility data was corrected on file. Re-run GenAI so rule checks use the corrected participant/eligibility context.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 2: Invoice customer name uses an abbreviation. Update fuzzy matching ruleset settings, then re-run GenAI to reduce false failures.
+            </Text>
+            <Text fontSize="sm">
+              Example 3: OCR extracted a questionable code. Verify code ownership here, then decide whether OCR/GenAI rerun or contractor correction is needed.
+            </Text>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
       <Drawer isOpen={isOpen} placement="right" onClose={closeDetails} size="xl">
         <DrawerOverlay />

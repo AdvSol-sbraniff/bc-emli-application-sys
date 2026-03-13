@@ -1,5 +1,7 @@
 
 vite: bin/vite dev
 web: bin/rails s
+sidekiq: SIDEKIQ_CONCURRENCY=10 bundle exec sidekiq -q default -q virus_scan -q file_processing -q webhooks -q websocket -q model_callbacks
+sidekiq_claims: SIDEKIQ_CONCURRENCY=1 bundle exec sidekiq -q claims_ocr -q claims_genai
 anycable: bundle exec anycable
 ws: bin/anycable-go --port=8080
