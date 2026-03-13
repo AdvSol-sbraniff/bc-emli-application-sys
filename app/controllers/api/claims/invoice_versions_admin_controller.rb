@@ -19,8 +19,11 @@ module Api
           .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
           .limit(limit)
 
+        invoice = ::Claims::Invoice.find_by(id: invoice_id)
+
         render json: {
           invoice_id: invoice_id,
+          invoice: invoice&.as_json(only: [:id, :status, :created_at, :updated_at, :status_updated_at]),
           invoice_versions: rows.as_json(
             only: [
               :id, :invoice_id, :invoice_versionno,
@@ -47,16 +50,7 @@ module Api
         end
 
         render json: {
-          invoice_version: {
-            id: row.id,
-            invoice_id: row.invoice_id,
-            invoice_versionno: row.invoice_versionno,
-            di_raw_json: row.di_raw_json,
-            di_page_map: row.di_page_map,
-            genai_raw_json: row.genai_raw_json,
-            created_at: row.created_at,
-            updated_at: row.updated_at
-          }
+          invoice_version: row.as_json
         }, status: :ok
       rescue => e
         Rails.logger.error("[claims][invoice_versions_admin][show] ERROR: #{e.class}: #{e.message}")

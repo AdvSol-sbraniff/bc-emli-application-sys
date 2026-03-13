@@ -1,5 +1,5 @@
 // /app/frontend/components/domains/sessions-admin/index.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -14,6 +14,7 @@ import {
   Flex,
   Heading,
   HStack,
+  IconButton,
   Input,
   Select,
   SimpleGrid,
@@ -24,10 +25,12 @@ import {
   Text,
   Th,
   Thead,
+  Tooltip,
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ArrowsClockwise, CaretLeft, CaretRight, Info, XCircle } from '@phosphor-icons/react';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // ============================================================
@@ -87,6 +90,13 @@ function fmtTs(s?: string | null) {
   return s ? String(s).replace('T', ' ').replace('Z', '') : '—';
 }
 
+function fmtDate(s?: string | null) {
+  if (!s) return '—';
+  const raw = String(s);
+  if (raw.includes('T')) return raw.split('T')[0];
+  return raw.slice(0, 10);
+}
+
 function yn(v: any) {
   if (v === true) return 'yes';
   if (v === false) return 'no';
@@ -122,9 +132,6 @@ export default function SessionsAdminScreen() {
 
   const page = Math.max(1, parseInt(pageStr || '1', 10) || 1);
   const per = [25, 50, 100].includes(parseInt(perStr, 10)) ? parseInt(perStr, 10) : 25;
-
-  const [qDraft, setQDraft] = useState<string>(q);
-  useEffect(() => setQDraft(q), [q]);
 
   // ============================================================
   // SECTION 02 — GRID DATA
@@ -211,88 +218,102 @@ export default function SessionsAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Sessions Admin" />
+      <ThinBlueTitleBar title="Sessions Admin" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
-            <Box>
-              <Heading size="md" mb={1}>
-                Sessions grid (view-backed)
-              </Heading>
-              <Text as="div" fontSize="sm" opacity={0.8}>
-                Powered by <code>claims.v_sessions_with_contractors</code> (bookmarkable filters via URL query params).
+          <Flex gap={3} align="end" wrap="wrap" mb={4}>
+            <Box flex="1" minW="280px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Search (contractor name/number/email/city/postal, ids)
               </Text>
+              <Input
+                value={q}
+                onChange={(e) => setParams(navigate, location, { q: e.target.value, page: '1' })}
+                placeholder="Search sessions..."
+                bg="white"
+              />
             </Box>
 
-            <HStack spacing={2}>
+            <Box w="220px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Status
+              </Text>
               <Select
-                size="sm"
-                value={per}
+                value={status}
+                onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
+                bg="white"
+              >
+                <option value="">(any)</option>
+                <option value="OPENBUTNOTSUBMITTED">OPENBUTNOTSUBMITTED</option>
+                <option value="OPENANDSUBMITTED">OPENANDSUBMITTED</option>
+                <option value="CLOSED">CLOSED</option>
+              </Select>
+            </Box>
+
+            <Box w="240px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Sort
+              </Text>
+              <Select
+                value={sort}
+                onChange={(e) => setParams(navigate, location, { sort: e.target.value, page: '1' })}
+                bg="white"
+              >
+                <option value="updated_at:desc">updated_at desc</option>
+                <option value="created_at:desc">created_at desc</option>
+                <option value="submitted_at:desc">submitted_at desc</option>
+                <option value="status:asc">status asc</option>
+                <option value="status:desc">status desc</option>
+                <option value="contractor_business_name:asc">contractor name asc</option>
+                <option value="contractor_business_name:desc">contractor name desc</option>
+              </Select>
+            </Box>
+
+            <Box w="120px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Per page
+              </Text>
+              <Select
+                value={String(per)}
                 onChange={(e) => setParams(navigate, location, { per: e.target.value, page: '1' })}
-                width="110px"
+                bg="white"
               >
                 <option value="25">25</option>
                 <option value="50">50</option>
                 <option value="100">100</option>
               </Select>
+            </Box>
 
-              <Select
-                size="sm"
-                value={sort}
-                onChange={(e) => setParams(navigate, location, { sort: e.target.value, page: '1' })}
-                width="220px"
-              >
-                <option value="updated_at:desc">updated_at:desc</option>
-                <option value="created_at:desc">created_at:desc</option>
-                <option value="submitted_at:desc">submitted_at:desc</option>
-                <option value="status:asc">status:asc</option>
-                <option value="status:desc">status:desc</option>
-                <option value="contractor_business_name:asc">contractor_business_name:asc</option>
-                <option value="contractor_business_name:desc">contractor_business_name:desc</option>
-              </Select>
+            <HStack spacing={2} pb={1}>
+              <Tooltip label="Clear filters">
+                <IconButton
+                  aria-label="Clear filters"
+                  icon={<XCircle size={18} />}
+                  variant="outline"
+                  onClick={() => {
+                    setParams(navigate, location, {
+                      q: '',
+                      status: '',
+                      sort: 'updated_at:desc',
+                      per: '25',
+                      page: '1',
+                    });
+                  }}
+                  isDisabled={!q.trim() && !status.trim() && sort === 'updated_at:desc' && per === 25}
+                />
+              </Tooltip>
 
-              <Select
-                size="sm"
-                value={status}
-                onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
-                width="240px"
-              >
-                <option value="">status: (any)</option>
-                <option value="OPENBUTNOTSUBMITTED">OPENBUTNOTSUBMITTED</option>
-                <option value="OPENANDSUBMITTED">OPENANDSUBMITTED</option>
-                <option value="CLOSED">CLOSED</option>
-              </Select>
-
-              <Button size="sm" onClick={fetchSessions} isLoading={gridLoading}>
-                Refresh
-              </Button>
+              <Tooltip label="Refresh grid">
+                <IconButton
+                  aria-label="Refresh grid"
+                  icon={<ArrowsClockwise size={18} />}
+                  variant="outline"
+                  onClick={fetchSessions}
+                  isLoading={gridLoading}
+                />
+              </Tooltip>
             </HStack>
-          </Flex>
-
-          <Flex gap={2} mb={3} wrap="wrap">
-            <Input
-              value={qDraft}
-              onChange={(e) => setQDraft(e.target.value)}
-              placeholder="Search (contractor name/number/email/city/postal, ids)…"
-              maxW="640px"
-            />
-            <Button
-              onClick={() => setParams(navigate, location, { q: qDraft.trim(), page: '1' })}
-              isDisabled={qDraft.trim() === q.trim()}
-            >
-              Apply
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setQDraft('');
-                setParams(navigate, location, { q: '', page: '1' });
-              }}
-              isDisabled={!q.trim() && !qDraft.trim()}
-            >
-              Clear
-            </Button>
           </Flex>
 
           {gridError && (
@@ -303,53 +324,47 @@ export default function SessionsAdminScreen() {
             </Box>
           )}
 
-          <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflow="hidden">
-            <Box bg="gray.50" px={3} py={2}>
-              <Flex justify="space-between" align="center">
-                <Flex align="center" gap={2}>
-                  <Text as="div" fontSize="sm" fontWeight="bold">
-                    Rows
-                  </Text>
-                  {gridLoading ? <Spinner size="sm" /> : null}
-                </Flex>
-
-                <Text as="div" fontSize="xs" opacity={0.7}>
-                  total: {total}
-                </Text>
-              </Flex>
-            </Box>
-
-            <Box bg="white" p={0}>
-              <Table size="sm">
-                <Thead>
+          <Box borderWidth="1px" borderRadius="md" overflow="auto">
+            <Table size="sm" minW="980px">
+                <Thead bg="gray.50">
                   <Tr>
+                    <Th>created</Th>
                     <Th>contractor</Th>
+                    <Th>contractor #</Th>
                     <Th>session status</Th>
-                    <Th>updated</Th>
                     <Th>submitted</Th>
                     <Th>session_id</Th>
                     <Th></Th>
                   </Tr>
                 </Thead>
-                <Tbody>
+              <Tbody>
+                {gridLoading && rows.length === 0 && (
+                  <Tr>
+                    <Td colSpan={7}>
+                      <Flex align="center" gap={2} py={3}>
+                        <Spinner size="sm" />
+                        <Text>Loading sessions...</Text>
+                      </Flex>
+                    </Td>
+                  </Tr>
+                )}
+
                   {rows.map((r) => (
                     <Tr key={r.id} _hover={{ bg: 'gray.50' }}>
-                      <Td fontSize="sm">
-                        <Text as="div" fontWeight="bold">
-                          {r.contractor_business_name ?? '—'}
-                        </Text>
-                        <Text as="div" fontSize="xs" opacity={0.75}>
-                          {r.contractor_number ? `#${r.contractor_number}` : '—'}{' '}
-                          {r.contractor_city ? `• ${r.contractor_city}` : ''}
-                        </Text>
+                      <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                        {fmtDate(r.created_at)}
+                      </Td>
+
+                      <Td fontSize="sm" whiteSpace="nowrap">
+                        {r.contractor_business_name ?? '—'}
+                      </Td>
+
+                      <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                        {r.contractor_number ?? '—'}
                       </Td>
 
                       <Td fontFamily="mono" fontSize="xs">
                         {r.status ?? '—'}
-                      </Td>
-
-                      <Td fontFamily="mono" fontSize="xs">
-                        {fmtTs(r.updated_at)}
                       </Td>
 
                       <Td fontFamily="mono" fontSize="xs">
@@ -362,9 +377,15 @@ export default function SessionsAdminScreen() {
 
                       <Td>
                         <HStack justify="flex-end" spacing={2}>
-                          <Button size="xs" variant="outline" onClick={() => openDrawer(r)}>
-                            Details
-                          </Button>
+                          <Tooltip label="Open details drawer">
+                            <IconButton
+                              aria-label="Open details drawer"
+                              size="xs"
+                              variant="outline"
+                              icon={<Info size={14} />}
+                              onClick={() => openDrawer(r)}
+                            />
+                          </Tooltip>
                           <Button size="xs" variant="outline" onClick={() => openInvoicesGrid(r.id)}>
                             Open invoices
                           </Button>
@@ -375,41 +396,53 @@ export default function SessionsAdminScreen() {
 
                   {!gridLoading && rows.length === 0 && (
                     <Tr>
-                      <Td colSpan={6}>
+                      <Td colSpan={7}>
                         <Text as="div" fontSize="sm" opacity={0.7} p={3}>
                           No sessions found.
                         </Text>
                       </Td>
                     </Tr>
                   )}
-                </Tbody>
-              </Table>
-            </Box>
+              </Tbody>
+            </Table>
           </Box>
 
-          <Flex mt={3} justify="space-between" align="center" wrap="wrap" gap={2}>
-            <Text as="div" fontSize="xs" opacity={0.7}>
-              page {page} of {totalPages}
+          <Flex mt={4} justify="space-between" align="center" wrap="wrap" gap={3}>
+            <Text fontSize="sm" opacity={0.8}>
+              Total: {total}
             </Text>
 
             <HStack>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setParams(navigate, location, { page: String(Math.max(1, page - 1)) })}
-                isDisabled={page <= 1}
-              >
-                Prev
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setParams(navigate, location, { page: String(Math.min(totalPages, page + 1)) })}
-                isDisabled={page >= totalPages}
-              >
-                Next
-              </Button>
+              <Tooltip label="Previous page">
+                <IconButton
+                  aria-label="Previous page"
+                  size="sm"
+                  variant="outline"
+                  icon={<CaretLeft size={16} />}
+                  onClick={() => setParams(navigate, location, { page: String(Math.max(1, page - 1)) })}
+                  isDisabled={page <= 1}
+                />
+              </Tooltip>
+              <Text fontSize="sm">
+                Page {page} of {totalPages}
+              </Text>
+              <Tooltip label="Next page">
+                <IconButton
+                  aria-label="Next page"
+                  size="sm"
+                  variant="outline"
+                  icon={<CaretRight size={16} />}
+                  onClick={() => setParams(navigate, location, { page: String(Math.min(totalPages, page + 1)) })}
+                  isDisabled={page >= totalPages}
+                />
+              </Tooltip>
             </HStack>
+          </Flex>
+
+          <Flex mt={3}>
+            <Button size="sm" onClick={() => navigate('/admin-create-session')}>
+              Create new session
+            </Button>
           </Flex>
         </Box>
       </Container>
@@ -448,12 +481,6 @@ export default function SessionsAdminScreen() {
                   </Text>
                 </Box>
 
-                <HStack spacing={2} mb={4} justify="flex-end">
-                  <Button variant="outline" onClick={() => openInvoicesGrid(selected.id)}>
-                    Open invoices grid
-                  </Button>
-                </HStack>
-
                 <Divider my={4} />
 
                 <Heading size="sm" mb={2}>
@@ -486,13 +513,6 @@ export default function SessionsAdminScreen() {
                 </SimpleGrid>
 
                 <Divider my={4} />
-
-                <HStack spacing={2} justify="flex-end">
-                  <Button variant="outline" onClick={closeDrawer}>
-                    Close
-                  </Button>
-                  <Button onClick={() => openInvoicesGrid(selected.id)}>Open invoices</Button>
-                </HStack>
               </Box>
             )}
           </DrawerBody>

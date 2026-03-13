@@ -40,6 +40,9 @@ const AIAdminScreen = lazy(() =>
 const RulesetEditorScreen = lazy(() =>
   import('../ruleset-editor').then((module) => ({ default: module.default })),
 );
+const RulesetsAdminScreen = lazy(() =>
+  import('../rulesets-admin').then((module) => ({ default: module.default })),
+);
 
 
 // the invoicesadmin is in ../invoices-admin/
@@ -60,9 +63,24 @@ const AdminCreateSessionScreen = lazy(() =>
 const UploadInvoiceAdminScreen = lazy(() =>
   import('../upload-invoice-admin').then((module) => ({ default: module.default })),
 );
+const UploadInvoiceFixAdminScreen = lazy(() =>
+  import('../upload-invoice-fix-admin').then((module) => ({ default: module.default })),
+);
 
 const SessionsAdminScreen = lazy(() =>
   import('../sessions-admin').then((module) => ({ default: module.default })),
+);
+const EligibilitycodesAdminScreen = lazy(() =>
+  import('../eligibilitycodes-admin').then((module) => ({ default: module.default })),
+);
+const EligibilitycodeEditorScreen = lazy(() =>
+  import('../eligibilitycode-editor').then((module) => ({ default: module.default })),
+);
+const RevisionRequestsAdminScreen = lazy(() =>
+  import('../revision-requests-admin').then((module) => ({ default: module.default })),
+);
+const RevisionRequestEditorScreen = lazy(() =>
+  import('../revision-request-editor').then((module) => ({ default: module.default })),
 );
 
 // end sbra20260130
@@ -407,16 +425,17 @@ export const Navigation = observer(() => {
           {sitewideMessage}
         </Center>
       )}
-      <NavBar />
-
       {isValidating ? (
         <LoadingScreen />
       ) : (
-        <Suspense fallback={<LoadingScreen />}>
-          <AppRoutes />
+        <>
+          <NavBar />
+          <Suspense fallback={<LoadingScreen />}>
+            <AppRoutes />
 
-          <Footer />
-        </Suspense>
+            <Footer />
+          </Suspense>
+        </>
       )}
     </BrowserRouter>
   );
@@ -756,15 +775,30 @@ const AppRoutes = observer(() => {
         <Route path="/confirmed" element={<EmailConfirmedScreen />} />
 
         {/* sbra20260130 claims subsytem route info */}
-        <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
-        <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
-        <Route path="/ai-admin" element={<AIAdminScreen />} />    
-        <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
-        <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} /> 
-        <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
-        <Route path="/admin-create-session" element={<AdminCreateSessionScreen />} />
-        <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
-        <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
+        <Route
+          element={
+            <ProtectedRoute
+              isAllowed={loggedIn && !mustAcceptEula}
+              redirectPath={(mustAcceptEula && '/') || '/login'}
+            />
+          }
+        >
+          <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
+          <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
+          <Route path="/ai-admin" element={<AIAdminScreen />} />
+          <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
+          <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
+          <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
+          <Route path="/rulesets-admin" element={<RulesetsAdminScreen />} />
+          <Route path="/admin-create-session" element={<AdminCreateSessionScreen />} />
+          <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
+          <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
+          <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
+          <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
+          <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
+          <Route path="/revision-requests-admin" element={<RevisionRequestsAdminScreen />} />
+          <Route path="/revision-request-editor" element={<RevisionRequestEditorScreen />} />
+        </Route>
         {/* end sbra20260130 */}
 
 

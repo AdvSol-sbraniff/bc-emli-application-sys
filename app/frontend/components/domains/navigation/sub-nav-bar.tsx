@@ -47,12 +47,84 @@ interface IDynamicBreadcrumbProps {
 const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
   const { t } = useTranslation();
   const rootStore = useMst();
+  const location = useLocation();
 
   const [breadcrumbs, setBreadcrumbs] = useState<TBreadcrumbSegment[]>([]);
+  const [includeHome, setIncludeHome] = useState(true);
 
   const FRIENDLY_SLUG_RESOURCES = ['jurisdictions'];
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const invoiceIdForRevisionRequests = searchParams.get('invoice_id') || '';
+    const revisionRequestsHref = invoiceIdForRevisionRequests
+      ? `/revision-requests-admin?invoice_id=${encodeURIComponent(invoiceIdForRevisionRequests)}`
+      : '/revision-requests-admin';
+
+    const isInvoicePdfViewerPath =
+      /^\/sessions\/[^/]+\/invoices\/[^/]+\/read$/.test(path) || /^\/invoice-versions\/[^/]+$/.test(path);
+
+    const claimsBreadcrumbs: Record<string, TBreadcrumbSegment[]> = {
+      '/invoices-admin': [{ href: '/invoices-admin', title: t('home.invoicesAdminTitle') }],
+      '/sessions-admin': [{ href: '/sessions-admin', title: t('home.sessionsAdminTitle') }],
+      '/rulesets-admin': [{ href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') }],
+      '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
+      '/revision-requests-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/revision-requests-admin', title: 'Revision Requests Admin' },
+      ],
+      '/invoice-versions-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/invoice-versions-admin', title: 'Versions History Inspection' },
+      ],
+      '/ai-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/ai-admin', title: 'OCR & GenAI' },
+      ],
+      '/upload-invoice-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/upload-invoice-admin', title: 'Upload New Invoice' },
+      ],
+      '/upload-invoice-fix-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/upload-invoice-fix-admin', title: 'Upload Invoice Fix' },
+      ],
+      '/ruleset-editor': [
+        { href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') },
+        { href: '/ruleset-editor', title: 'Ruleset editor' },
+      ],
+      '/eligibilitycode-editor': [
+        { href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') },
+        { href: '/eligibilitycode-editor', title: 'Eligibility code editor' },
+      ],
+      '/admin-create-session': [
+        { href: '/sessions-admin', title: t('home.sessionsAdminTitle') },
+        { href: '/admin-create-session', title: 'Create session' },
+      ],
+      '/revision-request-editor': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: revisionRequestsHref, title: 'Revision Requests Admin' },
+        { href: '/revision-request-editor', title: 'Revision Request Editor' },
+      ],
+    };
+
+    if (claimsBreadcrumbs[path]) {
+      setIncludeHome(false);
+      setBreadcrumbs(claimsBreadcrumbs[path]);
+      return;
+    }
+
+    if (isInvoicePdfViewerPath) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: path, title: 'Invoices Admin - PDF Viewer' },
+      ]);
+      return;
+    }
+
+    setIncludeHome(true);
+
     // Get the current path and split into segments
     const pathSegments = path.split('/').filter(Boolean);
 
@@ -84,24 +156,27 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       });
 
     setBreadcrumbs(breadcrumbSegments);
-  }, [path, rootStore.jurisdictionStore.currentJurisdiction]);
+  }, [path, location.search, rootStore.jurisdictionStore.currentJurisdiction]);
 
-  return <SiteBreadcrumbs breadcrumbs={breadcrumbs} />;
+  return <SiteBreadcrumbs breadcrumbs={breadcrumbs} includeHome={includeHome} />;
 });
 
 interface ISiteBreadcrumbProps {
   breadcrumbs: TBreadcrumbSegment[];
+  includeHome?: boolean;
 }
 
-const SiteBreadcrumbs = observer(function SiteBreadcrumb({ breadcrumbs }: ISiteBreadcrumbProps) {
+const SiteBreadcrumbs = observer(function SiteBreadcrumb({ breadcrumbs, includeHome = true }: ISiteBreadcrumbProps) {
   const { t } = useTranslation();
   return (
     <Breadcrumb spacing={2} separator="/">
-      <BreadcrumbItem>
-        <BreadcrumbLink as={RouterLinkButton} to="/" textTransform="capitalize" variant="link">
-          {t('site.home')}
-        </BreadcrumbLink>
-      </BreadcrumbItem>
+      {includeHome && (
+        <BreadcrumbItem>
+          <BreadcrumbLink as={RouterLinkButton} to="/" textTransform="capitalize" variant="link">
+            {t('site.home')}
+          </BreadcrumbLink>
+        </BreadcrumbItem>
+      )}
 
       {breadcrumbs.map((breadcrumb, index) => {
         const finalSegment = index == breadcrumbs.length - 1;

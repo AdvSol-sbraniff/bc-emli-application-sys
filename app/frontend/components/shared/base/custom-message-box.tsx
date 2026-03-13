@@ -26,6 +26,10 @@ export const CustomMessageBox = ({
   status,
   children,
   headingProps,
+  isClosable: _isClosable,
+  render: _render,
+  duration: _duration,
+  position: _position,
   ...rest
 }: ICustomMessageBoxProps) => {
   return (

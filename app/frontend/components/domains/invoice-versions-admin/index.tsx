@@ -1,7 +1,8 @@
-import { Box, Button, Container, Flex, Heading, Input, Text } from '@chakra-ui/react';
+import { Box, Container, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, IconButton, Input, Text, Tooltip } from '@chakra-ui/react';
 import { Table, Thead, Tbody, Tr, Th, Td, Spinner } from '@chakra-ui/react';
 import { Tabs, TabList, TabPanels, Tab, TabPanel } from '@chakra-ui/react';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { Info } from '@phosphor-icons/react';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
@@ -28,12 +29,26 @@ type InvoiceVersionDetail = {
   id: string;
   invoice_id: string;
   invoice_versionno: number;
-  di_raw_json: any | null;
-  genai_raw_json: any | null;
-  di_page_map: any | null;
+  di_raw_json?: any | null;
+  genai_raw_json?: any | null;
+  [key: string]: any;
+};
+
+type InvoiceMeta = {
+  id: string;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  status_updated_at?: string | null;
 };
 
 const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
+const fmtDate = (s?: string | null) => {
+  if (!s) return '—';
+  const raw = String(s);
+  if (raw.includes('T')) return raw.split('T')[0];
+  return raw.slice(0, 10);
+};
 
 function prettyJson(v: any): string {
   if (v === null || v === undefined) return '';
@@ -46,12 +61,15 @@ function prettyJson(v: any): string {
 
 export function InvoiceVersionsAdminScreen() {
   const [invoiceId, setInvoiceId] = useState<string>('');
+  const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [loadingJson, setLoadingJson] = useState<boolean>(false);
+  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   const [rows, setRows] = useState<InvoiceVersionRow[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>('');
+  const [selectedDetail, setSelectedDetail] = useState<InvoiceVersionDetail | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
   const [diJson, setDiJson] = useState<any | null>(null);
   const [genaiJson, setGenaiJson] = useState<any | null>(null);
@@ -69,18 +87,20 @@ export function InvoiceVersionsAdminScreen() {
     if (q && q.trim()) setInvoiceId(q.trim());
   }, [location.search]);
 
-  const handleRefresh = async () => {
+  const fetchRows = async (id: string) => {
     setLoading(true);
     setError('');
     setRows([]);
+    setInvoiceMeta(null);
     setSelectedVersionId('');
+    setSelectedDetail(null);
     setDiJson(null);
     setGenaiJson(null);
 
     try {
-      if (!invoiceId.trim()) throw new Error('Please enter an invoice_id.');
+      if (!id.trim()) throw new Error('Missing invoice_id.');
 
-      const url = `/api/claims/admin/invoices/${encodeURIComponent(invoiceId.trim())}/invoice_versions`;
+      const url = `/api/claims/admin/invoices/${encodeURIComponent(id.trim())}/invoice_versions`;
 
       const res = await fetch(url, {
         method: 'GET',
@@ -92,6 +112,7 @@ export function InvoiceVersionsAdminScreen() {
       if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
 
       setRows(Array.isArray(data?.invoice_versions) ? data.invoice_versions : []);
+      setInvoiceMeta(data?.invoice || null);
     } catch (e: any) {
       setError(e?.message || 'Failed to load invoice_versions.');
     } finally {
@@ -99,12 +120,10 @@ export function InvoiceVersionsAdminScreen() {
     }
   };
 
-  const handleShowJson = async (invoiceVersionId: string) => {
-    setLoadingJson(true);
+  const fetchVersionDetail = async (invoiceVersionId: string) => {
+    setLoadingDetail(true);
     setError('');
     setSelectedVersionId(invoiceVersionId);
-    setDiJson(null);
-    setGenaiJson(null);
 
     try {
 
@@ -122,31 +141,39 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
       const iv: InvoiceVersionDetail | undefined = data?.invoice_version;
       if (!iv) throw new Error('Missing invoice_version in response.');
 
+      setSelectedDetail(iv);
       setDiJson(iv.di_raw_json ?? null);
       setGenaiJson(iv.genai_raw_json ?? null);
     } catch (e: any) {
       setError(e?.message || 'Failed to load JSON blobs.');
       setSelectedVersionId('');
     } finally {
-      setLoadingJson(false);
+      setLoadingDetail(false);
     }
   };
 
+  useEffect(() => {
+    if (!invoiceId.trim()) return;
+    fetchRows(invoiceId.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceId]);
+
+  const openDetailsDrawer = async (invoiceVersionId: string) => {
+    await fetchVersionDetail(invoiceVersionId);
+    setIsDrawerOpen(true);
+  };
+
+  const detailEntries = selectedDetail
+    ? Object.entries(selectedDetail).sort(([a], [b]) => a.localeCompare(b))
+    : [];
+
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Invoice Versions Admin" />
+      <ThinBlueTitleBar title="Versions History Inspection" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Heading size="md" mb={2}>
-            Invoice versions by invoice
-          </Heading>
-
-          <Text fontSize="sm" opacity={0.8} mb={4}>
-            Shows <code>claims.invoice_versions</code> rows for a single invoice (ALL versions).
-          </Text>
-
-          {/* invoice_id + refresh */}
+          {/* invoice context */}
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box flex="1" minW="360px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
@@ -154,16 +181,25 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               </Text>
               <Input
                 value={invoiceId}
-                onChange={(e) => setInvoiceId(e.target.value)}
-                placeholder="paste invoice UUID"
+                isReadOnly
                 bg="white"
                 fontFamily="mono"
               />
             </Box>
 
-            <Button onClick={handleRefresh} isLoading={loading} loadingText="Refreshing...">
-              Refresh
-            </Button>
+            <Box minW="220px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                invoices.status
+              </Text>
+              <Input value={invoiceMeta?.status || '—'} isReadOnly bg="white" />
+            </Box>
+
+            <Box minW="220px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                invoices.created_at
+              </Text>
+              <Input value={fmtDate(invoiceMeta?.created_at)} isReadOnly bg="white" />
+            </Box>
           </Flex>
 
           {error && (
@@ -188,7 +224,6 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                 <Tr>
                   <Th>updated</Th>
                   <Th>version</Th>
-                  <Th>invoice_version_id</Th>
                   <Th>di_invoice_id</Th>
                   <Th>vendor</Th>
                   <Th isNumeric>total</Th>
@@ -198,15 +233,19 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 
               <Tbody>
                 {rows.map((r) => (
-                  <Tr key={r.id} bg={r.id === selectedVersionId ? 'gray.50' : undefined}>
+                  <Tr
+                    key={r.id}
+                    bg={r.id === selectedVersionId ? 'gray.50' : undefined}
+                    borderLeftWidth={r.id === selectedVersionId ? '4px' : '0'}
+                    borderLeftColor={r.id === selectedVersionId ? 'blue.500' : 'transparent'}
+                    cursor="pointer"
+                    onClick={() => fetchVersionDetail(r.id)}
+                  >
                     <Td fontFamily="mono" fontSize="xs">
                       {fmtTs(r.updated_at)}
                     </Td>
                     <Td fontFamily="mono" fontSize="xs">
                       {r.invoice_versionno}
-                    </Td>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {r.id}
                     </Td>
                     <Td fontFamily="mono" fontSize="xs">
                       {r.di_ocr_invoice_id ?? ''}
@@ -218,24 +257,28 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                       {r.di_ocr_invoice_total ?? ''}
                     </Td>
                     <Td>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => handleShowJson(r.id)}
-                        isLoading={loadingJson && selectedVersionId === r.id}
-                        loadingText="Loading..."
-                      >
-                        Show JSON
-                      </Button>
+                      <Tooltip label="Open all invoice_version fields">
+                        <IconButton
+                          aria-label="Open invoice version details"
+                          icon={<Info size={16} />}
+                          size="xs"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDetailsDrawer(r.id);
+                          }}
+                          isLoading={loadingDetail && selectedVersionId === r.id}
+                        />
+                      </Tooltip>
                     </Td>
                   </Tr>
                 ))}
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={7}>
+                    <Td colSpan={6}>
                       <Text fontSize="sm" opacity={0.7}>
-                        Enter an invoice_id and click Refresh.
+                        No versions found for this invoice.
                       </Text>
                     </Td>
                   </Tr>
@@ -250,7 +293,7 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               <Text fontSize="sm" fontWeight="bold">
                 JSON displays {selectedVersionId ? `(invoice_version_id: ${selectedVersionId})` : ''}
               </Text>
-              {loadingJson && <Spinner size="sm" />}
+              {loadingDetail && <Spinner size="sm" />}
             </Flex>
 
  
@@ -298,7 +341,7 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                     p={3}
                     bg="gray.50"
                   >
-                    {selectedVersionId ? prettyJson(diJson) : 'Select a row and click “Show JSON”.'}
+                    {selectedVersionId ? prettyJson(diJson) : 'Select a row to load JSON.'}
                   </Box>
                 </TabPanel>
 
@@ -316,7 +359,7 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                     p={3}
                     bg="gray.50"
                   >
-                    {selectedVersionId ? prettyJson(genaiJson) : 'Select a row and click “Show JSON”.'}
+                    {selectedVersionId ? prettyJson(genaiJson) : 'Select a row to load JSON.'}
                   </Box>
                 </TabPanel>
               </TabPanels>
@@ -324,6 +367,48 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
           </Box>
         </Box>
       </Container>
+
+      <Drawer isOpen={isDrawerOpen} placement="right" onClose={() => setIsDrawerOpen(false)} size="md">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Invoice Version Full Details</DrawerHeader>
+          <DrawerBody>
+            {!selectedDetail ? (
+              <Text fontSize="sm" opacity={0.7}>No row selected.</Text>
+            ) : (
+              <Flex direction="column" gap={3}>
+                {detailEntries.map(([k, v]) => (
+                  <Box key={k}>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>{k}</Text>
+                    {typeof v === 'object' && v !== null ? (
+                      <Box
+                        as="pre"
+                        fontFamily="mono"
+                        fontSize="xs"
+                        whiteSpace="pre-wrap"
+                        borderWidth="1px"
+                        borderColor="greys.grey20"
+                        borderRadius="md"
+                        p={2}
+                        bg="gray.50"
+                        maxH="220px"
+                        overflow="auto"
+                      >
+                        {prettyJson(v)}
+                      </Box>
+                    ) : (
+                      <Text fontSize="sm" fontFamily={k.endsWith('_id') ? 'mono' : undefined} whiteSpace="pre-wrap">
+                        {v === null || v === undefined || v === '' ? '—' : String(v)}
+                      </Text>
+                    )}
+                  </Box>
+                ))}
+              </Flex>
+            )}
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Flex>
   );
 }

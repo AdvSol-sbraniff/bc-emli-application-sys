@@ -77,13 +77,14 @@ class Api::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   end
 
   def failure
-    error = env["omniauth.error"]
-    error_type = env["omniauth.error.type"]
-    error_strategy = env["omniauth.error.strategy"]&.name
-    Rails.logger.error "OmniAuth failure: type=#{error_type}, strategy=#{error_strategy}, error=#{error&.class}: #{error&.message}"
-    if error&.backtrace
-      Rails.logger.error error&.backtrace&.first(5)&.join("\n")
-    end
+    strategy = request.env["omniauth.error.strategy"]
+    error = request.env["omniauth.error"]
+    error_type = request.env["omniauth.error.type"]
+
+    Rails.logger.error(
+      "OmniAuth failure: type=#{error_type.inspect} strategy=#{strategy&.name.inspect} message=#{error&.message.inspect} params=#{request.filtered_parameters.inspect}"
+    )
+
     redirect_to login_path(frontend_flash_message("omniauth.failure", "error"))
   end
 end

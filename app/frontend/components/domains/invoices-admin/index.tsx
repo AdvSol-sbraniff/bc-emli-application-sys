@@ -15,12 +15,14 @@ import {
   Flex,
   Heading,
   HStack,
+  IconButton,
   Input,
   Select,
   SimpleGrid,
   Spinner,
   Table,
   Tbody,
+  Tooltip,
   Td,
   Text,
   Th,
@@ -28,14 +30,16 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ArrowsClockwise, CaretLeft, CaretRight, FilePdf, Info, Question, XCircle } from '@phosphor-icons/react';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 type InvoiceGridRow = {
-  invoice_id: string;
+  invoice_id?: string | null;
 
   session_id: string;
-  invoice_status: string;
+  session_created_at?: string | null;
+  invoice_status?: string | null;
   invoice_status_updated_at?: string | null;
   invoice_created_at?: string | null;
   invoice_updated_at?: string | null;
@@ -83,13 +87,18 @@ type ApiResp = {
 };
 
 const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
+const fmtDate = (s?: string | null) => {
+  if (!s) return '';
+  const raw = String(s);
+  if (raw.includes('T')) return raw.split('T')[0];
+  return raw.slice(0, 10);
+};
 const fmtMoney = (v?: string | number | null) => {
   if (v === null || v === undefined || v === '') return '';
   const n = typeof v === 'number' ? v : Number(v);
   if (Number.isNaN(n)) return String(v);
   return n.toLocaleString(undefined, { style: 'currency', currency: 'CAD' });
 };
-const shortId = (s?: string | null) => (s ? `${s.slice(0, 8)}…` : '');
 
 function PassDot({ val }: { val: boolean | null | undefined }) {
   // neutral dot if null/undefined
@@ -128,6 +137,11 @@ export function InvoicesAdminScreen() {
 
   // drawer
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isUploadHelpOpen,
+    onOpen: onUploadHelpOpen,
+    onClose: onUploadHelpClose,
+  } = useDisclosure();
   const [selected, setSelected] = useState<InvoiceGridRow | null>(null);
 
   const didInitFromUrl = useRef(false);
@@ -260,7 +274,7 @@ const handlePopulateJobAdminWithInvoice = (row: InvoiceGridRow) => {
   if (row.latest_invoice_version_id) params.set('invoice_version_id', row.latest_invoice_version_id);
 
   const url = `/ai-admin?${params.toString()}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  window.open(url, '_blank');
 };
   
   const handleOpenVersions = (invoiceId: string) => {
@@ -270,6 +284,37 @@ const handlePopulateJobAdminWithInvoice = (row: InvoiceGridRow) => {
 
 const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
   const url = `/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const handleOpenUploadNewInvoice = (sessionId: string) => {
+  const url = `/upload-invoice-admin?session_id=${encodeURIComponent(sessionId)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const handleOpenUploadFix = (row: InvoiceGridRow) => {
+  const params = new URLSearchParams();
+  if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
+  if (row.session_id) params.set('session_id', String(row.session_id));
+  if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
+  if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined) params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
+  if (row.contractor_business_name) params.set('contractor_business_name', String(row.contractor_business_name));
+  if (row.latest_di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
+
+  const url = `/upload-invoice-fix-admin?${params.toString()}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const handleOpenRevisions = (row: InvoiceGridRow) => {
+  const params = new URLSearchParams();
+  if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
+  if (row.session_id) params.set('context_session_id', String(row.session_id));
+  if (row.session_created_at) params.set('context_session_created_at', String(row.session_created_at));
+  if (row.session_status) params.set('context_session_status', String(row.session_status));
+  if (row.invoice_status) params.set('context_invoice_status', String(row.invoice_status));
+  if (row.contractor_business_name) params.set('context_contractor_business_name', String(row.contractor_business_name));
+  if (row.latest_di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
+  const url = `/revision-requests-admin?${params.toString()}`;
   window.open(url, '_blank', 'noopener,noreferrer');
 };
 
@@ -285,21 +330,13 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Invoices Admin" />
+      <ThinBlueTitleBar title="Invoices Admin" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Heading size="md" mb={2}>
-            Invoice grid (view-backed)
-          </Heading>
-
-          <Text fontSize="sm" opacity={0.8} mb={4}>
-            Powered by <code>claims.v_invoice_grid</code> (bookmarkable filters via URL query params).
-          </Text>
-
           {/* Filters */}
-          <Flex gap={3} align="end" wrap="wrap" mb={4}>
-            <Box flex="1" minW="260px">
+          <Flex gap={3} align="end" wrap="nowrap" mb={4} overflowX="auto">
+            <Box flex="1" minW="220px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 session_id (optional)
               </Text>
@@ -335,7 +372,7 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
               />
             </Box>
 
-            <Box minW="220px">
+            <Box minW="180px" maxW="220px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 invoice_status
               </Text>
@@ -362,7 +399,7 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
               </Select>
             </Box>
 
-            <Box minW="300px">
+            <Box minW="220px" maxW="280px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 sort
               </Text>
@@ -385,7 +422,7 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
               </Select>
             </Box>
 
-            <Box minW="120px">
+            <Box minW="100px" maxW="120px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 per
               </Text>
@@ -405,16 +442,51 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
               </Select>
             </Box>
 
-<Button
-  onClick={() => fetchRows()}
-  isLoading={loading}
-  loadingText="Refreshing..."
->
-  Refresh
-</Button>
+            <HStack spacing={2} pb={1} flexShrink={0}>
+              <Tooltip label="Help: upload new, upload fix, OCR / AI, inspect versions">
+                <IconButton
+                  aria-label="Open invoices help"
+                  icon={<Question size={18} />}
+                  variant="outline"
+                  size="sm"
+                  onClick={onUploadHelpOpen}
+                />
+              </Tooltip>
 
+              <Tooltip label="Refresh grid">
+                <IconButton
+                  aria-label="Refresh grid"
+                  icon={<ArrowsClockwise size={18} />}
+                  onClick={() => fetchRows()}
+                  isLoading={loading}
+                  variant="outline"
+                />
+              </Tooltip>
 
-
+              <Tooltip label="Clear filters">
+                <IconButton
+                  aria-label="Clear filters"
+                  icon={<XCircle size={18} />}
+                  variant="outline"
+                  onClick={() => {
+                    setSessionId('');
+                    setQ('');
+                    setInvoiceStatus('');
+                    setSort('latest_invoice_version_updated_at:desc');
+                    setPer(25);
+                    setPage(1);
+                    pushUrl({
+                      sessionId: '',
+                      q: '',
+                      invoiceStatus: '',
+                      sort: 'latest_invoice_version_updated_at:desc',
+                      per: 25,
+                      page: 1,
+                    });
+                  }}
+                />
+              </Tooltip>
+            </HStack>
           </Flex>
 
           {error && (
@@ -440,35 +512,39 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
             </Flex>
 
             <Table size="sm">
-              <Thead>
+              <Thead bg="gray.50">
                 <Tr>
-                  <Th>updated</Th>
-                  <Th>invoice #</Th>
+                  <Th>session created</Th>
                   <Th>contractor</Th>
+                  <Th>contractor #</Th>
+                  <Th>invoice #</Th>
                   <Th isNumeric>total</Th>
                   <Th>status</Th>
                   <Th>AI</Th>
                   <Th isNumeric>conf</Th>
-                  <Th></Th>
+                  <Th>Actions</Th>
                 </Tr>
               </Thead>
 
               <Tbody>
-                {rows.map((r) => (
-                  <Tr key={r.invoice_id}>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {fmtTs(r.latest_invoice_version_updated_at ?? r.invoice_updated_at)}
+                {rows.map((r, idx) => {
+                  const hasInvoice = Boolean(r.invoice_id && String(r.invoice_id).trim());
+                  return (
+                  <Tr key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}>
+                    <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                      {fmtDate(r.session_created_at)}
+                    </Td>
+
+                    <Td fontSize="sm" whiteSpace="nowrap">
+                      {r.contractor_business_name ?? '—'}
+                    </Td>
+
+                    <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                      {r.contractor_number ?? '—'}
                     </Td>
 
                     <Td fontFamily="mono" fontSize="xs">
-                      {r.latest_di_ocr_invoice_id ?? shortId(r.invoice_id)}
-                    </Td>
-
-                    <Td fontSize="sm">
-                      <Text fontWeight="semibold">{r.contractor_business_name ?? '—'}</Text>
-                      <Text fontSize="xs" opacity={0.75}>
-                        {(r.contractor_number ? `${r.contractor_number}` : '')}
-                      </Text>
+                      {r.latest_di_ocr_invoice_id || '—'}
                     </Td>
 
                     <Td isNumeric fontFamily="mono" fontSize="xs">
@@ -476,7 +552,7 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
                     </Td>
 
                     <Td>
-                      <Badge>{r.invoice_status}</Badge>
+                      <Badge>{r.invoice_status || '—'}</Badge>
                     </Td>
 
                     <Td>
@@ -498,44 +574,82 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
 
                     <Td>
                       <HStack justify="flex-end" spacing={2}>
-<Button
+<Tooltip label="Open details drawer">
+<IconButton
+  aria-label="Open details drawer"
   size="xs"
   variant="outline"
+  icon={<Info size={14} />}
   onClick={() => handleOpenDrawer(r)}
->
-  Details
-</Button>
+  isDisabled={!hasInvoice}
+/>
+</Tooltip>
 
-
-<Button
+<Tooltip label ="Open PDF viewer"> 
+<IconButton
+  aria-label="Open PDF viewer"
   size="xs"
   variant="outline"
-  onClick={() => handleOpenDetailsWithPdf(r.session_id, r.invoice_id)}
->
-  Details with PDF
-</Button>
+  icon={<FilePdf size={14} />}
+  onClick={() => handleOpenDetailsWithPdf(r.session_id, String(r.invoice_id))}
+  isDisabled={!hasInvoice}
+/>
+</Tooltip>
 
-<Button size="xs" variant="outline" onClick={() => handleOpenVersions(r.invoice_id)}>
-  Versions Grid
+<Tooltip label="see all prior versions of this invoice for inspection">
+<Button size="xs" variant="outline" onClick={() => handleOpenVersions(String(r.invoice_id))} isDisabled={!hasInvoice}>
+  Inspect Versions
 </Button>
+</Tooltip>
 
+<Tooltip label="view all revision requests for all versions for this invoice">
+<Button size="xs" variant="outline" onClick={() => handleOpenRevisions(r)} isDisabled={!hasInvoice}>
+  revisions
+</Button>
+</Tooltip>
+
+<Tooltip label=" Re-run OCR / AI jobs for this invoice">
 <Button
   size="xs"
   variant="outline"
   onClick={() => handlePopulateJobAdminWithInvoice(r)}
->
-  Populate Job Admin
+  isDisabled={!hasInvoice}
+  >
+  OCR / AI
 </Button>
+</Tooltip>
+
+<Tooltip label="upload net new invoice (not a fix) for this session">
+<Button
+  size="xs"
+  variant="outline"
+  onClick={() => handleOpenUploadNewInvoice(r.session_id)}
+>
+  upload new
+</Button>
+</Tooltip>
+
+<Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
+<Button
+  size="xs"
+  variant="outline"
+  onClick={() => handleOpenUploadFix(r)}
+  isDisabled={!hasInvoice || !r.latest_invoice_version_id}
+>
+  upload fix
+</Button>
+</Tooltip>
 
 
                       </HStack>
                     </Td>
                   </Tr>
-                ))}
+                );
+                })}
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={8}>
+                    <Td colSpan={9}>
                       <Text fontSize="sm" opacity={0.7}>
                         No rows. Adjust filters or click Refresh.
                       </Text>
@@ -546,65 +660,115 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
             </Table>
 
             {/* Pagination */}
-            <Flex mt={3} align="center" justify="space-between" wrap="wrap" gap={2}>
-              <Text fontSize="xs" opacity={0.75}>
-                Page {page} / {totalPages}
+            <Flex mt={4} justify="space-between" align="center" wrap="wrap" gap={3}>
+              <Text fontSize="sm" opacity={0.8}>
+                Total: {total}
               </Text>
 
-              <HStack spacing={2}>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const next = 1;
-                    setPage(next);
-                    pushUrl({ page: next });
-                  }}
-                  isDisabled={page <= 1 || loading}
-                >
-                  First
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const next = Math.max(1, page - 1);
-                    setPage(next);
-                    pushUrl({ page: next });
-                  }}
-                  isDisabled={page <= 1 || loading}
-                >
-                  Prev
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const next = Math.min(totalPages, page + 1);
-                    setPage(next);
-                    pushUrl({ page: next });
-                  }}
-                  isDisabled={page >= totalPages || loading}
-                >
-                  Next
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const next = totalPages;
-                    setPage(next);
-                    pushUrl({ page: next });
-                  }}
-                  isDisabled={page >= totalPages || loading}
-                >
-                  Last
-                </Button>
+              <HStack>
+                <Tooltip label="Previous page">
+                  <IconButton
+                    aria-label="Previous page"
+                    size="sm"
+                    variant="outline"
+                    icon={<CaretLeft size={16} />}
+                    onClick={() => {
+                      const next = Math.max(1, page - 1);
+                      setPage(next);
+                      pushUrl({ page: next });
+                    }}
+                    isDisabled={page <= 1}
+                  />
+                </Tooltip>
+                <Text fontSize="sm">
+                  Page {page} of {totalPages}
+                </Text>
+                <Tooltip label="Next page">
+                  <IconButton
+                    aria-label="Next page"
+                    size="sm"
+                    variant="outline"
+                    icon={<CaretRight size={16} />}
+                    onClick={() => {
+                      const next = Math.min(totalPages, page + 1);
+                      setPage(next);
+                      pushUrl({ page: next });
+                    }}
+                    isDisabled={page >= totalPages}
+                  />
+                </Tooltip>
               </HStack>
             </Flex>
           </Box>
         </Box>
       </Container>
+
+      <Drawer isOpen={isUploadHelpOpen} placement="left" onClose={onUploadHelpClose} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Invoices Admin Help</DrawerHeader>
+          <DrawerBody>
+            <Text fontSize="sm" mb={3}>
+              This screen has five related but distinct actions: upload new, upload fix, OCR / AI, Inspect Versions, and Revision Requests. They are intentionally separated so document upload can be managed independently from OCR and GenAI processing, while version history and revision-request review remain dedicated inspection workflows.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Upload new
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Use this when the contractor omitted an entire homeowner invoice from their batch. This creates a new invoice record and its first invoice version (version 1). Although the button appears on a row that displays invoice-level details, this action is session-scoped and uses the selected session to add a net-new invoice to that session.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Upload fix
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Use this when an existing invoice PDF needs correction (for example, a typo or other source-document error). This creates a new child invoice version (+1) under the same invoice.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              OCR / AI
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              The upload buttons only store the PDF and create invoice/invoice-version records. They do not run OCR extraction or GenAI rule checks. OCR and GenAI are run separately via OCR / AI so they can be re-run without re-uploading files.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Inspect Versions
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              The main Invoices grid shows only the current (latest) version for each invoice. Use Inspect Versions to view prior versions and compare what the contractor changed between revision requests.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Revision Requests
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Revision Requests opens an invoice-scoped grid across all versions for the selected invoice, even though this Invoices grid only shows the current version. For example, an invoice with 3 versions might show 5 revision requests in total: 2 on version 1, 2 on version 2, and 1 on version 3. Each revision request record includes both the admin request and the contractor response.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Why this separation matters
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 1: Participant or account data changed (such as a corrected eligibility code). Re-run GenAI only to refresh rule checks against current system data.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 2: The source PDF itself was incorrect. Request the contractor to correct and upload a fix, then run OCR/GenAI on the new invoice version.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 3: A new validation ruleset is introduced. Re-run GenAI and select the new ruleset to evaluate outcomes without uploading again.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Example 4: OCR quality improvements are released. Re-run OCR (and then GenAI if needed) to pick up improved extraction quality from the same uploaded PDF.
+            </Text>
+            <Text fontSize="sm">
+              Example 5: Operational troubleshooting. If a prior run failed due to transient processing issues, re-run only the failed step instead of repeating full upload.
+            </Text>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
       {/* Drawer */}
       <Drawer isOpen={isOpen} placement="right" onClose={handleCloseDrawer} size="md">
@@ -612,7 +776,7 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
         <DrawerContent>
           <DrawerCloseButton />
           <DrawerHeader>
-            Invoice {selected?.latest_di_ocr_invoice_id ?? shortId(selected?.invoice_id ?? '')}
+            Invoice {selected?.latest_di_ocr_invoice_id || '—'}
           </DrawerHeader>
 
           <DrawerBody>
@@ -625,20 +789,32 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                   <Box>
                     <Text fontWeight="bold" mb={1}>
-                      Summary
+                      Invoice
                     </Text>
                     <Text fontSize="sm">
-                      <b>Contractor:</b> {selected.contractor_business_name ?? '—'}
+                      <b>Invoice number (DI):</b> {selected.latest_di_ocr_invoice_id || '—'}
                     </Text>
                     <Text fontSize="sm">
-                      <b>Status:</b> {selected.invoice_status}
+                      <b>Invoice id:</b> {selected.invoice_id ?? '—'}
                     </Text>
                     <Text fontSize="sm">
-                      <b>Total:</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
+                      <b>Invoice status:</b> {selected.invoice_status ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Status updated at:</b> {fmtTs(selected.invoice_status_updated_at) || '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Created at:</b> {fmtTs(selected.invoice_created_at) || '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Updated at:</b> {fmtTs(selected.invoice_updated_at) || '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Invoice total (DI):</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
                     </Text>
                     <HStack spacing={2} mt={1}>
                       <Text fontSize="sm">
-                        <b>AI:</b>
+                        <b>GenAI:</b>
                       </Text>
                       <PassDot val={selected.latest_genai_all_rulechecks_pass_flag} />
                       <Text fontSize="sm" opacity={0.85}>
@@ -649,26 +825,26 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
                             : 'fail'}
                       </Text>
                       <Text fontSize="sm" opacity={0.85}>
-                        (conf {selected.latest_genai_overall_confidence ?? '—'})
+                        (confidence {selected.latest_genai_overall_confidence ?? '—'})
                       </Text>
                     </HStack>
                   </Box>
 
                   <Box>
                     <Text fontWeight="bold" mb={1}>
-                      Document
+                      Session
                     </Text>
                     <Text fontSize="sm">
-                      <b>Invoice date:</b> {selected.latest_di_ocr_invoice_date ?? '—'}
+                      <b>Session id:</b> {selected.session_id ?? '—'}
                     </Text>
                     <Text fontSize="sm">
-                      <b>Vendor:</b> {selected.latest_di_ocr_vendor_name ?? '—'}
+                      <b>Session status:</b> {selected.session_status ?? '—'}
                     </Text>
                     <Text fontSize="sm">
-                      <b>Filename:</b> {selected.latest_original_filename ?? '—'}
+                      <b>Session submitted at:</b> {fmtTs(selected.session_submitted_at) || '—'}
                     </Text>
                     <Text fontSize="sm">
-                      <b>Last updated:</b> {fmtTs(selected.latest_invoice_version_updated_at ?? selected.invoice_updated_at)}
+                      <b>Session created at:</b> {fmtTs(selected.session_created_at) || '—'}
                     </Text>
                   </Box>
                 </SimpleGrid>
@@ -678,27 +854,81 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                   <Box>
                     <Text fontWeight="bold" mb={1}>
-                      Submitter
+                      Contractor
                     </Text>
-                    <Text fontSize="sm">{selected.submitter_name ?? '—'}</Text>
-                    <Text fontSize="sm" opacity={0.85}>
-                      {selected.submitter_email ?? ''}
+                    <Text fontSize="sm">
+                      <b>Contractor id:</b> {selected.contractor_id ?? '—'}
                     </Text>
-                    <Text fontSize="xs" opacity={0.7} fontFamily="mono" mt={1}>
-                      submitter_id: {selected.submitter_id ? selected.submitter_id : '—'}
+                    <Text fontSize="sm">
+                      <b>Business name:</b> {selected.contractor_business_name ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Contractor number:</b> {selected.contractor_number ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Contact name:</b> {selected.contractor_contact_name ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Contact email:</b> {selected.contractor_contact_email ?? '—'}
                     </Text>
                   </Box>
 
                   <Box>
                     <Text fontWeight="bold" mb={1}>
-                      Contractor contact
+                      Submitter
                     </Text>
-                    <Text fontSize="sm">{selected.contractor_contact_name ?? '—'}</Text>
-                    <Text fontSize="sm" opacity={0.85}>
-                      {selected.contractor_contact_email ?? ''}
+                    <Text fontSize="sm">
+                      <b>Submitter id:</b> {selected.submitter_id ?? '—'}
                     </Text>
-                    <Text fontSize="xs" opacity={0.7} fontFamily="mono" mt={1}>
-                      contractor_id: {selected.contractor_id ? selected.contractor_id : '—'}
+                    <Text fontSize="sm">
+                      <b>Name:</b> {selected.submitter_name ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Email:</b> {selected.submitter_email ?? '—'}
+                    </Text>
+                  </Box>
+                </SimpleGrid>
+
+                <Divider my={4} />
+
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                  <Box>
+                    <Text fontWeight="bold" mb={1}>
+                      Invoice Version (latest)
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Version id:</b> {selected.latest_invoice_version_id ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Version number:</b> {selected.latest_invoice_versionno ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Version updated at:</b> {fmtTs(selected.latest_invoice_version_updated_at) || '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Original filename:</b> {selected.latest_original_filename ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Last updated (effective):</b>{' '}
+                      {fmtTs(selected.latest_invoice_version_updated_at ?? selected.invoice_updated_at) || '—'}
+                    </Text>
+                  </Box>
+
+                  <Box>
+                    <Text fontWeight="bold" mb={1}>
+                      DI Extracted Values
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Invoice number:</b> {selected.latest_di_ocr_invoice_id ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Invoice date:</b> {selected.latest_di_ocr_invoice_date ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Vendor:</b> {selected.latest_di_ocr_vendor_name ?? '—'}
+                    </Text>
+                    <Text fontSize="sm">
+                      <b>Invoice total:</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
                     </Text>
                   </Box>
                 </SimpleGrid>
@@ -717,22 +947,6 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
                   </>
                 ) : null}
 
-                <Divider my={4} />
-
-                <HStack spacing={2} justify="flex-end">
-                  <Button variant="outline" onClick={() => handleOpenVersions(selected.invoice_id)}>
-                    Open versions
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      // If you later add a stable invoice read route in the SPA, wire it here.
-                      // For now, just open versions which is already built.
-                      handleOpenVersions(selected.invoice_id);
-                    }}
-                  >
-                    Open
-                  </Button>
-                </HStack>
               </Box>
             )}
           </DrawerBody>

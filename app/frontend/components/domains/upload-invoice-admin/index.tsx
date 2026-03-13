@@ -6,8 +6,10 @@ import {
   Flex,
   Heading,
   HStack,
+  IconButton,
   Input,
   Select,
+  SimpleGrid,
   Spinner,
   Tab,
   TabList,
@@ -20,12 +22,14 @@ import {
   Text,
   Th,
   Thead,
+  Tooltip,
   Tr,
 } from '@chakra-ui/react';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowsClockwise, CaretLeft, CaretRight, XCircle } from '@phosphor-icons/react';
 import { observer } from 'mobx-react-lite';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // ============================================================
@@ -88,13 +92,15 @@ function setParams(navigate: any, location: any, patch: Record<string, string>) 
   navigate(`${location.pathname}${qs ? `?${qs}` : ''}`, { replace: true });
 }
 
-function sanitizeSqlLike(string: string): string {
-  // matches backend sanitize_sql_like behavior for % and _
-  return string.toString().replace(/[\\%_]/g, (x) => `\\${x}`);
-}
-
 function fmtTs(s?: string | null) {
   return s ? String(s).replace('T', ' ').replace('Z', '') : '—';
+}
+
+function fmtDate(s?: string | null) {
+  if (!s) return '—';
+  const raw = String(s);
+  if (raw.includes('T')) return raw.split('T')[0];
+  return raw.slice(0, 10);
 }
 
 function tryExtractUploadIds(data: any): { invoice_id: string; invoice_version_id: string } {
@@ -123,10 +129,6 @@ export default observer(function UploadInvoiceAdminScreen() {
 
   const page = Math.max(1, parseInt(pageStr || '1', 10) || 1);
   const per = [25, 50, 100].includes(parseInt(perStr, 10)) ? parseInt(perStr, 10) : 25;
-
-  // local draft input (so typing doesn’t update URL per-keystroke)
-  const [qDraft, setQDraft] = useState<string>(q);
-  useEffect(() => setQDraft(q), [q]);
 
   // ============================================================
   // SECTION 02 — GRID DATA
@@ -229,7 +231,7 @@ export default observer(function UploadInvoiceAdminScreen() {
     setUploadError('');
     setUploadOkMsg('');
 
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     const firstFile = files[0] ?? null;
 
     // allow selecting same file again
@@ -318,7 +320,7 @@ const openJobAdmin = () => {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Upload Invoice (Admin)" />
+      <ThinBlueTitleBar title="Upload Invoice Admin" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -333,83 +335,98 @@ const openJobAdmin = () => {
                   TAB 1 — SESSION CHOOSER
               ============================================================ */}
               <TabPanel px={0}>
-                <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
-                  <Box>
-                    <Heading size="sm">Sessions</Heading>
-                    <Text as="div" fontSize="xs" opacity={0.7}>
-                      Search and select a session. Selection is stored in the URL as{' '}
-                      <Box as="code">session_id</Box>.
+                <Flex gap={3} align="end" wrap="nowrap" mb={3}>
+                  <Box flex="1" minW="280px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      Search (contractor name/number/email/city/postal, ids)
                     </Text>
+                    <Input
+                      value={q}
+                      onChange={(e) => setParams(navigate, location, { q: e.target.value, page: '1' })}
+                      placeholder="Search sessions..."
+                      bg="white"
+                    />
                   </Box>
 
-                  <HStack spacing={2}>
+                  <Box w="220px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      Status
+                    </Text>
                     <Select
-                      size="sm"
-                      value={per}
+                      value={status}
+                      onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
+                      bg="white"
+                    >
+                      <option value="">(any)</option>
+                      <option value="OPENBUTNOTSUBMITTED">OPENBUTNOTSUBMITTED</option>
+                      <option value="OPENANDSUBMITTED">OPENANDSUBMITTED</option>
+                      <option value="CLOSED">CLOSED</option>
+                    </Select>
+                  </Box>
+
+                  <Box w="240px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      Sort
+                    </Text>
+                    <Select
+                      value={sort}
+                      onChange={(e) => setParams(navigate, location, { sort: e.target.value, page: '1' })}
+                      bg="white"
+                    >
+                      <option value="updated_at:desc">updated_at desc</option>
+                      <option value="created_at:desc">created_at desc</option>
+                      <option value="submitted_at:desc">submitted_at desc</option>
+                      <option value="status:asc">status asc</option>
+                      <option value="status:desc">status desc</option>
+                      <option value="contractor_business_name:asc">contractor name asc</option>
+                      <option value="contractor_business_name:desc">contractor name desc</option>
+                    </Select>
+                  </Box>
+
+                  <Box w="120px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      Per page
+                    </Text>
+                    <Select
+                      value={String(per)}
                       onChange={(e) => setParams(navigate, location, { per: e.target.value, page: '1' })}
-                      width="110px"
+                      bg="white"
                     >
                       <option value="25">25</option>
                       <option value="50">50</option>
                       <option value="100">100</option>
                     </Select>
+                  </Box>
 
-                    <Select
-                      size="sm"
-                      value={sort}
-                      onChange={(e) => setParams(navigate, location, { sort: e.target.value, page: '1' })}
-                      width="200px"
-                    >
-                      <option value="updated_at:desc">updated_at:desc</option>
-                      <option value="created_at:desc">created_at:desc</option>
-                      <option value="submitted_at:desc">submitted_at:desc</option>
-                      <option value="status:asc">status:asc</option>
-                      <option value="status:desc">status:desc</option>
-                      <option value="contractor_business_name:asc">contractor_business_name:asc</option>
-                      <option value="contractor_business_name:desc">contractor_business_name:desc</option>
-                    </Select>
+                  <HStack spacing={2} pb={1}>
+                    <Tooltip label="Clear filters">
+                      <IconButton
+                        aria-label="Clear filters"
+                        icon={<XCircle size={18} />}
+                        variant="outline"
+                        onClick={() => {
+                          setParams(navigate, location, {
+                            q: '',
+                            status: '',
+                            sort: 'updated_at:desc',
+                            per: '25',
+                            page: '1',
+                          });
+                        }}
+                        isDisabled={!q.trim() && !status.trim() && sort === 'updated_at:desc' && per === 25}
+                      />
+                    </Tooltip>
 
-                    <Select
-                      size="sm"
-                      value={status}
-                      onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
-                      width="220px"
-                    >
-                      <option value="">status: (any)</option>
-                      <option value="OPENBUTNOTSUBMITTED">OPENBUTNOTSUBMITTED</option>
-                      <option value="OPENANDSUBMITTED">OPENANDSUBMITTED</option>
-                      <option value="CLOSED">CLOSED</option>
-                    </Select>
-
-                    <Button size="sm" onClick={fetchSessions} isLoading={gridLoading}>
-                      Refresh
-                    </Button>
+                    <Tooltip label="Refresh grid">
+                      <IconButton
+                        aria-label="Refresh grid"
+                        icon={<ArrowsClockwise size={18} />}
+                        variant="outline"
+                        onClick={fetchSessions}
+                        isLoading={gridLoading}
+                      />
+                    </Tooltip>
                   </HStack>
-                </Flex>
-
-                <Flex gap={2} mb={3} wrap="wrap">
-                  <Input
-                    value={qDraft}
-                    onChange={(e) => setQDraft(e.target.value)}
-                    placeholder="Search (contractor name/number/email/city/postal, ids)…"
-                    maxW="640px"
-                  />
-                  <Button
-                    onClick={() => setParams(navigate, location, { q: qDraft.trim(), page: '1' })}
-                    isDisabled={qDraft.trim() === q.trim()}
-                  >
-                    Apply
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setQDraft('');
-                      setParams(navigate, location, { q: '', page: '1' });
-                    }}
-                    isDisabled={!q.trim() && !qDraft.trim()}
-                  >
-                    Clear
-                  </Button>
                 </Flex>
 
                 {gridError && (
@@ -420,34 +437,20 @@ const openJobAdmin = () => {
                   </Box>
                 )}
 
-                <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflow="hidden">
-                  <Box bg="gray.50" px={3} py={2}>
-                    <Flex justify="space-between" align="center">
-                      <Flex align="center" gap={2}>
-                        <Text as="div" fontSize="sm" fontWeight="bold">
-                          Rows
-                        </Text>
-                        {gridLoading ? <Spinner size="sm" /> : null}
-                      </Flex>
-
-                      <Text as="div" fontSize="xs" opacity={0.7}>
-                        total: {total}
-                      </Text>
-                    </Flex>
-                  </Box>
-
-                  <Box bg="white" p={0}>
-                    <Table size="sm">
-                      <Thead>
-                        <Tr>
-                          <Th>contractor</Th>
-                          <Th>session status</Th>
-                          <Th>updated</Th>
-                          <Th>submitted</Th>
-                          <Th>session_id</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
+                <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflow="hidden" bg="white">
+                  <Table size="sm">
+                    <Thead bg="gray.50">
+                      <Tr>
+                          <Th>created</Th>
+                        <Th>contractor</Th>
+                          <Th>contractor #</Th>
+                          <Th>city</Th>
+                        <Th>session status</Th>
+                        <Th>submitted</Th>
+                        <Th>session_id</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
                         {rows.map((r) => {
                           const isSelected = r.id === sessionIdFromUrl;
                           return (
@@ -458,22 +461,18 @@ const openJobAdmin = () => {
                               _hover={{ bg: isSelected ? 'blue.100' : 'gray.50' }}
                               onClick={() => handleSelectSession(r)}
                             >
-                              <Td fontSize="sm">
-                                <Text as="div" fontWeight="bold">
-                                  {r.contractor_business_name ?? '—'}
-                                </Text>
-                                <Text as="div" fontSize="xs" opacity={0.75}>
-                                  {r.contractor_number ? `#${r.contractor_number}` : '—'}{' '}
-                                  {r.contractor_city ? `• ${r.contractor_city}` : ''}
-                                </Text>
+                              <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                                {fmtDate(r.created_at)}
                               </Td>
+
+                              <Td fontSize="sm" whiteSpace="nowrap">{r.contractor_business_name ?? '—'}</Td>
+
+                              <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">{r.contractor_number ?? '—'}</Td>
+
+                              <Td fontSize="sm" whiteSpace="nowrap">{r.contractor_city ?? '—'}</Td>
 
                               <Td fontFamily="mono" fontSize="xs">
                                 {r.status ?? '—'}
-                              </Td>
-
-                              <Td fontFamily="mono" fontSize="xs">
-                                {fmtTs(r.updated_at)}
                               </Td>
 
                               <Td fontFamily="mono" fontSize="xs">
@@ -489,40 +488,46 @@ const openJobAdmin = () => {
 
                         {!gridLoading && rows.length === 0 && (
                           <Tr>
-                            <Td colSpan={5}>
+                            <Td colSpan={7}>
                               <Text as="div" fontSize="sm" opacity={0.7} p={3}>
                                 No sessions found.
                               </Text>
                             </Td>
                           </Tr>
                         )}
-                      </Tbody>
-                    </Table>
-                  </Box>
+                    </Tbody>
+                  </Table>
                 </Box>
 
-                <Flex mt={3} justify="space-between" align="center" wrap="wrap" gap={2}>
-                  <Text as="div" fontSize="xs" opacity={0.7}>
-                    page {page} of {totalPages}
+                <Flex mt={4} justify="space-between" align="center" wrap="wrap" gap={3}>
+                  <Text as="div" fontSize="sm" opacity={0.8}>
+                    Total: {total}
                   </Text>
 
                   <HStack>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setParams(navigate, location, { page: String(Math.max(1, page - 1)) })}
-                      isDisabled={page <= 1}
-                    >
-                      Prev
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setParams(navigate, location, { page: String(Math.min(totalPages, page + 1)) })}
-                      isDisabled={page >= totalPages}
-                    >
-                      Next
-                    </Button>
+                    <Tooltip label="Previous page">
+                      <IconButton
+                        aria-label="Previous page"
+                        size="sm"
+                        variant="outline"
+                        icon={<CaretLeft size={16} />}
+                        onClick={() => setParams(navigate, location, { page: String(Math.max(1, page - 1)) })}
+                        isDisabled={page <= 1}
+                      />
+                    </Tooltip>
+                    <Text fontSize="sm">
+                      Page {page} of {totalPages}
+                    </Text>
+                    <Tooltip label="Next page">
+                      <IconButton
+                        aria-label="Next page"
+                        size="sm"
+                        variant="outline"
+                        icon={<CaretRight size={16} />}
+                        onClick={() => setParams(navigate, location, { page: String(Math.min(totalPages, page + 1)) })}
+                        isDisabled={page >= totalPages}
+                      />
+                    </Tooltip>
                   </HStack>
                 </Flex>
               </TabPanel>
@@ -531,35 +536,61 @@ const openJobAdmin = () => {
                   TAB 2 — UPLOAD INVOICE
               ============================================================ */}
               <TabPanel px={0}>
-                <Heading size="sm" mb={2}>
-                  Upload invoice PDF
-                </Heading>
-
                 <Text as="div" fontSize="xs" opacity={0.7} mb={3}>
                   This screen only uploads a PDF to the selected session (moves PDF to Azure). No OCR/GenAI here.
                 </Text>
 
-                <Box mb={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-                  <Text as="div" fontSize="xs" opacity={0.7}>
+                <Box mb={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
+                  <Text as="div" fontSize="sm" fontWeight="bold" mb={2}>
                     Selected session
                   </Text>
 
-                  <Text as="div" fontSize="sm" fontWeight="bold">
-                    {selectedSession?.contractor_business_name ?? '(none selected)'}
-                  </Text>
+                  <Box>
+                    <Text as="div" fontSize="xs" opacity={0.7}>Session ID</Text>
+                    <Text as="div" fontSize="xs" fontFamily="mono">{sessionIdFromUrl || '—'}</Text>
+                  </Box>
 
-                  <Text as="div" fontSize="xs" fontFamily="mono" opacity={0.9}>
-                    session_id: {sessionIdFromUrl || '—'}
-                  </Text>
+                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mt={2}>
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor name</Text>
+                      <Text as="div" fontSize="sm">{selectedSession?.contractor_business_name ?? '—'}</Text>
+                    </Box>
 
-                  {selectedSession?.status && (
-                    <Text as="div" fontSize="xs" opacity={0.8}>
-                      status:{' '}
-                      <Box as="span" fontFamily="mono">
-                        {selectedSession.status}
-                      </Box>
-                    </Text>
-                  )}
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor number</Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">{selectedSession?.contractor_number ?? '—'}</Text>
+                    </Box>
+
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Session status</Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">{selectedSession?.status ?? '—'}</Text>
+                    </Box>
+
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Submitted at</Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.submitted_at)}</Text>
+                    </Box>
+
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Created at</Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.created_at)}</Text>
+                    </Box>
+
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Updated at</Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.updated_at)}</Text>
+                    </Box>
+
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor email</Text>
+                      <Text as="div" fontSize="sm">{selectedSession?.contractor_email ?? '—'}</Text>
+                    </Box>
+
+                    <Box>
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor city</Text>
+                      <Text as="div" fontSize="sm">{selectedSession?.contractor_city ?? '—'}</Text>
+                    </Box>
+                  </SimpleGrid>
                 </Box>
 
                 <HStack spacing={2} wrap="wrap">
@@ -571,15 +602,6 @@ const openJobAdmin = () => {
                     isDisabled={!sessionIdFromUrl.trim()}
                   >
                     Upload PDF (single)
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      clearUploadOutputs();
-                    }}
-                  >
-                    Clear
                   </Button>
                 </HStack>
 
