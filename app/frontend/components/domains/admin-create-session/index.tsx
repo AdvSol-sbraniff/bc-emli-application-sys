@@ -5,6 +5,7 @@ import {
   Container,
   Flex,
   Heading,
+  IconButton,
   Input,
   Spinner,
   Table,
@@ -21,11 +22,13 @@ import {
   Text,
   HStack,
   Select,
+  Tooltip,
 } from '@chakra-ui/react';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowsClockwise, CaretLeft, CaretRight, XCircle } from '@phosphor-icons/react';
 import { observer } from 'mobx-react-lite';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // ============================================================
@@ -226,7 +229,7 @@ export default observer(function AdminCreateSessionScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Admin Create Session" />
+      <ThinBlueTitleBar title="Sessions Admin - Create" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -241,67 +244,82 @@ export default observer(function AdminCreateSessionScreen() {
                   TAB 1 — CONTRACTOR CHOOSER
               ============================================================ */}
               <TabPanel px={0}>
-                <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
-                  <Box>
-                    <Heading size="sm">Contractors</Heading>
-                    <Text as="div" fontSize="xs" opacity={0.7}>
-                      Search and select a contractor. Selection is stored in the URL as{' '}
-                      <Box as="code">contractor_id</Box>.
+                <Flex gap={3} align="end" wrap="nowrap" overflowX="auto" mb={3}>
+                  <Box flex="1" minW="300px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      Search (name, number, email, contact)
                     </Text>
+                    <Input
+                      value={qDraft}
+                      onChange={(e) => setQDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') setParams(navigate, location, { q: qDraft.trim(), page: '1' });
+                      }}
+                      onBlur={() => setParams(navigate, location, { q: qDraft.trim(), page: '1' })}
+                      placeholder="Search contractors..."
+                      bg="white"
+                    />
                   </Box>
 
-                  <HStack spacing={2}>
+                  <Box minW="220px" maxW="280px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      sort
+                    </Text>
                     <Select
-                      size="sm"
-                      value={per}
+                      value={sort}
+                      onChange={(e) => setParams(navigate, location, { sort: e.target.value, page: '1' })}
+                      bg="white"
+                    >
+                      <option value="business_name:asc">business name A-Z</option>
+                      <option value="business_name:desc">business name Z-A</option>
+                      <option value="created_at:desc">created desc</option>
+                    </Select>
+                  </Box>
+
+                  <Box minW="100px" maxW="120px">
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      per
+                    </Text>
+                    <Select
+                      value={String(per)}
                       onChange={(e) => setParams(navigate, location, { per: e.target.value, page: '1' })}
-                      width="110px"
+                      bg="white"
                     >
                       <option value="25">25</option>
                       <option value="50">50</option>
                       <option value="100">100</option>
                     </Select>
+                  </Box>
 
-                    <Select
-                      size="sm"
-                      value={sort}
-                      onChange={(e) => setParams(navigate, location, { sort: e.target.value, page: '1' })}
-                      width="200px"
-                    >
-                      <option value="business_name:asc">business_name:asc</option>
-                      <option value="business_name:desc">business_name:desc</option>
-                      <option value="created_at:desc">created_at:desc</option>
-                    </Select>
+                  <HStack spacing={2} pb={1}>
+                    <Tooltip label="Refresh grid">
+                      <IconButton
+                        aria-label="Refresh grid"
+                        icon={<ArrowsClockwise size={18} />}
+                        onClick={fetchContractors}
+                        isLoading={gridLoading}
+                        variant="outline"
+                      />
+                    </Tooltip>
 
-                    <Button size="sm" onClick={fetchContractors} isLoading={gridLoading}>
-                      Refresh
-                    </Button>
+                    <Tooltip label="Clear filters">
+                      <IconButton
+                        aria-label="Clear filters"
+                        icon={<XCircle size={18} />}
+                        variant="outline"
+                        onClick={() => {
+                          setQDraft('');
+                          setParams(navigate, location, {
+                            q: '',
+                            sort: 'business_name:asc',
+                            per: '25',
+                            page: '1',
+                          });
+                        }}
+                        isDisabled={!q.trim() && !qDraft.trim() && sort === 'business_name:asc' && per === 25 && page === 1}
+                      />
+                    </Tooltip>
                   </HStack>
-                </Flex>
-
-                <Flex gap={2} mb={3} wrap="wrap">
-                  <Input
-                    value={qDraft}
-                    onChange={(e) => setQDraft(e.target.value)}
-                    placeholder="Search (name, number, email, contact)…"
-                    maxW="520px"
-                  />
-                  <Button
-                    onClick={() => setParams(navigate, location, { q: qDraft.trim(), page: '1' })}
-                    isDisabled={qDraft.trim() === q.trim()}
-                  >
-                    Apply
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setQDraft('');
-                      setParams(navigate, location, { q: '', page: '1' });
-                    }}
-                    isDisabled={!q.trim() && !qDraft.trim()}
-                  >
-                    Clear
-                  </Button>
                 </Flex>
 
                 {gridError && (
@@ -337,7 +355,6 @@ export default observer(function AdminCreateSessionScreen() {
                           <Th>number</Th>
                           <Th>contact</Th>
                           <Th>email</Th>
-                          <Th>id</Th>
                         </Tr>
                       </Thead>
                       <Tbody>
@@ -357,16 +374,13 @@ export default observer(function AdminCreateSessionScreen() {
                               </Td>
                               <Td fontSize="sm">{r.contact_name ?? '—'}</Td>
                               <Td fontSize="sm">{r.email ?? '—'}</Td>
-                              <Td fontFamily="mono" fontSize="xs">
-                                {r.id}
-                              </Td>
                             </Tr>
                           );
                         })}
 
                         {!gridLoading && rows.length === 0 && (
                           <Tr>
-                            <Td colSpan={5}>
+                            <Td colSpan={4}>
                               <Text as="div" fontSize="sm" opacity={0.7} p={3}>
                                 No contractors found.
                               </Text>
@@ -378,29 +392,35 @@ export default observer(function AdminCreateSessionScreen() {
                   </Box>
                 </Box>
 
-                {/* simple paging */}
-                <Flex mt={3} justify="space-between" align="center" wrap="wrap" gap={2}>
-                  <Text as="div" fontSize="xs" opacity={0.7}>
-                    page {page} of {totalPages}
+                <Flex mt={4} justify="space-between" align="center" wrap="wrap" gap={3}>
+                  <Text fontSize="sm" opacity={0.8}>
+                    Total: {total}
                   </Text>
 
                   <HStack>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setParams(navigate, location, { page: String(Math.max(1, page - 1)) })}
-                      isDisabled={page <= 1}
-                    >
-                      Prev
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setParams(navigate, location, { page: String(Math.min(totalPages, page + 1)) })}
-                      isDisabled={page >= totalPages}
-                    >
-                      Next
-                    </Button>
+                    <Tooltip label="Previous page">
+                      <IconButton
+                        aria-label="Previous page"
+                        size="sm"
+                        variant="outline"
+                        icon={<CaretLeft size={16} />}
+                        onClick={() => setParams(navigate, location, { page: String(Math.max(1, page - 1)) })}
+                        isDisabled={page <= 1}
+                      />
+                    </Tooltip>
+                    <Text fontSize="sm">
+                      Page {page} of {totalPages}
+                    </Text>
+                    <Tooltip label="Next page">
+                      <IconButton
+                        aria-label="Next page"
+                        size="sm"
+                        variant="outline"
+                        icon={<CaretRight size={16} />}
+                        onClick={() => setParams(navigate, location, { page: String(Math.min(totalPages, page + 1)) })}
+                        isDisabled={page >= totalPages}
+                      />
+                    </Tooltip>
                   </HStack>
                 </Flex>
               </TabPanel>
@@ -409,39 +429,43 @@ export default observer(function AdminCreateSessionScreen() {
                   TAB 2 — CREATE SESSION
               ============================================================ */}
               <TabPanel px={0}>
-                <Heading size="sm" mb={2}>
-                  Create session
-                </Heading>
-
-                <Text as="div" fontSize="xs" opacity={0.7} mb={3}>
-                  Uses <Box as="code">claims.sessions.contractor_id</Box> (FK → <Box as="code">public.contractors.id</Box>).
-                </Text>
-
-                <Box mb={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-                  <Text as="div" fontSize="xs" opacity={0.7}>
-                    Selected contractor
+                <Box mb={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
+                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>
+                    Selected contractor details
                   </Text>
 
-                  <Text as="div" fontSize="sm" fontWeight="bold">
-                    {selectedContractor?.business_name ?? '(none selected)'}
-                  </Text>
+                  <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
+                    <Box flex="1">
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor ID</Text>
+                      <Text as="div" fontSize="xs" fontFamily="mono">{contractorIdFromUrl || '—'}</Text>
+                    </Box>
 
-                  <Text as="div" fontSize="xs" fontFamily="mono" opacity={0.9}>
-                    contractor_id: {contractorIdFromUrl || '—'}
-                  </Text>
+                    <Box flex="1">
+                      <Text as="div" fontSize="xs" opacity={0.7}>Business name</Text>
+                      <Text as="div" fontSize="sm">{selectedContractor?.business_name ?? '—'}</Text>
+                    </Box>
+                  </Flex>
 
-                  {selectedContractor?.contractor_number && (
-                    <Text as="div" fontSize="xs" opacity={0.8}>
-                      contractor_number:{' '}
-                      <Box as="span" fontFamily="mono">
-                        {selectedContractor.contractor_number}
-                      </Box>
-                    </Text>
-                  )}
+                  <Flex mt={3} direction={{ base: 'column', md: 'row' }} gap={6}>
+                    <Box flex="1">
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor number</Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">{selectedContractor?.contractor_number ?? '—'}</Text>
+                    </Box>
+
+                    <Box flex="1">
+                      <Text as="div" fontSize="xs" opacity={0.7}>Contact name</Text>
+                      <Text as="div" fontSize="sm">{selectedContractor?.contact_name ?? '—'}</Text>
+                    </Box>
+                  </Flex>
+
+                  <Box mt={3}>
+                    <Text as="div" fontSize="xs" opacity={0.7}>Email</Text>
+                    <Text as="div" fontSize="sm">{selectedContractor?.email ?? '—'}</Text>
+                  </Box>
                 </Box>
 
                 <Button
-                  colorScheme="blue"
+                  variant="outline"
                   onClick={handleCreateSession}
                   isLoading={isCreating}
                   loadingText="Creating..."

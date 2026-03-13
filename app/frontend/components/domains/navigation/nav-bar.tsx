@@ -451,6 +451,19 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
     </MenuGroup>
   );
 
+  const claimsAdminItems = (
+    <>
+      <MenuDivider my={0} borderColor="border.light" />
+      <MenuGroup title={t('home.claimsAdminSectionTitle')}>
+        <NavMenuItem label={t('home.sessionsAdminTitle')} to={'/sessions-admin'} />
+        <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
+        <NavMenuItem label={t('home.uploadInvoiceAdminTitle')} to={'/upload-invoice-admin'} />
+        <NavMenuItem label={t('home.rulesetsAdminTitle')} to={'/rulesets-admin'} />
+        <NavMenuItem label={t('home.eligibilityAdminTitle')} to={'/eligibilitycodes-admin'} />
+      </MenuGroup>
+    </>
+  );
+
   // Combine the menu button rendering logic
   const renderMenuButton = () => {
     return (
@@ -546,6 +559,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
                   {(currentUser?.isReviewManager || currentUser?.isRegionalReviewManager) && reviewManagerItems}
                   {currentUser?.isReviewer && reviewerItems}
                   {currentUser?.isReviewStaff && reviewStaffItems}
+                  {(currentUser?.isSuperAdmin || currentUser?.isReviewStaff) && claimsAdminItems}
 
                   {/* Participants specific items */}
                   {currentUser?.isSubmitter && (

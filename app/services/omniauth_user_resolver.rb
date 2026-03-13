@@ -32,8 +32,9 @@ class OmniauthUserResolver
     if existing_user
       self.user = update_user
     else
-      #it's a new user, however only Basic BCeID/BCSC/Contractor can create own accounts, others must be invited
-      if @entry_point == "isParticipant" || @entry_point == "isContractor"
+      # New users can only self-register for specific providers on specific entry points.
+      # IDIR and other internal providers must be invited/managed by admins.
+      if can_self_register?
         self.user = create_user
       else
         self.user = invited_user
@@ -121,6 +122,17 @@ class OmniauthUserResolver
     end
 
     nil
+  end
+
+  def can_self_register?
+    case @entry_point
+    when "isParticipant"
+      [OMNIAUTH_PROVIDERS[:bcsc], OMNIAUTH_PROVIDERS[:bceid_basic]].include?(omniauth_provider)
+    when "isContractor"
+      omniauth_provider == OMNIAUTH_PROVIDERS[:bceid_business]
+    else
+      false
+    end
   end
 
   def accept_invitation_with_omniauth

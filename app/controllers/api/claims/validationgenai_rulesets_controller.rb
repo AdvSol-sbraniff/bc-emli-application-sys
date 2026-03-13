@@ -3,10 +3,10 @@ module Api
   module Claims
     class ValidationgenaiRulesetsController < Api::ApplicationController
       # POC: mirror your SessionsController approach (no auth for now)
-skip_before_action :verify_authenticity_token, only: %i[index show update]
-skip_before_action :authenticate_user!, only: %i[index show update]
-skip_before_action :require_confirmation, only: %i[index show update]
-skip_after_action  :verify_authorized, only: %i[index show update]
+    skip_before_action :verify_authenticity_token, only: %i[index show create update]
+    skip_before_action :authenticate_user!, only: %i[index show create update]
+    skip_before_action :require_confirmation, only: %i[index show create update]
+    skip_after_action  :verify_authorized, only: %i[index show create update]
 skip_after_action  :verify_policy_scoped, only: %i[index]
 
       # GET /api/claims/admin/validationgenai_rulesets/:id
@@ -24,6 +24,17 @@ skip_after_action  :verify_policy_scoped, only: %i[index]
         ruleset.update!(update_params)
 
         render json: serialize_ruleset(ruleset), status: :ok
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+      end
+
+      # POST /api/claims/admin/validationgenai_rulesets
+      # Body: { ruleset_shortname, system_record, user_record1 }
+      def create
+        ruleset = ::Claims::ValidationgenaiRuleset.new(update_params)
+        ruleset.save!
+
+        render json: serialize_ruleset(ruleset), status: :created
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
       end

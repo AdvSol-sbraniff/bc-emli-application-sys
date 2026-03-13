@@ -29,8 +29,8 @@ export function EnergyCoachInfoBlock() {
       </Heading>
       {/* <Text fontSize="sm">{description}</Text> */}
       <UnorderedList fontSize="sm" pl={2} mb={0}>
-        {bulletPoints.map((p) => (
-          <ListItem>{p}</ListItem>
+        {bulletPoints.map((p, idx) => (
+          <ListItem key={`energy-coach-point-${idx}`}>{p}</ListItem>
         ))}
       </UnorderedList>
       <Flex direction="row" align="center" gap={2} mt={2} mb={2}>

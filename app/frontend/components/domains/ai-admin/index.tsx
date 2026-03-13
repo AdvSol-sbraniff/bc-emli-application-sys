@@ -7,8 +7,10 @@ import {
   Flex,
   Heading,
   HStack,
+  IconButton,
   Input,
   Select,
+  SimpleGrid,
   Spinner,
   Tab,
   TabList,
@@ -21,12 +23,14 @@ import {
   Text,
   Th,
   Thead,
+  Tooltip,
   Tr,
 } from '@chakra-ui/react';
 
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useMemo, useState } from 'react';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ArrowsClockwise } from '@phosphor-icons/react';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 // ============================================================
@@ -278,10 +282,6 @@ function shortGuid(s?: string | null) {
   const [stepsLoading, setStepsLoading] = useState(false);
   const [stepsError, setStepsError] = useState('');
   const [steps, setSteps] = useState<IngestStepRow[]>([]);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastAutoRefreshAt, setLastAutoRefreshAt] = useState('');
-
-  const hasRunningStep = useMemo(() => steps.some((s) => s.ok === null || typeof s.ok === 'undefined'), [steps]);
 
   const fetchStepsBySession = async () => {
     setStepsLoading(true);
@@ -308,30 +308,6 @@ function shortGuid(s?: string | null) {
       setStepsLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (!autoRefresh) return;
-    if (!sessionId.trim()) return;
-    if (steps.length === 0) return;
-    if (!hasRunningStep) return;
-
-    let cancelled = false;
-
-    const tick = async () => {
-      if (cancelled) return;
-      await fetchStepsBySession();
-      if (!cancelled) setLastAutoRefreshAt(new Date().toLocaleTimeString());
-    };
-
-    const id = window.setInterval(tick, 2000);
-    tick();
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, hasRunningStep, sessionId, steps.length]);
 
   // Run buttons
   const [isRunningOcr, setIsRunningOcr] = useState(false);
@@ -428,7 +404,7 @@ function shortGuid(s?: string | null) {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Job Admin" />
+      <ThinBlueTitleBar title="Invoices Admin - OCR & GenAI" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -444,14 +420,6 @@ function shortGuid(s?: string | null) {
               ============================================================ */}
               <TabPanel px={0}>
                 <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
-                  <Box>
-                    <Heading size="sm">Validation GenAI Rulesets</Heading>
-                    <Text as="div" fontSize="xs" opacity={0.7}>
-                      Select a ruleset. Selection is stored in the URL as{' '}
-                      <Box as="code">validationgenai_ruleset_id</Box>.
-                    </Text>
-                  </Box>
-
                   <HStack spacing={2}>
                     <Select
                       size="sm"
@@ -608,18 +576,6 @@ function shortGuid(s?: string | null) {
                     </Button>
                   </HStack>
                 </Flex>
-
-                <Box mt={4} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-                  <Text as="div" fontSize="xs" opacity={0.7}>
-                    Selected ruleset
-                  </Text>
-                  <Text as="div" fontSize="sm" fontWeight="bold">
-                    {selectedRuleset?.ruleset_shortname ?? '(none selected)'}
-                  </Text>
-                  <Text as="div" fontSize="xs" fontFamily="mono" opacity={0.9}>
-                    validationgenai_ruleset_id: {rulesetIdFromUrl || '—'}
-                  </Text>
-                </Box>
               </TabPanel>
 
               {/* ============================================================
@@ -629,41 +585,6 @@ function shortGuid(s?: string | null) {
                 <Flex direction="column" gap={4}>
                   {/* WORKING CONTEXT */}
                   <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="white">
-                    <Flex justify="space-between" align="flex-start" wrap="wrap" gap={3}>
-                      <Box>
-                        <Heading size="sm">Working context</Heading>
-                        <Text as="div" fontSize="xs" opacity={0.7}>
-                          Context is populated via the Invoice Grid Admin screen (paste the IDs from there). Uploads happen
-                          in <Box as="code">/upload-invoice-admin</Box>.
-                        </Text>
-                      </Box>
-
-                      <HStack spacing={2}>
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            setParams(navigate, location, {
-                              session_id: sessionId.trim(),
-                              invoice_id: invoiceId.trim(),
-                              invoice_version_id: invoiceVersionId.trim(),
-                            })
-                          }
-                        >
-                          Save to URL
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={fetchBusinessContext}
-                          isLoading={ctxLoading}
-                          isDisabled={!sessionId.trim() || !invoiceId.trim()}
-                        >
-                          Refresh context
-                        </Button>
-                      </HStack>
-                    </Flex>
-
                     {ctxError && (
                       <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
                         <Text as="div" fontSize="sm" color="red.700">
@@ -672,114 +593,91 @@ function shortGuid(s?: string | null) {
                       </Box>
                     )}
 
-                    <Flex mt={3} gap={3} wrap="wrap">
-                      <Box flex="1" minW="320px">
-                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
-                          session_id
-                        </Text>
-                        <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} fontFamily="mono" />
-                      </Box>
-
-                      <Box flex="1" minW="320px">
-                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
-                          invoice_id
-                        </Text>
-                        <Input value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} fontFamily="mono" />
-                      </Box>
-
-                      <Box flex="1" minW="320px">
-                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
-                          invoice_version_id
-                        </Text>
-                        <Input
-                          value={invoiceVersionId}
-                          onChange={(e) => setInvoiceVersionId(e.target.value)}
-                          placeholder="(required for runs)"
-                          fontFamily="mono"
-                        />
-                      </Box>
-                    </Flex>
-
                     <Box mt={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
                       {ctxLoading ? (
                         <Spinner size="sm" />
                       ) : ctxRow ? (
                         <>
-                          <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
+                          <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>
+                            Populated from the Invoice Admin screen
+                          </Text>
+
+                          <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
                             <Box>
-                              <Text as="div" fontSize="xs" opacity={0.7}>
-                                Contractor
-                              </Text>
-                              <Text as="div" fontSize="sm" fontWeight="bold">
-                                {ctxRow.contractor_business_name || '—'}
-                              </Text>
-                              <Text as="div" fontSize="xs" opacity={0.75}>
-                                {ctxRow.contractor_city || '—'} • {ctxRow.contractor_email || '—'}
-                              </Text>
+                              <Text as="div" fontSize="xs" opacity={0.7}>session_id</Text>
+                              <Text as="div" fontFamily="mono" fontSize="xs">{ctxRow.session_id || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>invoice_id</Text>
+                              <Text as="div" fontFamily="mono" fontSize="xs">{ctxRow.invoice_id || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>invoice_version_id</Text>
+                              <Text as="div" fontFamily="mono" fontSize="xs">{invoiceVersionId || ctxRow.latest_invoice_version_id || '—'}</Text>
                             </Box>
 
-                            <Box textAlign="right">
-                              <Text as="div" fontSize="xs" opacity={0.7}>
-                                Invoice
-                              </Text>
-                              <Text as="div" fontSize="sm" fontWeight="bold">
-                                status: {ctxRow.invoice_status || '—'}
-                              </Text>
-                              <Text as="div" fontSize="xs" opacity={0.75}>
-                                file: {ctxRow.latest_original_filename || '—'}
-                              </Text>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>Contractor name</Text>
+                              <Text as="div" fontSize="sm" fontWeight="bold">{ctxRow.contractor_business_name || '—'}</Text>
                             </Box>
-                          </Flex>
-
-                          <Flex mt={3} wrap="wrap" gap={6}>
-                            <Box minW="260px">
-                              <Text fontSize="xs" opacity={0.7}>
-                                DI (latest)
-                              </Text>
-                              <Text fontSize="sm" fontWeight="bold">
-                                total: {ctxRow.latest_di_ocr_invoice_total || '—'}
-                              </Text>
-                              <Text fontSize="xs" opacity={0.75}>
-                                date: {ctxRow.latest_di_ocr_invoice_date || '—'} • vendor:{' '}
-                                {ctxRow.latest_di_ocr_vendor_name || '—'}
-                              </Text>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>Contractor number</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.contractor_number || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>Contractor city</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.contractor_city || '—'}</Text>
                             </Box>
 
-                            <Box minW="260px">
-                              <Text fontSize="xs" opacity={0.7}>
-                                GenAI (latest)
-                              </Text>
-                              <Text fontSize="sm" fontWeight="bold">
-                                conf: {ctxRow.latest_genai_overall_confidence ?? '—'}
-                              </Text>
-                              <Text fontSize="xs" opacity={0.75}>
-                                pass: {ctxRow.latest_genai_all_rulechecks_pass_flag == null
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>Contractor email</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.contractor_email || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>Invoice status</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.invoice_status || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>Filename</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.latest_original_filename || '—'}</Text>
+                            </Box>
+
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>OCR invoice #</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.latest_di_ocr_invoice_id || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>OCR invoice date</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.latest_di_ocr_invoice_date || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>OCR vendor</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.latest_di_ocr_vendor_name || '—'}</Text>
+                            </Box>
+
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>OCR total</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.latest_di_ocr_invoice_total || '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>GenAI confidence</Text>
+                              <Text as="div" fontSize="xs">{ctxRow.latest_genai_overall_confidence ?? '—'}</Text>
+                            </Box>
+                            <Box>
+                              <Text as="div" fontSize="xs" opacity={0.7}>GenAI all checks pass</Text>
+                              <Text as="div" fontSize="xs">
+                                {ctxRow.latest_genai_all_rulechecks_pass_flag == null
                                   ? '—'
                                   : ctxRow.latest_genai_all_rulechecks_pass_flag
                                     ? 'true'
                                     : 'false'}
                               </Text>
                             </Box>
-
-                            <Box minW="260px">
-                              <Text fontSize="xs" opacity={0.7}>
-                                IDs (short)
-                              </Text>
-                              <Text fontFamily="mono" fontSize="xs">
-                                session: {shortGuid(ctxRow.session_id)}
-                              </Text>
-                              <Text fontFamily="mono" fontSize="xs">
-                                invoice: {shortGuid(ctxRow.invoice_id)}
-                              </Text>
-                              <Text fontFamily="mono" fontSize="xs">
-                                version: {shortGuid(invoiceVersionId || ctxRow.latest_invoice_version_id || '')}
-                              </Text>
-                            </Box>
-                          </Flex>
+                          </SimpleGrid>
                         </>
                       ) : (
                         <Text as="div" fontSize="sm" opacity={0.7}>
-                          (no context yet — enter session_id + invoice_id, then click “Refresh context”)
+                          No context loaded yet. Open this screen from Invoices Admin (OCR / AI action) to populate it.
                         </Text>
                       )}
                     </Box>
@@ -799,13 +697,6 @@ function shortGuid(s?: string | null) {
 
                   {/* RUN */}
                   <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="white">
-                    <Heading size="sm" mb={2}>
-                      Run
-                    </Heading>
-                    <Text as="div" fontSize="xs" opacity={0.7} mb={3}>
-                      These enqueue Sidekiq jobs. Step tracker below shows progress.
-                    </Text>
-
                     <Flex gap={3} wrap="wrap">
                       <Button
                         colorScheme="blue"
@@ -825,10 +716,6 @@ function shortGuid(s?: string | null) {
                         isDisabled={!sessionId.trim() || !invoiceVersionId.trim() || !rulesetIdFromUrl.trim()}
                       >
                         Run GenAI
-                      </Button>
-
-                      <Button variant="outline" onClick={fetchStepsBySession} isLoading={stepsLoading} isDisabled={!sessionId.trim()}>
-                        Refresh steps
                       </Button>
                     </Flex>
 
@@ -870,33 +757,20 @@ function shortGuid(s?: string | null) {
                         <Text as="div" fontSize="xs" opacity={0.7}>
                           ingest_step_runs filtered by <Box as="code">session_id</Box>
                         </Text>
-                        {autoRefresh && lastAutoRefreshAt ? (
-                          <Text as="div" fontSize="xs" opacity={0.6}>
-                            auto-refresh: {lastAutoRefreshAt}
-                          </Text>
-                        ) : null}
                       </Box>
 
                       <Flex gap={2} wrap="wrap">
-                        <Button size="sm" onClick={fetchStepsBySession} isLoading={stepsLoading} isDisabled={!sessionId.trim()}>
-                          Refresh
-                        </Button>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSteps([]);
-                            setStepsError('');
-                          }}
-                          isDisabled={steps.length === 0}
-                        >
-                          Clear
-                        </Button>
-
-                        <Button size="sm" variant="ghost" onClick={() => setAutoRefresh((v) => !v)}>
-                          auto: {autoRefresh ? 'on' : 'off'}
-                        </Button>
+                        <Tooltip label="Refresh steps">
+                          <IconButton
+                            aria-label="Refresh steps"
+                            icon={<ArrowsClockwise size={18} />}
+                            size="sm"
+                            variant="outline"
+                            onClick={fetchStepsBySession}
+                            isLoading={stepsLoading}
+                            isDisabled={!sessionId.trim()}
+                          />
+                        </Tooltip>
                       </Flex>
                     </Flex>
 
@@ -963,9 +837,7 @@ function shortGuid(s?: string | null) {
                           {!stepsLoading && steps.length === 0 && (
                             <Tr>
                               <Td colSpan={7}>
-                                <Text as="div" fontSize="sm" opacity={0.7}>
-                                  Paste a session_id and click Refresh.
-                                </Text>
+                                <Text as="div" fontSize="sm" opacity={0.7}>No steps found.</Text>
                               </Td>
                             </Tr>
                           )}

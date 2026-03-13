@@ -2,7 +2,7 @@
 import { fmtDate, fmtMoney, fmtText } from "./display";
 
 import { Box, Button, Heading, Text, Flex, Container, Accordion, AccordionItem, Badge, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar'; // adjust path
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
 
 // ============================================================
@@ -634,7 +634,7 @@ const renderHeightPx = useMemo(() => {
 
 return (
   <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-    <BlueTitleBar title="Admin Full Details" />
+    <ThinBlueTitleBar title="Invoices Admin - PDF Viewer" />
 
 <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
       <Box display="flex" flexDirection="column" height="100%">

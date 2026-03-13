@@ -94,6 +94,7 @@ get "admin/invoices", to: "invoice_grid#index"
 
   # New upload button (POST PDFs for an existing session_id)
   post "sessions/:session_id/upload", to: "ingest#upload"
+  post "invoices/:invoice_id/upload_fix", to: "ingest#upload_fix"
 
 # ============================================================
 # SECTION 40 — RUN TRACKER (AI Admin / POC)
@@ -124,11 +125,20 @@ get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
 
 get  "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#show"
 patch "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#update"
+post  "admin/validationgenai_rulesets", to: "validationgenai_rulesets#create"
 
 get "admin/contractors", to: "contractors_admin#index"
 
 get "admin/sessions_with_contractors", to: "sessions_with_contractors_admin#index"
 get "admin/validationgenai_rulesets", to: "validationgenai_rulesets#index"
+get "admin/user_eligibilitycodes", to: "user_eligibilitycodes_admin#index"
+get "admin/users_eligibilitycodes/:id", to: "user_eligibilitycodes_admin#show"
+post "admin/users_eligibilitycodes", to: "user_eligibilitycodes_admin#create"
+patch "admin/users_eligibilitycodes/:id", to: "user_eligibilitycodes_admin#update"
+get "admin/revision_requests", to: "revision_requests_admin#index"
+get "admin/revision_requests/:id", to: "revision_requests_admin#show"
+post "admin/revision_requests", to: "revision_requests_admin#create"
+patch "admin/revision_requests/:id", to: "revision_requests_admin#update"
 
 end
 # end sbra

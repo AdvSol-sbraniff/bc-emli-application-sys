@@ -1,2 +1,4 @@
 node_modules
 .env
+claims_ai_service/.env
+.env*

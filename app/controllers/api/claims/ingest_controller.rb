@@ -24,10 +24,10 @@ module Api
       # PURPOSE: Allow testing without login/policy/CSRF friction.
       # ============================================================
 
-skip_before_action :authenticate_user!, only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
-skip_before_action :require_confirmation, only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
-skip_after_action  :verify_authorized,   only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
-skip_forgery_protection only: %i[upload runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_before_action :authenticate_user!, only: %i[upload upload_fix runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_before_action :require_confirmation, only: %i[upload upload_fix runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_after_action  :verify_authorized,   only: %i[upload upload_fix runs_index steps_index steps_by_session_index run_ocr run_genai]
+skip_forgery_protection only: %i[upload upload_fix runs_index steps_index steps_by_session_index run_ocr run_genai]
 
 
 # ============================================================
@@ -196,6 +196,41 @@ end
         render json: {
           ok: false,
           stage: "upload_pdfs",
+          error: e.message
+        }, status: :unprocessable_entity
+      end
+
+
+      # ============================================================
+      # SECTION 02.05 — ACTION: upload_fix
+      # ROUTE: POST /api/claims/invoices/:invoice_id/upload_fix
+      # PURPOSE:
+      # - Accept multipart pdfs[] (or pdfs/files/file fallbacks)
+      # - Insert next invoice_version (+1) for an existing invoice
+      # ============================================================
+
+      def upload_fix
+        invoice_id = params[:invoice_id].to_s
+
+        files =
+          Array(params[:"pdfs[]"]) +
+          Array(params[:pdfs]) +
+          Array(params[:files]) +
+          Array(params[:file])
+
+        files = files.flatten.compact
+
+        result = ::Claims::Ingest::UploadFixPdf.call(
+          invoice_id: invoice_id,
+          files: files
+        )
+
+        render json: result.to_h, status: :ok
+      rescue => e
+        Rails.logger.error("[claims][ingest][upload_fix] ERROR: #{e.class}: #{e.message}")
+        render json: {
+          ok: false,
+          stage: "upload_fix_pdf",
           error: e.message
         }, status: :unprocessable_entity
       end
