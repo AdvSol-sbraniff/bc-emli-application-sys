@@ -30,7 +30,22 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, FilePdf, Info, Question, XCircle } from '@phosphor-icons/react';
+import {
+  ArrowsClockwise,
+  CaretLeft,
+  CaretRight,
+  FileArrowUp,
+  FilePdf,
+  GitBranch,
+  Info,
+  MagnifyingGlass,
+  Question,
+  Scan,
+  Sparkle,
+  Trash,
+  Wrench,
+  XCircle,
+} from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -132,6 +147,7 @@ export function InvoicesAdminScreen() {
   // data
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string>('');
   const [rows, setRows] = useState<InvoiceGridRow[]>([]);
   const [total, setTotal] = useState<number>(0);
 
@@ -316,6 +332,39 @@ const handleOpenRevisions = (row: InvoiceGridRow) => {
   if (row.latest_di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
   const url = `/revision-requests-admin?${params.toString()}`;
   window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const handleDeleteInvoice = async (invoiceId: string) => {
+  const confirmed = window.confirm(
+    'Delete this invoice and all child records (invoice versions, revision requests, lineitems, step runs, and related artifacts)? This cannot be undone.'
+  );
+  if (!confirmed) return;
+
+  setDeletingInvoiceId(invoiceId);
+  setError('');
+
+  try {
+    const res = await fetch(`/api/claims/admin/invoices/${encodeURIComponent(invoiceId)}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+    }
+
+    if (selected?.invoice_id === invoiceId) {
+      handleCloseDrawer();
+    }
+
+    await fetchRows();
+  } catch (e: any) {
+    setError(e?.message || 'Failed to delete invoice.');
+  } finally {
+    setDeletingInvoiceId('');
+  }
 };
 
   const handleOpenDrawer = (row: InvoiceGridRow) => {
@@ -596,48 +645,76 @@ const handleOpenRevisions = (row: InvoiceGridRow) => {
 />
 </Tooltip>
 
-<Tooltip label="see all prior versions of this invoice for inspection">
-<Button size="xs" variant="outline" onClick={() => handleOpenVersions(String(r.invoice_id))} isDisabled={!hasInvoice}>
-  Inspect Versions
-</Button>
+<Tooltip label="Delete invoice and all child claim records">
+<IconButton
+  aria-label="Delete invoice"
+  size="xs"
+  variant="outline"
+  colorScheme="red"
+  icon={<Trash size={14} />}
+  onClick={() => handleDeleteInvoice(String(r.invoice_id))}
+  isDisabled={!hasInvoice || loading || (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))}
+  isLoading={deletingInvoiceId === String(r.invoice_id)}
+/>
+</Tooltip>
+
+<Tooltip label="inspect prior versions of this invoice">
+<IconButton
+  aria-label="Inspect invoice versions"
+  size="xs"
+  variant="outline"
+  icon={<MagnifyingGlass size={14} />}
+  onClick={() => handleOpenVersions(String(r.invoice_id))}
+  isDisabled={!hasInvoice}
+/>
 </Tooltip>
 
 <Tooltip label="view all revision requests for all versions for this invoice">
-<Button size="xs" variant="outline" onClick={() => handleOpenRevisions(r)} isDisabled={!hasInvoice}>
-  revisions
-</Button>
-</Tooltip>
-
-<Tooltip label=" Re-run OCR / AI jobs for this invoice">
-<Button
+<IconButton
+  aria-label="Open revision requests"
   size="xs"
   variant="outline"
+  icon={<GitBranch size={14} />}
+  onClick={() => handleOpenRevisions(r)}
+  isDisabled={!hasInvoice}
+/>
+</Tooltip>
+
+<Tooltip label="Re-run OCR and AI jobs for this invoice">
+<IconButton
+  aria-label="Run OCR and AI jobs"
+  size="xs"
+  variant="outline"
+  icon={
+    <HStack spacing={0.5}>
+      <Scan size={12} />
+      <Sparkle size={12} />
+    </HStack>
+  }
   onClick={() => handlePopulateJobAdminWithInvoice(r)}
   isDisabled={!hasInvoice}
-  >
-  OCR / AI
-</Button>
+/>
 </Tooltip>
 
 <Tooltip label="upload net new invoice (not a fix) for this session">
-<Button
+<IconButton
+  aria-label="Upload new invoice"
   size="xs"
   variant="outline"
+  icon={<FileArrowUp size={14} />}
   onClick={() => handleOpenUploadNewInvoice(r.session_id)}
->
-  upload new
-</Button>
+/>
 </Tooltip>
 
 <Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
-<Button
+<IconButton
+  aria-label="Upload fix invoice version"
   size="xs"
   variant="outline"
+  icon={<Wrench size={14} />}
   onClick={() => handleOpenUploadFix(r)}
   isDisabled={!hasInvoice || !r.latest_invoice_version_id}
->
-  upload fix
-</Button>
+/>
 </Tooltip>
 
 
@@ -710,7 +787,7 @@ const handleOpenRevisions = (row: InvoiceGridRow) => {
           <DrawerHeader>Invoices Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This screen has five related but distinct actions: upload new, upload fix, OCR / AI, Inspect Versions, and Revision Requests. They are intentionally separated so document upload can be managed independently from OCR and GenAI processing, while version history and revision-request review remain dedicated inspection workflows.
+              This screen has six related but distinct actions: Submission, upload new, upload fix, OCR / AI, Inspect Versions, and Revision Requests. They are intentionally separated so full-pipeline simulation, document upload, OCR/GenAI processing, version inspection, and revision-request review remain clear and testable.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>

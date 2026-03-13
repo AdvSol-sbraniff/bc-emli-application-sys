@@ -7,29 +7,45 @@ require "json"
 module Claims
   class RunOcrJob
     include Sidekiq::Job
-    sidekiq_options retry: 5
+    sidekiq_options queue: :claims_ocr, retry: 5
 
     # args:
     # - invoice_version_id (required)
     # - ingest_run_id (optional)  => link to batch run
-    def perform(invoice_version_id, ingest_run_id = nil)
+    # - validationgenai_ruleset_id (optional) => enqueue GenAI after OCR success
+    def perform(invoice_version_id, ingest_run_id = nil, validationgenai_ruleset_id = nil)
 Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
 
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
       sess = Claims::Session.find(inv.session_id)
 
-      # 1) create step run (queued/in_progress == ok: NULL)
-      step = Claims::IngestStepRun.create!(
+      # 1) find/create queued step run for this invoice
+      step = nil
+      if ingest_run_id.present?
+        step = Claims::IngestStepRun
+          .where(
+            ingest_run_id: ingest_run_id,
+            invoice_version_id: iv.id,
+            step_type: "ocr"
+          )
+          .where(status: %w[queued in_progress])
+          .order(created_at: :asc)
+          .first
+      end
+
+      step ||= Claims::IngestStepRun.create!(
         ingest_run_id: ingest_run_id,
         session_id: sess.id,
         invoice_version_id: iv.id,
         step_type: "ocr",
-        ok: nil,
+        status: "queued",
         error_text: nil,
         created_at: Time.current,
         updated_at: Time.current
       )
+
+      step.update!(status: "in_progress", error_text: nil, updated_at: Time.current)
 
       # 2) set invoice status
       inv.update!(status: "ocr_in_progress", status_updated_at: Time.current)
@@ -83,18 +99,35 @@ Claims::InvoiceVersion.transaction do
 end
 
       # 5) mark succeeded
-      step.update!(ok: true, di_results_json: payload, updated_at: Time.current)
+      step.update!(status: "succeeded", di_results_json: payload, error_text: nil, updated_at: Time.current)
       inv.update!(status: "ocr_complete", status_updated_at: Time.current)
+
+      if validationgenai_ruleset_id.present?
+        Claims::RunGenaiJob.perform_async(
+          sess.id,
+          iv.id,
+          validationgenai_ruleset_id,
+          ingest_run_id
+        )
+      end
+
+      Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id) if ingest_run_id.present?
     rescue => e
       # mark failed (best-effort)
       begin
-        step&.update!(ok: false, error_text: e.message, updated_at: Time.current)
+        step&.update!(status: "failed", error_text: e.message, updated_at: Time.current)
       rescue
         # ignore
       end
 
       begin
         inv&.update!(status: "ocr_failed", status_updated_at: Time.current)
+      rescue
+        # ignore
+      end
+
+      begin
+        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id) if ingest_run_id.present?
       rescue
         # ignore
       end

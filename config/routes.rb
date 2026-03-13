@@ -80,6 +80,13 @@ get "sessions/:session_id/invoices", to: "invoices#index_by_session"
 
 get "admin/invoices", to: "invoice_grid#index"
 
+  delete "admin/invoices/:id", to: "invoice_grid#destroy"
+
+get "admin/reports/volume_value/summary", to: "reports_volume_value#summary"
+get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"
+get "admin/reports/volume_value/detail", to: "reports_volume_value#detail"
+
+
   # ============================================================
   # SECTION 20 — SESSION CRUD (AI Admin / POC)
   # ============================================================
@@ -102,8 +109,13 @@ get "admin/invoices", to: "invoice_grid#index"
 
 # List ingest runs (optionally filter by session_id)
 get "ingest/runs", to: "ingest#runs_index"
+get "ingest/runs/:ingest_run_id", to: "ingest#run_show"
 get "ingest/runs/:ingest_run_id/steps", to: "ingest#steps_index"
+get "ingest/runs/:ingest_run_id/invoices", to: "ingest#run_invoices_index"
 get "ingest/steps", to: "ingest#steps_by_session_index"
+get "ingest/invoices/:invoice_id/steps", to: "ingest#steps_by_invoice_index"
+
+post "ingest/admin_submit_batch", to: "ingest#admin_submit_batch"
 
 post "ingest/run_ocr", to: "ingest#run_ocr"
 
@@ -118,6 +130,9 @@ get "admin/invoices/:invoice_id/invoice_versions", to: "invoice_versions_admin#i
 
 # Screen B: fetch raw JSON blobs for one invoice_version (tabs)
 get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
+get "admin/invoice_versions/:id/read", to: "invoice_versions_admin#read_by_version"
+get "admin/invoice_versions/:id/read_genai", to: "invoice_versions_admin#read_genai_by_version"
+get "admin/invoice_versions/:id/pdf_url", to: "invoice_versions_admin#pdf_url_by_version"
 
 # ============================================================
 # SECTION 60 — RULESET EDITOR (admin)
@@ -130,6 +145,7 @@ post  "admin/validationgenai_rulesets", to: "validationgenai_rulesets#create"
 get "admin/contractors", to: "contractors_admin#index"
 
 get "admin/sessions_with_contractors", to: "sessions_with_contractors_admin#index"
+delete "admin/sessions_with_contractors/:id", to: "sessions_with_contractors_admin#destroy"
 get "admin/validationgenai_rulesets", to: "validationgenai_rulesets#index"
 get "admin/user_eligibilitycodes", to: "user_eligibilitycodes_admin#index"
 get "admin/users_eligibilitycodes/:id", to: "user_eligibilitycodes_admin#show"
@@ -139,6 +155,7 @@ get "admin/revision_requests", to: "revision_requests_admin#index"
 get "admin/revision_requests/:id", to: "revision_requests_admin#show"
 post "admin/revision_requests", to: "revision_requests_admin#create"
 patch "admin/revision_requests/:id", to: "revision_requests_admin#update"
+delete "admin/revision_requests/:id", to: "revision_requests_admin#destroy"
 
 end
 # end sbra

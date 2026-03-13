@@ -62,10 +62,16 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       : '/revision-requests-admin';
 
     const isInvoicePdfViewerPath =
-      /^\/sessions\/[^/]+\/invoices\/[^/]+\/read$/.test(path) || /^\/invoice-versions\/[^/]+$/.test(path);
+      /^\/sessions\/[^/]+\/invoices\/[^/]+\/read$/.test(path) ||
+      /^\/invoice-versions\/[^/]+$/.test(path) ||
+      /^\/invoice-versions-by-version\/[^/]+\/read$/.test(path);
 
     const claimsBreadcrumbs: Record<string, TBreadcrumbSegment[]> = {
       '/invoices-admin': [{ href: '/invoices-admin', title: t('home.invoicesAdminTitle') }],
+      '/reports-volume-value': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/reports-volume-value', title: 'Reports - Volume and Value' },
+      ],
       '/sessions-admin': [{ href: '/sessions-admin', title: t('home.sessionsAdminTitle') }],
       '/rulesets-admin': [{ href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') }],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
@@ -88,6 +94,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/upload-invoice-fix-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/upload-invoice-fix-admin', title: 'Upload Invoice Fix' },
+      ],
+      '/submission-simulator-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/submission-simulator-admin', title: 'Submission Simulator' },
       ],
       '/ruleset-editor': [
         { href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') },
@@ -115,10 +125,11 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
     }
 
     if (isInvoicePdfViewerPath) {
+      const isByVersionViewer = /^\/invoice-versions-by-version\/[^/]+\/read$/.test(path);
       setIncludeHome(false);
       setBreadcrumbs([
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: path, title: 'Invoices Admin - PDF Viewer' },
+        { href: path, title: isByVersionViewer ? 'Invoices Admin - PDF Viewer (By Version)' : 'Invoices Admin - PDF Viewer' },
       ]);
       return;
     }

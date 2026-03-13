@@ -1,8 +1,31 @@
 // /app/frontend/components/domains/invoice-versions/index.tsx
 import { fmtDate, fmtMoney, fmtText } from "./display";
 
-import { Box, Button, Heading, Text, Flex, Container, Accordion, AccordionItem, Badge, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  Heading,
+  Text,
+  Flex,
+  Container,
+  Accordion,
+  AccordionItem,
+  Badge,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  IconButton,
+  Tooltip,
+  useDisclosure,
+} from '@chakra-ui/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
+import { Question } from '@phosphor-icons/react';
 
 
 // ============================================================
@@ -15,6 +38,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { useMst } from '../../../setup/root';
 
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -176,6 +200,8 @@ export const InvoiceVersionShowScreen = () => {
 
 const { sessionId, invoiceId, id } = useParams();
 const navigate = useNavigate();
+const { userStore } = useMst();
+const currentUserId = (userStore as any)?.currentUser?.id ? String((userStore as any).currentUser.id) : '';
 
 
 // ============================================================
@@ -210,6 +236,12 @@ const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
 
 const [codeFields, setCodeFields] = useState<any[]>([]);
 const [codeFieldsError, setCodeFieldsError] = useState<string | null>(null);
+
+const {
+  isOpen: isHelpOpen,
+  onOpen: onHelpOpen,
+  onClose: onHelpClose,
+} = useDisclosure();
 
 // ============================================================
 // SECTION 05.01.01 — ACTIVE HIGHLIGHT (SINGLE SOURCE OF TRUTH)
@@ -249,6 +281,8 @@ const [genAiRulechecksError, setGenAiRulechecksError] = useState<string | null>(
 // ============================================================
 const [lineitems, setLineitems] = useState<any[]>([]);
 const [lineitemsError, setLineitemsError] = useState<string | null>(null);
+const [isCreatingRevision, setIsCreatingRevision] = useState<boolean>(false);
+const [revisionError, setRevisionError] = useState<string | null>(null);
 
 // ============================================================
 // SECTION 06.01 — LOAD INVOICE NAV LIST
@@ -469,6 +503,110 @@ useEffect(() => {
     navigate(`/sessions/${sessionId}/invoices/${invoiceIds[idx + 1]}/read`);
   };
 
+  const openRevisionEditor = (revisionRequestId: string, invoiceVersionId: string) => {
+    const params = new URLSearchParams();
+    params.set('id', revisionRequestId);
+    params.set('invoice_version_id', invoiceVersionId);
+    if (invoiceId) params.set('invoice_id', String(invoiceId));
+    if (sessionId) params.set('session_id', String(sessionId));
+    if (readData?.session_created_at) params.set('session_created_at', String(readData.session_created_at));
+    if (readData?.contractor_business_name) params.set('contractor_business_name', String(readData.contractor_business_name));
+    if (readData?.created_at) params.set('invoice_version_created_at', String(readData.created_at));
+    if (readData?.invoice_versionno !== null && readData?.invoice_versionno !== undefined) {
+      params.set('invoice_versionno', String(readData.invoice_versionno));
+    }
+    if (readData?.di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(readData.di_ocr_invoice_id));
+    const url = `/revision-request-editor?${params.toString()}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openDraftRevision = async () => {
+    setRevisionError(null);
+
+    const invoiceVersionId = String(readData?.id || id || '').trim();
+    if (!invoiceVersionId) {
+      setRevisionError('Could not determine invoice_version_id for this screen.');
+      return;
+    }
+
+    if (!currentUserId) {
+      setRevisionError('Could not determine current user for requester_id.');
+      return;
+    }
+
+    const genAiAdvice = String(readData?.genai_admin_advice ?? '').trim();
+    const passFail = readData?.genai_all_rulechecks_pass_flag === true ? 'PASS' : 'FAIL';
+    const conf = readData?.genai_overall_confidence;
+
+    const draftText = genAiAdvice
+      ? `Overall (GenAI)\n\n${passFail} • conf ${conf ?? 0}\n\n${genAiAdvice}`
+      : [
+          `Draft revision request for invoice version ${readData?.invoice_versionno ?? '—'}.`,
+          'Please review OCR/AI findings and update this request before sending.',
+          'Expected contractor action: upload corrected invoice details and respond to this request.',
+        ].join('\n');
+
+    setIsCreatingRevision(true);
+    try {
+      // Reuse existing OPEN revision request for this invoice_version if present.
+      if (invoiceId) {
+        const lookupParams = new URLSearchParams();
+        lookupParams.set('invoice_id', String(invoiceId));
+        lookupParams.set('sort', 'revision_request_updated_at:desc');
+        lookupParams.set('page', '1');
+        lookupParams.set('per', '200');
+
+        const lookupResp = await fetch(`/api/claims/admin/revision_requests?${lookupParams.toString()}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        });
+
+        if (lookupResp.ok) {
+          const lookupJson = await lookupResp.json().catch(() => ({}));
+          const rows = Array.isArray(lookupJson?.rows) ? lookupJson.rows : [];
+          const existing = rows.find((r: any) =>
+            String(r?.invoice_version_id || '') === invoiceVersionId &&
+            String(r?.revision_request_status || '').toUpperCase() === 'OPEN' &&
+            !!r?.revision_request_id
+          );
+
+          if (existing?.revision_request_id) {
+            openRevisionEditor(String(existing.revision_request_id), invoiceVersionId);
+            return;
+          }
+        }
+      }
+
+      const resp = await fetch('/api/claims/admin/revision_requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invoice_version_id: invoiceVersionId,
+          requester_id: currentUserId,
+          status: 'OPEN',
+          request_text: draftText,
+          response_text: '',
+          closed_at: null,
+        }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data?.error || data?.message || `Create failed (${resp.status}).`);
+      }
+
+      const createdId = String(data?.id || '').trim();
+      if (!createdId) throw new Error('Create succeeded but no revision request id returned.');
+      openRevisionEditor(createdId, invoiceVersionId);
+    } catch (e: any) {
+      setRevisionError(e?.message || 'Failed to create revision request.');
+    } finally {
+      setIsCreatingRevision(false);
+    }
+  };
+
 // ============================================================
 // SECTION 06.06 — ACTIVE HIGHLIGHT RESOLVER
 // PURPOSE: Lookup active field config → (pageNumber + polygon)
@@ -634,7 +772,7 @@ const renderHeightPx = useMemo(() => {
 
 return (
   <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-    <ThinBlueTitleBar title="Invoices Admin - PDF Viewer" />
+    <ThinBlueTitleBar title="Invoices Admin - PDF Viewer (By Session)" />
 
 <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
       <Box display="flex" flexDirection="column" height="100%">
@@ -681,15 +819,16 @@ return (
   {showPdf ? "Hide PDF" : "Show PDF"}
 </Button>
 
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => {
-              console.log('[STUB] Draft revision request', { invoice_version_id: id ?? null });
-            }}
-          >
-            Auto populate a draft revision request
-          </Button>
+          <Tooltip label="Create a draft revision request from this invoice version">
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={openDraftRevision}
+              isLoading={isCreatingRevision}
+            >
+              Revision
+            </Button>
+          </Tooltip>
 
           <Button
             size="xs"
@@ -701,7 +840,25 @@ return (
             Lets Chat
           </Button>
 
+          <Box ml="auto">
+            <Tooltip label="Help: how this viewer is grouped and what each section means">
+              <IconButton
+                aria-label="Open PDF viewer help"
+                icon={<Question size={18} />}
+                size="sm"
+                variant="outline"
+                onClick={onHelpOpen}
+              />
+            </Tooltip>
+          </Box>
+
         </Box>
+
+        {revisionError && (
+          <Box mb="8px">
+            <Text fontSize="xs" color="red.700">{revisionError}</Text>
+          </Box>
+        )}
 
     {/* ============================================================
         SECTION 07.04 — MAIN SPLIT VIEW
@@ -1512,6 +1669,91 @@ onClick={() => {
 </Box>          {/* ✅ ADD THIS: closes the first Box inside Container (Box A) */}
 
 </Container>    {/* ✅ THIS is the closecontainer line */}
+
+<Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
+  <DrawerOverlay />
+  <DrawerContent>
+    <DrawerCloseButton />
+    <DrawerHeader>PDF Viewer Help</DrawerHeader>
+    <DrawerBody>
+      <Flex direction="column" gap={4}>
+        <Box>
+          <Heading size="sm" mb={2}>What This Screen Shows</Heading>
+          <Text as="div" fontSize="sm">
+            This screen shows the current invoice version for invoices in one session.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            The left and right arrows move through the current invoices in that same session.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            So you are not leaving the session. You are moving invoice by invoice inside the same group.
+          </Text>
+        </Box>
+
+        <Box>
+          <Heading size="sm" mb={2}>Why Session Grouping Matters</Heading>
+          <Text as="div" fontSize="sm">
+            Contractors work in sessions. Their invoice work is grouped by session.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            Admins should view the same grouping so both sides are looking at work in the same way.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            This keeps the contractor mental map and admin mental map aligned and reduces confusion.
+          </Text>
+        </Box>
+
+        <Box>
+          <Heading size="sm" mb={2}>Small vs Large Sessions</Heading>
+          <Text as="div" fontSize="sm">
+            If a session has only one invoice, the left and right navigation can feel a little odd.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            That is expected because there is nothing else to move to.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            For larger contractor organizations with many invoices in a session, this navigation is very useful.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            It lets you review many related invoices quickly without jumping between unrelated screens.
+          </Text>
+        </Box>
+
+        <Box>
+          <Heading size="sm" mb={2}>Accordion Sections</Heading>
+          <Text as="div" fontSize="sm">
+            Invoice: OCR header fields like invoice number, date, vendor, customer, and totals.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            Line Items: OCR line rows like description, quantity, unit price, and amount.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            GenAI Located Fields: values found by AI with evidence and document location details.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            Pre-existing info on file: known case data already in the system.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            GenAI Rulechecks: rule-by-rule pass or fail, confidence, notes, and the overall AI summary/advice.
+          </Text>
+        </Box>
+
+        <Box>
+          <Heading size="sm" mb={2}>How This Relates To Rulesets</Heading>
+          <Text as="div" fontSize="sm">
+            The ruleset tells AI what to check and what output shape to return.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            Because of that, ruleset changes directly affect what appears in GenAI Located Fields and GenAI Rulechecks.
+          </Text>
+          <Text as="div" fontSize="sm" mt={1}>
+            Invoice and Line Items are OCR-driven sections, while the GenAI sections are ruleset-driven review sections.
+          </Text>
+        </Box>
+      </Flex>
+    </DrawerBody>
+  </DrawerContent>
+</Drawer>
 </Flex>
 
   );

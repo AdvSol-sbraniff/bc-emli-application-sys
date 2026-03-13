@@ -1,11 +1,13 @@
 import {
-  Box, Button, Container, Flex, Heading, Input, Spinner, Text, Textarea,
+  Box, Button, Container, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay,
+  Flex, Heading, IconButton, Input, Spinner, Text, Textarea, Tooltip, useDisclosure,
   Tabs, TabList, TabPanels, Tab, TabPanel
 } from '@chakra-ui/react';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ArrowCounterClockwise, FloppyDiskBack, Question } from '@phosphor-icons/react';
+import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
 // If you already have an api helper (axios wrapper), swap fetch() for that.
 // This is intentionally simple and browser-friendly.
@@ -37,6 +39,12 @@ export default function RulesetEditorScreen() {
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const [ruleset, setRuleset] = useState<RulesetDto | null>(null);
+
+  const {
+    isOpen: isHelpOpen,
+    onOpen: onHelpOpen,
+    onClose: onHelpClose,
+  } = useDisclosure();
 
   // editable fields
   const [shortname, setShortname] = useState<string>('');
@@ -204,7 +212,7 @@ export default function RulesetEditorScreen() {
 
   return (
     <Box>
-      <BlueTitleBar title="Ruleset Editor" />
+      <ThinBlueTitleBar title="Ruleset Editor" />
 
       <Container maxW="6xl" py={6}>
         {!id && !isCreateMode && (
@@ -220,17 +228,33 @@ export default function RulesetEditorScreen() {
               <Heading size="md">{isCreateMode ? 'Ruleset (Create)' : 'Ruleset'}</Heading>
 
               <Flex gap={2}>
-                <Button onClick={load} variant="outline" isDisabled={isLoading || isSaving}>
-                  Reload
-                </Button>
-                <Button
-                  onClick={save}
-                  colorScheme="blue"
-                  isLoading={isSaving}
-                  isDisabled={(!isDirty && !isCreateMode) || isLoading}
-                >
-                  Save
-                </Button>
+                <Tooltip label="Undo unsaved changes by reloading the latest saved values from the database.">
+                  <IconButton
+                    aria-label="Undo unsaved changes"
+                    icon={<ArrowCounterClockwise size={18} />}
+                    variant="outline"
+                    onClick={load}
+                    isDisabled={isLoading || isSaving}
+                  />
+                </Tooltip>
+                <Tooltip label="Save ruleset changes">
+                  <IconButton
+                    aria-label="Save ruleset"
+                    icon={<FloppyDiskBack size={18} />}
+                    colorScheme="blue"
+                    onClick={save}
+                    isLoading={isSaving}
+                    isDisabled={(!isDirty && !isCreateMode) || isLoading}
+                  />
+                </Tooltip>
+                <Tooltip label="Help: context layers and output mapping">
+                  <IconButton
+                    aria-label="Open ruleset editor help"
+                    icon={<Question size={18} />}
+                    variant="outline"
+                    onClick={onHelpOpen}
+                  />
+                </Tooltip>
               </Flex>
             </Flex>
 
@@ -323,6 +347,128 @@ export default function RulesetEditorScreen() {
           </Box>
         )}
       </Container>
+
+      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Ruleset Editor Help</DrawerHeader>
+          <DrawerBody>
+            <Flex direction="column" gap={4}>
+              <Box>
+                <Heading size="sm" mb={2}>Big Picture</Heading>
+                <Text as="div" fontSize="sm">
+                  This page lets you edit the two ruleset tabs: system_record and user_record1.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  These two tabs tell the AI what to do and how to format the answer.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  They are the stable instructions that stay mostly the same across many invoices.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Clear writing here helps the AI give cleaner and more useful results.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>What You Edit And What You Do Not Edit</Heading>
+                <Text as="div" fontSize="sm">
+                  On this screen, you edit system_record and user_record1.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  system_record is the main instruction and output format.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  user_record1 is the stable background and task list.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  user record 2 is not edited on this page.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  user record 2 is built automatically at run time by looking up existing database records and document-read results.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>How This Page Is Used During A Check</Heading>
+                <Text as="div" fontSize="sm">
+                  First, the AI reads system_record and user_record1 from this screen.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Next, the system builds user record 2 automatically with this invoice&apos;s details.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  That user record 2 information is pulled from existing database tables and document-read data.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  So this page controls system_record and user_record1, but not user record 2.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Last, the AI answers in the exact shape asked by system_record.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>How One Answer Is Split Into 3 Parts</Heading>
+                <Text as="div" fontSize="sm">
+                  The AI answer is split into 3 parts.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Part 1 is the report card: confidence, pass/fail summary, and advice text.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Part 2 is "found things": where important values were found on the invoice.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Part 3 is "rule checks": each rule and whether it passed.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  These parts are saved separately so admins can read them clearly.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>How The 3 Parts Show In The PDF Viewer</Heading>
+                <Text as="div" fontSize="sm">
+                  "Invoice Header Fields" shows top invoice facts like names, dates, and totals.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  "Line Items (OCR)" shows each invoice line like description, quantity, and amount.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  "GenAI Located Fields" shows extra things the helper found and pointed to.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  "Pre-existing info on file" shows already-known case info from your system.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  "GenAI Rulechecks" shows each rule result plus the overall summary and advice.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  So one answer is shown in several friendly sections instead of one giant wall of text.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>Simple Editing Tips</Heading>
+                <Text as="div" fontSize="sm">
+                  Keep the boss note clear and strict.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Keep the always-true note focused on rules that almost never change.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Keep the final ask short and direct.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  If results look messy, simplify the words and remove extra instructions.
+                </Text>
+              </Box>
+            </Flex>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Box>
   );
 }

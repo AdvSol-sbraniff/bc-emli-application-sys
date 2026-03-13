@@ -3,6 +3,12 @@ import {
   Box,
   Button,
   Container,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
   Flex,
   HStack,
   IconButton,
@@ -17,8 +23,9 @@ import {
   Th,
   Thead,
   Tr,
+  useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, PencilSimple, XCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretLeft, CaretRight, PencilSimple, Question, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
@@ -69,6 +76,12 @@ export default function RulesetsAdminScreen() {
   const [error, setError] = useState<string>('');
   const [rows, setRows] = useState<RulesetRow[]>([]);
   const [total, setTotal] = useState<number>(0);
+
+  const {
+    isOpen: isHelpOpen,
+    onOpen: onHelpOpen,
+    onClose: onHelpClose,
+  } = useDisclosure();
 
   const didInitFromUrl = useRef(false);
 
@@ -236,6 +249,15 @@ export default function RulesetsAdminScreen() {
             </Box>
 
             <HStack spacing={2} pb={1}>
+              <Tooltip label="Help: ruleset strategy and governance">
+                <IconButton
+                  aria-label="Open ruleset help"
+                  icon={<Question size={18} />}
+                  variant="outline"
+                  onClick={onHelpOpen}
+                />
+              </Tooltip>
+
               <Tooltip label="Clear filters">
                 <IconButton
                   aria-label="Clear filters"
@@ -372,6 +394,82 @@ export default function RulesetsAdminScreen() {
           </Flex>
         </Box>
       </Container>
+
+      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Rulesets Admin Help</DrawerHeader>
+          <DrawerBody>
+            <Text fontSize="sm" mb={3}>
+              Think of a ruleset as a recipe card for how the system checks invoices. Different upgrade types need different recipe cards.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              One ruleset per upgrade type
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Keep separate rulesets for separate upgrade types. For example, heat pumps and windows should not share the same ruleset because they follow different rebate requirements. Use the CleanBC Better Homes Energy Savings Program Rebate Eligibility Requirements website as the source of truth for current upgrade categories and requirements.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Shortname naming
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Use shortnames that clearly show both upgrade type and version. Example pattern: upgradeType_vYYYY_Qn or upgradeType_v###. This makes it easy for staff to know what rule set is active and what changed over time.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Change strategy
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Do not edit an existing ruleset unless it is an emergency. In normal operations, duplicate the ruleset, make changes in the copy, test, then promote the new version. This protects history and avoids breaking prior results unexpectedly.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Testing discipline
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Always run a well-defined system integration test suite before rollout. Test against older known cases and current concern cases. The goal is to confirm the change fixes the target issue without causing regressions in other scenarios.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Update cadence
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              As a governance guideline, avoid changing rules more than quarterly unless policy changes or a critical issue requires faster action.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Keep aligned with published program rules
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              Rulesets should stay consistent with the published program requirements on the CleanBC website. Internal rule logic should reflect external policy, not drift away from it.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Why location and rules are separated
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              The system first finds information (located fields), then applies checks (rule checks). This helps AI work better because rules can reuse the same found values instead of re-searching the document each time.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              What you see in the PDF viewer
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              In the PDF viewer, there are separate accordion sections for found values and rule results. This split makes it easier to understand whether a failure happened because data could not be found or because a rule comparison failed.
+            </Text>
+
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Dynamic growth over time
+            </Text>
+            <Text fontSize="sm">
+              Different upgrade types can have different fields and different rules. Also, new rules can be added over time. The stored data is designed to grow flexibly so the viewer can expand naturally without redesigning the page each time a ruleset evolves.
+            </Text>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Flex>
   );
 }

@@ -96,6 +96,30 @@ services:
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT: "30"
       VIRUS_SCAN_TEMP_DIR: "/tmp/virus_scan"
+      SIDEKIQ_CONCURRENCY: "10"
+      SIDEKIQ_QUEUES: "default,virus_scan,file_processing,webhooks,websocket,model_callbacks"
+      <<: *default-env-vars
+    command: 'bundle exec sidekiq'
+    depends_on:
+      - app
+
+  sidekiq-claims:
+    image: hous-permit-portal-dev:latest
+    pull_policy: 'never'
+    tty: true
+    stdin_open: true
+    working_dir: /app
+    env_file: .env.docker_compose
+    volumes:
+      - .:/app
+      - virus_scan_tmp:/tmp/virus_scan
+    environment:
+      CLAMAV_HOST: "clamav"
+      CLAMAV_PORT: "3310"
+      CLAMAV_TIMEOUT: "30"
+      VIRUS_SCAN_TEMP_DIR: "/tmp/virus_scan"
+      SIDEKIQ_CONCURRENCY: "1"
+      SIDEKIQ_QUEUES: "claims_ocr,claims_genai"
       <<: *default-env-vars
     command: 'bundle exec sidekiq'
     depends_on:

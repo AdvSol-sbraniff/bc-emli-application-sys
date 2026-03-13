@@ -4,11 +4,11 @@ module Api
   module Claims
     class InvoiceGridController < Api::ApplicationController
       # POC: no auth/policy for now (match your SessionsController approach)
-skip_before_action :authenticate_user!, only: %i[index]
-skip_before_action :require_confirmation, only: %i[index]
-skip_after_action  :verify_authorized, only: %i[index]
+skip_before_action :authenticate_user!, only: %i[index destroy]
+skip_before_action :require_confirmation, only: %i[index destroy]
+skip_after_action  :verify_authorized, only: %i[index destroy]
 skip_after_action  :verify_policy_scoped, only: %i[index]
-skip_forgery_protection only: %i[index]
+skip_forgery_protection only: %i[index destroy]
 
       # GET /api/claims/admin/invoices
       # Query:
@@ -63,6 +63,49 @@ skip_forgery_protection only: %i[index]
         Rails.logger.error("[CLAIMS][INVOICE_GRID] ERROR: #{e.class}: #{e.message}")
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :internal_server_error
+      end
+
+      # DELETE /api/claims/admin/invoices/:id
+      # Deletes one invoice and all child claim artifacts in FK-safe order.
+      def destroy
+        invoice = ::Claims::Invoice.find(params[:id])
+
+        deleted = {
+          invoice_id: invoice.id,
+          invoice_versions: 0,
+          lineitems: 0,
+          revision_requests: 0,
+          supporting_documents: 0,
+          ingest_step_runs: 0
+        }
+
+        ::Claims::Invoice.transaction do
+          invoice_version_ids = ::Claims::InvoiceVersion.where(invoice_id: invoice.id).pluck(:id)
+
+          if invoice_version_ids.any?
+            deleted[:lineitems] = ::Claims::Lineitem.where(invoice_version_id: invoice_version_ids).delete_all
+            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(invoice_version_id: invoice_version_ids).delete_all
+
+            # These also cascade from invoice_versions, but explicit deletes keep counts accurate.
+            ::Claims::InvoiceVersionLocatedField.where(invoice_version_id: invoice_version_ids).delete_all
+            ::Claims::InvoiceVersionRulecheck.where(invoice_version_id: invoice_version_ids).delete_all
+            deleted[:ingest_step_runs] = ::Claims::IngestStepRun.where(invoice_version_id: invoice_version_ids).delete_all
+
+            deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(id: invoice_version_ids).delete_all
+          end
+
+          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(invoice_id: invoice.id).delete_all
+
+          invoice.destroy!
+        end
+
+        render json: { deleted: true, counts: deleted }, status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue => e
+        Rails.logger.error("[CLAIMS][INVOICE_GRID] destroy failed id=#{params[:id]}: #{e.class}: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\n"))
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       private

@@ -55,6 +55,9 @@ const InvoicesAdminScreen = lazy(() =>
 const InvoiceVersionsAdminScreen = lazy(() =>
   import('../invoice-versions-admin').then((module) => ({ default: module.InvoiceVersionsAdminScreen })),
 );  
+const InvoiceVersionByVersionScreen = lazy(() =>
+  import('../invoice-version-viewer-by-version').then((module) => ({ default: module.InvoiceVersionByVersionScreen })),
+);
 
 const AdminCreateSessionScreen = lazy(() =>
   import('../admin-create-session').then((module) => ({ default: module.default })),
@@ -65,6 +68,9 @@ const UploadInvoiceAdminScreen = lazy(() =>
 );
 const UploadInvoiceFixAdminScreen = lazy(() =>
   import('../upload-invoice-fix-admin').then((module) => ({ default: module.default })),
+);
+const SubmissionSimulatorAdminScreen = lazy(() =>
+  import('../submission-simulator-admin').then((module) => ({ default: module.default })),
 );
 
 const SessionsAdminScreen = lazy(() =>
@@ -81,6 +87,9 @@ const RevisionRequestsAdminScreen = lazy(() =>
 );
 const RevisionRequestEditorScreen = lazy(() =>
   import('../revision-request-editor').then((module) => ({ default: module.default })),
+);
+const ReportsVolumeValueScreen = lazy(() =>
+  import('../reports-volume-value').then((module) => ({ default: module.default })),
 );
 
 // end sbra20260130
@@ -785,6 +794,7 @@ const AppRoutes = observer(() => {
         >
           <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
           <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
+          <Route path="/invoice-versions-by-version/:invoiceVersionId/read" element={<InvoiceVersionByVersionScreen />} />
           <Route path="/ai-admin" element={<AIAdminScreen />} />
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
@@ -793,11 +803,13 @@ const AppRoutes = observer(() => {
           <Route path="/admin-create-session" element={<AdminCreateSessionScreen />} />
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
+          <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
           <Route path="/revision-requests-admin" element={<RevisionRequestsAdminScreen />} />
           <Route path="/revision-request-editor" element={<RevisionRequestEditorScreen />} />
+          <Route path="/reports-volume-value" element={<ReportsVolumeValueScreen />} />
         </Route>
         {/* end sbra20260130 */}
 

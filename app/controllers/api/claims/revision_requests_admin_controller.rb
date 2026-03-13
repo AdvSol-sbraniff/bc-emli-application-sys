@@ -3,11 +3,11 @@
 module Api
   module Claims
     class RevisionRequestsAdminController < ApplicationController
-      skip_before_action :authenticate_user!, only: %i[index show create update]
-      skip_before_action :require_confirmation, only: %i[index show create update]
-      skip_after_action :verify_authorized, only: %i[index show create update]
+      skip_before_action :authenticate_user!, only: %i[index show create update destroy]
+      skip_before_action :require_confirmation, only: %i[index show create update destroy]
+      skip_after_action :verify_authorized, only: %i[index show create update destroy]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[index show create update]
+      skip_forgery_protection only: %i[index show create update destroy]
 
       # GET /api/claims/admin/revision_requests
       def index
@@ -117,6 +117,14 @@ module Api
         render json: serialize_record(record), status: :ok
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+      end
+
+      # DELETE /api/claims/admin/revision_requests/:id
+      def destroy
+        record = ::Claims::AdminRevisionRequest.find(params[:id])
+        record.destroy!
+
+        render json: { id: record.id, deleted: true }, status: :ok
       end
 
       private

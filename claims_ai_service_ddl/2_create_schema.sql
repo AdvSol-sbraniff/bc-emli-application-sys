@@ -543,7 +543,7 @@ CREATE INDEX IF NOT EXISTS idx_ingest_runs_status
 -- DESIGN: Keep ALL former validation_runs fields (nullable as needed)
 -- NOTE:
 -- - session_id is REQUIRED so orphan/manual steps can always be filtered.
--- - ok is NULL for queued/in-progress, TRUE for success, FALSE for failure.
+-- - status is authoritative lifecycle state for each step attempt.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
@@ -561,11 +561,9 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   -- Which step this attempt represents
   step_type text NOT NULL,  -- 'ocr' | 'genai'
 
-  -- Generic outcome:
-  -- NULL = queued/in_progress (no final outcome yet)
-  -- TRUE = succeeded
-  -- FALSE = failed (must have error_text)
-  ok boolean NULL,
+  status character varying NOT NULL DEFAULT 'queued',
+
+  -- failed states must provide error details
   error_text text NULL,
 
   -- unlike invoice_versions this is a per run record which can be multiple
@@ -601,14 +599,17 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   CONSTRAINT ingest_step_runs_step_type_chk
     CHECK (step_type IN ('ocr','genai')),
 
-  -- Allow queued/in-progress (ok NULL), success (ok TRUE), failure (ok FALSE + error_text)
-  CONSTRAINT ingest_step_runs_ok_error_chk
+  CONSTRAINT ingest_step_runs_status_chk
+    CHECK (status IN ('queued','in_progress','succeeded','failed')),
+
+  -- Keep lifecycle semantics explicit and consistent with error payload.
+  CONSTRAINT ingest_step_runs_status_error_chk
     CHECK (
-      (ok IS NULL AND error_text IS NULL)
+      (status IN ('queued','in_progress') AND error_text IS NULL)
       OR
-      (ok = true AND error_text IS NULL)
+      (status = 'succeeded' AND error_text IS NULL)
       OR
-      (ok = false AND error_text IS NOT NULL)
+      (status = 'failed' AND error_text IS NOT NULL)
     ),
 
   -- Only require ruleset_id when step_type='genai'

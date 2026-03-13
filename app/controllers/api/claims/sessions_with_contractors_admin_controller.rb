@@ -4,11 +4,11 @@ module Api
   module Claims
     class SessionsWithContractorsAdminController < ApplicationController
       # TEMP: allow local dev to hit this without auth until KC is wired
-      skip_before_action :authenticate_user!, only: %i[index]
-      skip_before_action :require_confirmation, only: %i[index]
-      skip_after_action  :verify_authorized, only: %i[index]
+      skip_before_action :authenticate_user!, only: %i[index destroy]
+      skip_before_action :require_confirmation, only: %i[index destroy]
+      skip_after_action  :verify_authorized, only: %i[index destroy]
       skip_after_action  :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[index]
+      skip_forgery_protection only: %i[index destroy]
 
       # GET /api/claims/admin/sessions_with_contractors?q=&status=&sort=&page=&per=
       def index
@@ -86,6 +86,61 @@ module Api
             }
           }
         }
+      end
+
+      # DELETE /api/claims/admin/sessions_with_contractors/:id
+      # Deletes a session and all claim artifacts beneath it in FK-safe order.
+      def destroy
+        session = ::Claims::Session.find(params[:id])
+
+        deleted = {
+          session_id: session.id,
+          invoices: 0,
+          invoice_versions: 0,
+          lineitems: 0,
+          revision_requests: 0,
+          supporting_documents: 0,
+          ingest_runs: 0,
+          ingest_step_runs: 0
+        }
+
+        ::Claims::Session.transaction do
+          invoice_ids = ::Claims::Invoice.where(session_id: session.id).pluck(:id)
+          invoice_version_ids = if invoice_ids.any?
+            ::Claims::InvoiceVersion.where(invoice_id: invoice_ids).pluck(:id)
+          else
+            []
+          end
+
+          if invoice_version_ids.any?
+            deleted[:lineitems] = ::Claims::Lineitem.where(invoice_version_id: invoice_version_ids).delete_all
+            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(invoice_version_id: invoice_version_ids).delete_all
+
+            # These also cascade from invoice_versions, but explicit deletes keep counts accurate.
+            ::Claims::InvoiceVersionLocatedField.where(invoice_version_id: invoice_version_ids).delete_all
+            ::Claims::InvoiceVersionRulecheck.where(invoice_version_id: invoice_version_ids).delete_all
+            deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(invoice_version_id: invoice_version_ids).delete_all
+          end
+
+          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(invoice_id: invoice_ids).delete_all if invoice_ids.any?
+
+          # Clean run trackers tied to this session before removing invoices/session.
+          deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(session_id: session.id).delete_all
+          deleted[:ingest_runs] = ::Claims::IngestRun.where(session_id: session.id).delete_all
+
+          deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(invoice_id: invoice_ids).delete_all if invoice_ids.any?
+          deleted[:invoices] = ::Claims::Invoice.where(id: invoice_ids).delete_all if invoice_ids.any?
+
+          session.destroy!
+        end
+
+        render json: { deleted: true, counts: deleted }, status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Session not found" }, status: :not_found
+      rescue => e
+        Rails.logger.error("[CLAIMS][SESSIONS_ADMIN] destroy failed id=#{params[:id]}: #{e.class}: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\n"))
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       private

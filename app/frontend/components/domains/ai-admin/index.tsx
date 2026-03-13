@@ -4,6 +4,12 @@ import {
   Box,
   Button,
   Container,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
   Flex,
   Heading,
   HStack,
@@ -25,11 +31,12 @@ import {
   Thead,
   Tooltip,
   Tr,
+  useDisclosure,
 } from '@chakra-ui/react';
 
 import { observer } from 'mobx-react-lite';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowsClockwise } from '@phosphor-icons/react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowsClockwise, Question } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -64,7 +71,7 @@ type IngestStepRow = {
   ingest_run_id: string;
   invoice_version_id?: string | null;
   step_type?: string | null;
-  ok?: boolean | null;
+  status?: string | null;
   error_text?: string | null;
   validationgenai_ruleset_id?: string | null;
   created_at?: string | null;
@@ -283,7 +290,11 @@ function shortGuid(s?: string | null) {
   const [stepsError, setStepsError] = useState('');
   const [steps, setSteps] = useState<IngestStepRow[]>([]);
 
-  const fetchStepsBySession = async () => {
+  const [autoPollEnabled, setAutoPollEnabled] = useState(false);
+  const [pollTargetInvoiceVersionId, setPollTargetInvoiceVersionId] = useState('');
+  const [pollGraceUntilMs, setPollGraceUntilMs] = useState(0);
+
+  const fetchStepsBySession = useCallback(async () => {
     setStepsLoading(true);
     setStepsError('');
 
@@ -307,7 +318,7 @@ function shortGuid(s?: string | null) {
     } finally {
       setStepsLoading(false);
     }
-  };
+  }, [sessionId]);
 
   // Run buttons
   const [isRunningOcr, setIsRunningOcr] = useState(false);
@@ -317,6 +328,42 @@ function shortGuid(s?: string | null) {
   const [isRunningGenai, setIsRunningGenai] = useState(false);
   const [genaiError, setGenaiError] = useState('');
   const [genaiOkMsg, setGenaiOkMsg] = useState('');
+
+  const POLL_INTERVAL_MS = 2500;
+  const POLL_GRACE_MS = 45000;
+
+  const hasPendingTargetStep = useMemo(() => {
+    const target = pollTargetInvoiceVersionId.trim();
+    if (!target) return false;
+    return steps.some(
+      (s) =>
+        String(s.invoice_version_id || '') === target &&
+        ['queued', 'in_progress'].includes(String(s.status || '').toLowerCase()),
+    );
+  }, [steps, pollTargetInvoiceVersionId]);
+
+  const shouldPollSteps =
+    autoPollEnabled &&
+    !!sessionId.trim() &&
+    (isRunningOcr || isRunningGenai || Date.now() < pollGraceUntilMs || hasPendingTargetStep);
+
+  useEffect(() => {
+    if (!shouldPollSteps) return;
+
+    const intervalId = window.setInterval(() => {
+      void fetchStepsBySession();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [shouldPollSteps, fetchStepsBySession]);
+
+  const {
+    isOpen: isHelpOpen,
+    onOpen: onHelpOpen,
+    onClose: onHelpClose,
+  } = useDisclosure();
 
   const handleRunOcr = async () => {
     setIsRunningOcr(true);
@@ -329,6 +376,13 @@ function shortGuid(s?: string | null) {
 
       if (!sid) throw new Error('Enter a session_id first.');
       if (!ivid) throw new Error('Enter an invoice_version_id first (or load context).');
+
+      // Start auto-refresh on first run click and keep it alive briefly
+      // so the tracker catches newly created step rows.
+      setAutoPollEnabled(true);
+      setPollTargetInvoiceVersionId(ivid);
+      setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
+      await fetchStepsBySession();
 
       const res = await fetch(`/api/claims/ingest/run_ocr`, {
         method: 'POST',
@@ -348,6 +402,8 @@ function shortGuid(s?: string | null) {
             `OCR queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
         ),
       );
+
+      setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
 
       await fetchStepsBySession();
     } catch (e: any) {
@@ -371,6 +427,13 @@ function shortGuid(s?: string | null) {
       if (!ivid) throw new Error('Enter an invoice_version_id first (or load context).');
       if (!rid) throw new Error('Select a ruleset first (Tab: Choose Ruleset).');
 
+      // Start auto-refresh on first run click and keep it alive briefly
+      // so the tracker catches newly created step rows.
+      setAutoPollEnabled(true);
+      setPollTargetInvoiceVersionId(ivid);
+      setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
+      await fetchStepsBySession();
+
       const res = await fetch(`/api/claims/ingest/run_genai`, {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -390,6 +453,8 @@ function shortGuid(s?: string | null) {
         ),
       );
 
+      setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
+
       await fetchStepsBySession();
     } catch (e: any) {
       setGenaiError(e?.message || 'Run GenAI failed.');
@@ -408,6 +473,18 @@ function shortGuid(s?: string | null) {
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
+          <Flex justify="flex-end" mb={3}>
+            <Tooltip label="Help: tabs, states, and run steps">
+              <IconButton
+                aria-label="Open OCR and GenAI help"
+                icon={<Question size={18} />}
+                size="sm"
+                variant="outline"
+                onClick={onHelpOpen}
+              />
+            </Tooltip>
+          </Flex>
+
           <Tabs variant="line" isFitted colorScheme="gray">
             <TabList mb="1em">
               <Tab>Choose ruleset</Tab>
@@ -796,7 +873,7 @@ function shortGuid(s?: string | null) {
                             <Th>created</Th>
                             <Th>step_id</Th>
                             <Th>type</Th>
-                            <Th>ok</Th>
+                            <Th>state</Th>
                             <Th>invoice_version_id</Th>
                             <Th>ruleset</Th>
                             <Th>error</Th>
@@ -816,10 +893,16 @@ function shortGuid(s?: string | null) {
                                 {s.step_type ?? ''}
                               </Td>
                               <Td fontSize="xs">
-                                {s.ok === null || typeof s.ok === 'undefined' ? (
+                                {String(s.status || '').toLowerCase() === 'in_progress' ? (
                                   <Spinner size="sm" />
+                                ) : String(s.status || '').toLowerCase() === 'queued' ? (
+                                  <Badge colorScheme="yellow">QUEUED</Badge>
+                                ) : String(s.status || '').toLowerCase() === 'succeeded' ? (
+                                  <Badge colorScheme="green">OK</Badge>
+                                ) : String(s.status || '').toLowerCase() === 'failed' ? (
+                                  <Badge colorScheme="red">FAIL</Badge>
                                 ) : (
-                                  <Badge colorScheme={s.ok ? 'green' : 'red'}>{s.ok ? 'OK' : 'FAIL'}</Badge>
+                                  <Badge colorScheme="gray">{String(s.status || 'unknown').toUpperCase()}</Badge>
                                 )}
                               </Td>
                               <Td fontFamily="mono" fontSize="xs">
@@ -851,6 +934,101 @@ function shortGuid(s?: string | null) {
           </Tabs>
         </Box>
       </Container>
+
+      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Invoices Admin OCR and GenAI Help</DrawerHeader>
+          <DrawerBody>
+            <Flex direction="column" gap={4}>
+              <Box>
+                <Heading size="sm" mb={2}>Two Tabs, Two Jobs</Heading>
+                <Text as="div" fontSize="sm">
+                  Tab 1 is where you pick the GenAI ruleset.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Tab 2 is where you run OCR or GenAI and watch the step tracker.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Think of Tab 1 as choosing the game rules, and Tab 2 as pressing play and watching what happens.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>Invoice State Basics</Heading>
+                <Text as="div" fontSize="sm">
+                  The state is tracked on the invoice, not on each invoice version.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  This means a newer version can move the same invoice back to an earlier-looking state, like going back to upload work.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  So if you upload a fix, the invoice can look like it moved backward, but that is expected.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>All Invoice States</Heading>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">upload_queued</Box>: waiting in line to start upload.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">upload_in_progress</Box>: upload work is happening now.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">upload_failed</Box>: upload stopped with an error.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">upload_complete</Box>: upload finished and file is saved.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">ocr_queued</Box>: OCR is waiting in line.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">ocr_in_progress</Box>: OCR is reading the PDF now.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">ocr_failed</Box>: OCR stopped with an error.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">ocr_complete</Box>: OCR finished and wrote extracted fields.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">genai_queued</Box>: GenAI is waiting in line.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">genai_in_progress</Box>: GenAI is running checks now.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">genai_failed</Box>: GenAI stopped with an error.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">genai_complete</Box>: GenAI is done and invoice is ready for contractor review.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">admin_review_inbox</Box>: invoice is in the admin review inbox.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">contractor_revision_inbox</Box>: contractor needs to fix something.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">closed_success</Box>: work is complete and accepted.</Text>
+                <Text as="div" fontSize="sm"><Box as="span" fontWeight="bold">closed_reject</Box>: work is closed and rejected.</Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>Why You Sometimes See Quick States</Heading>
+                <Text as="div" fontSize="sm">
+                  When you click Run OCR or Run GenAI, the system puts that work into a waiting line.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  A worker then picks it up and does the work shortly after.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  That is why you can see quick in-between states like queued and in progress.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Most of the time those states pass very fast, so admins barely notice them.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  If the system has a problem, the invoice can stay in one of those in-between states longer, and that is a clue to investigate.
+                </Text>
+              </Box>
+
+              <Box>
+                <Heading size="sm" mb={2}>How Run Steps Are Shown</Heading>
+                <Text as="div" fontSize="sm">
+                  The Step Run Tracker shows rows from ingest_step_runs for the current session.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Each row is one attempt of one step type: OCR or GenAI.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  State column meaning: QUEUED means waiting in queue, spinner means in progress, OK means succeeded, and FAIL means it ended with an error.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  If step type is GenAI, ruleset shows which ruleset was used.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Error column shows the failure text when a step fails.
+                </Text>
+              </Box>
+            </Flex>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Flex>
   );
 });

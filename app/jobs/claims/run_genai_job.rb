@@ -7,7 +7,7 @@ require "json"
 module Claims
   class RunGenaiJob
     include Sidekiq::Job
-    sidekiq_options retry: 0
+    sidekiq_options queue: :claims_genai, retry: 0
 
     # args must match controller perform_async call order:
     # perform(session_id, invoice_version_id, validationgenai_ruleset_id, ingest_run_id=nil)
@@ -46,20 +46,35 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
 
 
 
-      # 1) create step run (queued/in_progress == ok: NULL)
+      # 1) find/create step run and transition to in_progress
       Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step1.0")
 
-      step = Claims::IngestStepRun.create!(
+      step = nil
+      if ingest_run_id.present?
+        step = Claims::IngestStepRun
+          .where(
+            ingest_run_id: ingest_run_id,
+            invoice_version_id: iv.id,
+            step_type: "genai"
+          )
+          .where(status: %w[queued in_progress])
+          .order(created_at: :asc)
+          .first
+      end
+
+      step ||= Claims::IngestStepRun.create!(
         ingest_run_id: ingest_run_id,
         session_id: sess.id,
         invoice_version_id: iv.id,
         step_type: "genai",
-        ok: nil,
+        status: "queued",
         error_text: nil,
         validationgenai_ruleset_id: validationgenai_ruleset_id,
         created_at: Time.current,
         updated_at: Time.current
       )
+
+      step.update!(status: "in_progress", error_text: nil, updated_at: Time.current)
 
       # 2) set invoice status
       Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step2")
@@ -124,9 +139,10 @@ raise "ApplyGenaiLocatedFields failed: #{res.inspect}" unless res[:ok]
 )
       # 5) persist artifacts on the STEP (per-run history)
       step.update!(
-        ok: true,
+        status: "succeeded",
         genai_results_json: payload,
         context_window_json: contextwindowjson,
+        error_text: nil,
         updated_at: Time.current
       )
 
@@ -134,16 +150,24 @@ raise "ApplyGenaiLocatedFields failed: #{res.inspect}" unless res[:ok]
 
       # 7) finalize invoice status
       inv.update!(status: "genai_complete", status_updated_at: Time.current)
+
+      Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id) if ingest_run_id.present?
     rescue => e
       # mark failed (best-effort)
       begin
-        step&.update!(ok: false, error_text: "#{e.class}: #{e.message}", updated_at: Time.current)
+        step&.update!(status: "failed", error_text: "#{e.class}: #{e.message}", updated_at: Time.current)
       rescue
         # ignore
       end
 
       begin
         inv&.update!(status: "genai_failed", status_updated_at: Time.current)
+      rescue
+        # ignore
+      end
+
+      begin
+        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id) if ingest_run_id.present?
       rescue
         # ignore
       end
