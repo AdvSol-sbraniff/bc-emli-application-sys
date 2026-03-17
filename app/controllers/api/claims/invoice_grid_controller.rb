@@ -120,11 +120,6 @@ skip_forgery_protection only: %i[index destroy]
         [[n, lo].max, hi].min
       end
 
-      def sanitize_like(str)
-        # escape % and _ for LIKE patterns
-        str.to_s.gsub("\\", "\\\\\\").gsub("%", "\\%").gsub("_", "\\_")
-      end
-
       def apply_text_search(rel, q)
         q = q.to_s.strip
         return rel if q.blank?
@@ -146,9 +141,10 @@ skip_forgery_protection only: %i[index destroy]
         fields = candidates.select { |c| cols.include?(c) }
         return rel if fields.empty?
 
-        pattern = "%#{sanitize_like(q)}%"
+        escape_char = "!"
+        pattern = "%#{ActiveRecord::Base.sanitize_sql_like(q, escape_char)}%"
 
-        clauses = fields.map { |f| "#{f} ILIKE :p ESCAPE '\\\\'" }.join(" OR ")
+        clauses = fields.map { |f| "#{f} ILIKE :p ESCAPE '#{escape_char}'" }.join(" OR ")
         rel.where(clauses, p: pattern)
       end
 

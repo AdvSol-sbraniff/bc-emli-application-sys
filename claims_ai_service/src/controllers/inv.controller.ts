@@ -41,6 +41,15 @@ class MintSasDto {
   container?: string;
 }
 
+class DeleteBlobDto {
+  @IsString()
+  storageKey!: string;
+
+  @IsOptional()
+  @IsString()
+  container?: string;
+}
+
 
 class UploadPdfDto {
   // sessions/<session_uuid>/pdfs/<invoice_version_uuid>/original.PDF
@@ -57,6 +66,25 @@ class UploadPdfDto {
   @IsOptional()
   @IsString()
   filename?: string; // default original.PDF
+}
+
+class UploadSupportingPdfDto {
+  @IsString()
+  sessionId!: string;
+
+  @IsString()
+  invoiceId!: string;
+
+  @IsString()
+  supportingDocumentId!: string;
+
+  @IsOptional()
+  @IsString()
+  container?: string;
+
+  @IsOptional()
+  @IsString()
+  filename?: string;
 }
 
 
@@ -84,6 +112,15 @@ export class InvController {
 @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
 async mintSas(@Body() dto: MintSasDto): Promise<any> {
   return this.invService.mintSasUrl({
+    container: dto.container,
+    storageKey: dto.storageKey,
+  });
+}
+
+@Post('delete-blob')
+@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+async deleteBlob(@Body() dto: DeleteBlobDto): Promise<any> {
+  return this.invService.deleteBlob({
     container: dto.container,
     storageKey: dto.storageKey,
   });
@@ -146,6 +183,28 @@ return this.invService.uploadPdfToBlob({
 
 }
 
+@Post('upload-supporting-pdf')
+@UseInterceptors(FileInterceptor('file'))
+@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+async uploadSupportingPdf(
+  @UploadedFile() file: Express.Multer.File,
+  @Body() dto: UploadSupportingPdfDto,
+) {
+  if (!file) {
+    throw new BadRequestException("Missing multipart file field 'file'.");
+  }
+
+  return this.invService.uploadSupportingPdfToBlob({
+    sessionId: dto.sessionId,
+    invoiceId: dto.invoiceId,
+    supportingDocumentId: dto.supportingDocumentId,
+    container: dto.container,
+    filename: dto.filename,
+    buffer: file.buffer,
+    contentType: file.mimetype || 'application/pdf',
+    originalName: file.originalname,
+  });
+}
 
 
 // sample parsing checks

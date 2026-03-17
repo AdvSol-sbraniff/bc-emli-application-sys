@@ -81,6 +81,11 @@ get "sessions/:session_id/invoices", to: "invoices#index_by_session"
 get "admin/invoices", to: "invoice_grid#index"
 
   delete "admin/invoices/:id", to: "invoice_grid#destroy"
+  get "admin/invoices/:invoice_id/supporting_documents/context", to: "invoice_supporting_documents#context"
+  get "admin/invoices/:invoice_id/supporting_documents", to: "invoice_supporting_documents#index"
+  post "admin/invoices/:invoice_id/supporting_documents", to: "invoice_supporting_documents#create"
+  delete "admin/supporting_documents/:id", to: "invoice_supporting_documents#destroy"
+  get "admin/supporting_documents/:id/pdf_url", to: "invoice_supporting_documents#pdf_url"
 
 get "admin/reports/volume_value/summary", to: "reports_volume_value#summary"
 get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"

@@ -28,6 +28,9 @@ fi
 # Rails Entrypoint
 # If running the rails server then create or migrate existing database
 if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
+  # Defensive cleanup in case a stale PID file made it into the image or volume.
+  rm -f /app/tmp/pids/server.pid
+
   until nc -z -v -w30 ${DATABASE_OPENSHIFT_SERVICE_HOST} 5432; do
     echo "Waiting for PostgreSQL database (${DATABASE_OPENSHIFT_SERVICE_HOST}) to start..."
     sleep 1

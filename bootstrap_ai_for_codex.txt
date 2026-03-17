@@ -78,6 +78,38 @@ Claims feature deployment status
 - If Claims menus are missing after login, running app image is old.
 - Build and deploy a fresh image tag from current code before re-testing UI.
 
+OpenShift DB access pattern (confirmed working)
+- `oc` auth can expire between conversations. First re-check:
+  1) `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc whoami'`
+  2) `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc project ce8baa-dev'`
+  3) `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev get pods'`
+- Primary Postgres pod observed in ce8baa-dev:
+  - `hesp-crunchydb-ha-6bxt-0`
+- Database secret / target DB observed in ce8baa-dev:
+  - Secret: `hesp-crunchydb-pguser-postgres`
+  - DB: `hesp-crunchydb`
+- Reliable file-run pattern for SQL against OpenShift DB:
+  1) Copy repo SQL file into DB pod:
+     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev cp /home/sbraniff/bc-emli-application-sys/claims_ai_service_ddl/<file>.sql hesp-crunchydb-ha-6bxt-0:/tmp/<file>.sql -c database'`
+  2) Execute it with psql inside the DB pod:
+     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev exec hesp-crunchydb-ha-6bxt-0 -c database -- psql -v ON_ERROR_STOP=1 -U postgres -d hesp-crunchydb -f /tmp/<file>.sql'`
+- Confirmed on 2026-03-17:
+  - Ran `claims_ai_service_ddl/3_views.sql`
+  - Ran `claims_ai_service_ddl/4_reporting_views.sql`
+  - This fixed `Reports - Volume and Value` 500s in OpenShift.
+- Root cause captured from live app logs:
+  - `PG::UndefinedTable: relation "claims.v_reporting_invoice_business" does not exist`
+- Verification pattern for this exact issue:
+  1) Hit endpoints:
+     - `/api/claims/admin/reports/volume_value/summary`
+     - `/api/claims/admin/reports/volume_value/trend?grain=week`
+     - `/api/claims/admin/reports/volume_value/detail?sort=invoice_created_at%3Adesc&page=1&per=25`
+  2) Check app logs:
+     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev logs hesp-app-<pod> --since=5m | tail -n 200'`
+- Important dependency note:
+  - `4_reporting_views.sql` depends on `claims.v_invoice_grid`
+  - If reporting endpoints fail because `claims.v_reporting_invoice_business` is missing, run `3_views.sql` first, then `4_reporting_views.sql`
+
 ============================================================
 SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
 ============================================================

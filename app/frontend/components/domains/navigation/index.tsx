@@ -71,6 +71,9 @@ const UploadInvoiceFixAdminScreen = lazy(() =>
 const SubmissionSimulatorAdminScreen = lazy(() =>
   import('../submission-simulator-admin').then((module) => ({ default: module.default })),
 );
+const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
+  import('../invoice-supporting-documents-admin').then((module) => ({ default: module.default })),
+);
 
 const SessionsAdminScreen = lazy(() =>
   import('../sessions-admin').then((module) => ({ default: module.default })),
@@ -757,6 +760,7 @@ const AppRoutes = observer(() => {
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
+          <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
           <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
