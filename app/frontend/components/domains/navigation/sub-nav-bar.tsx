@@ -95,6 +95,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/upload-invoice-fix-admin', title: 'Upload Invoice Fix' },
       ],
+      '/invoice-supporting-documents-admin': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/invoice-supporting-documents-admin', title: 'Invoice Supporting Documents' },
+      ],
       '/submission-simulator-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/submission-simulator-admin', title: 'Submission Simulator' },

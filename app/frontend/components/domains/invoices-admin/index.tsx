@@ -35,6 +35,7 @@ import {
   CaretLeft,
   CaretRight,
   FileArrowUp,
+  Files,
   FilePdf,
   GitBranch,
   Info,
@@ -306,6 +307,11 @@ const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
 const handleOpenUploadNewInvoice = (sessionId: string) => {
   const url = `/upload-invoice-admin?session_id=${encodeURIComponent(sessionId)}`;
   window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const handleOpenSupportingDocuments = (row: InvoiceGridRow) => {
+  if (!row.invoice_id) return;
+  navigate(`/invoice-supporting-documents-admin?invoice_id=${encodeURIComponent(String(row.invoice_id))}`);
 };
 
 const handleOpenUploadFix = (row: InvoiceGridRow) => {
@@ -703,6 +709,17 @@ const handleDeleteInvoice = async (invoiceId: string) => {
   variant="outline"
   icon={<FileArrowUp size={14} />}
   onClick={() => handleOpenUploadNewInvoice(r.session_id)}
+/>
+</Tooltip>
+
+<Tooltip label="Manage supporting PDFs for this invoice">
+<IconButton
+  aria-label="Manage supporting PDFs"
+  size="xs"
+  variant="outline"
+  icon={<Files size={14} />}
+  onClick={() => handleOpenSupportingDocuments(r)}
+  isDisabled={!hasInvoice}
 />
 </Tooltip>
 

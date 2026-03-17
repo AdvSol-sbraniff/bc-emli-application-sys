@@ -7,5 +7,10 @@ module Claims
              class_name: "Claims::InvoiceVersion",
              foreign_key: :invoice_id,
              dependent: :destroy
+
+    has_many :supporting_documents,
+             class_name: "Claims::SupportingDocument",
+             foreign_key: :invoice_id,
+             dependent: :destroy
   end
 end

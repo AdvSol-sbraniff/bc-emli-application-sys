@@ -36,6 +36,7 @@ services:
       - redis
       - elasticsearch
       - vite
+      - claims-ai
     environment:
       VITE_RUBY_HOST: vite
       IS_APP_SERVER: "true"
@@ -102,6 +103,7 @@ services:
     command: 'bundle exec sidekiq'
     depends_on:
       - app
+      - claims-ai
 
   sidekiq-claims:
     image: hous-permit-portal-dev:latest

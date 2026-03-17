@@ -126,6 +126,65 @@ const storageKey = `sessions/${args.sessionId}/pdfs/${args.invoiceVersionId}/${f
   };
 }
 
+async uploadSupportingPdfToBlob(args: {
+  sessionId: string;
+  invoiceId: string;
+  supportingDocumentId: string;
+  container?: string;
+  filename?: string;
+  buffer: Buffer;
+  contentType: string;
+  originalName?: string;
+}) {
+  const containerName = (args.container || this.defaultContainer).trim();
+  const filename = (args.filename || args.originalName || 'supporting-document.PDF').trim();
+  const storageKey = `sessions/${args.sessionId}/invoices/${args.invoiceId}/supporting-documents/${args.supportingDocumentId}/${filename}`;
+
+  const sha256 = crypto.createHash('sha256').update(args.buffer).digest('hex');
+
+  const containerClient = this.blobSvc.getContainerClient(containerName);
+  await containerClient.createIfNotExists();
+
+  const blobClient = containerClient.getBlockBlobClient(storageKey);
+
+  const uploadResp = await blobClient.uploadData(args.buffer, {
+    blobHTTPHeaders: {
+      blobContentType: args.contentType || 'application/pdf',
+    },
+    metadata: {
+      original_name: (args.originalName || '').slice(0, 200),
+      sha256,
+    },
+  });
+
+  const etag = (uploadResp.etag || '').replace(/"/g, '');
+
+  return {
+    ok: true,
+    container: containerName,
+    storage_key: storageKey,
+    byte_size: args.buffer.length,
+    sha256,
+    etag,
+    url: blobClient.url,
+  };
+}
+
+async deleteBlob(args: { container?: string; storageKey: string }) {
+  const containerName = (args.container || this.defaultContainer).trim();
+  const storageKey = (args.storageKey || '').trim();
+  if (!storageKey) throw new Error('Missing storageKey');
+
+  const containerClient = this.blobSvc.getContainerClient(containerName);
+  const blobClient = containerClient.getBlockBlobClient(storageKey);
+  await blobClient.deleteIfExists();
+
+  return {
+    ok: true,
+    container: containerName,
+    storage_key: storageKey,
+  };
+}
 
 
 // ============================================================
