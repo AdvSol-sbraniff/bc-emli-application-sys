@@ -13,6 +13,8 @@ define arguments
 	"${NAME}" . -n "${NAMESPACE}" -f values.yaml -f "values-${NAMESPACE}.yaml" \
 	--set app.image.tag="${IMAGE_TAG}" \
 	--set sidekiq.image.tag="${IMAGE_TAG}" \
+	--set sidekiqClaims.image.tag="${IMAGE_TAG}" \
+	--set claimsAi.image.tag="${IMAGE_TAG}" \
 	--set anycable-rpc.image.tag="${IMAGE_TAG}"
 endef
 

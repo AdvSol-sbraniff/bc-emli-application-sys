@@ -17,6 +17,16 @@ dependencies:
     version: '0.1.0'
     repository: 'file://../_sidekiq'
     condition: sidekiq.enabled
+  - name: sidekiq
+    alias: sidekiqClaims
+    version: '0.1.0'
+    repository: 'file://../_sidekiq'
+    condition: sidekiqClaims.enabled
+  - name: claims-ai
+    alias: claimsAi
+    version: '0.1.0'
+    repository: 'file://../_claims-ai'
+    condition: claimsAi.enabled
   - name: crunchy-postgres
     version: '0.6.1'
     repository: https://bcgov.github.io/crunchy-postgres/

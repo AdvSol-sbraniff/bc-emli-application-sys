@@ -85,6 +85,40 @@ sidekiq:
   env:
     'ELASTICSEARCH_URL': 'http://hesp-elasticsearch:9200'
 
+sidekiqClaims:
+  enabled: false
+  image:
+    pullPolicy: IfNotPresent
+
+  nameOverride: hesp-sidekiq-claims
+  fullnameOverride: hesp-sidekiq-claims
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+  env:
+    'ELASTICSEARCH_URL': 'http://hesp-elasticsearch:9200'
+    'SIDEKIQ_CONCURRENCY': '1'
+    'SIDEKIQ_QUEUES': 'claims_ocr,claims_genai'
+
+claimsAi:
+  enabled: false
+  image:
+    repository: ghcr.io/bcgov/hesp-claims-ai
+    pullPolicy: IfNotPresent
+
+  nameOverride: hesp-claims-ai
+  fullnameOverride: hesp-claims-ai
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+  env: {}
+
 anycable-rpc:
   enabled: false
   image:
