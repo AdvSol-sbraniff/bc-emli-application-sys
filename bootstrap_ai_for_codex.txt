@@ -1,41 +1,129 @@
-BOOTSTRAP FOR CODEX - LOCAL DB/WORKFLOW QUICKSTART
+BOOTSTRAP FOR CODEX - REBOOT RUNBOOK
 
 Purpose
-- Use this note after agent reboot to quickly restore context and run commands reliably.
+- Persist operational memory across conversation compression and reboot.
+- Restore reliable execution for local DB work and OpenShift deploys quickly.
 
 Workspace
 - Repo path: \\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys
-- Main compose file: \\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml
+- Compose file: \\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml
+- Namespace (gold): ce8baa-dev
+- Helm release: hesp
 
-Important Environment Quirk
-- Running docker compose from WSL-style cwd in this terminal can fail with path translation errors.
-- Reliable workaround: run docker compose from a Windows-local cwd and pass explicit -f UNC path.
+============================================================
+SECTION A - DB CONNECTIONS (LOCAL LAPTOP)
+============================================================
 
-Known-Good Pattern (PowerShell)
+Known environment quirk
+- Running docker compose from a WSL cwd in this shell may fail.
+- Reliable method: run from Windows cwd and pass explicit compose file path.
+
+Known-good command wrapper
 1) Set-Location C:\
-2) docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" <compose-command>
+2) docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" <command>
 
-Known-Good DB Sanity Query
-- docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -tAc "select count(*) from claims.invoices;"
-
-Local Dev DB Details (from compose)
+DB connection details (local compose)
 - Service: postgres
 - User: postgres
 - Password: password
 - Database: app_development
 - Port: 5432
 
-When user asks to run DDL
-- Prefer command shape:
-  docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -f /workspace/<path-from-repo-root>.sql
-- Note: postgres service mounts repo as /workspace inside container.
+Known-good sanity query
+- Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -tAc "select count(*) from claims.invoices;"
 
-Suggested First Checks After Reboot
-1) Confirm compose services:
-   docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" ps
-2) Run DB sanity select (invoice count)
-3) If needed, read this file again and proceed.
+Run DDL SQL file from repo
+- Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -f /workspace/<repo-relative-path>.sql
 
 Notes
-- If command output is missing, prefer non-interactive forms (-T and -tAc for psql).
-- Keep changes minimal and FK-safe when adding delete endpoints.
+- Use -T for non-interactive compose exec.
+- Use psql -tAc for clean machine-readable query output.
+- Prefer DDL script workflow when user requests DB changes.
+
+============================================================
+SECTION B - OPENSHIFT DEPLOYMENTS (GOLD)
+============================================================
+
+Known-good oc invocation on this machine
+- Use WSL explicit shim path:
+  /home/sbraniff/.asdf/shims/oc
+
+Known-good command pattern
+- wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc <args>'
+
+Cluster access sanity checks
+1) wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc whoami'
+2) wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc project ce8baa-dev'
+3) wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev get pods'
+
+Helm deploy pattern (current stack)
+- Directory: /home/sbraniff/bc-emli-application-sys/helm/main
+- Command shape:
+  wsl -d Ubuntu -e bash -lc 'cd /home/sbraniff/bc-emli-application-sys/helm/main; helm upgrade --install "hesp" . -n "ce8baa-dev" -f values.yaml -f values-ce8baa-dev.yaml --set app.image.tag="<tag>" --set sidekiq.image.tag="<tag>" --set anycable-rpc.image.tag="<tag>"'
+
+Critical deployment facts for ce8baa-dev
+- App URL: https://hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca
+- AnyCable URL: https://hesp-anycable-go-ce8baa-dev.apps.gold.devops.gov.bc.ca
+- Current approach uses Kubernetes secret "hesp" for app envFrom.
+- Login requires KEYCLOAK_CLIENT, KEYCLOAK_SECRET, and DEVISE_JWT_SECRET_KEY in secret hesp.
+
+Known auth pitfalls and fixes
+- Invalid redirect_uri:
+  Add exact callback in Keycloak client:
+  https://hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca/api/auth/keycloak/callback
+- Missing JWT key causes callback 500:
+  Ensure DEVISE_JWT_SECRET_KEY exists in secret hesp.
+
+Claims feature deployment status
+- If Claims menus are missing after login, running app image is old.
+- Build and deploy a fresh image tag from current code before re-testing UI.
+
+============================================================
+SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
+============================================================
+
+1) Read this file first.
+2) Confirm local DB command path works with compose -f UNC pattern.
+3) Confirm oc access with explicit shim path and namespace selection.
+4) Confirm app route responds (curl -I app URL).
+5) If login fails, check app logs first, then hesp secret keys.
+6) Before deploying frontend changes, verify deployed image tag and build freshness.
+
+============================================================
+SECTION D - MEMORY INTENT
+============================================================
+
+- This file is the durable runbook to survive VS Code conversation compression.
+- Prefer updating this file whenever a new blocker/fix pattern is discovered.
+
+============================================================
+SECTION E - FAST DEPLOY METHOD (PREFERRED)
+============================================================
+
+Goal
+- Avoid slow in-cluster source builds.
+- Build image locally, push to registry, deploy immutable tag with Helm.
+
+Steps
+1) Login to OpenShift internal registry
+  - Get user/token via oc and run docker login to image-registry.apps.gold.devops.gov.bc.ca.
+
+2) Build app image locally
+  - Dockerfile: devops/docker/app/Dockerfile
+  - Tag pattern: image-registry.apps.gold.devops.gov.bc.ca/ce8baa-dev/energy-app:<immutable-tag>
+
+3) Push image
+  - Push same immutable tag to internal registry.
+
+4) Helm deploy with explicit app image override
+  - Keep command in helm/main with values.yaml + values-ce8baa-dev.yaml.
+  - Set app.image.repository and app.image.tag to the pushed image.
+
+5) Verify rollout
+  - oc -n ce8baa-dev get pods
+  - oc -n ce8baa-dev get deploy hesp-app -o yaml | grep image:
+  - Confirm UI/routing updates are present.
+
+Notes
+- This is the default path when user asks for rapid deploy of latest code.
+- Use in-cluster BuildConfig only if local build/push is blocked.

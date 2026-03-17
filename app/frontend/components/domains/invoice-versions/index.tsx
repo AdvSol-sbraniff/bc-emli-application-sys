@@ -40,10 +40,9 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useMst } from '../../../setup/root';
 
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-
+//import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+//pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 // ============================================================
 // SECTION 01.01 — UI COMPONENTS

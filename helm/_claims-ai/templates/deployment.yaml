@@ -19,13 +19,6 @@ spec:
       {{- with $podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
-        # vault.hashicorp.com/role: {{ .Values.global.vault.role }}
-        # vault.hashicorp.com/agent-inject-secret-secrets.env: {{ .Values.global.vault.role }}/{{ .Values.global.vault.subPath }}
-        # vault.hashicorp.com/agent-inject-template-secrets.env: |
-        #   {{`{{- with secret "`}}{{ .Values.global.vault.role }}/{{ .Values.global.vault.subPath }}{{ `" -}}`}}
-        #   {{`{{- range $k, $v := .Data.data }}`}}
-        #   {{ `{{ $k }}={{ $v }}{{ end -}}` }}
-        #   {{`{{- end }}`}}
       labels:
         {{- include "_.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
@@ -45,22 +38,12 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ $deploymentTag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/bin/sh", "-c"]
-          args:
-            ['exec bundle exec sidekiq']
+          ports:
+            - containerPort: {{ .Values.service.targetPort }}
+              name: http
           env:
             - name: DEPLOYMENT_TAG
               value: {{ $deploymentTag | quote }}
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.crunchydbSecret }}
-                  key: uri
-            - name: DATABASE_OPENSHIFT_SERVICE_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.crunchydbSecret }}
-                  key: host
           {{- $env := merge (.Values.global.env | default dict) (.Values.env | default dict) -}}
             {{- range $k, $v := $env }}
             - name: {{ $k | quote }}
@@ -82,14 +65,6 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
