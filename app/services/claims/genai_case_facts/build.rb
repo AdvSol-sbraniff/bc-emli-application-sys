@@ -52,10 +52,10 @@ module Claims
     contractor.city,
     contractor.postal_code
   ].compact.reject(&:blank?).join(", ")
-},
+            },
 
             users_eligibilitycodes: {
-              eligibility_code: eligibility_code,
+              eligibility_code: elig&.eligibility_code,
               approved_at: elig&.approved_at,
               expires_at: elig&.expires_at
             },
@@ -77,7 +77,7 @@ module Claims
       # - line_number=0
       # - confidence=100 (DB facts)
       #
-      def self.persist_code_located_fields!(invoice_version_id:, case_facts:)
+      def self.persist_code_located_fields!(invoice_version_id:, case_facts:, extracted_eligibility_code: nil)
         now = Time.current
 
         facts = case_facts.fetch(:esp_database_values)
@@ -132,6 +132,13 @@ module Claims
 
         # eligibility facts
         add_row.call(
+          field_key: "ocr_regex.eligibility_code",
+          value_type: "text",
+          value_text: extracted_eligibility_code&.to_s,
+          normalized_value: extracted_eligibility_code&.to_s
+        )
+
+        add_row.call(
           field_key: "users_eligibilitycodes.eligibility_code",
           value_type: "text",
           value_text: facts.dig(:users_eligibilitycodes, :eligibility_code)&.to_s,
@@ -164,42 +171,29 @@ module Claims
 
         # participant_address intentionally omitted (nil) until you have the column.
         # You can still snapshot a nil row if you want, but it adds noise.
+        return if rows.empty?
 
-        # Upsert so reruns don't explode unique constraint:
-        # UNIQUE (invoice_version_id, source_engine, field_key, line_number)
-        #
-        # NOTE: the index/constraint name in your DDL is:
-        #   invoice_version_located_fields_uniq
-        #
-        Claims::InvoiceVersionLocatedField.upsert_all(
-          rows,
-          unique_by: :invoice_version_located_fields_uniq
-        )
+        Claims::InvoiceVersionLocatedField.transaction do
+          Claims::InvoiceVersionLocatedField.where(
+            invoice_version_id: invoice_version_id,
+            source_engine: "code"
+          ).delete_all
+
+          Claims::InvoiceVersionLocatedField.insert_all!(rows)
+        end
       end
 
       # ============================================================
       # INTERNAL HELPERS
       # ============================================================
-
       # Pull eligibility code from the deep/raw OCR blob.
-      # Examples: ESP1-136a31ba (yours), could also be ESP2/ESP3.
+      # Store the full OCR token exactly as found.
 def self.extract_eligibility_code(di_raw_json)
   return nil if di_raw_json.blank?
 
   s = di_raw_json.to_json
-
-  # Accept OCR confusion: 1 <-> I, allow whitespace + different dash chars
-  m = s.match(/\bESP(?:[123]|I)\s*[-–—]\s*([0-9a-fA-F]{8})\b/)
-  return "ESP1-#{m[1]}" if m && m[0].match?(/\bESPI\b/)   # normalize ESPI -> ESP1
-  return "ESP#{m[0][3]}-#{m[1]}" if m                    # ESP1/2/3
-
-  # Fallback: longer IDs (still allow I)
-  m2 = s.match(/\bESP(?:[123]|I)\s*[-–—]\s*([A-Za-z0-9]{6,})\b/)
-  return nil unless m2
-
-  prefix = m2[0][0,4] # "ESP1" / "ESP2" / "ESP3" / "ESPI"
-  prefix = "ESP1" if prefix == "ESPI"
-  "#{prefix}-#{m2[1]}"
+  m = s.match(/\b(ESP(?:[123]|I)[A-Za-z0-9-]*)\b/)
+  m ? m[1] : nil
 end
       def self.participant_name_from_user(user)
         return nil if user.nil?
@@ -216,3 +210,4 @@ end
     end
   end
 end
+

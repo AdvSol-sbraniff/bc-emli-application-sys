@@ -1,9 +1,9 @@
-import { Accordion, AccordionButton, AccordionIcon, AccordionItem, AccordionPanel, Badge, Box, Button, Container, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, IconButton, Input, Text, Tooltip } from '@chakra-ui/react';
+import { Box, Button, Container, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, IconButton, Input, Text, Tooltip } from '@chakra-ui/react';
 import { Table, Thead, Tbody, Tr, Th, Td, Spinner } from '@chakra-ui/react';
 import { Tabs, TabList, TabPanels, Tab, TabPanel } from '@chakra-ui/react';
 import { ArrowsClockwise, FilePdf, Info, Question } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 
@@ -69,6 +69,15 @@ type AiDiff = {
   changedRules: Array<{ key: string; before: any; after: any }>;
 };
 
+type DrawerView = 'details' | 'diJson' | 'genaiJson' | 'genaiAdvice';
+type SimpleDiffRow = { label: string; before: string; after: string };
+type SimpleDiffSection = {
+  title: string;
+  rows: SimpleDiffRow[];
+  beforePass?: boolean | null;
+  afterPass?: boolean | null;
+};
+
 const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
 const fmtDate = (s?: string | null) => {
   if (!s) return '—';
@@ -132,6 +141,27 @@ function diffFieldVal(v: any): string {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'true' : 'false';
   return String(v);
+}
+
+type StatusDotProps = { pass: boolean | null | undefined };
+
+function StatusDot({ pass }: StatusDotProps) {
+  const bg =
+    pass === true ? 'green.400' :
+    pass === false ? 'red.400' :
+    'red.400';
+
+  return (
+    <Box
+      as="span"
+      w="10px"
+      h="10px"
+      borderRadius="full"
+      display="inline-block"
+      bg={bg}
+      flexShrink={0}
+    />
+  );
 }
 
 function lineitemKey(li: any): string {
@@ -317,6 +347,99 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
   return { overallChanges, addedFields, removedFields, changedFields, addedRules, removedRules, changedRules };
 }
 
+function buildDiffRows(
+  defs: Array<{ key: string; label: string }>,
+  beforeObj: any,
+  afterObj: any,
+  valueFormatter: (value: any) => string
+): SimpleDiffRow[] {
+  return defs
+    .map((def) => ({
+      label: def.label,
+      beforeRaw: beforeObj?.[def.key],
+      afterRaw: afterObj?.[def.key],
+    }))
+    .filter((row) => norm(row.beforeRaw) !== norm(row.afterRaw))
+    .map((row) => ({
+      label: row.label,
+      before: valueFormatter(row.beforeRaw),
+      after: valueFormatter(row.afterRaw),
+    }));
+}
+
+function lineitemDiffSections(diff: ContractorDiff): SimpleDiffSection[] {
+  const changed = sortedByKey(diff.changedLineitems, (item) => item.key).map((item) => ({
+    title: `Line ${item.key}`,
+    rows: buildDiffRows(lineitemFields, item.before, item.after, lineitemFieldVal),
+  }));
+
+  const added = sortedByKey(diff.addedLineitems, (item) => String(item.key)).map((item) => ({
+    title: `Line ${item.key}`,
+    rows: buildDiffRows(lineitemFields, {}, item, lineitemFieldVal),
+  }));
+
+  const removed = sortedByKey(diff.removedLineitems, (item) => String(item.key)).map((item) => ({
+    title: `Line ${item.key}`,
+    rows: buildDiffRows(lineitemFields, item, {}, lineitemFieldVal),
+  }));
+
+  return [...changed, ...added, ...removed].filter((section) => section.rows.length > 0);
+}
+
+function locatedFieldTitle(entry: { key: string; before?: any; after?: any }): string {
+  const fieldKey = entry.before?.field_key || entry.after?.field_key || entry.key;
+  return `Field ${fieldKey}`;
+}
+
+function locatedFieldDiffSections(diff: AiDiff): SimpleDiffSection[] {
+  const changed = sortedByKey(diff.changedFields, (item) => item.key).map((item) => ({
+    title: locatedFieldTitle(item),
+    rows: buildDiffRows(locatedFieldDisplayFields, item.before, item.after, diffFieldVal),
+  }));
+
+  const added = sortedByKey(diff.addedFields, (item) => String(item.key)).map((item) => ({
+    title: locatedFieldTitle({ key: String(item.key), after: item }),
+    rows: buildDiffRows(locatedFieldDisplayFields, {}, item, diffFieldVal),
+  }));
+
+  const removed = sortedByKey(diff.removedFields, (item) => String(item.key)).map((item) => ({
+    title: locatedFieldTitle({ key: String(item.key), before: item }),
+    rows: buildDiffRows(locatedFieldDisplayFields, item, {}, diffFieldVal),
+  }));
+
+  return [...changed, ...added, ...removed].filter((section) => section.rows.length > 0);
+}
+
+function ruleSectionTitle(ruleNumber: string, record?: any): string {
+  const name = String(record?.rule_name ?? '').trim();
+  return name ? `Rule ${ruleNumber} — ${name}` : `Rule ${ruleNumber}`;
+}
+
+function ruleDiffSections(diff: AiDiff): SimpleDiffSection[] {
+  const changed = sortedByKey(diff.changedRules, (item) => item.key).map((item) => ({
+    title: ruleSectionTitle(item.key, item.after || item.before),
+    rows: buildDiffRows(ruleDisplayFields, item.before, item.after, diffFieldVal),
+    beforePass: item.before?.pass,
+    afterPass: item.after?.pass,
+  }));
+
+  const added = sortedByKey(diff.addedRules, (item) => String(item.key)).map((item) => ({
+    title: ruleSectionTitle(String(item.key), item),
+    rows: buildDiffRows(ruleDisplayFields, {}, item, diffFieldVal),
+    beforePass: null,
+    afterPass: item.pass,
+  }));
+
+  const removed = sortedByKey(diff.removedRules, (item) => String(item.key)).map((item) => ({
+    title: ruleSectionTitle(String(item.key), item),
+    rows: buildDiffRows(ruleDisplayFields, item, {}, diffFieldVal),
+    beforePass: item.pass,
+    afterPass: null,
+  }));
+
+  return [...changed, ...added, ...removed].filter((section) => section.rows.length > 0);
+}
+
 export function InvoiceVersionsAdminScreen() {
   const [invoiceId, setInvoiceId] = useState<string>('');
   const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
@@ -329,6 +452,7 @@ export function InvoiceVersionsAdminScreen() {
   const [selectedDetail, setSelectedDetail] = useState<InvoiceVersionDetail | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [drawerView, setDrawerView] = useState<DrawerView>('details');
 
   const [diJson, setDiJson] = useState<any | null>(null);
   const [genaiJson, setGenaiJson] = useState<any | null>(null);
@@ -340,12 +464,6 @@ export function InvoiceVersionsAdminScreen() {
   const [contractorDiff, setContractorDiff] = useState<ContractorDiff | null>(null);
   const [aiDiff, setAiDiff] = useState<AiDiff | null>(null);
   const [lastDiffPair, setLastDiffPair] = useState<{ a: string; b: string } | null>(null);
-
-  const contractorHeaderRef = useRef<HTMLDivElement | null>(null);
-  const contractorLineitemsRef = useRef<HTMLDivElement | null>(null);
-  const aiOverallRef = useRef<HTMLDivElement | null>(null);
-  const aiLocatedRef = useRef<HTMLDivElement | null>(null);
-  const aiRulesRef = useRef<HTMLDivElement | null>(null);
 
   // ============================================================
   // SECTION 01 — ROUTE QUERYSTRING (prefill invoice_id)
@@ -392,6 +510,7 @@ export function InvoiceVersionsAdminScreen() {
 
       setRows(Array.isArray(data?.invoice_versions) ? data.invoice_versions : []);
       setInvoiceMeta(data?.invoice || null);
+      setDrawerView('details');
     } catch (e: any) {
       setError(e?.message || 'Failed to load invoice_versions.');
     } finally {
@@ -423,6 +542,7 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
       setSelectedDetail(iv);
       setDiJson(iv.di_raw_json ?? null);
       setGenaiJson(iv.genai_raw_json ?? null);
+      setDrawerView('details');
     } catch (e: any) {
       setError(e?.message || 'Failed to load JSON blobs.');
       setSelectedVersionId('');
@@ -510,10 +630,6 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
     if (id === diffAId) setDiffAId('');
   };
 
-  const jumpTo = (target: React.RefObject<HTMLDivElement | null>) => {
-    target.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const detailEntries = selectedDetail
     ? Object.entries(selectedDetail)
         .filter(([k]) => {
@@ -524,6 +640,10 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
         })
         .sort(([a], [b]) => a.localeCompare(b))
     : [];
+
+  const contractorLineSections = contractorDiff ? lineitemDiffSections(contractorDiff) : [];
+  const aiLocatedSections = aiDiff ? locatedFieldDiffSections(aiDiff) : [];
+  const aiRuleSections = aiDiff ? ruleDiffSections(aiDiff) : [];
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
@@ -722,11 +842,11 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
             </Table>
           </Box>
 
-          {/* json panels */}
+          {/* diff panels */}
           <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
             <Flex align="center" justify="space-between" mb={2}>
               <Text fontSize="sm" fontWeight="bold">
-                JSON displays {selectedVersionId ? `(invoice_version_id: ${selectedVersionId})` : ''}
+                Version diffs
               </Text>
               <Flex align="center" gap={2}>
                 <Tooltip label="Refresh A vs B diff tabs">
@@ -784,130 +904,22 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 >
 
               <TabList>
-                <Tab>DI JSON</Tab>
-                <Tab>GenAI JSON</Tab>
-                <Tab>GenAI Advice</Tab>
                 <Tab>Diff Contractor Changes</Tab>
                 <Tab>Diff AI Changes</Tab>
               </TabList>
 
               <TabPanels>
                 <TabPanel p={3}>
-                  <Box
-                    as="pre"
-                    fontFamily="mono"
-                    fontSize="xs"
-                    whiteSpace="pre-wrap"
-                    overflow="auto"
-                    maxH="520px"
-                    borderWidth="1px"
-                    borderColor="greys.grey20"
-                    borderRadius="md"
-                    p={3}
-                    bg="gray.50"
-                  >
-                    {selectedVersionId ? prettyJson(diJson) : 'Select a row to load JSON.'}
-                  </Box>
-                </TabPanel>
-
-                <TabPanel p={3}>
-                  <Box
-                    as="pre"
-                    fontFamily="mono"
-                    fontSize="xs"
-                    whiteSpace="pre-wrap"
-                    overflow="auto"
-                    maxH="520px"
-                    borderWidth="1px"
-                    borderColor="greys.grey20"
-                    borderRadius="md"
-                    p={3}
-                    bg="gray.50"
-                  >
-                    {selectedVersionId ? prettyJson(genaiJson) : 'Select a row to load JSON.'}
-                  </Box>
-                </TabPanel>
-
-                <TabPanel p={3}>
-                  <Box
-                    fontSize="sm"
-                    whiteSpace="pre-wrap"
-                    overflow="auto"
-                    maxH="520px"
-                    borderWidth="1px"
-                    borderColor="greys.grey20"
-                    borderRadius="md"
-                    p={3}
-                    bg="gray.50"
-                  >
-                    {selectedVersionId
-                      ? selectedDetail?.genai_admin_advice || 'No admin advice found for this version.'
-                      : 'Select a row to load admin advice.'}
-                  </Box>
-                </TabPanel>
-
-                <TabPanel p={3}>
                   {!contractorDiff ? (
                     <Text fontSize="sm" opacity={0.75}>Pick A and B, then click diff refresh.</Text>
                   ) : (
                     <Flex direction="column" gap={3}>
-                      <Box
-                        position="sticky"
-                        top="0"
-                        zIndex={2}
-                        bg="white"
-                        borderWidth="1px"
-                        borderColor="greys.grey20"
-                        borderRadius="md"
-                        p={2}
-                      >
-                        <Flex align="center" gap={2} wrap="wrap">
-                          <Text fontSize="xs" fontWeight="bold">Contractor diff summary</Text>
-                          <Badge colorScheme="blue">
-                            Total {contractorDiff.changedFields.length + contractorDiff.changedLineitems.length + contractorDiff.addedLineitems.length + contractorDiff.removedLineitems.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={contractorDiff.changedFields.length > 0 ? 'orange' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(contractorHeaderRef)}
-                          >
-                            Header {contractorDiff.changedFields.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={contractorDiff.changedLineitems.length > 0 ? 'orange' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(contractorLineitemsRef)}
-                          >
-                            Changed lines {contractorDiff.changedLineitems.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={contractorDiff.addedLineitems.length > 0 ? 'green' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(contractorLineitemsRef)}
-                          >
-                            Added lines {contractorDiff.addedLineitems.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={contractorDiff.removedLineitems.length > 0 ? 'red' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(contractorLineitemsRef)}
-                          >
-                            Removed lines {contractorDiff.removedLineitems.length}
-                          </Badge>
-                        </Flex>
-                      </Box>
-
-                      <Box ref={contractorHeaderRef} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Flex align="center" gap={2} mb={2} wrap="wrap">
-                          <Text fontSize="sm" fontWeight="bold">Header field changes</Text>
-                          <Badge colorScheme={contractorDiff.changedFields.length > 0 ? 'orange' : 'gray'}>
-                            Changed {contractorDiff.changedFields.length}
-                          </Badge>
-                        </Flex>
+                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Header field changes</Text>
                         {contractorDiff.changedFields.length === 0 ? (
                           <Text fontSize="xs" opacity={0.8}>No header field changes.</Text>
                         ) : (
-                          <Flex direction="column" gap={2} maxH="320px" overflow="auto">
+                          <Flex direction="column" gap={2}>
                             {contractorDiff.changedFields.map((f) => (
                               <Box key={f.label} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
                                 <Text fontSize="xs" fontWeight="bold" mb={1}>{f.label}</Text>
@@ -927,116 +939,35 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                         )}
                       </Box>
 
-                      <Box ref={contractorLineitemsRef} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Flex align="center" gap={2} mb={2} wrap="wrap">
-                          <Text fontSize="sm" fontWeight="bold">Line item changes</Text>
-                          <Badge colorScheme={contractorDiff.changedLineitems.length > 0 ? 'orange' : 'gray'}>Changed {contractorDiff.changedLineitems.length}</Badge>
-                          <Badge colorScheme={contractorDiff.addedLineitems.length > 0 ? 'green' : 'gray'}>Added {contractorDiff.addedLineitems.length}</Badge>
-                          <Badge colorScheme={contractorDiff.removedLineitems.length > 0 ? 'red' : 'gray'}>Removed {contractorDiff.removedLineitems.length}</Badge>
-                        </Flex>
-                        <Flex direction="column" gap={2} maxH="380px" overflow="auto">
-                          {sortedByKey(contractorDiff.changedLineitems, (li) => li.key).map((li) => (
-                            <Box key={`chg-${li.key}`} borderWidth="1px" borderColor="orange.200" borderRadius="md" p={2} bg="orange.50">
-                              <Text fontSize="xs" fontWeight="bold" mb={1}>Changed line {li.key}</Text>
-                              <Flex gap={3}>
-                                <Box flex="1">
-                                  <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                  <Flex direction="column" gap={1}>
-                                    {lineitemFields.map((f) => (
-                                      <Flex key={`before-${li.key}-${f.key}`} justify="space-between" gap={2}>
-                                        <Text fontSize="10px" opacity={0.7}>{f.label}</Text>
-                                        <Text fontSize="xs" fontFamily="mono">{lineitemFieldVal(li.before?.[f.key])}</Text>
-                                      </Flex>
-                                    ))}
-                                  </Flex>
-                                </Box>
-                                <Box flex="1">
-                                  <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                  <Flex direction="column" gap={1}>
-                                    {lineitemFields.map((f) => (
-                                      <Flex key={`after-${li.key}-${f.key}`} justify="space-between" gap={2}>
-                                        <Text fontSize="10px" opacity={0.7}>{f.label}</Text>
-                                        <Text fontSize="xs" fontFamily="mono">{lineitemFieldVal(li.after?.[f.key])}</Text>
-                                      </Flex>
-                                    ))}
-                                  </Flex>
-                                </Box>
-                              </Flex>
-                            </Box>
-                          ))}
-
-                          <Accordion
-                            allowMultiple
-                            defaultIndex={
-                              contractorDiff.addedLineitems.length > 0
-                                ? [0]
-                                : contractorDiff.removedLineitems.length > 0
-                                  ? [1]
-                                  : []
-                            }
-                          >
-                            <AccordionItem border="1px solid" borderColor="green.200" borderRadius="md" bg="green.50">
-                              <AccordionButton>
-                                <Flex flex="1" align="center" justify="space-between" pr={2}>
-                                  <Text fontSize="xs" fontWeight="bold">Added lines</Text>
-                                  <Badge colorScheme={contractorDiff.addedLineitems.length > 0 ? 'green' : 'gray'}>{contractorDiff.addedLineitems.length}</Badge>
-                                </Flex>
-                                <AccordionIcon />
-                              </AccordionButton>
-                              <AccordionPanel pt={0}>
-                                <Flex direction="column" gap={2}>
-                                  {sortedByKey(contractorDiff.addedLineitems, (li) => String(li.key)).map((li) => (
-                                    <Box key={`add-${li.key}`} borderWidth="1px" borderColor="green.200" borderRadius="md" p={2} bg="white">
-                                      <Text fontSize="xs" fontWeight="bold" mb={1}>Added line {li.key}</Text>
-                                      <Flex direction="column" gap={1}>
-                                        {lineitemFields.map((f) => (
-                                          <Flex key={`add-${li.key}-${f.key}`} justify="space-between" gap={2}>
-                                            <Text fontSize="10px" opacity={0.7}>{f.label}</Text>
-                                            <Text fontSize="xs" fontFamily="mono">{lineitemFieldVal(li[f.key])}</Text>
-                                          </Flex>
-                                        ))}
+                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Line item changes</Text>
+                        <Flex direction="column" gap={2}>
+                          {contractorLineSections.length === 0 ? (
+                            <Text fontSize="xs" opacity={0.8}>No line item changes.</Text>
+                          ) : (
+                            contractorLineSections.map((section) => (
+                              <Box key={section.title} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
+                                <Text fontSize="xs" fontWeight="bold" mb={1}>{section.title}</Text>
+                                <Flex direction="column" gap={1}>
+                                  {section.rows.map((row) => (
+                                    <Box key={`${section.title}-${row.label}`} borderTopWidth="1px" borderColor="gray.100" pt={1}>
+                                      <Text fontSize="10px" opacity={0.7}>{row.label}</Text>
+                                      <Flex gap={3}>
+                                        <Box flex="1">
+                                          <Text fontSize="10px" opacity={0.7}>A (before)</Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.before || '-'}</Text>
+                                        </Box>
+                                        <Box flex="1">
+                                          <Text fontSize="10px" opacity={0.7}>B (after)</Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.after || '-'}</Text>
+                                        </Box>
                                       </Flex>
                                     </Box>
                                   ))}
-                                  {contractorDiff.addedLineitems.length === 0 && <Text fontSize="xs" opacity={0.8}>No added lines.</Text>}
                                 </Flex>
-                              </AccordionPanel>
-                            </AccordionItem>
-
-                            <AccordionItem border="1px solid" borderColor="red.200" borderRadius="md" bg="red.50" mt={2}>
-                              <AccordionButton>
-                                <Flex flex="1" align="center" justify="space-between" pr={2}>
-                                  <Text fontSize="xs" fontWeight="bold">Removed lines</Text>
-                                  <Badge colorScheme={contractorDiff.removedLineitems.length > 0 ? 'red' : 'gray'}>{contractorDiff.removedLineitems.length}</Badge>
-                                </Flex>
-                                <AccordionIcon />
-                              </AccordionButton>
-                              <AccordionPanel pt={0}>
-                                <Flex direction="column" gap={2}>
-                                  {sortedByKey(contractorDiff.removedLineitems, (li) => String(li.key)).map((li) => (
-                                    <Box key={`remove-${li.key}`} borderWidth="1px" borderColor="red.200" borderRadius="md" p={2} bg="white">
-                                      <Text fontSize="xs" fontWeight="bold" mb={1}>Removed line {li.key}</Text>
-                                      <Flex direction="column" gap={1}>
-                                        {lineitemFields.map((f) => (
-                                          <Flex key={`remove-${li.key}-${f.key}`} justify="space-between" gap={2}>
-                                            <Text fontSize="10px" opacity={0.7}>{f.label}</Text>
-                                            <Text fontSize="xs" fontFamily="mono">{lineitemFieldVal(li[f.key])}</Text>
-                                          </Flex>
-                                        ))}
-                                      </Flex>
-                                    </Box>
-                                  ))}
-                                  {contractorDiff.removedLineitems.length === 0 && <Text fontSize="xs" opacity={0.8}>No removed lines.</Text>}
-                                </Flex>
-                              </AccordionPanel>
-                            </AccordionItem>
-                          </Accordion>
-
-                          {contractorDiff.addedLineitems.length === 0 &&
-                            contractorDiff.removedLineitems.length === 0 &&
-                            contractorDiff.changedLineitems.length === 0 && (
-                              <Text fontSize="xs" opacity={0.8}>No line item changes.</Text>
-                            )}
+                              </Box>
+                            ))
+                          )}
                         </Flex>
                       </Box>
                     </Flex>
@@ -1048,81 +979,12 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                     <Text fontSize="sm" opacity={0.75}>Pick A and B, then click diff refresh.</Text>
                   ) : (
                     <Flex direction="column" gap={3}>
-                      <Box
-                        position="sticky"
-                        top="0"
-                        zIndex={2}
-                        bg="white"
-                        borderWidth="1px"
-                        borderColor="greys.grey20"
-                        borderRadius="md"
-                        p={2}
-                      >
-                        <Flex align="center" gap={2} wrap="wrap">
-                          <Text fontSize="xs" fontWeight="bold">AI diff summary</Text>
-                          <Badge colorScheme="blue">
-                            Total {aiDiff.overallChanges.length + aiDiff.changedFields.length + aiDiff.addedFields.length + aiDiff.removedFields.length + aiDiff.changedRules.length + aiDiff.addedRules.length + aiDiff.removedRules.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.overallChanges.length > 0 ? 'orange' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiOverallRef)}
-                          >
-                            Overall {aiDiff.overallChanges.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.changedFields.length > 0 ? 'orange' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiLocatedRef)}
-                          >
-                            Changed fields {aiDiff.changedFields.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.addedFields.length > 0 ? 'green' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiLocatedRef)}
-                          >
-                            Added fields {aiDiff.addedFields.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.removedFields.length > 0 ? 'red' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiLocatedRef)}
-                          >
-                            Removed fields {aiDiff.removedFields.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.changedRules.length > 0 ? 'orange' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiRulesRef)}
-                          >
-                            Changed rules {aiDiff.changedRules.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.addedRules.length > 0 ? 'green' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiRulesRef)}
-                          >
-                            Added rules {aiDiff.addedRules.length}
-                          </Badge>
-                          <Badge
-                            colorScheme={aiDiff.removedRules.length > 0 ? 'red' : 'gray'}
-                            cursor="pointer"
-                            onClick={() => jumpTo(aiRulesRef)}
-                          >
-                            Removed rules {aiDiff.removedRules.length}
-                          </Badge>
-                        </Flex>
-                      </Box>
-
-                      <Box ref={aiOverallRef} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Flex align="center" gap={2} mb={2} wrap="wrap">
-                          <Text fontSize="sm" fontWeight="bold">Overall AI field changes ({aiDiff.overallChanges.length})</Text>
-                        </Flex>
+                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Overall AI changes</Text>
                         {aiDiff.overallChanges.length === 0 ? (
                           <Text fontSize="xs" opacity={0.8}>No overall AI field changes.</Text>
                         ) : (
-                          <Flex direction="column" gap={2} maxH="260px" overflow="auto">
+                          <Flex direction="column" gap={2}>
                             {aiDiff.overallChanges.map((f) => (
                               <Box key={f.label} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
                                 <Text fontSize="xs" fontWeight="bold" mb={1}>{f.label}</Text>
@@ -1142,226 +1004,81 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                         )}
                       </Box>
 
-                      <Box ref={aiLocatedRef} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Flex align="center" gap={2} mb={2} wrap="wrap">
-                          <Text fontSize="sm" fontWeight="bold">Located field changes</Text>
-                          <Badge colorScheme={aiDiff.changedFields.length > 0 ? 'orange' : 'gray'}>Changed {aiDiff.changedFields.length}</Badge>
-                          <Badge colorScheme={aiDiff.addedFields.length > 0 ? 'green' : 'gray'}>Added {aiDiff.addedFields.length}</Badge>
-                          <Badge colorScheme={aiDiff.removedFields.length > 0 ? 'red' : 'gray'}>Removed {aiDiff.removedFields.length}</Badge>
-                        </Flex>
-                        <Flex direction="column" gap={2} maxH="300px" overflow="auto">
-                          {sortedByKey(aiDiff.changedFields, (f) => f.key).map((f, idx) => (
-                            <Box key={`chgf-${f.key}-${idx}`} borderWidth="1px" borderColor="orange.200" borderRadius="md" p={2} bg="orange.50">
-                              <Text fontSize="xs" fontWeight="bold" mb={1}>Changed field {f.before?.field_key || f.after?.field_key || f.key}</Text>
-                              <Flex gap={3}>
-                                <Box flex="1">
-                                  <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                  <Flex direction="column" gap={1}>
-                                    {locatedFieldDisplayFields.map((df) => (
-                                      <Flex key={`loc-before-${f.key}-${df.key}-${idx}`} justify="space-between" gap={2}>
-                                        <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                        <Text fontSize="xs" fontFamily="mono">{diffFieldVal(f.before?.[df.key])}</Text>
-                                      </Flex>
-                                    ))}
-                                  </Flex>
-                                </Box>
-                                <Box flex="1">
-                                  <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                  <Flex direction="column" gap={1}>
-                                    {locatedFieldDisplayFields.map((df) => (
-                                      <Flex key={`loc-after-${f.key}-${df.key}-${idx}`} justify="space-between" gap={2}>
-                                        <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                        <Text fontSize="xs" fontFamily="mono">{diffFieldVal(f.after?.[df.key])}</Text>
-                                      </Flex>
-                                    ))}
-                                  </Flex>
-                                </Box>
-                              </Flex>
-                            </Box>
-                          ))}
-
-                          <Accordion
-                            allowMultiple
-                            defaultIndex={
-                              aiDiff.addedFields.length > 0
-                                ? [0]
-                                : aiDiff.removedFields.length > 0
-                                  ? [1]
-                                  : []
-                            }
-                          >
-                            <AccordionItem border="1px solid" borderColor="green.200" borderRadius="md" bg="green.50">
-                              <AccordionButton>
-                                <Flex flex="1" align="center" justify="space-between" pr={2}>
-                                  <Text fontSize="xs" fontWeight="bold">Added fields</Text>
-                                  <Badge colorScheme={aiDiff.addedFields.length > 0 ? 'green' : 'gray'}>{aiDiff.addedFields.length}</Badge>
-                                </Flex>
-                                <AccordionIcon />
-                              </AccordionButton>
-                              <AccordionPanel pt={0}>
-                                <Flex direction="column" gap={2}>
-                                  {sortedByKey(aiDiff.addedFields, (f) => String(f.key)).map((f, idx) => (
-                                    <Box key={`addf-${f.key}`} borderWidth="1px" borderColor="green.200" borderRadius="md" p={2} bg="white">
-                                      <Text fontSize="xs" fontWeight="bold" mb={1}>Added field {f.field_key || f.key}</Text>
-                                      <Flex direction="column" gap={1}>
-                                        {locatedFieldDisplayFields.map((df) => (
-                                          <Flex key={`loc-add-${f.key}-${df.key}-${idx}`} justify="space-between" gap={2}>
-                                            <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                            <Text fontSize="xs" fontFamily="mono">{diffFieldVal(f[df.key])}</Text>
-                                          </Flex>
-                                        ))}
+                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Located field changes</Text>
+                        {aiLocatedSections.length === 0 ? (
+                          <Text fontSize="xs" opacity={0.8}>No located field changes.</Text>
+                        ) : (
+                          <Flex direction="column" gap={2}>
+                            {aiLocatedSections.map((section) => (
+                              <Box key={section.title} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
+                                <Text fontSize="xs" fontWeight="bold" mb={1}>{section.title}</Text>
+                                <Flex direction="column" gap={1}>
+                                  {section.rows.map((row) => (
+                                    <Box key={`${section.title}-${row.label}`} borderTopWidth="1px" borderColor="gray.100" pt={1}>
+                                      <Text fontSize="10px" opacity={0.7}>{row.label}</Text>
+                                      <Flex gap={3}>
+                                        <Box flex="1">
+                                          <Text fontSize="10px" opacity={0.7}>A (before)</Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.before || '-'}</Text>
+                                        </Box>
+                                        <Box flex="1">
+                                          <Text fontSize="10px" opacity={0.7}>B (after)</Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.after || '-'}</Text>
+                                        </Box>
                                       </Flex>
                                     </Box>
                                   ))}
-                                  {aiDiff.addedFields.length === 0 && <Text fontSize="xs" opacity={0.8}>No added fields.</Text>}
                                 </Flex>
-                              </AccordionPanel>
-                            </AccordionItem>
-
-                            <AccordionItem border="1px solid" borderColor="red.200" borderRadius="md" bg="red.50" mt={2}>
-                              <AccordionButton>
-                                <Flex flex="1" align="center" justify="space-between" pr={2}>
-                                  <Text fontSize="xs" fontWeight="bold">Removed fields</Text>
-                                  <Badge colorScheme={aiDiff.removedFields.length > 0 ? 'red' : 'gray'}>{aiDiff.removedFields.length}</Badge>
-                                </Flex>
-                                <AccordionIcon />
-                              </AccordionButton>
-                              <AccordionPanel pt={0}>
-                                <Flex direction="column" gap={2}>
-                                  {sortedByKey(aiDiff.removedFields, (f) => String(f.key)).map((f, idx) => (
-                                    <Box key={`rmf-${f.key}`} borderWidth="1px" borderColor="red.200" borderRadius="md" p={2} bg="white">
-                                      <Text fontSize="xs" fontWeight="bold" mb={1}>Removed field {f.field_key || f.key}</Text>
-                                      <Flex direction="column" gap={1}>
-                                        {locatedFieldDisplayFields.map((df) => (
-                                          <Flex key={`loc-remove-${f.key}-${df.key}-${idx}`} justify="space-between" gap={2}>
-                                            <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                            <Text fontSize="xs" fontFamily="mono">{diffFieldVal(f[df.key])}</Text>
-                                          </Flex>
-                                        ))}
-                                      </Flex>
-                                    </Box>
-                                  ))}
-                                  {aiDiff.removedFields.length === 0 && <Text fontSize="xs" opacity={0.8}>No removed fields.</Text>}
-                                </Flex>
-                              </AccordionPanel>
-                            </AccordionItem>
-                          </Accordion>
-
-                          {aiDiff.addedFields.length === 0 && aiDiff.removedFields.length === 0 && aiDiff.changedFields.length === 0 && (
-                            <Text fontSize="xs" opacity={0.8}>No located field changes.</Text>
-                          )}
-                        </Flex>
+                              </Box>
+                            ))}
+                          </Flex>
+                        )}
                       </Box>
 
-                      <Box ref={aiRulesRef} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Flex align="center" gap={2} mb={2} wrap="wrap">
-                          <Text fontSize="sm" fontWeight="bold">Rulecheck changes</Text>
-                          <Badge colorScheme={aiDiff.changedRules.length > 0 ? 'orange' : 'gray'}>Changed {aiDiff.changedRules.length}</Badge>
-                          <Badge colorScheme={aiDiff.addedRules.length > 0 ? 'green' : 'gray'}>Added {aiDiff.addedRules.length}</Badge>
-                          <Badge colorScheme={aiDiff.removedRules.length > 0 ? 'red' : 'gray'}>Removed {aiDiff.removedRules.length}</Badge>
-                        </Flex>
-                        <Flex direction="column" gap={2} maxH="300px" overflow="auto">
-                          {sortedByKey(aiDiff.changedRules, (r) => r.key).map((r) => (
-                            <Box key={`chgr-${r.key}`} borderWidth="1px" borderColor="orange.200" borderRadius="md" p={2} bg="orange.50">
-                              <Text fontSize="xs" fontWeight="bold" mb={1}>Changed rule {r.key}</Text>
-                              <Flex gap={3}>
-                                <Box flex="1">
-                                  <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                  <Flex direction="column" gap={1}>
-                                    {ruleDisplayFields.map((df) => (
-                                      <Flex key={`rule-before-${r.key}-${df.key}`} justify="space-between" gap={2}>
-                                        <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                        <Text fontSize="xs" fontFamily="mono">{diffFieldVal(r.before?.[df.key])}</Text>
-                                      </Flex>
-                                    ))}
+                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Rulecheck changes</Text>
+                        {aiRuleSections.length === 0 ? (
+                          <Text fontSize="xs" opacity={0.8}>No rulecheck changes.</Text>
+                        ) : (
+                          <Flex direction="column" gap={2}>
+                            {aiRuleSections.map((section) => (
+                              <Box key={section.title} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
+                                <Flex align="center" justify="space-between" gap={3} mb={1} wrap="wrap">
+                                  <Text fontSize="xs" fontWeight="bold">{section.title}</Text>
+                                  <Flex align="center" gap={3}>
+                                    <Flex align="center" gap={2}>
+                                      <Text fontSize="10px" opacity={0.7}>A</Text>
+                                      <StatusDot pass={section.beforePass} />
+                                    </Flex>
+                                    <Text fontSize="10px" opacity={0.5}>→</Text>
+                                    <Flex align="center" gap={2}>
+                                      <Text fontSize="10px" opacity={0.7}>B</Text>
+                                      <StatusDot pass={section.afterPass} />
+                                    </Flex>
                                   </Flex>
-                                </Box>
-                                <Box flex="1">
-                                  <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                  <Flex direction="column" gap={1}>
-                                    {ruleDisplayFields.map((df) => (
-                                      <Flex key={`rule-after-${r.key}-${df.key}`} justify="space-between" gap={2}>
-                                        <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                        <Text fontSize="xs" fontFamily="mono">{diffFieldVal(r.after?.[df.key])}</Text>
-                                      </Flex>
-                                    ))}
-                                  </Flex>
-                                </Box>
-                              </Flex>
-                            </Box>
-                          ))}
-
-                          <Accordion
-                            allowMultiple
-                            defaultIndex={
-                              aiDiff.addedRules.length > 0
-                                ? [0]
-                                : aiDiff.removedRules.length > 0
-                                  ? [1]
-                                  : []
-                            }
-                          >
-                            <AccordionItem border="1px solid" borderColor="green.200" borderRadius="md" bg="green.50">
-                              <AccordionButton>
-                                <Flex flex="1" align="center" justify="space-between" pr={2}>
-                                  <Text fontSize="xs" fontWeight="bold">Added rules</Text>
-                                  <Badge colorScheme={aiDiff.addedRules.length > 0 ? 'green' : 'gray'}>{aiDiff.addedRules.length}</Badge>
                                 </Flex>
-                                <AccordionIcon />
-                              </AccordionButton>
-                              <AccordionPanel pt={0}>
-                                <Flex direction="column" gap={2}>
-                                  {sortedByKey(aiDiff.addedRules, (r) => String(r.key)).map((r) => (
-                                    <Box key={`addr-${r.key}`} borderWidth="1px" borderColor="green.200" borderRadius="md" p={2} bg="white">
-                                      <Text fontSize="xs" fontWeight="bold" mb={1}>Added rule {r.key}</Text>
-                                      <Flex direction="column" gap={1}>
-                                        {ruleDisplayFields.map((df) => (
-                                          <Flex key={`rule-add-${r.key}-${df.key}`} justify="space-between" gap={2}>
-                                            <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                            <Text fontSize="xs" fontFamily="mono">{diffFieldVal(r[df.key])}</Text>
-                                          </Flex>
-                                        ))}
+                                <Flex direction="column" gap={1}>
+                                  {section.rows.map((row) => (
+                                    <Box key={`${section.title}-${row.label}`} borderTopWidth="1px" borderColor="gray.100" pt={1}>
+                                      <Text fontSize="10px" opacity={0.7}>{row.label}</Text>
+                                      <Flex gap={3}>
+                                        <Box flex="1">
+                                          <Text fontSize="10px" opacity={0.7}>A (before)</Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.before || '-'}</Text>
+                                        </Box>
+                                        <Box flex="1">
+                                          <Text fontSize="10px" opacity={0.7}>B (after)</Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.after || '-'}</Text>
+                                        </Box>
                                       </Flex>
                                     </Box>
                                   ))}
-                                  {aiDiff.addedRules.length === 0 && <Text fontSize="xs" opacity={0.8}>No added rules.</Text>}
                                 </Flex>
-                              </AccordionPanel>
-                            </AccordionItem>
-
-                            <AccordionItem border="1px solid" borderColor="red.200" borderRadius="md" bg="red.50" mt={2}>
-                              <AccordionButton>
-                                <Flex flex="1" align="center" justify="space-between" pr={2}>
-                                  <Text fontSize="xs" fontWeight="bold">Removed rules</Text>
-                                  <Badge colorScheme={aiDiff.removedRules.length > 0 ? 'red' : 'gray'}>{aiDiff.removedRules.length}</Badge>
-                                </Flex>
-                                <AccordionIcon />
-                              </AccordionButton>
-                              <AccordionPanel pt={0}>
-                                <Flex direction="column" gap={2}>
-                                  {sortedByKey(aiDiff.removedRules, (r) => String(r.key)).map((r) => (
-                                    <Box key={`rmr-${r.key}`} borderWidth="1px" borderColor="red.200" borderRadius="md" p={2} bg="white">
-                                      <Text fontSize="xs" fontWeight="bold" mb={1}>Removed rule {r.key}</Text>
-                                      <Flex direction="column" gap={1}>
-                                        {ruleDisplayFields.map((df) => (
-                                          <Flex key={`rule-remove-${r.key}-${df.key}`} justify="space-between" gap={2}>
-                                            <Text fontSize="10px" opacity={0.7}>{df.label}</Text>
-                                            <Text fontSize="xs" fontFamily="mono">{diffFieldVal(r[df.key])}</Text>
-                                          </Flex>
-                                        ))}
-                                      </Flex>
-                                    </Box>
-                                  ))}
-                                  {aiDiff.removedRules.length === 0 && <Text fontSize="xs" opacity={0.8}>No removed rules.</Text>}
-                                </Flex>
-                              </AccordionPanel>
-                            </AccordionItem>
-                          </Accordion>
-
-                          {aiDiff.addedRules.length === 0 && aiDiff.removedRules.length === 0 && aiDiff.changedRules.length === 0 && (
-                            <Text fontSize="xs" opacity={0.8}>No rulecheck changes.</Text>
-                          )}
-                        </Flex>
+                              </Box>
+                            ))}
+                          </Flex>
+                        )}
                       </Box>
                     </Flex>
                   )}
@@ -1372,42 +1089,143 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
         </Box>
       </Container>
 
-      <Drawer isOpen={isDrawerOpen} placement="right" onClose={() => setIsDrawerOpen(false)} size="md">
+      <Drawer isOpen={isDrawerOpen} placement="right" onClose={() => setIsDrawerOpen(false)} size="xl">
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Invoice Version Full Details</DrawerHeader>
+          <DrawerHeader>Invoice Version Inspection Details</DrawerHeader>
           <DrawerBody>
             {!selectedDetail ? (
               <Text fontSize="sm" opacity={0.7}>No row selected.</Text>
             ) : (
               <Flex direction="column" gap={3}>
-                {detailEntries.map(([k, v]) => (
-                  <Box key={k}>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>{k}</Text>
-                    {typeof v === 'object' && v !== null ? (
-                      <Box
-                        as="pre"
-                        fontFamily="mono"
-                        fontSize="xs"
-                        whiteSpace="pre-wrap"
-                        borderWidth="1px"
-                        borderColor="greys.grey20"
-                        borderRadius="md"
-                        p={2}
-                        bg="gray.50"
-                        maxH="220px"
-                        overflow="auto"
-                      >
-                        {prettyJson(v)}
+                <Flex gap={2} wrap="wrap">
+                  <Button
+                    size="sm"
+                    variant={drawerView === 'details' ? 'solid' : 'outline'}
+                    colorScheme="blue"
+                    onClick={() => setDrawerView('details')}
+                  >
+                    Details
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={drawerView === 'diJson' ? 'solid' : 'outline'}
+                    colorScheme="blue"
+                    onClick={() => setDrawerView('diJson')}
+                  >
+                    DI JSON
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={drawerView === 'genaiJson' ? 'solid' : 'outline'}
+                    colorScheme="blue"
+                    onClick={() => setDrawerView('genaiJson')}
+                  >
+                    GenAI JSON
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={drawerView === 'genaiAdvice' ? 'solid' : 'outline'}
+                    colorScheme="blue"
+                    onClick={() => setDrawerView('genaiAdvice')}
+                  >
+                    GenAI Advice
+                  </Button>
+                </Flex>
+
+                {drawerView === 'details' && (
+                  <Flex direction="column" gap={3}>
+                    {detailEntries.map(([k, v]) => (
+                      <Box key={k}>
+                        <Text fontSize="xs" opacity={0.7} mb={1}>{k}</Text>
+                        {typeof v === 'object' && v !== null ? (
+                          <Box
+                            as="pre"
+                            fontFamily="mono"
+                            fontSize="xs"
+                            whiteSpace="pre-wrap"
+                            borderWidth="1px"
+                            borderColor="greys.grey20"
+                            borderRadius="md"
+                            p={3}
+                            bg="gray.50"
+                            maxH="260px"
+                            overflow="auto"
+                          >
+                            {prettyJson(v)}
+                          </Box>
+                        ) : (
+                          <Text fontSize="sm" fontFamily={k.endsWith('_id') ? 'mono' : undefined} whiteSpace="pre-wrap">
+                            {v === null || v === undefined || v === '' ? '—' : String(v)}
+                          </Text>
+                        )}
                       </Box>
-                    ) : (
-                      <Text fontSize="sm" fontFamily={k.endsWith('_id') ? 'mono' : undefined} whiteSpace="pre-wrap">
-                        {v === null || v === undefined || v === '' ? '—' : String(v)}
-                      </Text>
-                    )}
+                    ))}
+                  </Flex>
+                )}
+
+                {drawerView === 'diJson' && (
+                  <Box>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>di_raw_json</Text>
+                    <Box
+                      as="pre"
+                      fontFamily="mono"
+                      fontSize="xs"
+                      whiteSpace="pre-wrap"
+                      borderWidth="1px"
+                      borderColor="greys.grey20"
+                      borderRadius="md"
+                      p={3}
+                      bg="gray.50"
+                      minH="420px"
+                      maxH="70vh"
+                      overflow="auto"
+                    >
+                      {diJson ? prettyJson(diJson) : 'No DI JSON found for this version.'}
+                    </Box>
                   </Box>
-                ))}
+                )}
+
+                {drawerView === 'genaiJson' && (
+                  <Box>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>genai_raw_json</Text>
+                    <Box
+                      as="pre"
+                      fontFamily="mono"
+                      fontSize="xs"
+                      whiteSpace="pre-wrap"
+                      borderWidth="1px"
+                      borderColor="greys.grey20"
+                      borderRadius="md"
+                      p={3}
+                      bg="gray.50"
+                      minH="420px"
+                      maxH="70vh"
+                      overflow="auto"
+                    >
+                      {genaiJson ? prettyJson(genaiJson) : 'No GenAI JSON found for this version.'}
+                    </Box>
+                  </Box>
+                )}
+
+                {drawerView === 'genaiAdvice' && (
+                  <Box>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>genai_admin_advice</Text>
+                    <Box
+                      borderWidth="1px"
+                      borderColor="greys.grey20"
+                      borderRadius="md"
+                      p={3}
+                      bg="gray.50"
+                      minH="220px"
+                    >
+                      <Text fontSize="sm" whiteSpace="pre-wrap">
+                        {selectedDetail?.genai_admin_advice ? String(selectedDetail.genai_admin_advice) : 'No GenAI advice found for this version.'}
+                      </Text>
+                    </Box>
+                  </Box>
+                )}
               </Flex>
             )}
           </DrawerBody>
@@ -1425,7 +1243,7 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                 <Text fontWeight="bold" mb={1}>What this page is for</Text>
                 <Text fontSize="sm">
                   Use this page to compare two invoice versions and quickly see what changed.
-                  You can compare contractor-side extracted data and AI-side extracted/check data.
+                  The main view is now focused on just the two diff tabs: contractor changes and AI changes.
                 </Text>
               </Box>
 
@@ -1444,8 +1262,8 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                 <Text fontSize="sm">1. Pick one row as A and one row as B.</Text>
                 <Text fontSize="sm">2. Click the diff refresh icon.</Text>
                 <Text fontSize="sm">3. Read the two diff tabs:</Text>
-                <Text fontSize="sm">- Diff Contractor Changes: invoice/header fields and line item changes.</Text>
-                <Text fontSize="sm">- Diff AI Changes: AI extracted fields and AI rule check changes.</Text>
+                <Text fontSize="sm">- Diff Contractor Changes: invoice/header fields and line item changes only when the values actually changed.</Text>
+                <Text fontSize="sm">- Diff AI Changes: AI extracted fields and AI rule check changes only when the values actually changed.</Text>
               </Box>
 
               <Box>
@@ -1456,15 +1274,19 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               </Box>
 
               <Box>
-                <Text fontWeight="bold" mb={1}>Examples</Text>
-                <Text fontSize="sm">Example 1: Contractor line item quantity changed from 2 to 3. This appears under Changed line in contractor diff.</Text>
-                <Text fontSize="sm">Example 2: AI rule changed from pass=true to pass=false. This appears under Changed rule in AI diff.</Text>
-                <Text fontSize="sm">Example 3: A located field moved line but value stayed the same. This is not treated as a content change.</Text>
+                <Text fontWeight="bold" mb={1}>Drawer contents</Text>
+                <Text fontSize="sm">Use the row details icon to open the drawer.</Text>
+                <Text fontSize="sm">Inside the drawer you can switch between:</Text>
+                <Text fontSize="sm">- Details</Text>
+                <Text fontSize="sm">- DI JSON</Text>
+                <Text fontSize="sm">- GenAI JSON</Text>
+                <Text fontSize="sm">- GenAI Advice</Text>
               </Box>
 
               <Box>
                 <Text fontWeight="bold" mb={1}>Tips</Text>
-                <Text fontSize="sm">- Start with the summary badges to see where changes exist.</Text>
+                <Text fontSize="sm">- Only changed values are shown in the diff tabs.</Text>
+                <Text fontSize="sm">- Added or removed values are shown as a before/after change rather than with badges.</Text>
                 <Text fontSize="sm">- Use the row PDF icon to open the version PDF in a separate tab if you need visual confirmation.</Text>
                 <Text fontSize="sm">- If nothing appears in changed sections, the two versions are effectively the same for that section.</Text>
               </Box>

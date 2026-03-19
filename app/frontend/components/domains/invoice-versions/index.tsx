@@ -94,6 +94,13 @@ const FieldRow = ({ label, value, active, disabled, onClick }: FieldRowProps) =>
   );
 };
 
+const displayLocatedFieldValue = (row: any): string => {
+  if (row?.value_text != null && row.value_text !== "") return String(row.value_text);
+  if (row?.value_json != null) return JSON.stringify(row.value_json);
+  if (row?.normalized_value != null && row.normalized_value !== "") return String(row.normalized_value);
+  return "-";
+};
+
 // ============================================================
 // SECTION 01.02 — UI COMPONENTS (STATUS DOT)
 // PURPOSE: Small red/green/gray dot for pass/fail/unknown
@@ -1099,15 +1106,7 @@ flexShrink={0}
 
       {genAiFields.map((r: any) => {
         const label = `${r.field_key}${r.line_number != null ? ` (line ${r.line_number})` : ""}`;
-
-        const value =
-          (r.normalized_value != null && r.normalized_value !== "")
-            ? String(r.normalized_value)
-            : (r.value_text != null && r.value_text !== "")
-              ? String(r.value_text)
-              : (r.value_json != null)
-                ? JSON.stringify(r.value_json)
-                : "-";
+        const value = displayLocatedFieldValue(r);
 
         const meta = [
           r.page != null ? `p${r.page}` : null,
@@ -1198,15 +1197,7 @@ bg={
     {/* list */}
     {codeFields.map((r: any) => {
       const label = `${r.field_key}${r.line_number != null ? ` (line ${r.line_number})` : ""}`;
-
-      const value =
-        (r.normalized_value != null && r.normalized_value !== "")
-          ? String(r.normalized_value)
-          : (r.value_text != null && r.value_text !== "")
-            ? String(r.value_text)
-            : (r.value_json != null)
-              ? JSON.stringify(r.value_json)
-              : "-";
+      const value = displayLocatedFieldValue(r);
 
       const meta = [
         r.page != null ? `p${r.page}` : null,

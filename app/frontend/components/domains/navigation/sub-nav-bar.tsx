@@ -75,6 +75,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/sessions-admin': [{ href: '/sessions-admin', title: t('home.sessionsAdminTitle') }],
       '/rulesets-admin': [{ href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') }],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
+      '/users-admin': [{ href: '/users-admin', title: t('home.usersAdminTitle') }],
       '/revision-requests-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/revision-requests-admin', title: 'Revision Requests Admin' },
@@ -111,9 +112,17 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') },
         { href: '/eligibilitycode-editor', title: 'Eligibility code editor' },
       ],
+      '/user-editor': [
+        { href: '/users-admin', title: t('home.usersAdminTitle') },
+        { href: '/user-editor', title: 'User editor' },
+      ],
       '/admin-create-session': [
         { href: '/sessions-admin', title: t('home.sessionsAdminTitle') },
         { href: '/admin-create-session', title: 'Create session' },
+      ],
+      '/edit-session-admin': [
+        { href: '/sessions-admin', title: t('home.sessionsAdminTitle') },
+        { href: '/edit-session-admin', title: 'Edit session' },
       ],
       '/revision-request-editor': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },

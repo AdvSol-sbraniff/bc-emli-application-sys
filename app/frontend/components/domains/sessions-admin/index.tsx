@@ -29,7 +29,7 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, Info, Question, Trash, XCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretLeft, CaretRight, Info, PencilSimple, Question, Trash, XCircle } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -216,6 +216,10 @@ export default function SessionsAdminScreen() {
   const openInvoicesGrid = (sessionId: string) => {
     const url = `/invoices-admin?session_id=${encodeURIComponent(sessionId)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openEditSession = (sessionId: string) => {
+    window.open(`/edit-session-admin?id=${encodeURIComponent(sessionId)}`, '_blank', 'noopener,noreferrer');
   };
 
   const deleteSession = async (sessionId: string) => {
@@ -432,6 +436,15 @@ export default function SessionsAdminScreen() {
                               variant="outline"
                               icon={<Info size={14} />}
                               onClick={() => openDrawer(r)}
+                            />
+                          </Tooltip>
+                          <Tooltip label="Edit session">
+                            <IconButton
+                              aria-label="Edit session"
+                              size="xs"
+                              variant="outline"
+                              icon={<PencilSimple size={14} />}
+                              onClick={() => openEditSession(r.id)}
                             />
                           </Tooltip>
                           <Tooltip label="Delete session and all child claim records">

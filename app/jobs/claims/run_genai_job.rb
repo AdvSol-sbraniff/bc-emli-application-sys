@@ -85,10 +85,12 @@ Rails.logger.info("[CLAIMS][RUN_GENAI_JOB] START step0.4")
       # NOTE: for now, the "case facts" can be hardcoded sample data per your milestone.
       # Later milestone: replace with DB joins (contractors, users, users_eligibilitycodes, etc.)
 case_facts = Claims::GenaiCaseFacts::Build.call(sess: sess, invoice_version: iv)
+extracted_eligibility_code = Claims::GenaiCaseFacts::Build.extract_eligibility_code(iv.di_raw_json)
 
 Claims::GenaiCaseFacts::Build.persist_code_located_fields!(
   invoice_version_id: iv.id,
-  case_facts: case_facts
+  case_facts: case_facts,
+  extracted_eligibility_code: extracted_eligibility_code
 )
 
       contextwindowjson = build_contextwindowjson(

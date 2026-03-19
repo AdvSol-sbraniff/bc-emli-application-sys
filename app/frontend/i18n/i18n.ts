@@ -2150,6 +2150,7 @@ const options = {
           uploadInvoiceAdminTitle: 'Upload invoice',
           rulesetsAdminTitle: 'Rulesets admin',
           eligibilityAdminTitle: 'Eligibility admin',
+          usersAdminTitle: 'Users admin',
           configureUsersTitle: 'Configure users',
           configureUsersDescription: 'Invite or remove users.',
           apiSettingsTitle: 'API Settings',
