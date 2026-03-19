@@ -461,6 +461,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
         <NavMenuItem label={'Submission Simulator'} to={'/submission-simulator-admin'} />
         <NavMenuItem label={t('home.rulesetsAdminTitle')} to={'/rulesets-admin'} />
         <NavMenuItem label={t('home.eligibilityAdminTitle')} to={'/eligibilitycodes-admin'} />
+        <NavMenuItem label={t('home.usersAdminTitle')} to={'/users-admin'} />
       </MenuGroup>
     </>
   );

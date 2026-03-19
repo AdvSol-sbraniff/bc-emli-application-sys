@@ -61,6 +61,9 @@ const InvoiceVersionByVersionScreen = lazy(() =>
 const AdminCreateSessionScreen = lazy(() =>
   import('../admin-create-session').then((module) => ({ default: module.default })),
 );
+const EditSessionAdminScreen = lazy(() =>
+  import('../edit-session-admin').then((module) => ({ default: module.default })),
+);
 
 const UploadInvoiceAdminScreen = lazy(() =>
   import('../upload-invoice-admin').then((module) => ({ default: module.default })),
@@ -80,6 +83,12 @@ const SessionsAdminScreen = lazy(() =>
 );
 const EligibilitycodesAdminScreen = lazy(() =>
   import('../eligibilitycodes-admin').then((module) => ({ default: module.default })),
+);
+const UsersAdminScreen = lazy(() =>
+  import('../users-admin').then((module) => ({ default: module.default })),
+);
+const UserEditorScreen = lazy(() =>
+  import('../user-editor').then((module) => ({ default: module.default })),
 );
 const EligibilitycodeEditorScreen = lazy(() =>
   import('../eligibilitycode-editor').then((module) => ({ default: module.default })),
@@ -757,12 +766,15 @@ const AppRoutes = observer(() => {
           <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
           <Route path="/rulesets-admin" element={<RulesetsAdminScreen />} />
           <Route path="/admin-create-session" element={<AdminCreateSessionScreen />} />
+          <Route path="/edit-session-admin" element={<EditSessionAdminScreen />} />
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
           <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
+          <Route path="/users-admin" element={<UsersAdminScreen />} />
+          <Route path="/user-editor" element={<UserEditorScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
           <Route path="/revision-requests-admin" element={<RevisionRequestsAdminScreen />} />
           <Route path="/revision-request-editor" element={<RevisionRequestEditorScreen />} />

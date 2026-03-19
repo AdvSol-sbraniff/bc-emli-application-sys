@@ -38,12 +38,7 @@ module Api
         scope = scope.order(order_clause(sort))
         total = scope.count
 
-        # IMPORTANT:
-        # Do NOT .select(...) here. Contractor model methods/associations may touch columns
-        # not in the select list (e.g., contact_id via belongs_to :contact), which triggers
-        # ActiveModel::MissingAttributeError.
         contractors = scope
-          .includes(:contact)
           .offset((page - 1) * per)
           .limit(per)
 
@@ -52,8 +47,7 @@ module Api
             id: c.id,
             business_name: c.business_name,
             contractor_number: c.number,
-            contact_name: c.contact&.name,
-            email: c.contact&.email, # prefer contact email; change to c[:email] if you want contractors.email column
+            email: c.email,
             phone_number: c.phone_number,
             cellphone_number: c.cellphone_number,
             city: c.city,

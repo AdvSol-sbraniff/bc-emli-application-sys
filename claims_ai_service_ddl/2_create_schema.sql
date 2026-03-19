@@ -255,8 +255,8 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
       (value_text IS NULL AND value_json IS NULL)  -- allow �not found� rows
     ),
 
-  CONSTRAINT invoice_version_located_fields_uniq
-    UNIQUE (invoice_version_id, source_engine, field_key, line_number)
+--  CONSTRAINT invoice_version_located_fields_uniq
+--    UNIQUE (invoice_version_id, source_engine, field_key, line_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ivlf_invoice_version

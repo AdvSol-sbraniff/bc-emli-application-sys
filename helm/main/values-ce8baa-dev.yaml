@@ -59,6 +59,7 @@ sidekiq:
   enabled: true
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
+    pullPolicy: Always
 
   resources:
     requests:
@@ -90,6 +91,7 @@ sidekiqClaims:
   enabled: true
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
+    pullPolicy: Always
 
   resources:
     requests:
@@ -105,6 +107,7 @@ claimsAi:
   enabled: true
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-claims-ai
+    pullPolicy: Always
 
   resources:
     requests:
@@ -118,6 +121,7 @@ anycable-rpc:
   enabled: true
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
+    pullPolicy: Always
 
   nameOverride: hesp-anycable-rpc
   fullnameOverride: hesp-anycable-rpc
