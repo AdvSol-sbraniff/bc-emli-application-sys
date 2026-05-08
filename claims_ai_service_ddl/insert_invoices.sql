@@ -1,4 +1,4 @@
-BEGIN;
+ï»¿BEGIN;
 
 -- ============================================================
 -- SEED IDs (fixed, repeatable)
@@ -442,7 +442,7 @@ INSERT INTO claims.invoice_versions (
   1,
   '[5.4878, 2.0141, 6.1149, 2.0119, 6.1149, 2.1637, 5.4878, 2.1642]'::jsonb,
 
-  'Centra® WINDOWS',  --  di_ocr_vendor_name,
+  'CentraÂ® WINDOWS',  --  di_ocr_vendor_name,
   1,
   '[0.9797, 0.537, 3.4301, 0.5511, 3.4255, 1.3663, 0.975, 1.3523]'::jsonb,
 
@@ -499,13 +499,10 @@ INSERT INTO claims.invoice_version_located_fields
   value_type,
   value_text,
   value_json,
-  normalized_value,
   confidence,
   page,
   polygon,
   evidence_text,
-  evidence_hint,
-  notes,
   created_at,
   updated_at
 )
@@ -518,13 +515,10 @@ VALUES
   'text',
   '105091532',
   NULL,
-  '105091532',
   95,
   1,
   '[1.2873, 8.6172, 1.9867, 8.6179, 1.9867, 8.7667, 1.2873, 8.7677]'::jsonb,
   'GST Number 105091532',
-  'Bottom section of invoice near totals',
-  NULL,
   now(),
   now()
 ),
@@ -536,13 +530,10 @@ VALUES
   'text',
   'ESP1-136a31ba',
   NULL,
-  'ESP1',
   94,
   1,
   '[0.2853, 3.9889, 1.3226, 3.9911, 1.3226, 4.1401, 0.2853, 4.1358]'::jsonb,
   'ESP1-136a31ba',
-  'Order details table',
-  NULL,
   now(),
   now()
 ),
@@ -554,13 +545,10 @@ VALUES
   'currency',
   NULL,
   NULL,
-  NULL,
   40,
   NULL,
   NULL,
-  NULL,
-  'No explicit labour total shown',
-  'Invoice shows supply & install but does not separately itemize labour cost.',
+  'No explicit labour total shown. Invoice shows supply and install but does not separately itemize labour cost.',
   now(),
   now()
 ),
@@ -572,13 +560,10 @@ VALUES
   'currency',
   NULL,
   NULL,
-  NULL,
   60,
   1,
   '[6.8533, 8.4581, 6.9395, 8.4592, 6.9395, 8.5861, 6.8529, 8.5849]'::jsonb,
-  'Deposit Received:',
-  'Totals section',
-  'Deposit label present but amount not populated.',
+  'Deposit Received: Totals section. Deposit label present but amount not populated.',
   now(),
   now()
 ),
@@ -590,13 +575,10 @@ VALUES
   'text',
   'NR5707-46721659-ES5',
   NULL,
-  'NR5707-46721659-ES5',
   96,
   1,
   '[3.3654, 4.8774, 4.6042, 4.8788, 4.6042, 5.0304, 3.3644, 5.0322]'::jsonb,
   'NRCan: NR5707-46721659-ES5',
-  'Line item description',
-  NULL,
   now(),
   now()
 ),
@@ -608,12 +590,9 @@ VALUES
   'text',
   NULL,
   NULL,
-  NULL,
   20,
   NULL,
   NULL,
-  NULL,
-  'No CPD identifier found',
   NULL,
   now(),
   now()
@@ -626,13 +605,10 @@ VALUES
   'text',
   'Centra Model 6800 ENERGY STAR windows',
   NULL,
-  'Centra 6800',
   90,
   1,
   NULL,
   'Model: 6800 U-factor: 1.14 ENERGY STAR',
-  'Line item description',
-  NULL,
   now(),
   now()
 ),
@@ -644,13 +620,10 @@ VALUES
   'number',
   '1.14',
   NULL,
-  '1.14',
   95,
   1,
   '[1.5429, 4.8806, 1.767, 4.8794, 1.7665, 5.0311, 1.5425, 5.0313]'::jsonb,
   'U-factor: 1.14',
-  'Line item description',
-  NULL,
   now(),
   now()
 ),
@@ -661,18 +634,14 @@ VALUES
   NULL,
   'json',
   NULL,
-  NULL,  -- NOTE: “not found” row; keep both null
   NULL,
   30,
   NULL,
   NULL,
   NULL,
-  'No labour/unit breakdown provided',
-  NULL,
   now(),
   now()
 );
-
 
 
 

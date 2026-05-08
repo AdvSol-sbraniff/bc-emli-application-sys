@@ -31,6 +31,9 @@ import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
 type RulesetRow = {
   id: string;
+  invoice_upgrade_type_id?: string | null;
+  upgrade_type_key?: string | null;
+  upgrade_type_description?: string | null;
   ruleset_shortname: string;
   created_at?: string | null;
   updated_at?: string | null;
@@ -77,11 +80,7 @@ export default function RulesetsAdminScreen() {
   const [rows, setRows] = useState<RulesetRow[]>([]);
   const [total, setTotal] = useState<number>(0);
 
-  const {
-    isOpen: isHelpOpen,
-    onOpen: onHelpOpen,
-    onClose: onHelpClose,
-  } = useDisclosure();
+  const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
   const didInitFromUrl = useRef(false);
 
@@ -147,7 +146,7 @@ export default function RulesetsAdminScreen() {
         credentials: 'include',
       });
 
-      const data: RulesetApiResp = await res.json().catch(() => ({ rows: [] } as RulesetApiResp));
+      const data: RulesetApiResp = await res.json().catch(() => ({ rows: [] }) as RulesetApiResp);
 
       if (!res.ok) {
         throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
@@ -182,6 +181,10 @@ export default function RulesetsAdminScreen() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
+  const openConfigEditor = () => {
+    window.open('/ruleset-config-editor', '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar title="Rulesets Admin" />
@@ -191,7 +194,7 @@ export default function RulesetsAdminScreen() {
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box flex="1" minW="280px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
-                Search (id, shortname, system_record, user_record1)
+                Search (id, shortname, upgrade type, user_record1)
               </Text>
               <Input
                 value={q}
@@ -223,6 +226,8 @@ export default function RulesetsAdminScreen() {
                 <option value="updated_at:asc">updated_at asc</option>
                 <option value="created_at:desc">created_at desc</option>
                 <option value="created_at:asc">created_at asc</option>
+                <option value="upgrade_type_key:asc">upgrade type asc</option>
+                <option value="upgrade_type_key:desc">upgrade type desc</option>
                 <option value="ruleset_shortname:asc">shortname asc</option>
                 <option value="ruleset_shortname:desc">shortname desc</option>
               </Select>
@@ -249,6 +254,16 @@ export default function RulesetsAdminScreen() {
             </Box>
 
             <HStack spacing={2} pb={1}>
+              <Button size="sm" variant="outline" onClick={openConfigEditor}>
+                Edit AI system config
+              </Button>
+              <Button
+                size="sm"
+                colorScheme="blue"
+                onClick={() => window.open('/ruleset-editor?mode=create', '_blank', 'noopener,noreferrer')}
+              >
+                Create ruleset
+              </Button>
               <Tooltip label="Help: ruleset strategy and governance">
                 <IconButton
                   aria-label="Open ruleset help"
@@ -298,6 +313,7 @@ export default function RulesetsAdminScreen() {
             <Table size="sm" minW="900px">
               <Thead bg="gray.50">
                 <Tr>
+                  <Th>Upgrade type</Th>
                   <Th>ruleset_shortname</Th>
                   <Th>updated_at</Th>
                   <Th>created_at</Th>
@@ -307,7 +323,7 @@ export default function RulesetsAdminScreen() {
               <Tbody>
                 {loading ? (
                   <Tr>
-                    <Td colSpan={4}>
+                    <Td colSpan={5}>
                       <Flex align="center" gap={2} py={3}>
                         <Spinner size="sm" />
                         <Text>Loading rulesets...</Text>
@@ -316,7 +332,7 @@ export default function RulesetsAdminScreen() {
                   </Tr>
                 ) : rows.length === 0 ? (
                   <Tr>
-                    <Td colSpan={4}>
+                    <Td colSpan={5}>
                       <Text py={3} opacity={0.8}>
                         No rulesets found.
                       </Text>
@@ -325,6 +341,12 @@ export default function RulesetsAdminScreen() {
                 ) : (
                   rows.map((row) => (
                     <Tr key={row.id}>
+                      <Td>
+                        <Text fontWeight="semibold">{row.upgrade_type_key || ''}</Text>
+                        <Text fontSize="xs" opacity={0.7}>
+                          {row.upgrade_type_description || ''}
+                        </Text>
+                      </Td>
                       <Td>{row.ruleset_shortname}</Td>
                       <Td>{fmtDate(row.updated_at)}</Td>
                       <Td>{fmtDate(row.created_at)}</Td>
@@ -402,70 +424,86 @@ export default function RulesetsAdminScreen() {
           <DrawerHeader>Rulesets Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              Think of a ruleset as a recipe card for how the system checks invoices. Different upgrade types need different recipe cards.
+              Think of a ruleset as a recipe card for how the system checks invoices. Different upgrade types need
+              different recipe cards.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               One ruleset per upgrade type
             </Text>
             <Text fontSize="sm" mb={3}>
-              Keep separate rulesets for separate upgrade types. For example, heat pumps and windows should not share the same ruleset because they follow different rebate requirements. Use the CleanBC Better Homes Energy Savings Program Rebate Eligibility Requirements website as the source of truth for current upgrade categories and requirements.
+              Keep separate rulesets for separate upgrade types. For example, heat pumps and windows should not share
+              the same ruleset because they follow different rebate requirements. Use the CleanBC Better Homes Energy
+              Savings Program Rebate Eligibility Requirements website as the source of truth for current upgrade
+              categories and requirements.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Shortname naming
             </Text>
             <Text fontSize="sm" mb={3}>
-              Use shortnames that clearly show both upgrade type and version. Example pattern: upgradeType_vYYYY_Qn or upgradeType_v###. This makes it easy for staff to know what rule set is active and what changed over time.
+              Use shortnames that clearly show both upgrade type and version. Example pattern: upgradeType_vYYYY_Qn or
+              upgradeType_v###. This makes it easy for staff to know what rule set is active and what changed over time.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Change strategy
             </Text>
             <Text fontSize="sm" mb={3}>
-              Do not edit an existing ruleset unless it is an emergency. In normal operations, duplicate the ruleset, make changes in the copy, test, then promote the new version. This protects history and avoids breaking prior results unexpectedly.
+              Do not edit an existing ruleset unless it is an emergency. In normal operations, duplicate the ruleset,
+              make changes in the copy, test, then promote the new version. This protects history and avoids breaking
+              prior results unexpectedly.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Testing discipline
             </Text>
             <Text fontSize="sm" mb={3}>
-              Always run a well-defined system integration test suite before rollout. Test against older known cases and current concern cases. The goal is to confirm the change fixes the target issue without causing regressions in other scenarios.
+              Always run a well-defined system integration test suite before rollout. Test against older known cases and
+              current concern cases. The goal is to confirm the change fixes the target issue without causing
+              regressions in other scenarios.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Update cadence
             </Text>
             <Text fontSize="sm" mb={3}>
-              As a governance guideline, avoid changing rules more than quarterly unless policy changes or a critical issue requires faster action.
+              As a governance guideline, avoid changing rules more than quarterly unless policy changes or a critical
+              issue requires faster action.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Keep aligned with published program rules
             </Text>
             <Text fontSize="sm" mb={3}>
-              Rulesets should stay consistent with the published program requirements on the CleanBC website. Internal rule logic should reflect external policy, not drift away from it.
+              Rulesets should stay consistent with the published program requirements on the CleanBC website. Internal
+              rule logic should reflect external policy, not drift away from it.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Why location and rules are separated
             </Text>
             <Text fontSize="sm" mb={3}>
-              The system first finds information (located fields), then applies checks (rule checks). This helps AI work better because rules can reuse the same found values instead of re-searching the document each time.
+              The system first finds information (located fields), then applies checks (rule checks). This helps AI work
+              better because rules can reuse the same found values instead of re-searching the document each time.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               What you see in the PDF viewer
             </Text>
             <Text fontSize="sm" mb={3}>
-              In the PDF viewer, there are separate accordion sections for found values and rule results. This split makes it easier to understand whether a failure happened because data could not be found or because a rule comparison failed.
+              In the PDF viewer, there are separate accordion sections for found values and rule results. This split
+              makes it easier to understand whether a failure happened because data could not be found or because a rule
+              comparison failed.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Dynamic growth over time
             </Text>
             <Text fontSize="sm">
-              Different upgrade types can have different fields and different rules. Also, new rules can be added over time. The stored data is designed to grow flexibly so the viewer can expand naturally without redesigning the page each time a ruleset evolves.
+              Different upgrade types can have different fields and different rules. Also, new rules can be added over
+              time. The stored data is designed to grow flexibly so the viewer can expand naturally without redesigning
+              the page each time a ruleset evolves.
             </Text>
           </DrawerBody>
         </DrawerContent>

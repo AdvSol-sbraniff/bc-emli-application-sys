@@ -2,7 +2,8 @@ CREATE OR REPLACE VIEW claims.v_current_invoice_versions AS
 SELECT DISTINCT ON (iv.invoice_id)
   i.session_id,
   i.status AS invoice_status,
-  iv.*
+  iv.*,
+  i.upgrade_type_id
 FROM claims.invoices i
 JOIN claims.invoice_versions iv
   ON iv.invoice_id = i.id
@@ -20,6 +21,11 @@ ORDER BY
 CREATE OR REPLACE VIEW claims.v_sessions_with_contractors AS
 SELECT
   s.*,
+  sc.contractor_ids,
+  sc.submitter_ids,
+  sc.representative_contractor_id AS contractor_id,
+  sc.representative_submitter_id AS submitter_id,
+  sc.representative_submitted_at AS submitted_at,
 
   c.business_name      AS contractor_business_name,
   c.number             AS contractor_number,
@@ -30,8 +36,19 @@ SELECT
   c.postal_code        AS contractor_postal_code,
   c.onboarded          AS contractor_onboarded
 FROM claims.sessions s
-JOIN public.contractors c
-  ON c.id = s.contractor_id;
+LEFT JOIN LATERAL (
+  SELECT
+    COALESCE(array_agg(DISTINCT i.contractor_id), ARRAY[]::uuid[]) AS contractor_ids,
+    COALESCE(array_agg(DISTINCT i.submitter_id) FILTER (WHERE i.submitter_id IS NOT NULL), ARRAY[]::uuid[]) AS submitter_ids,
+    (array_agg(i.contractor_id ORDER BY i.created_at, i.id))[1] AS representative_contractor_id,
+    (array_agg(i.submitter_id ORDER BY i.created_at, i.id) FILTER (WHERE i.submitter_id IS NOT NULL))[1] AS representative_submitter_id,
+    (array_agg(i.submitted_at ORDER BY i.created_at, i.id) FILTER (WHERE i.submitted_at IS NOT NULL))[1] AS representative_submitted_at
+  FROM claims.invoices i
+  WHERE i.session_id = s.id
+) sc
+  ON TRUE
+LEFT JOIN public.contractors c
+  ON c.id = sc.representative_contractor_id;
 
 -- ============================================================
 -- INVOICE GRID (admin read model)
@@ -57,10 +74,9 @@ SELECT
   -- -------------------------
   -- session (base)
   -- -------------------------
-  s.contractor_id     AS contractor_id,
-  s.submitter_id      AS submitter_id,
-  s.status            AS session_status,
-  s.submitted_at      AS session_submitted_at,
+  i.contractor_id     AS contractor_id,
+  i.submitter_id      AS submitter_id,
+  i.submitted_at      AS session_submitted_at,
   s.created_at        AS session_created_at,
   s.updated_at        AS session_updated_at,
 
@@ -102,19 +118,61 @@ SELECT
   civ.di_ocr_invoice_id               AS latest_di_ocr_invoice_id,
 
   civ.genai_all_rulechecks_pass_flag  AS latest_genai_all_rulechecks_pass_flag,
-  civ.genai_overall_confidence        AS latest_genai_overall_confidence
+  civ.genai_overall_confidence        AS latest_genai_overall_confidence,
 
-FROM claims.sessions s
+  -- -------------------------
+  -- upgrade type / domain
+  -- -------------------------
+  i.upgrade_type_id   AS upgrade_type_id,
+  ut.code             AS upgrade_type_code,
+  ut.name             AS upgrade_type_name,
+
+  civut.latest_detected_upgrade_type_keys AS latest_detected_upgrade_type_keys,
+  civut.latest_detected_upgrade_types_json AS latest_detected_upgrade_types_json,
+
+  i.submitted_at      AS invoice_submitted_at
+
+FROM claims.invoices i
+JOIN claims.sessions s
+  ON s.id = i.session_id
 JOIN public.contractors c
-  ON c.id = s.contractor_id
-LEFT JOIN claims.invoices i
-  ON i.session_id = s.id
+  ON c.id = i.contractor_id
+LEFT JOIN public.permit_classifications ut
+  ON ut.id = i.upgrade_type_id
 LEFT JOIN public.users cu
   ON cu.id = c.contact_id
 LEFT JOIN public.users u
-  ON u.id = s.submitter_id
+  ON u.id = i.submitter_id
 LEFT JOIN claims.v_current_invoice_versions civ
-  ON civ.invoice_id = i.id;
+  ON civ.invoice_id = i.id
+LEFT JOIN LATERAL (
+  SELECT
+    COALESCE(array_agg(x.upgrade_type_key ORDER BY x.upgrade_type_key), ARRAY[]::text[]) AS latest_detected_upgrade_type_keys,
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'upgrade_type_key', x.upgrade_type_key,
+          'description', x.description,
+          'confidence', x.confidence
+        )
+        ORDER BY x.upgrade_type_key
+      ),
+      '[]'::jsonb
+    ) AS latest_detected_upgrade_types_json
+  FROM (
+    SELECT DISTINCT ON (iut.upgrade_type_key)
+      iut.upgrade_type_key,
+      iut.description,
+      ivut.confidence
+    FROM claims.invoice_version_upgrade_types ivut
+    JOIN claims.invoice_upgrade_types iut
+      ON iut.id = ivut.invoice_upgrade_type_id
+    WHERE ivut.invoice_version_id = civ.id
+      AND ivut.source_engine = 'classifier'
+    ORDER BY iut.upgrade_type_key, ivut.created_at DESC, ivut.confidence DESC
+  ) x
+) civut
+  ON TRUE;
 
 /***********
 
@@ -262,21 +320,24 @@ SELECT
   -- session
   -- =========================================================
   s.id            AS session_id,
-  s.contractor_id AS session_contractor_id,
-  s.submitter_id  AS session_submitter_id,
-  s.status        AS session_status,
+  i.contractor_id AS session_contractor_id,
+  i.submitter_id  AS session_submitter_id,
+  NULL::text      AS session_status,
   s.created_at    AS session_created_at,
   s.updated_at    AS session_updated_at,
-  s.submitted_at  AS session_submitted_at,
+  i.submitted_at  AS session_submitted_at,
 
   -- =========================================================
   -- invoice
   -- =========================================================
   i.id                AS invoice_id,
   i.session_id        AS invoice_session_id,
+  i.contractor_id     AS invoice_contractor_id,
+  i.submitter_id      AS invoice_submitter_id,
   i.status            AS invoice_status,
   i.status_updated_at AS invoice_status_updated_at,
   i.system_help_notes AS invoice_system_help_notes,
+  i.submitted_at      AS invoice_submitted_at,
   i.created_at        AS invoice_created_at,
   i.updated_at        AS invoice_updated_at,
 

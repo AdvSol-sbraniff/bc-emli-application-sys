@@ -6,29 +6,23 @@ module Api
       # TEMP: allow local dev to hit this without auth until KC is wired
       skip_before_action :authenticate_user!, only: %i[index destroy]
       skip_before_action :require_confirmation, only: %i[index destroy]
-      skip_after_action  :verify_authorized, only: %i[index destroy]
-      skip_after_action  :verify_policy_scoped, only: %i[index]
+      skip_after_action :verify_authorized, only: %i[index destroy]
+      skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[index destroy]
 
       # GET /api/claims/admin/sessions_with_contractors?q=&status=&sort=&page=&per=
       def index
-        per    = clamp_int(params[:per], 25, 1, 200)
-        page   = clamp_int(params[:page], 1, 1, 10_000)
-        q      = params[:q].to_s.strip
-        status = params[:status].to_s.strip # optional: OPENBUTNOTSUBMITTED / OPENANDSUBMITTED / CLOSED
-        sort   = params[:sort].to_s.strip.presence || "updated_at:desc"
+        per = clamp_int(params[:per], 25, 1, 200)
+        page = clamp_int(params[:page], 1, 1, 10_000)
+        q = params[:q].to_s.strip
+        sort = params[:sort].to_s.strip.presence || "updated_at:desc"
 
         # View lives in claims schema
         scope = ::Claims::VSessionWithContractor.all
 
-        if status.present?
-          scope = scope.where(status: status)
-        end
-
         if q.present?
           like = "%#{sanitize_sql_like(q)}%"
-          scope = scope.where(
-            <<~SQL.squish,
+          scope = scope.where(<<~SQL.squish, like: like)
               CAST(claims.v_sessions_with_contractors.id AS text) ILIKE :like
               OR CAST(claims.v_sessions_with_contractors.contractor_id AS text) ILIKE :like
               OR claims.v_sessions_with_contractors.contractor_business_name ILIKE :like
@@ -39,53 +33,47 @@ module Api
               OR claims.v_sessions_with_contractors.contractor_city ILIKE :like
               OR claims.v_sessions_with_contractors.contractor_postal_code ILIKE :like
             SQL
-            like: like
-          )
         end
 
         scope = scope.order(order_clause(sort))
         total = scope.count
 
-        sessions = scope
-          .offset((page - 1) * per)
-          .limit(per)
+        sessions = scope.offset((page - 1) * per).limit(per)
 
-        rows = sessions.map do |s|
-          {
-            # session fields (from s.* in the view)
-            id: s.id,
-            contractor_id: s.contractor_id,
-            submitter_id: s.submitter_id,
-            status: s.status,
-            created_at: s.created_at,
-            updated_at: s.updated_at,
-            submitted_at: s.submitted_at,
-
-            # denormalized contractor fields (aliased in the view)
-            contractor_business_name: s.contractor_business_name,
-            contractor_number: s.contractor_number,
-            contractor_email: s.contractor_email,
-            contractor_phone_number: s.contractor_phone_number,
-            contractor_cellphone_number: s.contractor_cellphone_number,
-            contractor_city: s.contractor_city,
-            contractor_postal_code: s.contractor_postal_code,
-            contractor_onboarded: s.contractor_onboarded
-          }
-        end
+        rows =
+          sessions.map do |s|
+            {
+              # session fields (from s.* in the view)
+              id: s.id,
+              contractor_id: s.contractor_id,
+              submitter_id: s.submitter_id,
+              created_at: s.created_at,
+              updated_at: s.updated_at,
+              submitted_at: s.submitted_at,
+              # denormalized contractor fields (aliased in the view)
+              contractor_business_name: s.contractor_business_name,
+              contractor_number: s.contractor_number,
+              contractor_email: s.contractor_email,
+              contractor_phone_number: s.contractor_phone_number,
+              contractor_cellphone_number: s.contractor_cellphone_number,
+              contractor_city: s.contractor_city,
+              contractor_postal_code: s.contractor_postal_code,
+              contractor_onboarded: s.contractor_onboarded
+            }
+          end
 
         render json: {
-          rows: rows,
-          meta: {
-            total: total,
-            page: page,
-            per: per,
-            sort: sort,
-            filters: {
-              q: q.presence,
-              status: status.presence
-            }
-          }
-        }
+                 rows: rows,
+                 meta: {
+                   total: total,
+                   page: page,
+                   per: per,
+                   sort: sort,
+                   filters: {
+                     q: q.presence
+                   }
+                 }
+               }
       end
 
       # DELETE /api/claims/admin/sessions_with_contractors/:id
@@ -105,31 +93,53 @@ module Api
         }
 
         ::Claims::Session.transaction do
-          invoice_ids = ::Claims::Invoice.where(session_id: session.id).pluck(:id)
-          invoice_version_ids = if invoice_ids.any?
-            ::Claims::InvoiceVersion.where(invoice_id: invoice_ids).pluck(:id)
-          else
-            []
-          end
+          invoice_ids =
+            ::Claims::Invoice.where(session_id: session.id).pluck(:id)
+          invoice_version_ids =
+            if invoice_ids.any?
+              ::Claims::InvoiceVersion.where(invoice_id: invoice_ids).pluck(:id)
+            else
+              []
+            end
 
           if invoice_version_ids.any?
-            deleted[:lineitems] = ::Claims::Lineitem.where(invoice_version_id: invoice_version_ids).delete_all
-            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(invoice_version_id: invoice_version_ids).delete_all
+            deleted[:lineitems] = ::Claims::Lineitem.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
+            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
 
             # These also cascade from invoice_versions, but explicit deletes keep counts accurate.
-            ::Claims::InvoiceVersionLocatedField.where(invoice_version_id: invoice_version_ids).delete_all
-            ::Claims::InvoiceVersionRulecheck.where(invoice_version_id: invoice_version_ids).delete_all
-            deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(invoice_version_id: invoice_version_ids).delete_all
+            ::Claims::InvoiceVersionLocatedField.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
+            ::Claims::InvoiceVersionRulecheck.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
+            deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
           end
 
-          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(invoice_id: invoice_ids).delete_all if invoice_ids.any?
+          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(
+            invoice_id: invoice_ids
+          ).delete_all if invoice_ids.any?
 
           # Clean run trackers tied to this session before removing invoices/session.
-          deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(session_id: session.id).delete_all
-          deleted[:ingest_runs] = ::Claims::IngestRun.where(session_id: session.id).delete_all
+          deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(
+            session_id: session.id
+          ).delete_all
+          deleted[:ingest_runs] = ::Claims::IngestRun.where(
+            session_id: session.id
+          ).delete_all
 
-          deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(invoice_id: invoice_ids).delete_all if invoice_ids.any?
-          deleted[:invoices] = ::Claims::Invoice.where(id: invoice_ids).delete_all if invoice_ids.any?
+          deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(
+            invoice_id: invoice_ids
+          ).delete_all if invoice_ids.any?
+          deleted[:invoices] = ::Claims::Invoice.where(
+            id: invoice_ids
+          ).delete_all if invoice_ids.any?
 
           session.destroy!
         end
@@ -138,7 +148,9 @@ module Api
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Session not found" }, status: :not_found
       rescue => e
-        Rails.logger.error("[CLAIMS][SESSIONS_ADMIN] destroy failed id=#{params[:id]}: #{e.class}: #{e.message}")
+        Rails.logger.error(
+          "[CLAIMS][SESSIONS_ADMIN] destroy failed id=#{params[:id]}: #{e.class}: #{e.message}"
+        )
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -146,7 +158,12 @@ module Api
       private
 
       def clamp_int(value, default, min, max)
-        n = Integer(value) rescue default
+        n =
+          begin
+            Integer(value)
+          rescue StandardError
+            default
+          end
         n = default if n.nil?
         n = min if n < min
         n = max if n > max
@@ -163,14 +180,20 @@ module Api
 
         column =
           case key
-          when "created_at"               then "claims.v_sessions_with_contractors.created_at"
-          when "updated_at"               then "claims.v_sessions_with_contractors.updated_at"
-          when "submitted_at"             then "claims.v_sessions_with_contractors.submitted_at"
-          when "status"                   then "claims.v_sessions_with_contractors.status"
-          when "contractor_business_name" then "claims.v_sessions_with_contractors.contractor_business_name"
-          when "contractor_number"        then "claims.v_sessions_with_contractors.contractor_number"
-          when "contractor_city"          then "claims.v_sessions_with_contractors.contractor_city"
-          when "contractor_onboarded"     then "claims.v_sessions_with_contractors.contractor_onboarded"
+          when "created_at"
+            "claims.v_sessions_with_contractors.created_at"
+          when "updated_at"
+            "claims.v_sessions_with_contractors.updated_at"
+          when "submitted_at"
+            "claims.v_sessions_with_contractors.submitted_at"
+          when "contractor_business_name"
+            "claims.v_sessions_with_contractors.contractor_business_name"
+          when "contractor_number"
+            "claims.v_sessions_with_contractors.contractor_number"
+          when "contractor_city"
+            "claims.v_sessions_with_contractors.contractor_city"
+          when "contractor_onboarded"
+            "claims.v_sessions_with_contractors.contractor_onboarded"
           else
             "claims.v_sessions_with_contractors.updated_at"
           end

@@ -1,24 +1,44 @@
 import {
-  Box, Button, Container, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay,
-  Flex, Heading, IconButton, Input, Spinner, Text, Textarea, Tooltip, useDisclosure,
-  Tabs, TabList, TabPanels, Tab, TabPanel
+  Box,
+  Button,
+  Container,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  Flex,
+  Heading,
+  IconButton,
+  Input,
+  Select,
+  Spinner,
+  Text,
+  Textarea,
+  Tooltip,
+  useDisclosure,
 } from '@chakra-ui/react';
-
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowCounterClockwise, FloppyDiskBack, Question } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
-// If you already have an api helper (axios wrapper), swap fetch() for that.
-// This is intentionally simple and browser-friendly.
-
 type RulesetDto = {
   id: string;
+  invoice_upgrade_type_id: string;
+  upgrade_type_key?: string | null;
+  upgrade_type_description?: string | null;
   ruleset_shortname: string;
-  system_record: string | null;
   user_record1: string | null;
   created_at?: string;
   updated_at?: string;
+};
+
+type UpgradeTypeDto = {
+  id: string;
+  upgrade_type_key: string;
+  description?: string | null;
 };
 
 function useQueryParam(name: string): string | null {
@@ -37,28 +57,23 @@ export default function RulesetEditorScreen() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-
   const [ruleset, setRuleset] = useState<RulesetDto | null>(null);
+  const [upgradeTypes, setUpgradeTypes] = useState<UpgradeTypeDto[]>([]);
 
-  const {
-    isOpen: isHelpOpen,
-    onOpen: onHelpOpen,
-    onClose: onHelpClose,
-  } = useDisclosure();
+  const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
-  // editable fields
   const [shortname, setShortname] = useState<string>('');
-  const [systemRecord, setSystemRecord] = useState<string>('');
+  const [invoiceUpgradeTypeId, setInvoiceUpgradeTypeId] = useState<string>('');
   const [userRecord1, setUserRecord1] = useState<string>('');
   const [initialValues, setInitialValues] = useState({
     shortname: '',
-    systemRecord: '',
+    invoiceUpgradeTypeId: '',
     userRecord1: '',
   });
 
   const isDirty =
     shortname !== initialValues.shortname ||
-    systemRecord !== initialValues.systemRecord ||
+    invoiceUpgradeTypeId !== initialValues.invoiceUpgradeTypeId ||
     userRecord1 !== initialValues.userRecord1;
 
   function buildDuplicateShortname(originalShortname?: string | null): string {
@@ -67,12 +82,33 @@ export default function RulesetEditorScreen() {
     return `${base}-changeme`;
   }
 
+  async function loadUpgradeTypes() {
+    const resp = await fetch('/api/claims/admin/invoice_upgrade_types', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`GET upgrade types failed (${resp.status}): ${txt}`);
+    }
+
+    const data = await resp.json();
+    const rows = Array.isArray(data?.rows) ? data.rows : [];
+    setUpgradeTypes(rows);
+    return rows as UpgradeTypeDto[];
+  }
+
   async function load() {
     setIsLoading(true);
     setError(null);
     setInfoMessage(null);
 
     try {
+      const loadedUpgradeTypes = await loadUpgradeTypes();
+      const defaultUpgradeTypeId = loadedUpgradeTypes[0]?.id || '';
+
       if (isCreateMode) {
         if (duplicateFromId) {
           const resp = await fetch(`/api/claims/admin/validationgenai_rulesets/${duplicateFromId}`, {
@@ -91,11 +127,11 @@ export default function RulesetEditorScreen() {
 
           setRuleset(null);
           setShortname(duplicatedShortname);
-          setSystemRecord(sourceData.system_record ?? '');
+          setInvoiceUpgradeTypeId(sourceData.invoice_upgrade_type_id || defaultUpgradeTypeId);
           setUserRecord1(sourceData.user_record1 ?? '');
           setInitialValues({
             shortname: duplicatedShortname,
-            systemRecord: sourceData.system_record ?? '',
+            invoiceUpgradeTypeId: sourceData.invoice_upgrade_type_id || defaultUpgradeTypeId,
             userRecord1: sourceData.user_record1 ?? '',
           });
           setInfoMessage(`Create mode from duplicate of ruleset: ${sourceData.id}`);
@@ -104,11 +140,11 @@ export default function RulesetEditorScreen() {
 
         setRuleset(null);
         setShortname('changeme');
-        setSystemRecord('');
+        setInvoiceUpgradeTypeId(defaultUpgradeTypeId);
         setUserRecord1('');
         setInitialValues({
           shortname: 'changeme',
-          systemRecord: '',
+          invoiceUpgradeTypeId: defaultUpgradeTypeId,
           userRecord1: '',
         });
         setInfoMessage('Create mode: no database row is inserted until Save is clicked.');
@@ -134,11 +170,11 @@ export default function RulesetEditorScreen() {
       const data: RulesetDto = await resp.json();
       setRuleset(data);
       setShortname(data.ruleset_shortname ?? '');
-      setSystemRecord(data.system_record ?? '');
+      setInvoiceUpgradeTypeId(data.invoice_upgrade_type_id ?? '');
       setUserRecord1(data.user_record1 ?? '');
       setInitialValues({
         shortname: data.ruleset_shortname ?? '',
-        systemRecord: data.system_record ?? '',
+        invoiceUpgradeTypeId: data.invoice_upgrade_type_id ?? '',
         userRecord1: data.user_record1 ?? '',
       });
     } catch (e: any) {
@@ -154,6 +190,10 @@ export default function RulesetEditorScreen() {
     const trimmedShortname = shortname.trim();
     if (!trimmedShortname) {
       setError('ruleset_shortname is required');
+      return;
+    }
+    if (!invoiceUpgradeTypeId) {
+      setError('upgrade type is required');
       return;
     }
 
@@ -174,7 +214,7 @@ export default function RulesetEditorScreen() {
         credentials: 'include',
         body: JSON.stringify({
           ruleset_shortname: trimmedShortname,
-          system_record: systemRecord,
+          invoice_upgrade_type_id: invoiceUpgradeTypeId,
           user_record1: userRecord1,
         }),
       });
@@ -187,11 +227,11 @@ export default function RulesetEditorScreen() {
       const data: RulesetDto = await resp.json();
       setRuleset(data);
       setShortname(data.ruleset_shortname ?? '');
-      setSystemRecord(data.system_record ?? '');
+      setInvoiceUpgradeTypeId(data.invoice_upgrade_type_id ?? '');
       setUserRecord1(data.user_record1 ?? '');
       setInitialValues({
         shortname: data.ruleset_shortname ?? '',
-        systemRecord: data.system_record ?? '',
+        invoiceUpgradeTypeId: data.invoice_upgrade_type_id ?? '',
         userRecord1: data.user_record1 ?? '',
       });
 
@@ -228,6 +268,13 @@ export default function RulesetEditorScreen() {
               <Heading size="md">{isCreateMode ? 'Ruleset (Create)' : 'Ruleset'}</Heading>
 
               <Flex gap={2}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open('/ruleset-config-editor', '_blank', 'noopener,noreferrer')}
+                >
+                  Edit AI system config
+                </Button>
                 <Tooltip label="Undo unsaved changes by reloading the latest saved values from the database.">
                   <IconButton
                     aria-label="Undo unsaved changes"
@@ -247,7 +294,7 @@ export default function RulesetEditorScreen() {
                     isDisabled={(!isDirty && !isCreateMode) || isLoading}
                   />
                 </Tooltip>
-                <Tooltip label="Help: context layers and output mapping">
+                <Tooltip label="Help: ruleset layers and output mapping">
                   <IconButton
                     aria-label="Open ruleset editor help"
                     icon={<Question size={18} />}
@@ -267,7 +314,7 @@ export default function RulesetEditorScreen() {
             {isLoading && (
               <Flex align="center" gap={3} p={4}>
                 <Spinner />
-                <Text>Loading…</Text>
+                <Text>Loading...</Text>
               </Flex>
             )}
 
@@ -282,56 +329,33 @@ export default function RulesetEditorScreen() {
               <Box>
                 <Box mb={4}>
                   <Text fontWeight="bold" mb={1}>
+                    upgrade type
+                  </Text>
+                  <Select value={invoiceUpgradeTypeId} onChange={(e) => setInvoiceUpgradeTypeId(e.target.value)}>
+                    {upgradeTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.description || t.upgrade_type_key} ({t.upgrade_type_key})
+                      </option>
+                    ))}
+                  </Select>
+                </Box>
+
+                <Box mb={4}>
+                  <Text fontWeight="bold" mb={1}>
                     ruleset_shortname
                   </Text>
                   <Input value={shortname} onChange={(e) => setShortname(e.target.value)} />
                 </Box>
 
-                <Box
-                  borderWidth="1px"
-                  borderRadius="lg"
-                  p={3}
-                  mb={4}
-                  bg="white"
-                >
-                  <Tabs
-                    variant="line"
-                    isFitted
-                    colorScheme="gray"
-                    sx={{
-                      '.chakra-tabs__tablist': {
-                        borderBottomWidth: '2px',
-                        borderColor: 'gray.300',
-                      },
-                      '.chakra-tabs__tab[aria-selected=true]': {
-                        borderBottomWidth: '4px',
-                        borderColor: 'gray.800',
-                      },
-                    }}
-                  >
-                    <TabList>
-                      <Tab>system_record</Tab>
-                      <Tab>user_record1</Tab>
-                    </TabList>
-
-                    <TabPanels>
-                      <TabPanel px={0} pt={3}>
-                        <Textarea
-                          value={systemRecord}
-                          onChange={(e) => setSystemRecord(e.target.value)}
-                          minH="360px"
-                        />
-                      </TabPanel>
-
-                      <TabPanel px={0} pt={3}>
-                        <Textarea
-                          value={userRecord1}
-                          onChange={(e) => setUserRecord1(e.target.value)}
-                          minH="360px"
-                        />
-                      </TabPanel>
-                    </TabPanels>
-                  </Tabs>
+                <Box borderWidth="1px" borderRadius="lg" p={3} mb={4} bg="white">
+                  <Text fontWeight="bold" mb={2}>
+                    user_record1
+                  </Text>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Located fields and rulechecks for this ruleset. Common invoice evidence now lives in the common
+                    ruleset row.
+                  </Text>
+                  <Textarea value={userRecord1} onChange={(e) => setUserRecord1(e.target.value)} minH="520px" />
                 </Box>
 
                 <Flex justify="space-between" mt={2}>
@@ -356,113 +380,42 @@ export default function RulesetEditorScreen() {
           <DrawerBody>
             <Flex direction="column" gap={4}>
               <Box>
-                <Heading size="sm" mb={2}>Big Picture</Heading>
-                <Text as="div" fontSize="sm">
-                  This page lets you edit the two ruleset tabs: system_record and user_record1.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  These two tabs tell the AI what to do and how to format the answer.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  They are the stable instructions that stay mostly the same across many invoices.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Clear writing here helps the AI give cleaner and more useful results.
+                <Heading size="sm" mb={2}>
+                  Big Picture
+                </Heading>
+                <Text fontSize="sm">
+                  This page edits one ruleset. The shared system prompt and final advice wrapper are edited separately
+                  in AI System Config.
                 </Text>
               </Box>
 
               <Box>
-                <Heading size="sm" mb={2}>What You Edit And What You Do Not Edit</Heading>
-                <Text as="div" fontSize="sm">
-                  On this screen, you edit system_record and user_record1.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  system_record is the main instruction and output format.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  user_record1 is the stable background and task list.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  user record 2 is not edited on this page.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  user record 2 is built automatically at run time by looking up existing database records and document-read results.
+                <Heading size="sm" mb={2}>
+                  What Lives Here
+                </Heading>
+                <Text fontSize="sm">
+                  user_record1 should contain the fields and rulechecks for this ruleset. The common invoice evidence
+                  rules now live in the common ruleset row.
                 </Text>
               </Box>
 
               <Box>
-                <Heading size="sm" mb={2}>How This Page Is Used During A Check</Heading>
-                <Text as="div" fontSize="sm">
-                  First, the AI reads system_record and user_record1 from this screen.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Next, the system builds user record 2 automatically with this invoice&apos;s details.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  That user record 2 information is pulled from existing database tables and document-read data.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  So this page controls system_record and user_record1, but not user record 2.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Last, the AI answers in the exact shape asked by system_record.
+                <Heading size="sm" mb={2}>
+                  What Happens At Runtime
+                </Heading>
+                <Text fontSize="sm">
+                  The GenAI call receives system_record from AI System Config, then this ruleset's user_record1, then
+                  the invoice OCR and case facts. In the multi-type flow, the common ruleset runs as its own call.
                 </Text>
               </Box>
 
               <Box>
-                <Heading size="sm" mb={2}>How One Answer Is Split Into 3 Parts</Heading>
-                <Text as="div" fontSize="sm">
-                  The AI answer is split into 3 parts.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Part 1 is the report card: confidence, pass/fail summary, and advice text.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Part 2 is "found things": where important values were found on the invoice.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Part 3 is "rule checks": each rule and whether it passed.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  These parts are saved separately so admins can read them clearly.
-                </Text>
-              </Box>
-
-              <Box>
-                <Heading size="sm" mb={2}>How The 3 Parts Show In The PDF Viewer</Heading>
-                <Text as="div" fontSize="sm">
-                  "Invoice Header Fields" shows top invoice facts like names, dates, and totals.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  "Line Items (OCR)" shows each invoice line like description, quantity, and amount.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  "GenAI Located Fields" shows extra things the helper found and pointed to.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  "Pre-existing info on file" shows already-known case info from your system.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  "GenAI Rulechecks" shows each rule result plus the overall summary and advice.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  So one answer is shown in several friendly sections instead of one giant wall of text.
-                </Text>
-              </Box>
-
-              <Box>
-                <Heading size="sm" mb={2}>Simple Editing Tips</Heading>
-                <Text as="div" fontSize="sm">
-                  Keep the boss note clear and strict.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Keep the always-true note focused on rules that almost never change.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Keep the final ask short and direct.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  If results look messy, simplify the words and remove extra instructions.
+                <Heading size="sm" mb={2}>
+                  Safe Editing Pattern
+                </Heading>
+                <Text fontSize="sm">
+                  Prefer duplicating an existing ruleset, editing the copy, testing it, and only then using it for real
+                  invoice runs.
                 </Text>
               </Box>
             </Flex>

@@ -1,0 +1,16 @@
+Run from WSL like this:
+
+bash claims_ai_service_ddl/test_responses_structured.txt
+bash claims_ai_service_ddl/test_responses_simple.txt
+bash claims_ai_service_ddl/test_chat_completions.txt
+bash claims_ai_service_ddl/test_chat_completions_strict.txt
+
+What they do:
+- test_responses_structured.txt: tests the newer /v1/responses API using the same structured input shape as the Node service.
+- test_responses_simple.txt: tests /v1/responses with a plain string input.
+- test_chat_completions.txt: tests the older /v1/chat/completions API.
+- test_chat_completions_strict.txt: tests chat completions again, but with a system prompt asking for a very short answer.
+
+Timeouts:
+- connect timeout: 20 seconds
+- total request timeout: 300 seconds

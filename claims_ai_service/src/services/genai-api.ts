@@ -1,0 +1,73 @@
+export type GenAiApiStyle = 'responses' | 'chat_completions';
+
+export function getGenAiApiStyleFromEnv(): GenAiApiStyle {
+  const raw = String(process.env.GENAI_API_STYLE || 'chat_completions')
+    .trim()
+    .toLowerCase();
+
+  return raw === 'responses' ? 'responses' : 'chat_completions';
+}
+
+export function flattenGenAiContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map((part: any) => {
+      if (typeof part === 'string') return part;
+      if (part?.type === 'text' && typeof part?.text === 'string')
+        return part.text;
+      if (typeof part?.text === 'string') return part.text;
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+export function toChatMessages(
+  conversation: any[],
+): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  if (!Array.isArray(conversation)) return [];
+
+  return conversation
+    .map((entry: any) => {
+      const role =
+        entry?.role === 'system' || entry?.role === 'assistant'
+          ? entry.role
+          : 'user';
+      const content = flattenGenAiContent(entry?.content);
+      return { role, content };
+    })
+    .filter((entry) => entry.content);
+}
+
+export function extractChatCompletionText(resp: any): string {
+  const messageContent = resp?.choices?.[0]?.message?.content;
+  return flattenGenAiContent(messageContent);
+}
+
+export function stripThinkBlocks(text: string): string {
+  return String(text || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .trim();
+}
+
+export function extractJsonPayloadText(text: string): string {
+  const cleaned = stripThinkBlocks(text).trim();
+  if (!cleaned) return cleaned;
+
+  const objectStart = cleaned.indexOf('{');
+  const objectEnd = cleaned.lastIndexOf('}');
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return cleaned.slice(objectStart, objectEnd + 1);
+  }
+
+  const arrayStart = cleaned.indexOf('[');
+  const arrayEnd = cleaned.lastIndexOf(']');
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    return cleaned.slice(arrayStart, arrayEnd + 1);
+  }
+
+  return cleaned;
+}

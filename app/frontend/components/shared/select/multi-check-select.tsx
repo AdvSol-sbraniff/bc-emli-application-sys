@@ -42,6 +42,9 @@ export const MultiCheckSelect = <T extends string>({
           background="white"
           borderColor="gray.300"
           fontWeight="normal"
+          overflow="hidden"
+          textOverflow="ellipsis"
+          whiteSpace="nowrap"
           _focus={{ boxShadow: 'outline' }}
           rightIcon={<CaretDown />}
         >

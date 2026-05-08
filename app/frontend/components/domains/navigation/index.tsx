@@ -21,6 +21,7 @@ import { ContractorManagementScreen } from '../contractor-management';
 import { ContractorEmployeeIndexScreen } from '../contractor-management/employees';
 import { ContractorProgramResourcesScreen } from '../contractor-management/contractor-program-resources-screen';
 import { ContractorDashboardScreen } from '../contractor-dashboard/contractor-dashboard-screen';
+import { AiContractorDashboardScreen } from '../ai-contractor-dashboard/ai-contractor-dashboard-screen';
 import { ContractorOnboardingImport } from '../contractor-landing/import';
 import { SuspendReasonPage } from '../contractor-management/suspend-reason-page';
 import { RemoveReasonPage } from '../contractor-management/remove-reason-page';
@@ -29,21 +30,17 @@ import { ContractorUnsuspendConfirmedScreen } from '../energy-savings-applicatio
 import { ContractorRemoveConfirmedScreen } from '../energy-savings-application/successful-action-screens';
 import { trackPageViewEvent } from '../../../utils/snowplow';
 
-
 // sbra20260130 addijng url-routes for the claims subsytem (aka new the genai subsystem)
 const InvoiceVersionShowScreen = lazy(() =>
   import('../invoice-versions').then((module) => ({ default: module.InvoiceVersionShowScreen })),
 );
-const AIAdminScreen = lazy(() =>
-  import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })),
+const AIAdminScreen = lazy(() => import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })));
+const RulesetEditorScreen = lazy(() => import('../ruleset-editor').then((module) => ({ default: module.default })));
+const RulesetConfigEditorScreen = lazy(() =>
+  import('../ruleset-config-editor').then((module) => ({ default: module.default })),
 );
-const RulesetEditorScreen = lazy(() =>
-  import('../ruleset-editor').then((module) => ({ default: module.default })),
-);
-const RulesetsAdminScreen = lazy(() =>
-  import('../rulesets-admin').then((module) => ({ default: module.default })),
-);
-
+const RulesetsAdminScreen = lazy(() => import('../rulesets-admin').then((module) => ({ default: module.default })));
+const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
 
 // the invoicesadmin is in ../invoices-admin/
 // below is the code for it
@@ -54,16 +51,9 @@ const InvoicesAdminScreen = lazy(() =>
 // below is the new code for the invoice-versions admin screen
 const InvoiceVersionsAdminScreen = lazy(() =>
   import('../invoice-versions-admin').then((module) => ({ default: module.InvoiceVersionsAdminScreen })),
-);  
+);
 const InvoiceVersionByVersionScreen = lazy(() =>
   import('../invoice-version-viewer-by-version').then((module) => ({ default: module.InvoiceVersionByVersionScreen })),
-);
-
-const AdminCreateSessionScreen = lazy(() =>
-  import('../admin-create-session').then((module) => ({ default: module.default })),
-);
-const EditSessionAdminScreen = lazy(() =>
-  import('../edit-session-admin').then((module) => ({ default: module.default })),
 );
 
 const UploadInvoiceAdminScreen = lazy(() =>
@@ -79,18 +69,11 @@ const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
   import('../invoice-supporting-documents-admin').then((module) => ({ default: module.default })),
 );
 
-const SessionsAdminScreen = lazy(() =>
-  import('../sessions-admin').then((module) => ({ default: module.default })),
-);
 const EligibilitycodesAdminScreen = lazy(() =>
   import('../eligibilitycodes-admin').then((module) => ({ default: module.default })),
 );
-const UsersAdminScreen = lazy(() =>
-  import('../users-admin').then((module) => ({ default: module.default })),
-);
-const UserEditorScreen = lazy(() =>
-  import('../user-editor').then((module) => ({ default: module.default })),
-);
+const UsersAdminScreen = lazy(() => import('../users-admin').then((module) => ({ default: module.default })));
+const UserEditorScreen = lazy(() => import('../user-editor').then((module) => ({ default: module.default })));
 const EligibilitycodeEditorScreen = lazy(() =>
   import('../eligibilitycode-editor').then((module) => ({ default: module.default })),
 );
@@ -599,7 +582,7 @@ const AppRoutes = observer(() => {
         element={<ContractorRemoveConfirmedScreen />}
       />
       <Route path="/contractor-program-resources" element={<ContractorProgramResourcesScreen />} />
-      // view blank applications and view supported applications to go here
+      {/* view blank applications and view supported applications to go here */}
       {import.meta.env.DEV && (
         <>
           <Route
@@ -673,6 +656,7 @@ const AppRoutes = observer(() => {
           }
         >
           <Route path="/contractor-dashboard" element={<ContractorDashboardScreen />} />
+          <Route path="/ai-contractor-dashboard" element={<AiContractorDashboardScreen />} />
           <Route path="/contractor/applications/:permitApplicationId/edit" element={<EditPermitApplicationScreen />} />
         </Route>
 
@@ -806,19 +790,21 @@ const AppRoutes = observer(() => {
         >
           <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
           <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
-          <Route path="/invoice-versions-by-version/:invoiceVersionId/read" element={<InvoiceVersionByVersionScreen />} />
+          <Route
+            path="/invoice-versions-by-version/:invoiceVersionId/read"
+            element={<InvoiceVersionByVersionScreen />}
+          />
           <Route path="/ai-admin" element={<AIAdminScreen />} />
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
           <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
+          <Route path="/ruleset-config-editor" element={<RulesetConfigEditorScreen />} />
           <Route path="/rulesets-admin" element={<RulesetsAdminScreen />} />
-          <Route path="/admin-create-session" element={<AdminCreateSessionScreen />} />
-          <Route path="/edit-session-admin" element={<EditSessionAdminScreen />} />
+          <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
-          <Route path="/sessions-admin" element={<SessionsAdminScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />
@@ -828,7 +814,6 @@ const AppRoutes = observer(() => {
           <Route path="/reports-volume-value" element={<ReportsVolumeValueScreen />} />
         </Route>
         {/* end sbra20260130 */}
-
 
         <Route path="/welcome" element={<LandingScreen />} />
         <Route path="/welcome/contractor" element={<ContractorLandingScreen />} />

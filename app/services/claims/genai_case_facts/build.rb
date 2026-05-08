@@ -20,51 +20,72 @@ module Claims
       # Returns a Ruby Hash you can JSON.generate into the context window.
       #
       # Required inputs:
-      # - sess: Claims::Session (has contractor_id, submitted_at)
-      # - invoice_version: Claims::InvoiceVersion (has di_raw_json, first-class fields, etc.)
+      # - sess: Claims::Session grouping row
+      # - invoice: Claims::Invoice (owns contractor_id, submitted_at)
+      # - eligibility_code: code located by the classifier call from OCR text
       #
-      def self.call(sess:, invoice_version:)
-        contractor = ::Contractor.find(sess.contractor_id)
+      def self.call(sess:, invoice: nil, eligibility_code: nil)
+        build_shared_context(
+          sess: sess,
+          invoice: invoice,
+          eligibility_code: eligibility_code
+        ).fetch(:case_facts)
+      end
 
-        # 1) Extract eligibility_code from DI raw JSON (deep/raw OCR blob)
-        eligibility_code = extract_eligibility_code(invoice_version.di_raw_json)
+      # Builds DB facts for downstream common/upgrade GenAI calls after the
+      # OCR-only classifier has located the eligibility code.
+      def self.build_shared_context(sess:, invoice: nil, eligibility_code: nil)
+        invoice ||=
+          Claims::Invoice
+            .where(session_id: sess.id)
+            .order(:created_at, :id)
+            .first
+        if invoice.nil?
+          raise ArgumentError, "Missing invoice for session_id=#{sess.id}"
+        end
 
-        # 2) Lookup eligibility record (child of users)
+        contractor = ::Contractor.find(invoice.contractor_id)
+
         elig = nil
         participant = nil
+        eligibility_code = normalize_eligibility_code(eligibility_code)
 
         if eligibility_code.present?
-          elig = Claims::UsersEligibilitycode.find_by(eligibility_code: eligibility_code)
+          elig = find_eligibility_code(eligibility_code)
           participant = ::User.find(elig.user_id) if elig
         end
 
         # 3) Build facts blob (keep it small + deterministic)
-        {
+        case_facts = {
           esp_database_values: {
             sessions: {
-              submitted_at: sess.submitted_at
+              submitted_at: invoice.submitted_at
             },
-
- contractors: {
-  business_name: contractor.business_name,
-  address: [
-    contractor.street_address,
-    contractor.city,
-    contractor.postal_code
-  ].compact.reject(&:blank?).join(", ")
+            contractors: {
+              business_name: contractor.business_name,
+              address: [
+                contractor.street_address,
+                contractor.city,
+                contractor.postal_code
+              ].compact.reject(&:blank?).join(", ")
             },
-
             users_eligibilitycodes: {
               eligibility_code: elig&.eligibility_code,
+              income_level:
+                income_level_from_eligibility_code(elig&.eligibility_code),
               approved_at: elig&.approved_at,
               expires_at: elig&.expires_at
             },
-
             users: {
               participant_name: participant_name_from_user(participant),
               participant_address: nil # TODO: add once column exists on public.users
             }
           }
+        }
+
+        {
+          case_facts: case_facts,
+          classifier_eligibility_code: eligibility_code
         }
       end
 
@@ -77,7 +98,11 @@ module Claims
       # - line_number=0
       # - confidence=100 (DB facts)
       #
-      def self.persist_code_located_fields!(invoice_version_id:, case_facts:, extracted_eligibility_code: nil)
+      def self.persist_code_located_fields!(
+        invoice_version_id:,
+        case_facts:,
+        classifier_eligibility_code: nil
+      )
         now = Time.current
 
         facts = case_facts.fetch(:esp_database_values)
@@ -85,88 +110,86 @@ module Claims
         rows = []
 
         # Helper for inserting typed rows
-        add_row = lambda do |field_key:, value_type:, value_text: nil, normalized_value: nil|
-          rows << {
-            invoice_version_id: invoice_version_id,
-            source_engine: "code",
-            field_key: field_key,
-            line_number: 0,
-            value_type: value_type,
-            value_text: value_text,
-            value_json: nil,
-            normalized_value: normalized_value,
-            confidence: 100,
-            page: nil,
-            polygon: nil,
-            evidence_text: "ESP database",
-            evidence_hint: nil,
-            notes: nil,
-            created_at: now,
-            updated_at: now
-          }
-        end
+        add_row =
+          lambda do |field_key:, value_type:, value_text: nil|
+            rows << {
+              invoice_version_id: invoice_version_id,
+              source_engine: "code",
+              field_key: field_key,
+              line_number: 0,
+              value_type: value_type,
+              value_text: value_text,
+              value_json: nil,
+              confidence: 100,
+              page: nil,
+              polygon: nil,
+              evidence_text: "ESP database",
+              created_at: now,
+              updated_at: now
+            }
+          end
 
         # sessions.submitted_at
         submitted_at = facts.dig(:sessions, :submitted_at)
         add_row.call(
           field_key: "sessions.submitted_at",
           value_type: "date",
-          value_text: submitted_at&.to_date&.iso8601,
-          normalized_value: submitted_at&.to_date&.iso8601
+          value_text: submitted_at&.to_date&.iso8601
         )
 
         # contractor facts
         add_row.call(
           field_key: "contractors.business_name",
           value_type: "text",
-          value_text: facts.dig(:contractors, :business_name)&.to_s,
-          normalized_value: facts.dig(:contractors, :business_name)&.to_s
+          value_text: facts.dig(:contractors, :business_name)&.to_s
         )
 
         add_row.call(
           field_key: "contractors.address",
           value_type: "text",
-          value_text: facts.dig(:contractors, :address)&.to_s,
-          normalized_value: facts.dig(:contractors, :address)&.to_s
+          value_text: facts.dig(:contractors, :address)&.to_s
         )
 
         # eligibility facts
         add_row.call(
-          field_key: "ocr_regex.eligibility_code",
+          field_key: "classifier.eligibility_code",
           value_type: "text",
-          value_text: extracted_eligibility_code&.to_s,
-          normalized_value: extracted_eligibility_code&.to_s
+          value_text: classifier_eligibility_code&.to_s
         )
 
         add_row.call(
           field_key: "users_eligibilitycodes.eligibility_code",
           value_type: "text",
-          value_text: facts.dig(:users_eligibilitycodes, :eligibility_code)&.to_s,
-          normalized_value: facts.dig(:users_eligibilitycodes, :eligibility_code)&.to_s
+          value_text:
+            facts.dig(:users_eligibilitycodes, :eligibility_code)&.to_s
+        )
+
+        income_level = facts.dig(:users_eligibilitycodes, :income_level)
+        add_row.call(
+          field_key: "users_eligibilitycodes.income_level",
+          value_type: "number",
+          value_text: income_level&.to_s
         )
 
         approved_at = facts.dig(:users_eligibilitycodes, :approved_at)
         add_row.call(
           field_key: "users_eligibilitycodes.approved_at",
           value_type: "date",
-          value_text: approved_at&.to_date&.iso8601,
-          normalized_value: approved_at&.to_date&.iso8601
+          value_text: approved_at&.to_date&.iso8601
         )
 
         expires_at = facts.dig(:users_eligibilitycodes, :expires_at)
         add_row.call(
           field_key: "users_eligibilitycodes.expires_at",
           value_type: "date",
-          value_text: expires_at&.to_date&.iso8601,
-          normalized_value: expires_at&.to_date&.iso8601
+          value_text: expires_at&.to_date&.iso8601
         )
 
         # participant facts
         add_row.call(
           field_key: "users.participant_name",
           value_type: "text",
-          value_text: facts.dig(:users, :participant_name)&.to_s,
-          normalized_value: facts.dig(:users, :participant_name)&.to_s
+          value_text: facts.dig(:users, :participant_name)&.to_s
         )
 
         # participant_address intentionally omitted (nil) until you have the column.
@@ -186,15 +209,17 @@ module Claims
       # ============================================================
       # INTERNAL HELPERS
       # ============================================================
-      # Pull eligibility code from the deep/raw OCR blob.
-      # Store the full OCR token exactly as found.
-def self.extract_eligibility_code(di_raw_json)
-  return nil if di_raw_json.blank?
+      def self.normalize_eligibility_code(value)
+        value.to_s.strip.presence
+      end
 
-  s = di_raw_json.to_json
-  m = s.match(/\b(ESP(?:[123]|I)[A-Za-z0-9-]*)\b/)
-  m ? m[1] : nil
-end
+      def self.find_eligibility_code(eligibility_code)
+        Claims::UsersEligibilitycode.where(
+          "LOWER(eligibility_code) = LOWER(?)",
+          eligibility_code.to_s.strip
+        ).first
+      end
+
       def self.participant_name_from_user(user)
         return nil if user.nil?
 
@@ -207,7 +232,15 @@ end
 
         user.email.to_s.presence
       end
+
+      def self.income_level_from_eligibility_code(eligibility_code)
+        token = eligibility_code.to_s.strip.upcase
+        return 1 if token.start_with?("ESP1") || token.start_with?("ESPI")
+        return 2 if token.start_with?("ESP2")
+        return 3 if token.start_with?("ESP3")
+
+        nil
+      end
     end
   end
 end
-

@@ -54,126 +54,151 @@ Rails.application.routes.draw do
         to: "permit_type_submission_contacts#confirm",
         as: :permit_type_submission_contact_confirmation
 
+    # sbra20260130 claims subsystem (stable bookmark = invoice_id)
+    scope module: :claims, path: "claims" do
+      get "contractor/invoices", to: "contractor_portal#index"
 
-# sbra20260130 claims subsystem (stable bookmark = invoice_id)
-scope module: :claims, path: "claims" do
+      # ============================================================
+      # SECTION 10 — READ / NAV (existing)
+      # ============================================================
 
-  # ============================================================
-  # SECTION 10 — READ / NAV (existing)
-  # ============================================================
+      # Nav bar list for a session (returns invoice_ids in display order)
+      get "sessions/:session_id/current_invoices",
+          to: "invoice_versions#current_invoices"
 
-  # Nav bar list for a session (returns invoice_ids in display order)
-  get "sessions/:session_id/current_invoices", to: "invoice_versions#current_invoices"
+      # Read-screen payload for one invoice (resolves to *current* invoice_version)
+      get "sessions/:session_id/invoices/:invoice_id/read",
+          to: "invoice_versions#read"
 
-  # Read-screen payload for one invoice (resolves to *current* invoice_version)
-  get "sessions/:session_id/invoices/:invoice_id/read", to: "invoice_versions#read"
+      # GenAI located fields for the *current* invoice_version of an invoice
+      get "sessions/:session_id/invoices/:invoice_id/read_genai",
+          to: "invoice_versions#read_genai"
 
-  # GenAI located fields for the *current* invoice_version of an invoice
-  get "sessions/:session_id/invoices/:invoice_id/read_genai", to: "invoice_versions#read_genai"
+      get "sessions/:session_id/invoices/:invoice_id/pdf_url",
+          to: "invoice_versions#pdf_url"
 
-  get "sessions/:session_id/invoices/:invoice_id/pdf_url", to: "invoice_versions#pdf_url"
+      # ============================================================
+      # SECTION 12 — ADMIN GRID (POC)
+      # ============================================================
+      get "sessions/:session_id/invoices", to: "invoices#index_by_session"
 
-# ============================================================
-# SECTION 12 — ADMIN GRID (POC)
-# ============================================================
-get "sessions/:session_id/invoices", to: "invoices#index_by_session"
+      get "admin/invoices", to: "invoice_grid#index"
 
-get "admin/invoices", to: "invoice_grid#index"
+      delete "admin/invoices/:id", to: "invoice_grid#destroy"
+      get "admin/invoices/:invoice_id/supporting_documents/context",
+          to: "invoice_supporting_documents#context"
+      get "admin/invoices/:invoice_id/supporting_documents",
+          to: "invoice_supporting_documents#index"
+      post "admin/invoices/:invoice_id/supporting_documents",
+           to: "invoice_supporting_documents#create"
+      delete "admin/supporting_documents/:id",
+             to: "invoice_supporting_documents#destroy"
+      get "admin/supporting_documents/:id/pdf_url",
+          to: "invoice_supporting_documents#pdf_url"
 
-  delete "admin/invoices/:id", to: "invoice_grid#destroy"
-  get "admin/invoices/:invoice_id/supporting_documents/context", to: "invoice_supporting_documents#context"
-  get "admin/invoices/:invoice_id/supporting_documents", to: "invoice_supporting_documents#index"
-  post "admin/invoices/:invoice_id/supporting_documents", to: "invoice_supporting_documents#create"
-  delete "admin/supporting_documents/:id", to: "invoice_supporting_documents#destroy"
-  get "admin/supporting_documents/:id/pdf_url", to: "invoice_supporting_documents#pdf_url"
+      get "admin/reports/volume_value/summary",
+          to: "reports_volume_value#summary"
+      get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"
+      get "admin/reports/volume_value/detail", to: "reports_volume_value#detail"
 
-get "admin/reports/volume_value/summary", to: "reports_volume_value#summary"
-get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"
-get "admin/reports/volume_value/detail", to: "reports_volume_value#detail"
+      # ============================================================
+      # SECTION 20 — SESSION CRUD (AI Admin / POC)
+      # ============================================================
 
+      # Create new session (AI Admin screen)
+      post "sessions", to: "sessions#create"
 
-  # ============================================================
-  # SECTION 20 — SESSION CRUD (AI Admin / POC)
-  # ============================================================
+      # ============================================================
+      # SECTION 30 — INGEST (AI Admin / POC)
+      # ============================================================
 
-  # Create new session (AI Admin screen)
-  post "sessions", to: "sessions#create"
+      # New upload button (POST PDFs for an existing session_id)
+      post "sessions/:session_id/upload", to: "ingest#upload"
+      post "invoices/:invoice_id/upload_fix", to: "ingest#upload_fix"
 
+      # ============================================================
+      # SECTION 40 — RUN TRACKER (AI Admin / POC)
+      # ============================================================
 
-  # ============================================================
-  # SECTION 30 — INGEST (AI Admin / POC)
-  # ============================================================
+      # List ingest runs (optionally filter by session_id)
+      get "ingest/runs", to: "ingest#runs_index"
+      get "ingest/runs/:ingest_run_id", to: "ingest#run_show"
+      get "ingest/runs/:ingest_run_id/steps", to: "ingest#steps_index"
+      get "ingest/runs/:ingest_run_id/invoices", to: "ingest#run_invoices_index"
+      get "ingest/steps", to: "ingest#steps_by_session_index"
+      get "ingest/invoices/:invoice_id/steps",
+          to: "ingest#steps_by_invoice_index"
 
-  # New upload button (POST PDFs for an existing session_id)
-  post "sessions/:session_id/upload", to: "ingest#upload"
-  post "invoices/:invoice_id/upload_fix", to: "ingest#upload_fix"
+      post "ingest/admin_submit_batch", to: "ingest#admin_submit_batch"
 
-# ============================================================
-# SECTION 40 — RUN TRACKER (AI Admin / POC)
-# ============================================================
+      post "ingest/run_ocr", to: "ingest#run_ocr"
 
-# List ingest runs (optionally filter by session_id)
-get "ingest/runs", to: "ingest#runs_index"
-get "ingest/runs/:ingest_run_id", to: "ingest#run_show"
-get "ingest/runs/:ingest_run_id/steps", to: "ingest#steps_index"
-get "ingest/runs/:ingest_run_id/invoices", to: "ingest#run_invoices_index"
-get "ingest/steps", to: "ingest#steps_by_session_index"
-get "ingest/invoices/:invoice_id/steps", to: "ingest#steps_by_invoice_index"
+      post "ingest/run_genai", to: "ingest#run_genai"
 
-post "ingest/admin_submit_batch", to: "ingest#admin_submit_batch"
+      # ============================================================
+      # SECTION 50 — ADMIN / POC (claims)
+      # ============================================================
 
-post "ingest/run_ocr", to: "ingest#run_ocr"
+      # Screen B: list ALL invoice_versions for an invoice_id (grid)
+      get "admin/invoices/:invoice_id/invoice_versions",
+          to: "invoice_versions_admin#index_by_invoice"
 
-post "ingest/run_genai", to: "ingest#run_genai"
+      # Screen B: fetch raw JSON blobs for one invoice_version (tabs)
+      get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
+      get "admin/invoice_versions/:id/read",
+          to: "invoice_versions_admin#read_by_version"
+      get "admin/invoice_versions/:id/read_genai",
+          to: "invoice_versions_admin#read_genai_by_version"
+      get "admin/invoice_versions/:id/pdf_url",
+          to: "invoice_versions_admin#pdf_url_by_version"
 
-# ============================================================
-# SECTION 50 — ADMIN / POC (claims)
-# ============================================================
+      # ============================================================
+      # SECTION 60 — RULESET EDITOR (admin)
+      # ============================================================
 
-# Screen B: list ALL invoice_versions for an invoice_id (grid)
-get "admin/invoices/:invoice_id/invoice_versions", to: "invoice_versions_admin#index_by_invoice"
+      get "admin/validationgenai_rulesets/:id",
+          to: "validationgenai_rulesets#show"
+      patch "admin/validationgenai_rulesets/:id",
+            to: "validationgenai_rulesets#update"
+      post "admin/validationgenai_rulesets",
+           to: "validationgenai_rulesets#create"
+      get "admin/validationgenai_config",
+          to: "validationgenai_rulesets#config_show"
+      patch "admin/validationgenai_config",
+            to: "validationgenai_rulesets#config_update"
+      get "admin/invoice_upgrade_types",
+          to: "validationgenai_rulesets#upgrade_types"
 
-# Screen B: fetch raw JSON blobs for one invoice_version (tabs)
-get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
-get "admin/invoice_versions/:id/read", to: "invoice_versions_admin#read_by_version"
-get "admin/invoice_versions/:id/read_genai", to: "invoice_versions_admin#read_genai_by_version"
-get "admin/invoice_versions/:id/pdf_url", to: "invoice_versions_admin#pdf_url_by_version"
+      get "admin/contractors", to: "contractors_admin#index"
+      post "admin/hello_ai", to: "hello_ai#create"
 
-# ============================================================
-# SECTION 60 — RULESET EDITOR (admin)
-# ============================================================
-
-get  "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#show"
-patch "admin/validationgenai_rulesets/:id", to: "validationgenai_rulesets#update"
-post  "admin/validationgenai_rulesets", to: "validationgenai_rulesets#create"
-
-get "admin/contractors", to: "contractors_admin#index"
-
-get "admin/sessions/:id", to: "sessions_admin#show"
-patch "admin/sessions/:id", to: "sessions_admin#update"
-get "admin/sessions_with_contractors", to: "sessions_with_contractors_admin#index"
-delete "admin/sessions_with_contractors/:id", to: "sessions_with_contractors_admin#destroy"
-get "admin/validationgenai_rulesets", to: "validationgenai_rulesets#index"
-get "admin/users", to: "users_admin#index"
-get "admin/users/:id", to: "users_admin#show"
-post "admin/users", to: "users_admin#create"
-patch "admin/users/:id", to: "users_admin#update"
-delete "admin/users/:id", to: "users_admin#destroy"
-get "admin/user_eligibilitycodes", to: "user_eligibilitycodes_admin#index"
-get "admin/users_eligibilitycodes/:id", to: "user_eligibilitycodes_admin#show"
-post "admin/users_eligibilitycodes", to: "user_eligibilitycodes_admin#create"
-patch "admin/users_eligibilitycodes/:id", to: "user_eligibilitycodes_admin#update"
-get "admin/revision_requests", to: "revision_requests_admin#index"
-get "admin/revision_requests/:id", to: "revision_requests_admin#show"
-post "admin/revision_requests", to: "revision_requests_admin#create"
-patch "admin/revision_requests/:id", to: "revision_requests_admin#update"
-delete "admin/revision_requests/:id", to: "revision_requests_admin#destroy"
-
-end
-# end sbra
-
-
-
+      get "admin/sessions/:id", to: "sessions_admin#show"
+      patch "admin/sessions/:id", to: "sessions_admin#update"
+      get "admin/sessions_with_contractors",
+          to: "sessions_with_contractors_admin#index"
+      delete "admin/sessions_with_contractors/:id",
+             to: "sessions_with_contractors_admin#destroy"
+      get "admin/validationgenai_rulesets", to: "validationgenai_rulesets#index"
+      get "admin/users", to: "users_admin#index"
+      get "admin/users/:id", to: "users_admin#show"
+      post "admin/users", to: "users_admin#create"
+      patch "admin/users/:id", to: "users_admin#update"
+      delete "admin/users/:id", to: "users_admin#destroy"
+      get "admin/user_eligibilitycodes", to: "user_eligibilitycodes_admin#index"
+      get "admin/users_eligibilitycodes/:id",
+          to: "user_eligibilitycodes_admin#show"
+      post "admin/users_eligibilitycodes",
+           to: "user_eligibilitycodes_admin#create"
+      patch "admin/users_eligibilitycodes/:id",
+            to: "user_eligibilitycodes_admin#update"
+      get "admin/revision_requests", to: "revision_requests_admin#index"
+      get "admin/revision_requests/:id", to: "revision_requests_admin#show"
+      post "admin/revision_requests", to: "revision_requests_admin#create"
+      patch "admin/revision_requests/:id", to: "revision_requests_admin#update"
+      delete "admin/revision_requests/:id",
+             to: "revision_requests_admin#destroy"
+    end
+    # end sbra
 
     resources :requirement_blocks, only: %i[create show update destroy] do
       post "restore", on: :member, to: "requirement_blocks#restore"

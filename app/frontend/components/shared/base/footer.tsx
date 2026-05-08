@@ -30,7 +30,6 @@ function formatUTCDate(isoString) {
 export const Footer = observer(() => {
   const location = useLocation();
   const {
-    sessionStore: { loggedIn },
     userStore: { currentUser },
   } = useMst();
   const { t } = useTranslation();
@@ -45,6 +44,7 @@ export const Footer = observer(() => {
     '/get-support',
     '/contractor-program-resources',
     '/contractor-dashboard',
+    '/ai-contractor-dashboard',
   ];
 
   const shouldShowFooter = onlyShowFooterOnRoutes.some(

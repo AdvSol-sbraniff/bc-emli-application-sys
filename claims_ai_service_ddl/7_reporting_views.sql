@@ -15,7 +15,10 @@ SELECT
   ig.latest_invoice_version_id,
   ig.latest_invoice_versionno,
   ig.latest_original_filename,
-  ig.latest_di_ocr_invoice_total::numeric(12,2) AS invoice_total_cad
+  ig.latest_di_ocr_invoice_total::numeric(12,2) AS invoice_total_cad,
+  ig.upgrade_type_id,
+  ig.upgrade_type_code,
+  ig.upgrade_type_name
 FROM claims.v_invoice_grid ig
 WHERE ig.invoice_id IS NOT NULL;
 

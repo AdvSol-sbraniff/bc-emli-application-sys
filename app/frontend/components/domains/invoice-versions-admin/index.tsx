@@ -1,11 +1,25 @@
-import { Box, Button, Container, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, IconButton, Input, Text, Tooltip } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  Container,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  Flex,
+  IconButton,
+  Input,
+  Text,
+  Tooltip,
+} from '@chakra-ui/react';
 import { Table, Thead, Tbody, Tr, Th, Td, Spinner } from '@chakra-ui/react';
 import { Tabs, TabList, TabPanels, Tab, TabPanel } from '@chakra-ui/react';
 import { ArrowsClockwise, FilePdf, Info, Question } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-
 
 type InvoiceVersionRow = {
   id: string;
@@ -146,22 +160,9 @@ function diffFieldVal(v: any): string {
 type StatusDotProps = { pass: boolean | null | undefined };
 
 function StatusDot({ pass }: StatusDotProps) {
-  const bg =
-    pass === true ? 'green.400' :
-    pass === false ? 'red.400' :
-    'red.400';
+  const bg = pass === true ? 'green.400' : pass === false ? 'red.400' : 'red.400';
 
-  return (
-    <Box
-      as="span"
-      w="10px"
-      h="10px"
-      borderRadius="full"
-      display="inline-block"
-      bg={bg}
-      flexShrink={0}
-    />
-  );
+  return <Box as="span" w="10px" h="10px" borderRadius="full" display="inline-block" bg={bg} flexShrink={0} />;
 }
 
 function lineitemKey(li: any): string {
@@ -250,18 +251,28 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
     const yValue = norm(y?.value);
     return xValue !== yValue;
   };
-  const mapFieldA = new Map(a.locatedFields.map((r) => [fieldKey(r), {
-    field_key: r?.field_key ?? '',
-    line_number: r?.line_number ?? null,
-    value: r?.value_text ?? null,
-    confidence: r?.confidence ?? null,
-  }]));
-  const mapFieldB = new Map(b.locatedFields.map((r) => [fieldKey(r), {
-    field_key: r?.field_key ?? '',
-    line_number: r?.line_number ?? null,
-    value: r?.value_text ?? null,
-    confidence: r?.confidence ?? null,
-  }]));
+  const mapFieldA = new Map(
+    a.locatedFields.map((r) => [
+      fieldKey(r),
+      {
+        field_key: r?.field_key ?? '',
+        line_number: r?.line_number ?? null,
+        value: r?.value_text ?? null,
+        confidence: r?.confidence ?? null,
+      },
+    ]),
+  );
+  const mapFieldB = new Map(
+    b.locatedFields.map((r) => [
+      fieldKey(r),
+      {
+        field_key: r?.field_key ?? '',
+        line_number: r?.line_number ?? null,
+        value: r?.value_text ?? null,
+        confidence: r?.confidence ?? null,
+      },
+    ]),
+  );
 
   const addedFields: any[] = [];
   const removedFields: any[] = [];
@@ -311,22 +322,32 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
   unmatchedRemoved.forEach((x) => removedFields.push(x));
 
   const ruleKey = (r: any) => String(r?.rule_number ?? r?.id ?? '');
-  const mapRuleA = new Map(a.rulechecks.map((r) => [ruleKey(r), {
-    rule_name: r?.rule_name ?? null,
-    pass: r?.rule_pass_flag ?? null,
-    confidence: r?.confidence ?? null,
-    expected: r?.expected_text ?? null,
-    observed: r?.observed_text ?? null,
-    reason: r?.reason_and_likely_causes ?? null,
-  }]));
-  const mapRuleB = new Map(b.rulechecks.map((r) => [ruleKey(r), {
-    rule_name: r?.rule_name ?? null,
-    pass: r?.rule_pass_flag ?? null,
-    confidence: r?.confidence ?? null,
-    expected: r?.expected_text ?? null,
-    observed: r?.observed_text ?? null,
-    reason: r?.reason_and_likely_causes ?? null,
-  }]));
+  const mapRuleA = new Map(
+    a.rulechecks.map((r) => [
+      ruleKey(r),
+      {
+        rule_name: r?.rule_name ?? null,
+        pass: r?.rule_pass_flag ?? null,
+        confidence: r?.confidence ?? null,
+        expected: r?.expected_text ?? null,
+        observed: r?.observed_text ?? null,
+        reason: r?.reason_and_likely_causes ?? null,
+      },
+    ]),
+  );
+  const mapRuleB = new Map(
+    b.rulechecks.map((r) => [
+      ruleKey(r),
+      {
+        rule_name: r?.rule_name ?? null,
+        pass: r?.rule_pass_flag ?? null,
+        confidence: r?.confidence ?? null,
+        expected: r?.expected_text ?? null,
+        observed: r?.observed_text ?? null,
+        reason: r?.reason_and_likely_causes ?? null,
+      },
+    ]),
+  );
 
   const addedRules: any[] = [];
   const removedRules: any[] = [];
@@ -351,7 +372,7 @@ function buildDiffRows(
   defs: Array<{ key: string; label: string }>,
   beforeObj: any,
   afterObj: any,
-  valueFormatter: (value: any) => string
+  valueFormatter: (value: any) => string,
 ): SimpleDiffRow[] {
   return defs
     .map((def) => ({
@@ -524,8 +545,7 @@ export function InvoiceVersionsAdminScreen() {
     setSelectedVersionId(invoiceVersionId);
 
     try {
-
-const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVersionId)}`;
+      const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVersionId)}`;
 
       const res = await fetch(url, {
         method: 'GET',
@@ -580,14 +600,18 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
     if (!readRes.ok) throw new Error(readJson?.error || readJson?.message || `Read failed (${readRes.status}).`);
 
     const genaiJson = await genaiRes.json().catch(() => ({}));
-    if (!genaiRes.ok) throw new Error(genaiJson?.error || genaiJson?.message || `GenAI read failed (${genaiRes.status}).`);
+    if (!genaiRes.ok)
+      throw new Error(genaiJson?.error || genaiJson?.message || `GenAI read failed (${genaiRes.status}).`);
 
     return {
       invoiceVersionId,
       read: readJson?.read || null,
       lineitems: Array.isArray(readJson?.lineitems) ? readJson.lineitems : [],
       locatedFields: Array.isArray(genaiJson?.located_fields) ? genaiJson.located_fields : [],
-      rulechecks: Array.isArray(genaiJson?.rulechecks) ? genaiJson.rulechecks : [],
+      rulechecks: [
+        ...(Array.isArray(genaiJson?.code_rulechecks) ? genaiJson.code_rulechecks : []),
+        ...(Array.isArray(genaiJson?.rulechecks) ? genaiJson.rulechecks : []),
+      ],
     };
   };
 
@@ -686,12 +710,7 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                 <Text fontSize="xs" opacity={0.7} mb={1}>
                   invoice_id
                 </Text>
-                <Input
-                  value={invoiceId}
-                  isReadOnly
-                  bg="white"
-                  fontFamily="mono"
-                />
+                <Input value={invoiceId} isReadOnly bg="white" fontFamily="mono" />
               </Box>
 
               <Box minW="220px">
@@ -728,8 +747,18 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
             </Flex>
 
             <Flex mb={2} gap={4} align="center" wrap="wrap">
-              <Text fontSize="xs">A: <Box as="span" fontFamily="mono">{diffAId || '—'}</Box></Text>
-              <Text fontSize="xs">B: <Box as="span" fontFamily="mono">{diffBId || '—'}</Box></Text>
+              <Text fontSize="xs">
+                A:{' '}
+                <Box as="span" fontFamily="mono">
+                  {diffAId || '—'}
+                </Box>
+              </Text>
+              <Text fontSize="xs">
+                B:{' '}
+                <Box as="span" fontFamily="mono">
+                  {diffBId || '—'}
+                </Box>
+              </Text>
             </Flex>
 
             <Table size="sm">
@@ -866,43 +895,50 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 
             {diffError && (
               <Box mb={3} p={2} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-                <Text fontSize="xs" color="red.700">{diffError}</Text>
+                <Text fontSize="xs" color="red.700">
+                  {diffError}
+                </Text>
               </Box>
             )}
 
             {lastDiffPair && (
               <Box mb={3} p={2} bg="blue.50" borderWidth="1px" borderColor="blue.200" borderRadius="md">
                 <Text fontSize="xs">
-                  Diff loaded for A: <Box as="span" fontFamily="mono">{lastDiffPair.a}</Box> and B: <Box as="span" fontFamily="mono">{lastDiffPair.b}</Box>
+                  Diff loaded for A:{' '}
+                  <Box as="span" fontFamily="mono">
+                    {lastDiffPair.a}
+                  </Box>{' '}
+                  and B:{' '}
+                  <Box as="span" fontFamily="mono">
+                    {lastDiffPair.b}
+                  </Box>
                 </Text>
               </Box>
             )}
 
- 
-<Tabs
-  variant="line"
-  isFitted
-  colorScheme="gray"
-  sx={{
-    // ============================================================
-    // SECTION 04.02.01.01 — BOLDER LINE TAB STYLE
-    // PURPOSE: Make the underline + baseline thicker/darker
-    // ============================================================
+            <Tabs
+              variant="line"
+              isFitted
+              colorScheme="gray"
+              sx={{
+                // ============================================================
+                // SECTION 04.02.01.01 — BOLDER LINE TAB STYLE
+                // PURPOSE: Make the underline + baseline thicker/darker
+                // ============================================================
 
-    // the baseline under all tabs
-    ".chakra-tabs__tablist": {
-      borderBottomWidth: "2px",
-      borderColor: "gray.300",
-    },
+                // the baseline under all tabs
+                '.chakra-tabs__tablist': {
+                  borderBottomWidth: '2px',
+                  borderColor: 'gray.300',
+                },
 
-    // the active tab underline
-    ".chakra-tabs__tab[aria-selected=true]": {
-      borderBottomWidth: "4px",
-      borderColor: "gray.800",
-    },
-  }}
->
-
+                // the active tab underline
+                '.chakra-tabs__tab[aria-selected=true]': {
+                  borderBottomWidth: '4px',
+                  borderColor: 'gray.800',
+                },
+              }}
+            >
               <TabList>
                 <Tab>Diff Contractor Changes</Tab>
                 <Tab>Diff AI Changes</Tab>
@@ -911,26 +947,49 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               <TabPanels>
                 <TabPanel p={3}>
                   {!contractorDiff ? (
-                    <Text fontSize="sm" opacity={0.75}>Pick A and B, then click diff refresh.</Text>
+                    <Text fontSize="sm" opacity={0.75}>
+                      Pick A and B, then click diff refresh.
+                    </Text>
                   ) : (
                     <Flex direction="column" gap={3}>
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Header field changes</Text>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>
+                          Header field changes
+                        </Text>
                         {contractorDiff.changedFields.length === 0 ? (
-                          <Text fontSize="xs" opacity={0.8}>No header field changes.</Text>
+                          <Text fontSize="xs" opacity={0.8}>
+                            No header field changes.
+                          </Text>
                         ) : (
                           <Flex direction="column" gap={2}>
                             {contractorDiff.changedFields.map((f) => (
-                              <Box key={f.label} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
-                                <Text fontSize="xs" fontWeight="bold" mb={1}>{f.label}</Text>
+                              <Box
+                                key={f.label}
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                p={2}
+                                bg="white"
+                              >
+                                <Text fontSize="xs" fontWeight="bold" mb={1}>
+                                  {f.label}
+                                </Text>
                                 <Flex gap={3}>
                                   <Box flex="1">
-                                    <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{f.before || '—'}</Text>
+                                    <Text fontSize="10px" opacity={0.7}>
+                                      A (before)
+                                    </Text>
+                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                      {f.before || '—'}
+                                    </Text>
                                   </Box>
                                   <Box flex="1">
-                                    <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{f.after || '—'}</Text>
+                                    <Text fontSize="10px" opacity={0.7}>
+                                      B (after)
+                                    </Text>
+                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                      {f.after || '—'}
+                                    </Text>
                                   </Box>
                                 </Flex>
                               </Box>
@@ -940,26 +999,54 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                       </Box>
 
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Line item changes</Text>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>
+                          Line item changes
+                        </Text>
                         <Flex direction="column" gap={2}>
                           {contractorLineSections.length === 0 ? (
-                            <Text fontSize="xs" opacity={0.8}>No line item changes.</Text>
+                            <Text fontSize="xs" opacity={0.8}>
+                              No line item changes.
+                            </Text>
                           ) : (
                             contractorLineSections.map((section) => (
-                              <Box key={section.title} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
-                                <Text fontSize="xs" fontWeight="bold" mb={1}>{section.title}</Text>
+                              <Box
+                                key={section.title}
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                p={2}
+                                bg="white"
+                              >
+                                <Text fontSize="xs" fontWeight="bold" mb={1}>
+                                  {section.title}
+                                </Text>
                                 <Flex direction="column" gap={1}>
                                   {section.rows.map((row) => (
-                                    <Box key={`${section.title}-${row.label}`} borderTopWidth="1px" borderColor="gray.100" pt={1}>
-                                      <Text fontSize="10px" opacity={0.7}>{row.label}</Text>
+                                    <Box
+                                      key={`${section.title}-${row.label}`}
+                                      borderTopWidth="1px"
+                                      borderColor="gray.100"
+                                      pt={1}
+                                    >
+                                      <Text fontSize="10px" opacity={0.7}>
+                                        {row.label}
+                                      </Text>
                                       <Flex gap={3}>
                                         <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.before || '-'}</Text>
+                                          <Text fontSize="10px" opacity={0.7}>
+                                            A (before)
+                                          </Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                            {row.before || '-'}
+                                          </Text>
                                         </Box>
                                         <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.after || '-'}</Text>
+                                          <Text fontSize="10px" opacity={0.7}>
+                                            B (after)
+                                          </Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                            {row.after || '-'}
+                                          </Text>
                                         </Box>
                                       </Flex>
                                     </Box>
@@ -976,26 +1063,49 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 
                 <TabPanel p={3}>
                   {!aiDiff ? (
-                    <Text fontSize="sm" opacity={0.75}>Pick A and B, then click diff refresh.</Text>
+                    <Text fontSize="sm" opacity={0.75}>
+                      Pick A and B, then click diff refresh.
+                    </Text>
                   ) : (
                     <Flex direction="column" gap={3}>
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Overall AI changes</Text>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>
+                          Overall AI changes
+                        </Text>
                         {aiDiff.overallChanges.length === 0 ? (
-                          <Text fontSize="xs" opacity={0.8}>No overall AI field changes.</Text>
+                          <Text fontSize="xs" opacity={0.8}>
+                            No overall AI field changes.
+                          </Text>
                         ) : (
                           <Flex direction="column" gap={2}>
                             {aiDiff.overallChanges.map((f) => (
-                              <Box key={f.label} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
-                                <Text fontSize="xs" fontWeight="bold" mb={1}>{f.label}</Text>
+                              <Box
+                                key={f.label}
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                p={2}
+                                bg="white"
+                              >
+                                <Text fontSize="xs" fontWeight="bold" mb={1}>
+                                  {f.label}
+                                </Text>
                                 <Flex gap={3}>
                                   <Box flex="1">
-                                    <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{f.before || '—'}</Text>
+                                    <Text fontSize="10px" opacity={0.7}>
+                                      A (before)
+                                    </Text>
+                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                      {f.before || '—'}
+                                    </Text>
                                   </Box>
                                   <Box flex="1">
-                                    <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{f.after || '—'}</Text>
+                                    <Text fontSize="10px" opacity={0.7}>
+                                      B (after)
+                                    </Text>
+                                    <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                      {f.after || '—'}
+                                    </Text>
                                   </Box>
                                 </Flex>
                               </Box>
@@ -1005,26 +1115,54 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                       </Box>
 
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Located field changes</Text>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>
+                          Located field changes
+                        </Text>
                         {aiLocatedSections.length === 0 ? (
-                          <Text fontSize="xs" opacity={0.8}>No located field changes.</Text>
+                          <Text fontSize="xs" opacity={0.8}>
+                            No located field changes.
+                          </Text>
                         ) : (
                           <Flex direction="column" gap={2}>
                             {aiLocatedSections.map((section) => (
-                              <Box key={section.title} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
-                                <Text fontSize="xs" fontWeight="bold" mb={1}>{section.title}</Text>
+                              <Box
+                                key={section.title}
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                p={2}
+                                bg="white"
+                              >
+                                <Text fontSize="xs" fontWeight="bold" mb={1}>
+                                  {section.title}
+                                </Text>
                                 <Flex direction="column" gap={1}>
                                   {section.rows.map((row) => (
-                                    <Box key={`${section.title}-${row.label}`} borderTopWidth="1px" borderColor="gray.100" pt={1}>
-                                      <Text fontSize="10px" opacity={0.7}>{row.label}</Text>
+                                    <Box
+                                      key={`${section.title}-${row.label}`}
+                                      borderTopWidth="1px"
+                                      borderColor="gray.100"
+                                      pt={1}
+                                    >
+                                      <Text fontSize="10px" opacity={0.7}>
+                                        {row.label}
+                                      </Text>
                                       <Flex gap={3}>
                                         <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.before || '-'}</Text>
+                                          <Text fontSize="10px" opacity={0.7}>
+                                            A (before)
+                                          </Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                            {row.before || '-'}
+                                          </Text>
                                         </Box>
                                         <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.after || '-'}</Text>
+                                          <Text fontSize="10px" opacity={0.7}>
+                                            B (after)
+                                          </Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                            {row.after || '-'}
+                                          </Text>
                                         </Box>
                                       </Flex>
                                     </Box>
@@ -1037,39 +1175,73 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                       </Box>
 
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Rulecheck changes</Text>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>
+                          Rulecheck changes
+                        </Text>
                         {aiRuleSections.length === 0 ? (
-                          <Text fontSize="xs" opacity={0.8}>No rulecheck changes.</Text>
+                          <Text fontSize="xs" opacity={0.8}>
+                            No rulecheck changes.
+                          </Text>
                         ) : (
                           <Flex direction="column" gap={2}>
                             {aiRuleSections.map((section) => (
-                              <Box key={section.title} borderWidth="1px" borderColor="gray.200" borderRadius="md" p={2} bg="white">
+                              <Box
+                                key={section.title}
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                p={2}
+                                bg="white"
+                              >
                                 <Flex align="center" justify="space-between" gap={3} mb={1} wrap="wrap">
-                                  <Text fontSize="xs" fontWeight="bold">{section.title}</Text>
+                                  <Text fontSize="xs" fontWeight="bold">
+                                    {section.title}
+                                  </Text>
                                   <Flex align="center" gap={3}>
                                     <Flex align="center" gap={2}>
-                                      <Text fontSize="10px" opacity={0.7}>A</Text>
+                                      <Text fontSize="10px" opacity={0.7}>
+                                        A
+                                      </Text>
                                       <StatusDot pass={section.beforePass} />
                                     </Flex>
-                                    <Text fontSize="10px" opacity={0.5}>→</Text>
+                                    <Text fontSize="10px" opacity={0.5}>
+                                      →
+                                    </Text>
                                     <Flex align="center" gap={2}>
-                                      <Text fontSize="10px" opacity={0.7}>B</Text>
+                                      <Text fontSize="10px" opacity={0.7}>
+                                        B
+                                      </Text>
                                       <StatusDot pass={section.afterPass} />
                                     </Flex>
                                   </Flex>
                                 </Flex>
                                 <Flex direction="column" gap={1}>
                                   {section.rows.map((row) => (
-                                    <Box key={`${section.title}-${row.label}`} borderTopWidth="1px" borderColor="gray.100" pt={1}>
-                                      <Text fontSize="10px" opacity={0.7}>{row.label}</Text>
+                                    <Box
+                                      key={`${section.title}-${row.label}`}
+                                      borderTopWidth="1px"
+                                      borderColor="gray.100"
+                                      pt={1}
+                                    >
+                                      <Text fontSize="10px" opacity={0.7}>
+                                        {row.label}
+                                      </Text>
                                       <Flex gap={3}>
                                         <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>A (before)</Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.before || '-'}</Text>
+                                          <Text fontSize="10px" opacity={0.7}>
+                                            A (before)
+                                          </Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                            {row.before || '-'}
+                                          </Text>
                                         </Box>
                                         <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>B (after)</Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">{row.after || '-'}</Text>
+                                          <Text fontSize="10px" opacity={0.7}>
+                                            B (after)
+                                          </Text>
+                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
+                                            {row.after || '-'}
+                                          </Text>
                                         </Box>
                                       </Flex>
                                     </Box>
@@ -1096,7 +1268,9 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
           <DrawerHeader>Invoice Version Inspection Details</DrawerHeader>
           <DrawerBody>
             {!selectedDetail ? (
-              <Text fontSize="sm" opacity={0.7}>No row selected.</Text>
+              <Text fontSize="sm" opacity={0.7}>
+                No row selected.
+              </Text>
             ) : (
               <Flex direction="column" gap={3}>
                 <Flex gap={2} wrap="wrap">
@@ -1138,7 +1312,9 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
                   <Flex direction="column" gap={3}>
                     {detailEntries.map(([k, v]) => (
                       <Box key={k}>
-                        <Text fontSize="xs" opacity={0.7} mb={1}>{k}</Text>
+                        <Text fontSize="xs" opacity={0.7} mb={1}>
+                          {k}
+                        </Text>
                         {typeof v === 'object' && v !== null ? (
                           <Box
                             as="pre"
@@ -1167,7 +1343,9 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 
                 {drawerView === 'diJson' && (
                   <Box>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>di_raw_json</Text>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      di_raw_json
+                    </Text>
                     <Box
                       as="pre"
                       fontFamily="mono"
@@ -1189,7 +1367,9 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 
                 {drawerView === 'genaiJson' && (
                   <Box>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>genai_raw_json</Text>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      genai_raw_json
+                    </Text>
                     <Box
                       as="pre"
                       fontFamily="mono"
@@ -1211,17 +1391,14 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
 
                 {drawerView === 'genaiAdvice' && (
                   <Box>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>genai_admin_advice</Text>
-                    <Box
-                      borderWidth="1px"
-                      borderColor="greys.grey20"
-                      borderRadius="md"
-                      p={3}
-                      bg="gray.50"
-                      minH="220px"
-                    >
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      genai_admin_advice
+                    </Text>
+                    <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50" minH="220px">
                       <Text fontSize="sm" whiteSpace="pre-wrap">
-                        {selectedDetail?.genai_admin_advice ? String(selectedDetail.genai_admin_advice) : 'No GenAI advice found for this version.'}
+                        {selectedDetail?.genai_admin_advice
+                          ? String(selectedDetail.genai_admin_advice)
+                          : 'No GenAI advice found for this version.'}
                       </Text>
                     </Box>
                   </Box>
@@ -1240,15 +1417,19 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
           <DrawerBody>
             <Flex direction="column" gap={4}>
               <Box>
-                <Text fontWeight="bold" mb={1}>What this page is for</Text>
+                <Text fontWeight="bold" mb={1}>
+                  What this page is for
+                </Text>
                 <Text fontSize="sm">
-                  Use this page to compare two invoice versions and quickly see what changed.
-                  The main view is now focused on just the two diff tabs: contractor changes and AI changes.
+                  Use this page to compare two invoice versions and quickly see what changed. The main view is now
+                  focused on just the two diff tabs: contractor changes and AI changes.
                 </Text>
               </Box>
 
               <Box>
-                <Text fontWeight="bold" mb={1}>Top context area</Text>
+                <Text fontWeight="bold" mb={1}>
+                  Top context area
+                </Text>
                 <Text fontSize="sm">This gives you quick context before you compare:</Text>
                 <Text fontSize="sm">- invoice_id: which invoice you are reviewing.</Text>
                 <Text fontSize="sm">- invoices.status: current invoice status.</Text>
@@ -1258,23 +1439,35 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               </Box>
 
               <Box>
-                <Text fontWeight="bold" mb={1}>How to compare versions</Text>
+                <Text fontWeight="bold" mb={1}>
+                  How to compare versions
+                </Text>
                 <Text fontSize="sm">1. Pick one row as A and one row as B.</Text>
                 <Text fontSize="sm">2. Click the diff refresh icon.</Text>
                 <Text fontSize="sm">3. Read the two diff tabs:</Text>
-                <Text fontSize="sm">- Diff Contractor Changes: invoice/header fields and line item changes only when the values actually changed.</Text>
-                <Text fontSize="sm">- Diff AI Changes: AI extracted fields and AI rule check changes only when the values actually changed.</Text>
+                <Text fontSize="sm">
+                  - Diff Contractor Changes: invoice/header fields and line item changes only when the values actually
+                  changed.
+                </Text>
+                <Text fontSize="sm">
+                  - Diff AI Changes: AI extracted fields and AI rule check changes only when the values actually
+                  changed.
+                </Text>
               </Box>
 
               <Box>
-                <Text fontWeight="bold" mb={1}>How to read A vs B</Text>
+                <Text fontWeight="bold" mb={1}>
+                  How to read A vs B
+                </Text>
                 <Text fontSize="sm">- A is the older/original side you selected.</Text>
                 <Text fontSize="sm">- B is the newer/target side you selected.</Text>
                 <Text fontSize="sm">- In each card, left = A (before), right = B (after).</Text>
               </Box>
 
               <Box>
-                <Text fontWeight="bold" mb={1}>Drawer contents</Text>
+                <Text fontWeight="bold" mb={1}>
+                  Drawer contents
+                </Text>
                 <Text fontSize="sm">Use the row details icon to open the drawer.</Text>
                 <Text fontSize="sm">Inside the drawer you can switch between:</Text>
                 <Text fontSize="sm">- Details</Text>
@@ -1284,11 +1477,19 @@ const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVers
               </Box>
 
               <Box>
-                <Text fontWeight="bold" mb={1}>Tips</Text>
+                <Text fontWeight="bold" mb={1}>
+                  Tips
+                </Text>
                 <Text fontSize="sm">- Only changed values are shown in the diff tabs.</Text>
-                <Text fontSize="sm">- Added or removed values are shown as a before/after change rather than with badges.</Text>
-                <Text fontSize="sm">- Use the row PDF icon to open the version PDF in a separate tab if you need visual confirmation.</Text>
-                <Text fontSize="sm">- If nothing appears in changed sections, the two versions are effectively the same for that section.</Text>
+                <Text fontSize="sm">
+                  - Added or removed values are shown as a before/after change rather than with badges.
+                </Text>
+                <Text fontSize="sm">
+                  - Use the row PDF icon to open the version PDF in a separate tab if you need visual confirmation.
+                </Text>
+                <Text fontSize="sm">
+                  - If nothing appears in changed sections, the two versions are effectively the same for that section.
+                </Text>
               </Box>
             </Flex>
           </DrawerBody>

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+curl -v --connect-timeout 20 --max-time 300 -X POST "http://chat.advsol.tech:8000/v1/chat/completions" \
+  -H "Authorization: Bearer 1234" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen-122b","messages":[{"role":"system","content":"You are a helpful assistant. Reply in exactly one short sentence."},{"role":"user","content":"Say hello."}]}'

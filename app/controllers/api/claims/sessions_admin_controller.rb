@@ -18,15 +18,19 @@ module Api
       def update
         session = find_session
 
-        result = ::Claims::Sessions::Update.call(
-          session: session,
-          submitter_id: params[:submitter_id],
-          submitted_at: params[:submitted_at]
-        )
+        result =
+          ::Claims::Sessions::Update.call(
+            session: session,
+            submitter_id: params[:submitter_id],
+            submitted_at: params[:submitted_at]
+          )
 
         render json: serialize_session(result.session.reload), status: :ok
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
       rescue ArgumentError => e
         render json: { error: e.message }, status: :bad_request
       end
@@ -38,17 +42,22 @@ module Api
       end
 
       def serialize_session(session)
-        contractor = ::Contractor.find_by(id: session.contractor_id)
-        submitter = ::User.find_by(id: session.submitter_id)
+        representative_invoice =
+          ::Claims::Invoice
+            .where(session_id: session.id)
+            .order(:created_at, :id)
+            .first
+        contractor =
+          ::Contractor.find_by(id: representative_invoice&.contractor_id)
+        submitter = ::User.find_by(id: representative_invoice&.submitter_id)
 
         {
           id: session.id,
-          contractor_id: session.contractor_id,
-          submitter_id: session.submitter_id,
-          status: session.status,
+          contractor_id: representative_invoice&.contractor_id,
+          submitter_id: representative_invoice&.submitter_id,
           created_at: session.created_at,
           updated_at: session.updated_at,
-          submitted_at: session.submitted_at,
+          submitted_at: representative_invoice&.submitted_at,
           contractor: {
             id: contractor&.id,
             business_name: contractor&.business_name,

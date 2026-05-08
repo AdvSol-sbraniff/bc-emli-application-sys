@@ -1,9 +1,8 @@
 // /app/frontend/components/domains/invoices-admin/index.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
-  Button,
   Container,
   Divider,
   Drawer,
@@ -13,7 +12,6 @@ import {
   DrawerHeader,
   DrawerOverlay,
   Flex,
-  Heading,
   HStack,
   IconButton,
   Input,
@@ -34,7 +32,6 @@ import {
   ArrowsClockwise,
   CaretLeft,
   CaretRight,
-  FileArrowUp,
   Files,
   FilePdf,
   GitBranch,
@@ -49,6 +46,23 @@ import {
 } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { MultiCheckSelect } from '../../shared/select/multi-check-select';
+import {
+  getInvoiceUpgradeTypeMeta,
+  INVOICE_UPGRADE_TYPE_FILTER_ORDER,
+  InvoiceUpgradeTypeTile,
+} from '../../shared/claims/invoice-upgrade-type-visual';
+
+type DetectedUpgradeType = {
+  confidence?: number | null;
+  description?: string | null;
+  upgrade_type_key?: string | null;
+};
+
+type UpgradeTypeOption = {
+  description?: string | null;
+  upgrade_type_key: string;
+};
 
 type InvoiceGridRow = {
   invoice_id?: string | null;
@@ -87,6 +101,8 @@ type InvoiceGridRow = {
 
   latest_genai_all_rulechecks_pass_flag?: boolean | null;
   latest_genai_overall_confidence?: number | null;
+  latest_detected_upgrade_type_keys?: string[] | null;
+  latest_detected_upgrade_types_json?: DetectedUpgradeType[] | null;
 
   system_help_notes?: string | null;
 };
@@ -141,6 +157,7 @@ export function InvoicesAdminScreen() {
   const [sessionId, setSessionId] = useState<string>('');
   const [q, setQ] = useState<string>('');
   const [invoiceStatus, setInvoiceStatus] = useState<string>(''); // single for PoC (can extend to multi later)
+  const [selectedUpgradeTypeKeys, setSelectedUpgradeTypeKeys] = useState<string[]>([]);
   const [sort, setSort] = useState<string>('latest_invoice_version_updated_at:desc');
   const [page, setPage] = useState<number>(1);
   const [per, setPer] = useState<number>(25);
@@ -151,14 +168,11 @@ export function InvoicesAdminScreen() {
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string>('');
   const [rows, setRows] = useState<InvoiceGridRow[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [upgradeTypeOptions, setUpgradeTypeOptions] = useState<UpgradeTypeOption[]>([]);
 
   // drawer
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const {
-    isOpen: isUploadHelpOpen,
-    onOpen: onUploadHelpOpen,
-    onClose: onUploadHelpClose,
-  } = useDisclosure();
+  const { isOpen: isUploadHelpOpen, onOpen: onUploadHelpOpen, onClose: onUploadHelpClose } = useDisclosure();
   const [selected, setSelected] = useState<InvoiceGridRow | null>(null);
 
   const didInitFromUrl = useRef(false);
@@ -174,6 +188,10 @@ export function InvoicesAdminScreen() {
       session_id: params.get('session_id') || '',
       q: params.get('q') || '',
       invoice_status: params.get('invoice_status') || '',
+      upgrade_type_keys: (params.get('upgrade_type_keys') || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
       sort: params.get('sort') || 'latest_invoice_version_updated_at:desc',
       page: Number(params.get('page') || '1') || 1,
       per: Number(params.get('per') || '25') || 25,
@@ -184,6 +202,7 @@ export function InvoicesAdminScreen() {
       setSessionId(next.session_id);
       setQ(next.q);
       setInvoiceStatus(next.invoice_status);
+      setSelectedUpgradeTypeKeys(next.upgrade_type_keys);
       setSort(next.sort);
       setPage(next.page);
       setPer(next.per);
@@ -195,17 +214,29 @@ export function InvoicesAdminScreen() {
     setSessionId(next.session_id);
     setQ(next.q);
     setInvoiceStatus(next.invoice_status);
+    setSelectedUpgradeTypeKeys(next.upgrade_type_keys);
     setSort(next.sort);
     setPage(next.page);
     setPer(next.per);
   }, [location.search]);
 
   // 2) push state to URL (bookmarkable)
-  const pushUrl = (next: Partial<{ sessionId: string; q: string; invoiceStatus: string; sort: string; page: number; per: number }>) => {
+  const pushUrl = (
+    next: Partial<{
+      sessionId: string;
+      q: string;
+      invoiceStatus: string;
+      selectedUpgradeTypeKeys: string[];
+      sort: string;
+      page: number;
+      per: number;
+    }>,
+  ) => {
     const merged = {
       sessionId,
       q,
       invoiceStatus,
+      selectedUpgradeTypeKeys,
       sort,
       page,
       per,
@@ -216,6 +247,7 @@ export function InvoicesAdminScreen() {
       session_id: merged.sessionId || undefined,
       q: merged.q || undefined,
       invoice_status: merged.invoiceStatus || undefined,
+      upgrade_type_keys: merged.selectedUpgradeTypeKeys.length ? merged.selectedUpgradeTypeKeys.join(',') : undefined,
       sort: merged.sort || undefined,
       page: String(merged.page || 1),
       per: String(merged.per || 25),
@@ -224,154 +256,195 @@ export function InvoicesAdminScreen() {
     navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
   };
 
-// ============================================================
-// SECTION 05.01 — FETCH ROWS
-// PURPOSE: Load invoice grid rows from API (callable by button + by effect)
-// ============================================================
+  // ============================================================
+  // SECTION 05.01 — FETCH ROWS
+  // PURPOSE: Load invoice grid rows from API (callable by button + by effect)
+  // ============================================================
 
-const fetchRows = async () => {
-  setLoading(true);
-  setError('');
-  try {
-    const params = buildSearchParams({
-      session_id: sessionId || undefined,
-      q: q || undefined,
-      invoice_status: invoiceStatus || undefined,
-      sort: sort || undefined,
-      page: String(page || 1),
-      per: String(per || 25),
-    });
+  const fetchRows = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = buildSearchParams({
+        session_id: sessionId || undefined,
+        q: q || undefined,
+        invoice_status: invoiceStatus || undefined,
+        upgrade_type_keys: selectedUpgradeTypeKeys.length ? selectedUpgradeTypeKeys.join(',') : undefined,
+        sort: sort || undefined,
+        page: String(page || 1),
+        per: String(per || 25),
+      });
 
-    const url = `/api/claims/admin/invoices?${params.toString()}`;
+      const url = `/api/claims/admin/invoices?${params.toString()}`;
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-    });
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
 
-    const data: ApiResp = await res.json().catch(() => ({ rows: [] }));
-    if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+      const data: ApiResp = await res.json().catch(() => ({ rows: [] }));
+      if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
 
-    setRows(Array.isArray(data?.rows) ? data.rows : []);
-    setTotal(Number(data?.meta?.total || 0));
-  } catch (e: any) {
-    setRows([]);
-    setTotal(0);
-    setError(e?.message || 'Failed to load invoice grid.');
-  } finally {
-    setLoading(false);
-  }
-};
+      setRows(Array.isArray(data?.rows) ? data.rows : []);
+      setTotal(Number(data?.meta?.total || 0));
+    } catch (e: any) {
+      setRows([]);
+      setTotal(0);
+      setError(e?.message || 'Failed to load invoice grid.');
+    } finally {
+      setLoading(false);
+    }
+  }, [invoiceStatus, page, per, q, selectedUpgradeTypeKeys, sessionId, sort]);
 
-// ============================================================
-// SECTION 05.02 — AUTO FETCH
-// PURPOSE: Fetch whenever filter/sort/page params change
-// ============================================================
+  const loadUpgradeTypes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/claims/admin/invoice_upgrade_types', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
 
-useEffect(() => {
-  if (didInitFromUrl.current) fetchRows();
-}, [sessionId, q, invoiceStatus, sort, page, per]);
+      const data = await res.json().catch(() => ({ rows: [] }));
+      if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
 
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      const normalized = rows
+        .filter((row: UpgradeTypeOption) => row?.upgrade_type_key && row.upgrade_type_key !== 'common')
+        .sort((a: UpgradeTypeOption, b: UpgradeTypeOption) => {
+          const orderA = INVOICE_UPGRADE_TYPE_FILTER_ORDER.indexOf(a.upgrade_type_key as any);
+          const orderB = INVOICE_UPGRADE_TYPE_FILTER_ORDER.indexOf(b.upgrade_type_key as any);
+          const normalizedA = orderA === -1 ? Number.MAX_SAFE_INTEGER : orderA;
+          const normalizedB = orderB === -1 ? Number.MAX_SAFE_INTEGER : orderB;
 
+          if (normalizedA !== normalizedB) return normalizedA - normalizedB;
+          return (a.description || a.upgrade_type_key).localeCompare(b.description || b.upgrade_type_key);
+        });
 
+      setUpgradeTypeOptions(normalized);
+    } catch {
+      setUpgradeTypeOptions(
+        INVOICE_UPGRADE_TYPE_FILTER_ORDER.map((upgradeTypeKey) => ({
+          upgrade_type_key: upgradeTypeKey,
+          description: getInvoiceUpgradeTypeMeta(upgradeTypeKey).label,
+        })),
+      );
+    }
+  }, []);
 
+  // ============================================================
+  // SECTION 05.02 — AUTO FETCH
+  // PURPOSE: Fetch whenever filter/sort/page params change
+  // ============================================================
+
+  useEffect(() => {
+    if (didInitFromUrl.current) fetchRows();
+  }, [fetchRows]);
+
+  useEffect(() => {
+    loadUpgradeTypes();
+  }, [loadUpgradeTypes]);
 
   const totalPages = useMemo(() => {
     const p = Math.max(1, per || 25);
     return Math.max(1, Math.ceil((total || 0) / p));
   }, [total, per]);
 
+  const upgradeTypeFilterItems = useMemo(
+    () =>
+      upgradeTypeOptions.map((row) => ({
+        label: row.description || getInvoiceUpgradeTypeMeta(row.upgrade_type_key).label,
+        value: row.upgrade_type_key,
+      })),
+    [upgradeTypeOptions],
+  );
 
-const handlePopulateJobAdminWithInvoice = (row: InvoiceGridRow) => {
-  const params = new URLSearchParams();
+  const handlePopulateJobAdminWithInvoice = (row: InvoiceGridRow) => {
+    const params = new URLSearchParams();
 
-  if (row.session_id) params.set('session_id', row.session_id);
-  if (row.invoice_id) params.set('invoice_id', row.invoice_id);
-  if (row.latest_invoice_version_id) params.set('invoice_version_id', row.latest_invoice_version_id);
+    if (row.session_id) params.set('session_id', row.session_id);
+    if (row.invoice_id) params.set('invoice_id', row.invoice_id);
+    if (row.latest_invoice_version_id) params.set('invoice_version_id', row.latest_invoice_version_id);
 
-  const url = `/ai-admin?${params.toString()}`;
-  window.open(url, '_blank');
-};
-  
+    const url = `/ai-admin?${params.toString()}`;
+    window.open(url, '_blank');
+  };
+
   const handleOpenVersions = (invoiceId: string) => {
     const url = `/invoice-versions-admin?invoice_id=${encodeURIComponent(invoiceId)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
-  const url = `/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-};
+  const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
+    const url = `/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
-const handleOpenUploadNewInvoice = (sessionId: string) => {
-  const url = `/upload-invoice-admin?session_id=${encodeURIComponent(sessionId)}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-};
+  const handleOpenSupportingDocuments = (row: InvoiceGridRow) => {
+    if (!row.invoice_id) return;
+    navigate(`/invoice-supporting-documents-admin?invoice_id=${encodeURIComponent(String(row.invoice_id))}`);
+  };
 
-const handleOpenSupportingDocuments = (row: InvoiceGridRow) => {
-  if (!row.invoice_id) return;
-  navigate(`/invoice-supporting-documents-admin?invoice_id=${encodeURIComponent(String(row.invoice_id))}`);
-};
+  const handleOpenUploadFix = (row: InvoiceGridRow) => {
+    const params = new URLSearchParams();
+    if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
+    if (row.session_id) params.set('session_id', String(row.session_id));
+    if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
+    if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined)
+      params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
+    if (row.contractor_business_name) params.set('contractor_business_name', String(row.contractor_business_name));
+    if (row.latest_di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
 
-const handleOpenUploadFix = (row: InvoiceGridRow) => {
-  const params = new URLSearchParams();
-  if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
-  if (row.session_id) params.set('session_id', String(row.session_id));
-  if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
-  if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined) params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
-  if (row.contractor_business_name) params.set('contractor_business_name', String(row.contractor_business_name));
-  if (row.latest_di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
+    const url = `/upload-invoice-fix-admin?${params.toString()}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
-  const url = `/upload-invoice-fix-admin?${params.toString()}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-};
+  const handleOpenRevisions = (row: InvoiceGridRow) => {
+    const params = new URLSearchParams();
+    if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
+    if (row.session_id) params.set('context_session_id', String(row.session_id));
+    if (row.session_created_at) params.set('context_session_created_at', String(row.session_created_at));
+    if (row.session_status) params.set('context_session_status', String(row.session_status));
+    if (row.invoice_status) params.set('context_invoice_status', String(row.invoice_status));
+    if (row.contractor_business_name)
+      params.set('context_contractor_business_name', String(row.contractor_business_name));
+    if (row.latest_di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
+    const url = `/revision-requests-admin?${params.toString()}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
-const handleOpenRevisions = (row: InvoiceGridRow) => {
-  const params = new URLSearchParams();
-  if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
-  if (row.session_id) params.set('context_session_id', String(row.session_id));
-  if (row.session_created_at) params.set('context_session_created_at', String(row.session_created_at));
-  if (row.session_status) params.set('context_session_status', String(row.session_status));
-  if (row.invoice_status) params.set('context_invoice_status', String(row.invoice_status));
-  if (row.contractor_business_name) params.set('context_contractor_business_name', String(row.contractor_business_name));
-  if (row.latest_di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
-  const url = `/revision-requests-admin?${params.toString()}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-};
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    const confirmed = window.confirm(
+      'Delete this invoice and all child records (invoice versions, revision requests, lineitems, step runs, and related artifacts)? This cannot be undone.',
+    );
+    if (!confirmed) return;
 
-const handleDeleteInvoice = async (invoiceId: string) => {
-  const confirmed = window.confirm(
-    'Delete this invoice and all child records (invoice versions, revision requests, lineitems, step runs, and related artifacts)? This cannot be undone.'
-  );
-  if (!confirmed) return;
+    setDeletingInvoiceId(invoiceId);
+    setError('');
 
-  setDeletingInvoiceId(invoiceId);
-  setError('');
+    try {
+      const res = await fetch(`/api/claims/admin/invoices/${encodeURIComponent(invoiceId)}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
 
-  try {
-    const res = await fetch(`/api/claims/admin/invoices/${encodeURIComponent(invoiceId)}`, {
-      method: 'DELETE',
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-    });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+      }
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+      if (selected?.invoice_id === invoiceId) {
+        handleCloseDrawer();
+      }
+
+      await fetchRows();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to delete invoice.');
+    } finally {
+      setDeletingInvoiceId('');
     }
-
-    if (selected?.invoice_id === invoiceId) {
-      handleCloseDrawer();
-    }
-
-    await fetchRows();
-  } catch (e: any) {
-    setError(e?.message || 'Failed to delete invoice.');
-  } finally {
-    setDeletingInvoiceId('');
-  }
-};
+  };
 
   const handleOpenDrawer = (row: InvoiceGridRow) => {
     setSelected(row);
@@ -390,24 +463,7 @@ const handleDeleteInvoice = async (invoiceId: string) => {
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           {/* Filters */}
-          <Flex gap={3} align="end" wrap="nowrap" mb={4} overflowX="auto">
-            <Box flex="1" minW="220px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>
-                session_id (optional)
-              </Text>
-              <Input
-                value={sessionId}
-                onChange={(e) => {
-                  setSessionId(e.target.value);
-                  setPage(1);
-                }}
-                onBlur={() => pushUrl({ sessionId, page: 1 })}
-                placeholder="session UUID (optional)"
-                bg="white"
-                fontFamily="mono"
-              />
-            </Box>
-
+          <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box flex="1" minW="260px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 search (q)
@@ -442,16 +498,41 @@ const handleDeleteInvoice = async (invoiceId: string) => {
                 bg="white"
               >
                 <option value="">(all)</option>
+                <option value="upload_queued">upload_queued</option>
+                <option value="upload_in_progress">upload_in_progress</option>
                 <option value="upload_failed">upload_failed</option>
                 <option value="upload_complete">upload_complete</option>
+                <option value="ocr_queued">ocr_queued</option>
+                <option value="ocr_in_progress">ocr_in_progress</option>
                 <option value="ocr_failed">ocr_failed</option>
                 <option value="ocr_complete">ocr_complete</option>
+                <option value="genai_queued">genai_queued</option>
+                <option value="genai_in_progress">genai_in_progress</option>
                 <option value="genai_failed">genai_failed</option>
                 <option value="genai_complete">genai_complete</option>
-                <option value="awaiting_admin_review">awaiting_admin_review</option>
-                <option value="contractor_revision_required">contractor_revision_required</option>
-                <option value="closed">closed</option>
+                <option value="admin_review_inbox">admin_review_inbox</option>
+                <option value="contractor_revision_inbox">contractor_revision_inbox</option>
+                <option value="in_review">in_review</option>
+                <option value="approved_pending">approved_pending</option>
+                <option value="approved_paid">approved_paid</option>
+                <option value="ineligible">ineligible</option>
               </Select>
+            </Box>
+
+            <Box minW="240px" maxW="320px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                upgrade types
+              </Text>
+              <MultiCheckSelect
+                selectedValues={selectedUpgradeTypeKeys}
+                setSelectedValues={(values) => {
+                  setSelectedUpgradeTypeKeys(values);
+                  setPage(1);
+                  pushUrl({ selectedUpgradeTypeKeys: values, page: 1 });
+                }}
+                allItems={upgradeTypeFilterItems}
+                placeholder="All upgrade types"
+              />
             </Box>
 
             <Box minW="220px" maxW="280px">
@@ -497,8 +578,8 @@ const handleDeleteInvoice = async (invoiceId: string) => {
               </Select>
             </Box>
 
-            <HStack spacing={2} pb={1} flexShrink={0}>
-              <Tooltip label="Help: upload new, upload fix, OCR / AI, inspect versions">
+            <HStack spacing={2} pb={1} flexShrink={0} alignSelf="flex-end">
+              <Tooltip label="Help: upload fix, OCR / AI, inspect versions">
                 <IconButton
                   aria-label="Open invoices help"
                   icon={<Question size={18} />}
@@ -527,6 +608,7 @@ const handleDeleteInvoice = async (invoiceId: string) => {
                     setSessionId('');
                     setQ('');
                     setInvoiceStatus('');
+                    setSelectedUpgradeTypeKeys([]);
                     setSort('latest_invoice_version_updated_at:desc');
                     setPer(25);
                     setPage(1);
@@ -534,6 +616,7 @@ const handleDeleteInvoice = async (invoiceId: string) => {
                       sessionId: '',
                       q: '',
                       invoiceStatus: '',
+                      selectedUpgradeTypeKeys: [],
                       sort: 'latest_invoice_version_updated_at:desc',
                       per: 25,
                       page: 1,
@@ -553,7 +636,7 @@ const handleDeleteInvoice = async (invoiceId: string) => {
           )}
 
           {/* Grid */}
-          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
+          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} overflowX="auto">
             <Flex align="center" justify="space-between" mb={2}>
               <HStack spacing={3}>
                 <Text fontSize="sm" fontWeight="bold">
@@ -566,18 +649,17 @@ const handleDeleteInvoice = async (invoiceId: string) => {
               {loading && <Spinner size="sm" />}
             </Flex>
 
-            <Table size="sm">
+            <Table size="sm" minW="920px">
               <Thead bg="gray.50">
                 <Tr>
-                  <Th>session created</Th>
+                  <Th>version updated</Th>
                   <Th>contractor</Th>
-                  <Th>contractor #</Th>
-                  <Th>invoice #</Th>
-                  <Th isNumeric>total</Th>
                   <Th>status</Th>
+                  <Th minW="180px">upgrade types</Th>
                   <Th>AI</Th>
-                  <Th isNumeric>conf</Th>
-                  <Th>Actions</Th>
+                  <Th minW="360px" textAlign="right">
+                    Actions
+                  </Th>
                 </Tr>
               </Thead>
 
@@ -585,165 +667,177 @@ const handleDeleteInvoice = async (invoiceId: string) => {
                 {rows.map((r, idx) => {
                   const hasInvoice = Boolean(r.invoice_id && String(r.invoice_id).trim());
                   return (
-                  <Tr key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}>
-                    <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
-                      {fmtDate(r.session_created_at)}
-                    </Td>
+                    <Tr key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}>
+                      <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                        {fmtDate(r.latest_invoice_version_updated_at ?? r.invoice_updated_at)}
+                      </Td>
 
-                    <Td fontSize="sm" whiteSpace="nowrap">
-                      {r.contractor_business_name ?? '—'}
-                    </Td>
+                      <Td fontSize="sm" whiteSpace="nowrap">
+                        {r.contractor_business_name ?? '—'}
+                      </Td>
 
-                    <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
-                      {r.contractor_number ?? '—'}
-                    </Td>
+                      <Td>
+                        <Badge>{r.invoice_status || '—'}</Badge>
+                      </Td>
 
-                    <Td fontFamily="mono" fontSize="xs">
-                      {r.latest_di_ocr_invoice_id || '—'}
-                    </Td>
+                      <Td whiteSpace="nowrap" minW="180px">
+                        {Array.isArray(r.latest_detected_upgrade_types_json) &&
+                        r.latest_detected_upgrade_types_json.length > 0 ? (
+                          <Flex gap={2} wrap="nowrap" align="center" minW="max-content">
+                            {r.latest_detected_upgrade_types_json.map((upgradeType) => {
+                              const label =
+                                upgradeType.description ||
+                                getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key).label;
+                              const confidenceSuffix =
+                                upgradeType.confidence === null || upgradeType.confidence === undefined
+                                  ? ''
+                                  : ` (${upgradeType.confidence}%)`;
 
-                    <Td isNumeric fontFamily="mono" fontSize="xs">
-                      {fmtMoney(r.latest_di_ocr_invoice_total)}
-                    </Td>
+                              return (
+                                <Tooltip
+                                  key={`${r.invoice_id || 'invoice'}-${upgradeType.upgrade_type_key || 'unknown'}`}
+                                  label={`${label}${confidenceSuffix}`}
+                                >
+                                  <Box flexShrink={0}>
+                                    <InvoiceUpgradeTypeTile
+                                      upgradeTypeKey={upgradeType.upgrade_type_key}
+                                      description={upgradeType.description}
+                                    />
+                                  </Box>
+                                </Tooltip>
+                              );
+                            })}
+                          </Flex>
+                        ) : (
+                          <Text fontSize="xs" opacity={0.55}>
+                            none
+                          </Text>
+                        )}
+                      </Td>
 
-                    <Td>
-                      <Badge>{r.invoice_status || '—'}</Badge>
-                    </Td>
+                      <Td>
+                        <HStack spacing={2}>
+                          <PassDot val={r.latest_genai_all_rulechecks_pass_flag} />
+                          <Text fontSize="xs" opacity={0.8}>
+                            {r.latest_genai_all_rulechecks_pass_flag === null ||
+                            r.latest_genai_all_rulechecks_pass_flag === undefined
+                              ? 'unknown'
+                              : r.latest_genai_all_rulechecks_pass_flag
+                                ? 'pass'
+                                : 'fail'}
+                          </Text>
+                        </HStack>
+                      </Td>
 
-                    <Td>
-                      <HStack spacing={2}>
-                        <PassDot val={r.latest_genai_all_rulechecks_pass_flag} />
-                        <Text fontSize="xs" opacity={0.8}>
-                          {r.latest_genai_all_rulechecks_pass_flag === null || r.latest_genai_all_rulechecks_pass_flag === undefined
-                            ? 'unknown'
-                            : r.latest_genai_all_rulechecks_pass_flag
-                              ? 'pass'
-                              : 'fail'}
-                        </Text>
-                      </HStack>
-                    </Td>
+                      <Td whiteSpace="nowrap" minW="360px">
+                        <Flex justify="flex-end" align="center" gap={2} wrap="nowrap" minW="max-content">
+                          <Tooltip label="Open details drawer">
+                            <IconButton
+                              aria-label="Open details drawer"
+                              size="xs"
+                              variant="outline"
+                              icon={<Info size={14} />}
+                              onClick={() => handleOpenDrawer(r)}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
 
-                    <Td isNumeric fontFamily="mono" fontSize="xs">
-                      {r.latest_genai_overall_confidence ?? ''}
-                    </Td>
+                          <Tooltip label="Open PDF viewer">
+                            <IconButton
+                              aria-label="Open PDF viewer"
+                              size="xs"
+                              variant="outline"
+                              icon={<FilePdf size={14} />}
+                              onClick={() => handleOpenDetailsWithPdf(r.session_id, String(r.invoice_id))}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
 
-                    <Td>
-                      <HStack justify="flex-end" spacing={2}>
-<Tooltip label="Open details drawer">
-<IconButton
-  aria-label="Open details drawer"
-  size="xs"
-  variant="outline"
-  icon={<Info size={14} />}
-  onClick={() => handleOpenDrawer(r)}
-  isDisabled={!hasInvoice}
-/>
-</Tooltip>
+                          <Tooltip label="Delete invoice and all child claim records">
+                            <IconButton
+                              aria-label="Delete invoice"
+                              size="xs"
+                              variant="outline"
+                              colorScheme="red"
+                              icon={<Trash size={14} />}
+                              onClick={() => handleDeleteInvoice(String(r.invoice_id))}
+                              isDisabled={
+                                !hasInvoice ||
+                                loading ||
+                                (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))
+                              }
+                              isLoading={deletingInvoiceId === String(r.invoice_id)}
+                            />
+                          </Tooltip>
 
-<Tooltip label ="Open PDF viewer"> 
-<IconButton
-  aria-label="Open PDF viewer"
-  size="xs"
-  variant="outline"
-  icon={<FilePdf size={14} />}
-  onClick={() => handleOpenDetailsWithPdf(r.session_id, String(r.invoice_id))}
-  isDisabled={!hasInvoice}
-/>
-</Tooltip>
+                          <Tooltip label="inspect prior versions of this invoice">
+                            <IconButton
+                              aria-label="Inspect invoice versions"
+                              size="xs"
+                              variant="outline"
+                              icon={<MagnifyingGlass size={14} />}
+                              onClick={() => handleOpenVersions(String(r.invoice_id))}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
 
-<Tooltip label="Delete invoice and all child claim records">
-<IconButton
-  aria-label="Delete invoice"
-  size="xs"
-  variant="outline"
-  colorScheme="red"
-  icon={<Trash size={14} />}
-  onClick={() => handleDeleteInvoice(String(r.invoice_id))}
-  isDisabled={!hasInvoice || loading || (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))}
-  isLoading={deletingInvoiceId === String(r.invoice_id)}
-/>
-</Tooltip>
+                          <Tooltip label="view all revision requests for all versions for this invoice">
+                            <IconButton
+                              aria-label="Open revision requests"
+                              size="xs"
+                              variant="outline"
+                              icon={<GitBranch size={14} />}
+                              onClick={() => handleOpenRevisions(r)}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
 
-<Tooltip label="inspect prior versions of this invoice">
-<IconButton
-  aria-label="Inspect invoice versions"
-  size="xs"
-  variant="outline"
-  icon={<MagnifyingGlass size={14} />}
-  onClick={() => handleOpenVersions(String(r.invoice_id))}
-  isDisabled={!hasInvoice}
-/>
-</Tooltip>
+                          <Tooltip label="Re-run OCR and AI jobs for this invoice">
+                            <IconButton
+                              aria-label="Run OCR and AI jobs"
+                              size="xs"
+                              variant="outline"
+                              icon={
+                                <HStack spacing={0.5}>
+                                  <Scan size={12} />
+                                  <Sparkle size={12} />
+                                </HStack>
+                              }
+                              onClick={() => handlePopulateJobAdminWithInvoice(r)}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
 
-<Tooltip label="view all revision requests for all versions for this invoice">
-<IconButton
-  aria-label="Open revision requests"
-  size="xs"
-  variant="outline"
-  icon={<GitBranch size={14} />}
-  onClick={() => handleOpenRevisions(r)}
-  isDisabled={!hasInvoice}
-/>
-</Tooltip>
+                          <Tooltip label="Manage supporting PDFs for this invoice">
+                            <IconButton
+                              aria-label="Manage supporting PDFs"
+                              size="xs"
+                              variant="outline"
+                              icon={<Files size={14} />}
+                              onClick={() => handleOpenSupportingDocuments(r)}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
 
-<Tooltip label="Re-run OCR and AI jobs for this invoice">
-<IconButton
-  aria-label="Run OCR and AI jobs"
-  size="xs"
-  variant="outline"
-  icon={
-    <HStack spacing={0.5}>
-      <Scan size={12} />
-      <Sparkle size={12} />
-    </HStack>
-  }
-  onClick={() => handlePopulateJobAdminWithInvoice(r)}
-  isDisabled={!hasInvoice}
-/>
-</Tooltip>
-
-<Tooltip label="upload net new invoice (not a fix) for this session">
-<IconButton
-  aria-label="Upload new invoice"
-  size="xs"
-  variant="outline"
-  icon={<FileArrowUp size={14} />}
-  onClick={() => handleOpenUploadNewInvoice(r.session_id)}
-/>
-</Tooltip>
-
-<Tooltip label="Manage supporting PDFs for this invoice">
-<IconButton
-  aria-label="Manage supporting PDFs"
-  size="xs"
-  variant="outline"
-  icon={<Files size={14} />}
-  onClick={() => handleOpenSupportingDocuments(r)}
-  isDisabled={!hasInvoice}
-/>
-</Tooltip>
-
-<Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
-<IconButton
-  aria-label="Upload fix invoice version"
-  size="xs"
-  variant="outline"
-  icon={<Wrench size={14} />}
-  onClick={() => handleOpenUploadFix(r)}
-  isDisabled={!hasInvoice || !r.latest_invoice_version_id}
-/>
-</Tooltip>
-
-
-                      </HStack>
-                    </Td>
-                  </Tr>
-                );
+                          <Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
+                            <IconButton
+                              aria-label="Upload fix invoice version"
+                              size="xs"
+                              variant="outline"
+                              icon={<Wrench size={14} />}
+                              onClick={() => handleOpenUploadFix(r)}
+                              isDisabled={!hasInvoice || !r.latest_invoice_version_id}
+                            />
+                          </Tooltip>
+                        </Flex>
+                      </Td>
+                    </Tr>
+                  );
                 })}
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={9}>
+                    <Td colSpan={6}>
                       <Text fontSize="sm" opacity={0.7}>
                         No rows. Adjust filters or click Refresh.
                       </Text>
@@ -804,61 +898,69 @@ const handleDeleteInvoice = async (invoiceId: string) => {
           <DrawerHeader>Invoices Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This screen has six related but distinct actions: Submission, upload new, upload fix, OCR / AI, Inspect Versions, and Revision Requests. They are intentionally separated so full-pipeline simulation, document upload, OCR/GenAI processing, version inspection, and revision-request review remain clear and testable.
-            </Text>
-
-            <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Upload new
-            </Text>
-            <Text fontSize="sm" mb={3}>
-              Use this when the contractor omitted an entire homeowner invoice from their batch. This creates a new invoice record and its first invoice version (version 1). Although the button appears on a row that displays invoice-level details, this action is session-scoped and uses the selected session to add a net-new invoice to that session.
+              This screen has five related but distinct actions: Submission, upload fix, OCR / AI, Inspect Versions, and
+              Revision Requests. They are intentionally separated so full-pipeline simulation, document upload
+              correction, OCR/GenAI processing, version inspection, and revision-request review remain clear and
+              testable.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Upload fix
             </Text>
             <Text fontSize="sm" mb={3}>
-              Use this when an existing invoice PDF needs correction (for example, a typo or other source-document error). This creates a new child invoice version (+1) under the same invoice.
+              Use this when an existing invoice PDF needs correction (for example, a typo or other source-document
+              error). This creates a new child invoice version (+1) under the same invoice.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               OCR / AI
             </Text>
             <Text fontSize="sm" mb={3}>
-              The upload buttons only store the PDF and create invoice/invoice-version records. They do not run OCR extraction or GenAI rule checks. OCR and GenAI are run separately via OCR / AI so they can be re-run without re-uploading files.
+              The upload-fix action only stores the PDF and creates a new invoice-version record. It does not run OCR
+              extraction or GenAI rule checks. OCR and GenAI are run separately via OCR / AI so they can be re-run
+              without re-uploading files.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Inspect Versions
             </Text>
             <Text fontSize="sm" mb={3}>
-              The main Invoices grid shows only the current (latest) version for each invoice. Use Inspect Versions to view prior versions and compare what the contractor changed between revision requests.
+              The main Invoices grid shows only the current (latest) version for each invoice. Use Inspect Versions to
+              view prior versions and compare what the contractor changed between revision requests.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Revision Requests
             </Text>
             <Text fontSize="sm" mb={3}>
-              Revision Requests opens an invoice-scoped grid across all versions for the selected invoice, even though this Invoices grid only shows the current version. For example, an invoice with 3 versions might show 5 revision requests in total: 2 on version 1, 2 on version 2, and 1 on version 3. Each revision request record includes both the admin request and the contractor response.
+              Revision Requests opens an invoice-scoped grid across all versions for the selected invoice, even though
+              this Invoices grid only shows the current version. For example, an invoice with 3 versions might show 5
+              revision requests in total: 2 on version 1, 2 on version 2, and 1 on version 3. Each revision request
+              record includes both the admin request and the contractor response.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Why this separation matters
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 1: Participant or account data changed (such as a corrected eligibility code). Re-run GenAI only to refresh rule checks against current system data.
+              Example 1: Participant or account data changed (such as a corrected eligibility code). Re-run GenAI only
+              to refresh rule checks against current system data.
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 2: The source PDF itself was incorrect. Request the contractor to correct and upload a fix, then run OCR/GenAI on the new invoice version.
+              Example 2: The source PDF itself was incorrect. Request the contractor to correct and upload a fix, then
+              run OCR/GenAI on the new invoice version.
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 3: A new validation ruleset is introduced. Re-run GenAI and select the new ruleset to evaluate outcomes without uploading again.
+              Example 3: A new validation ruleset is introduced. Re-run GenAI and select the new ruleset to evaluate
+              outcomes without uploading again.
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 4: OCR quality improvements are released. Re-run OCR (and then GenAI if needed) to pick up improved extraction quality from the same uploaded PDF.
+              Example 4: OCR quality improvements are released. Re-run OCR (and then GenAI if needed) to pick up
+              improved extraction quality from the same uploaded PDF.
             </Text>
             <Text fontSize="sm">
-              Example 5: Operational troubleshooting. If a prior run failed due to transient processing issues, re-run only the failed step instead of repeating full upload.
+              Example 5: Operational troubleshooting. If a prior run failed due to transient processing issues, re-run
+              only the failed step instead of repeating full upload.
             </Text>
           </DrawerBody>
         </DrawerContent>
@@ -869,9 +971,7 @@ const handleDeleteInvoice = async (invoiceId: string) => {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>
-            Invoice {selected?.latest_di_ocr_invoice_id || '—'}
-          </DrawerHeader>
+          <DrawerHeader>Invoice {selected?.latest_di_ocr_invoice_id || '—'}</DrawerHeader>
 
           <DrawerBody>
             {!selected ? (
@@ -906,13 +1006,51 @@ const handleDeleteInvoice = async (invoiceId: string) => {
                     <Text fontSize="sm">
                       <b>Invoice total (DI):</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
                     </Text>
+                    <Box mt={2}>
+                      <Text fontSize="sm" fontWeight="bold" mb={2}>
+                        Detected upgrade types
+                      </Text>
+                      {Array.isArray(selected.latest_detected_upgrade_types_json) &&
+                      selected.latest_detected_upgrade_types_json.length > 0 ? (
+                        <Flex gap={2} wrap="wrap">
+                          {selected.latest_detected_upgrade_types_json.map((upgradeType) => {
+                            const label =
+                              upgradeType.description || getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key).label;
+                            const confidenceSuffix =
+                              upgradeType.confidence === null || upgradeType.confidence === undefined
+                                ? ''
+                                : ` (${upgradeType.confidence}%)`;
+
+                            return (
+                              <Tooltip
+                                key={`drawer-${upgradeType.upgrade_type_key || 'unknown'}`}
+                                label={`${label}${confidenceSuffix}`}
+                              >
+                                <Box>
+                                  <InvoiceUpgradeTypeTile
+                                    size={42}
+                                    upgradeTypeKey={upgradeType.upgrade_type_key}
+                                    description={upgradeType.description}
+                                  />
+                                </Box>
+                              </Tooltip>
+                            );
+                          })}
+                        </Flex>
+                      ) : (
+                        <Text fontSize="sm" opacity={0.7}>
+                          No classifier upgrade types on the latest invoice version yet.
+                        </Text>
+                      )}
+                    </Box>
                     <HStack spacing={2} mt={1}>
                       <Text fontSize="sm">
                         <b>GenAI:</b>
                       </Text>
                       <PassDot val={selected.latest_genai_all_rulechecks_pass_flag} />
                       <Text fontSize="sm" opacity={0.85}>
-                        {selected.latest_genai_all_rulechecks_pass_flag === null || selected.latest_genai_all_rulechecks_pass_flag === undefined
+                        {selected.latest_genai_all_rulechecks_pass_flag === null ||
+                        selected.latest_genai_all_rulechecks_pass_flag === undefined
                           ? 'unknown'
                           : selected.latest_genai_all_rulechecks_pass_flag
                             ? 'pass'
@@ -1040,7 +1178,6 @@ const handleDeleteInvoice = async (invoiceId: string) => {
                     </Box>
                   </>
                 ) : null}
-
               </Box>
             )}
           </DrawerBody>

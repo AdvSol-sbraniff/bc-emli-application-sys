@@ -1,0 +1,328 @@
+# frozen_string_literal: true
+
+module Claims
+  module InvoiceVersionRulechecks
+    class ApplyCodeRulechecks
+      SOURCE_VINTAGE_DATE = Date.new(2026, 4, 1)
+
+      def self.call(invoice_version_id:)
+        new(invoice_version_id: invoice_version_id).call
+      end
+
+      def initialize(invoice_version_id:)
+        @invoice_version_id = invoice_version_id
+      end
+
+      def call
+        @invoice_version = Claims::InvoiceVersion.find(@invoice_version_id)
+        @invoice = Claims::Invoice.find(@invoice_version.invoice_id)
+        @session = Claims::Session.find_by(id: @invoice.session_id)
+        @code_fields = load_fields("code")
+
+        rows = [
+          source_vintage_applies,
+          first_class_invoice_fields_present,
+          submission_within_six_months,
+          eligibility_code_valid_for_invoice_date
+        ].compact
+
+        Claims::InvoiceVersionRulecheck.transaction do
+          Claims::InvoiceVersionRulecheck.where(
+            invoice_version_id: @invoice_version_id,
+            source_engine: "code"
+          ).delete_all
+
+          Claims::InvoiceVersionRulecheck.insert_all!(rows) if rows.any?
+        end
+
+        { ok: true, replaced: rows.size }
+      rescue => e
+        { ok: false, error: e.message, error_class: e.class.name }
+      end
+
+      private
+
+      attr_reader :invoice_version, :invoice, :session, :code_fields
+
+      def source_vintage_applies
+        invoice_date = invoice_version.di_ocr_invoice_date
+
+        if invoice_date.blank?
+          return(
+            fail_row(
+              rule_number: 1001,
+              rule_key: "source_vintage_applies",
+              source_requirement_id: "ESP-2026-COM-001",
+              rule_name: "Source vintage applies",
+              expected_text:
+                "Invoice date is on or after #{SOURCE_VINTAGE_DATE.iso8601}.",
+              observed_text: "Invoice date was not found."
+            )
+          )
+        end
+
+        pass = invoice_date >= SOURCE_VINTAGE_DATE
+
+        row(
+          rule_number: 1001,
+          rule_key: "source_vintage_applies",
+          source_requirement_id: "ESP-2026-COM-001",
+          rule_name: "Source vintage applies",
+          rule_pass_flag: pass,
+          confidence: 100,
+          expected_text:
+            "Invoice date is on or after #{SOURCE_VINTAGE_DATE.iso8601}.",
+          observed_text: "Invoice date=#{invoice_date.iso8601}.",
+          calculation:
+            "#{invoice_date.iso8601} >= #{SOURCE_VINTAGE_DATE.iso8601} => #{pass}",
+          evidence_text: "invoice_versions.di_ocr_invoice_date"
+        )
+      end
+
+      def first_class_invoice_fields_present
+        required = {
+          "Invoice number" => invoice_version.di_ocr_invoice_id,
+          "Invoice date" => invoice_version.di_ocr_invoice_date,
+          "Vendor name" => invoice_version.di_ocr_vendor_name,
+          "Vendor address" => invoice_version.di_ocr_vendor_address,
+          "Customer name" => invoice_version.di_ocr_customer_name,
+          "Billing address" => invoice_version.di_ocr_billing_address,
+          "Subtotal" => invoice_version.di_ocr_sub_total,
+          "Total tax" => invoice_version.di_ocr_total_tax,
+          "Invoice total" => invoice_version.di_ocr_invoice_total,
+          "Amount due" => invoice_version.di_ocr_amount_due
+        }
+
+        missing = required.select { |_label, value| value.blank? }.keys
+        pass = missing.empty?
+
+        row(
+          rule_number: 1002,
+          rule_key: "first_class_invoice_fields_present",
+          source_requirement_id: "ESP-2026-COM-015",
+          rule_name: "Required invoice fields present",
+          rule_pass_flag: pass,
+          confidence: 100,
+          expected_text: "OCR first-class invoice fields are present.",
+          observed_text:
+            (
+              if pass
+                "All tracked first-class fields are present."
+              else
+                "Missing: #{missing.join(", ")}."
+              end
+            ),
+          evidence_text: "invoice_versions DI first-class columns",
+          reason_and_likely_causes:
+            (
+              if pass
+                nil
+              else
+                "The invoice may be missing information, or OCR may not have recognized it."
+              end
+            )
+        )
+      end
+
+      def submission_within_six_months
+        invoice_date = invoice_version.di_ocr_invoice_date
+        submitted_at = session&.submitted_at
+
+        missing = []
+        missing << "invoice date" if invoice_date.blank?
+        missing << "submitted_at" if submitted_at.blank?
+
+        if missing.any?
+          return(
+            fail_row(
+              rule_number: 1003,
+              rule_key: "submission_within_six_months",
+              source_requirement_id: "ESP-2026-COM-017",
+              rule_name: "Submission within six months",
+              expected_text: "submitted_at <= invoice_date + 6 months.",
+              observed_text: "Missing #{missing.join(" and ")}."
+            )
+          )
+        end
+
+        deadline = invoice_date.advance(months: 6)
+        submitted_date = submitted_at.to_date
+        pass = submitted_date <= deadline
+
+        row(
+          rule_number: 1003,
+          rule_key: "submission_within_six_months",
+          source_requirement_id: "ESP-2026-COM-017",
+          rule_name: "Submission within six months",
+          rule_pass_flag: pass,
+          confidence: 100,
+          expected_text: "submitted_at <= invoice_date + 6 months.",
+          observed_text:
+            "invoice_date=#{invoice_date.iso8601}; submitted_at=#{submitted_date.iso8601}.",
+          calculation:
+            "#{invoice_date.iso8601} + 6 months = #{deadline.iso8601}; #{submitted_date.iso8601} <= #{deadline.iso8601} => #{pass}",
+          evidence_text:
+            "invoice_versions.di_ocr_invoice_date + claims.sessions.submitted_at"
+        )
+      end
+
+      def eligibility_code_valid_for_invoice_date
+        invoice_date = invoice_version.di_ocr_invoice_date
+        approved_at =
+          first_field_value(code_fields, "users_eligibilitycodes.approved_at")
+        expires_at =
+          first_field_value(code_fields, "users_eligibilitycodes.expires_at")
+        eligibility_code =
+          first_field_value(
+            code_fields,
+            "users_eligibilitycodes.eligibility_code"
+          )
+
+        missing = []
+        missing << "invoice date" if invoice_date.blank?
+        missing << "eligibility code approval date" if approved_at.blank?
+
+        if missing.any?
+          return(
+            fail_row(
+              rule_number: 1004,
+              rule_key: "eligibility_code_valid_for_invoice_date",
+              source_requirement_id: "ESP-2026-COM-008",
+              rule_name: "Eligibility code valid for invoice date",
+              expected_text:
+                "Invoice date is within the eligibility-code validity window.",
+              observed_text: "Missing #{missing.join(" and ")}."
+            )
+          )
+        end
+
+        approved_date = parse_date(approved_at)
+        expiry_date = parse_date(expires_at)
+        deadline = expiry_date || approved_date.advance(months: 6)
+        pass = invoice_date >= approved_date && invoice_date <= deadline
+
+        row(
+          rule_number: 1004,
+          rule_key: "eligibility_code_valid_for_invoice_date",
+          source_requirement_id: "ESP-2026-COM-008",
+          rule_name: "Eligibility code valid for invoice date",
+          rule_pass_flag: pass,
+          confidence: 100,
+          expected_text:
+            "Invoice date is on or after eligibility-code approval and on or before eligibility-code expiry.",
+          observed_text:
+            "eligibility_code=#{eligibility_code.presence || "missing"}; approved_at=#{approved_date.iso8601}; expiry=#{deadline.iso8601}; invoice_date=#{invoice_date.iso8601}.",
+          calculation:
+            "#{approved_date.iso8601} <= #{invoice_date.iso8601} <= #{deadline.iso8601} => #{pass}",
+          evidence_text:
+            "claims.users_eligibilitycodes + invoice_versions.di_ocr_invoice_date"
+        )
+      rescue ArgumentError
+        fail_row(
+          rule_number: 1004,
+          rule_key: "eligibility_code_valid_for_invoice_date",
+          source_requirement_id: "ESP-2026-COM-008",
+          rule_name: "Eligibility code valid for invoice date",
+          expected_text:
+            "Eligibility approval/expiry dates are parseable dates.",
+          observed_text: "Could not parse eligibility-code dates."
+        )
+      end
+
+      def load_fields(source_engine)
+        Claims::InvoiceVersionLocatedField.where(
+          invoice_version_id: invoice_version.id,
+          source_engine: source_engine
+        ).to_a
+      end
+
+      def first_field_value(fields, key)
+        field_values(fields, key).first
+      end
+
+      def field_values(fields, key)
+        fields
+          .select { |f| f.field_key == key }
+          .map { |f| f.value_text.presence }
+          .compact
+      end
+
+      def parse_date(value)
+        return value if value.is_a?(Date)
+
+        Date.iso8601(value.to_s)
+      end
+
+      def fail_row(
+        rule_number:,
+        rule_key:,
+        source_requirement_id:,
+        rule_name:,
+        expected_text:,
+        observed_text:
+      )
+        row(
+          rule_number: rule_number,
+          rule_key: rule_key,
+          source_requirement_id: source_requirement_id,
+          rule_name: rule_name,
+          rule_pass_flag: false,
+          confidence: 0,
+          expected_text: expected_text,
+          observed_text: observed_text,
+          evidence_text: nil,
+          reason_and_likely_causes:
+            "Required evidence was not available for deterministic validation."
+        )
+      end
+
+      def row(
+        rule_number:,
+        rule_key:,
+        source_requirement_id:,
+        rule_name:,
+        rule_pass_flag:,
+        confidence:,
+        expected_text:,
+        observed_text:,
+        calculation: nil,
+        evidence_text: nil,
+        reason_and_likely_causes: nil
+      )
+        now = Time.current
+
+        attrs = {
+          invoice_version_id: invoice_version.id,
+          source_engine: "code",
+          rule_number: rule_number,
+          rule_name: "#{rule_key}: #{rule_name}",
+          rule_pass_flag: rule_pass_flag,
+          confidence: confidence,
+          expected_text: expected_text,
+          observed_text: observed_text,
+          calculation: calculation,
+          evidence_text: evidence_text,
+          reason_and_likely_causes: reason_and_likely_causes,
+          created_at: now,
+          updated_at: now
+        }
+
+        optional_metadata = {
+          rule_key: rule_key,
+          source_requirement_id: source_requirement_id,
+          evidence_source: "invoice_pdf|database"
+        }
+
+        optional_metadata.each do |key, value|
+          attrs[
+            key
+          ] = value if Claims::InvoiceVersionRulecheck.column_names.include?(
+            key.to_s
+          )
+        end
+
+        attrs
+      end
+    end
+  end
+end

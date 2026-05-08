@@ -4,11 +4,11 @@ module Api
   module Claims
     class InvoiceGridController < Api::ApplicationController
       # POC: no auth/policy for now (match your SessionsController approach)
-skip_before_action :authenticate_user!, only: %i[index destroy]
-skip_before_action :require_confirmation, only: %i[index destroy]
-skip_after_action  :verify_authorized, only: %i[index destroy]
-skip_after_action  :verify_policy_scoped, only: %i[index]
-skip_forgery_protection only: %i[index destroy]
+      skip_before_action :authenticate_user!, only: %i[index destroy]
+      skip_before_action :require_confirmation, only: %i[index destroy]
+      skip_after_action :verify_authorized, only: %i[index destroy]
+      skip_after_action :verify_policy_scoped, only: %i[index]
+      skip_forgery_protection only: %i[index destroy]
 
       # GET /api/claims/admin/invoices
       # Query:
@@ -30,6 +30,25 @@ skip_forgery_protection only: %i[index destroy]
           rel = rel.where(invoice_status: params[:invoice_status].to_s.strip)
         end
 
+        upgrade_type_keys = parse_upgrade_type_keys(params[:upgrade_type_keys])
+        if upgrade_type_keys.any?
+          placeholders =
+            upgrade_type_keys
+              .each_index
+              .map { |idx| ":upgrade_type_key_#{idx}" }
+              .join(", ")
+          binds =
+            upgrade_type_keys.each_with_index.to_h do |key, idx|
+              ["upgrade_type_key_#{idx}".to_sym, key]
+            end
+
+          rel =
+            rel.where(
+              "COALESCE(latest_detected_upgrade_type_keys, ARRAY[]::varchar[]) && ARRAY[#{placeholders}]::varchar[]",
+              binds
+            )
+        end
+
         # Text search (safe against missing columns)
         rel = apply_text_search(rel, params[:q])
 
@@ -39,28 +58,32 @@ skip_forgery_protection only: %i[index destroy]
 
         # Pagination
         page = to_int(params[:page], 1)
-        per  = clamp(to_int(params[:per], 25), 1, 200)
+        per = clamp(to_int(params[:per], 25), 1, 200)
         offset = (page - 1) * per
 
         total = rel.count
-        rows  = rel.offset(offset).limit(per)
+        rows = rel.offset(offset).limit(per)
 
         render json: {
-          rows: rows.as_json,
-          meta: {
-            total: total,
-            page: page,
-            per: per,
-            sort: "#{sort_field}:#{sort_dir}",
-            filters: {
-              session_id: params[:session_id].presence,
-              invoice_status: params[:invoice_status].presence,
-              q: params[:q].presence
-            }
-          }
-        }, status: :ok
+                 rows: rows.as_json,
+                 meta: {
+                   total: total,
+                   page: page,
+                   per: per,
+                   sort: "#{sort_field}:#{sort_dir}",
+                   filters: {
+                     session_id: params[:session_id].presence,
+                     invoice_status: params[:invoice_status].presence,
+                     upgrade_type_keys: upgrade_type_keys,
+                     q: params[:q].presence
+                   }
+                 }
+               },
+               status: :ok
       rescue => e
-        Rails.logger.error("[CLAIMS][INVOICE_GRID] ERROR: #{e.class}: #{e.message}")
+        Rails.logger.error(
+          "[CLAIMS][INVOICE_GRID] ERROR: #{e.class}: #{e.message}"
+        )
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :internal_server_error
       end
@@ -80,21 +103,36 @@ skip_forgery_protection only: %i[index destroy]
         }
 
         ::Claims::Invoice.transaction do
-          invoice_version_ids = ::Claims::InvoiceVersion.where(invoice_id: invoice.id).pluck(:id)
+          invoice_version_ids =
+            ::Claims::InvoiceVersion.where(invoice_id: invoice.id).pluck(:id)
 
           if invoice_version_ids.any?
-            deleted[:lineitems] = ::Claims::Lineitem.where(invoice_version_id: invoice_version_ids).delete_all
-            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(invoice_version_id: invoice_version_ids).delete_all
+            deleted[:lineitems] = ::Claims::Lineitem.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
+            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
 
             # These also cascade from invoice_versions, but explicit deletes keep counts accurate.
-            ::Claims::InvoiceVersionLocatedField.where(invoice_version_id: invoice_version_ids).delete_all
-            ::Claims::InvoiceVersionRulecheck.where(invoice_version_id: invoice_version_ids).delete_all
-            deleted[:ingest_step_runs] = ::Claims::IngestStepRun.where(invoice_version_id: invoice_version_ids).delete_all
+            ::Claims::InvoiceVersionLocatedField.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
+            ::Claims::InvoiceVersionRulecheck.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
+            deleted[:ingest_step_runs] = ::Claims::IngestStepRun.where(
+              invoice_version_id: invoice_version_ids
+            ).delete_all
 
-            deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(id: invoice_version_ids).delete_all
+            deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(
+              id: invoice_version_ids
+            ).delete_all
           end
 
-          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(invoice_id: invoice.id).delete_all
+          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(
+            invoice_id: invoice.id
+          ).delete_all
 
           invoice.destroy!
         end
@@ -103,7 +141,9 @@ skip_forgery_protection only: %i[index destroy]
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Invoice not found" }, status: :not_found
       rescue => e
-        Rails.logger.error("[CLAIMS][INVOICE_GRID] destroy failed id=#{params[:id]}: #{e.class}: #{e.message}")
+        Rails.logger.error(
+          "[CLAIMS][INVOICE_GRID] destroy failed id=#{params[:id]}: #{e.class}: #{e.message}"
+        )
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -112,7 +152,7 @@ skip_forgery_protection only: %i[index destroy]
 
       def to_int(v, default)
         Integer(v)
-      rescue
+      rescue StandardError
         default
       end
 
@@ -144,26 +184,45 @@ skip_forgery_protection only: %i[index destroy]
         escape_char = "!"
         pattern = "%#{ActiveRecord::Base.sanitize_sql_like(q, escape_char)}%"
 
-        clauses = fields.map { |f| "#{f} ILIKE :p ESCAPE '#{escape_char}'" }.join(" OR ")
+        clauses =
+          fields
+            .map { |f| "#{f} ILIKE :p ESCAPE '#{escape_char}'" }
+            .join(" OR ")
         rel.where(clauses, p: pattern)
       end
 
       def parse_sort(raw)
         cols = ::Claims::InvoiceGrid.column_names
 
-        default_field = cols.include?("latest_invoice_version_updated_at") ? "latest_invoice_version_updated_at" : "invoice_updated_at"
-        default_dir   = "desc"
+        default_field =
+          (
+            if cols.include?("latest_invoice_version_updated_at")
+              "latest_invoice_version_updated_at"
+            else
+              "invoice_updated_at"
+            end
+          )
+        default_dir = "desc"
 
-        return [default_field, default_dir] if raw.blank?
+        return default_field, default_dir if raw.blank?
 
         field, dir = raw.to_s.split(":", 2)
         field = field.to_s.strip
-        dir   = dir.to_s.strip.downcase
+        dir = dir.to_s.strip.downcase
 
         field = default_field unless cols.include?(field)
-        dir   = %w[asc desc].include?(dir) ? dir : default_dir
+        dir = %w[asc desc].include?(dir) ? dir : default_dir
 
         [field, dir]
+      end
+
+      def parse_upgrade_type_keys(raw)
+        raw
+          .to_s
+          .split(",")
+          .map { |value| value.to_s.strip }
+          .reject(&:blank?)
+          .uniq
       end
     end
   end

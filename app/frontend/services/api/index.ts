@@ -130,6 +130,10 @@ export class Api {
     return this.client.get('/validate_token');
   }
 
+  async fetchClaimsContractorInvoices() {
+    return this.client.get<ApiResponse<any>>('/claims/contractor/invoices');
+  }
+
   async invite(params) {
     return this.client.post('/invitation', params);
   }

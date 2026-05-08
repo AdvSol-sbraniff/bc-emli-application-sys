@@ -109,7 +109,7 @@ function isblankTemplatePath(path: string): boolean {
 }
 
 function isContractorDashboardPath(path: string): boolean {
-  return path === '/contractor-dashboard';
+  return path === '/contractor-dashboard' || path === '/ai-contractor-dashboard';
 }
 
 function isContractorWorkflowPath(path: string): boolean {
@@ -455,8 +455,8 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
     <>
       <MenuDivider my={0} borderColor="border.light" />
       <MenuGroup title={t('home.claimsAdminSectionTitle')}>
-        <NavMenuItem label={t('home.sessionsAdminTitle')} to={'/sessions-admin'} />
         <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
+        <NavMenuItem label={'Hello AI'} to={'/hello-ai-admin'} />
         <NavMenuItem label={'Reports'} to={'/reports-volume-value'} />
         <NavMenuItem label={'Submission Simulator'} to={'/submission-simulator-admin'} />
         <NavMenuItem label={t('home.rulesetsAdminTitle')} to={'/rulesets-admin'} />
@@ -562,6 +562,14 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
                   {currentUser?.isReviewer && reviewerItems}
                   {currentUser?.isReviewStaff && reviewStaffItems}
                   {(currentUser?.isSuperAdmin || currentUser?.isReviewStaff) && claimsAdminItems}
+
+                  {currentUser?.isContractor && (
+                    <>
+                      <NavMenuItem label="Legacy contractor portal" to="/contractor-dashboard" />
+                      <NavMenuItem label="AI contractor portal" to="/ai-contractor-dashboard" />
+                      <MenuDivider my={0} borderColor="border.light" />
+                    </>
+                  )}
 
                   {/* Participants specific items */}
                   {currentUser?.isSubmitter && (

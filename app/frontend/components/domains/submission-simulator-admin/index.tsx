@@ -13,7 +13,6 @@ import {
   Flex,
   HStack,
   IconButton,
-  Input,
   Select,
   Spinner,
   Tab,
@@ -36,14 +35,17 @@ import { ArrowsClockwise, Question, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
-type RulesetRow = {
-  id: string;
-  ruleset_shortname?: string | null;
-};
-
 type ContractorRow = {
   id: string;
   business_name?: string | null;
+};
+
+type UserRow = {
+  id: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  name?: string | null;
 };
 
 type RunHeader = {
@@ -85,6 +87,19 @@ type StepRow = {
   updated_at?: string | null;
 };
 
+type ClassifierResultRow = {
+  id: string;
+  invoice_version_id?: string | null;
+  invoice_upgrade_type_id?: string | null;
+  upgrade_type_key?: string | null;
+  upgrade_type_description?: string | null;
+  call_status?: string | null;
+  confidence?: number | null;
+  evidence_text?: string | null;
+  classifier_notes?: string | null;
+  updated_at?: string | null;
+};
+
 function getParam(search: string, key: string): string {
   return new URLSearchParams(search).get(key) ?? '';
 }
@@ -118,16 +133,20 @@ function statusColor(status?: string | null) {
 function progressIndicator(status?: string | null) {
   const v = String(status || '').toLowerCase();
 
-  if (v === 'genai_complete' || v === 'admin_review_inbox' || v === 'closed_success') {
+  if (v === 'genai_complete' || v === 'admin_review_inbox' || v === 'approved_pending' || v === 'approved_paid') {
     return <Box w="10px" h="10px" borderRadius="full" bg="green.400" />;
   }
 
-  if (v.endsWith('_failed') || v === 'closed_reject') {
+  if (v.endsWith('_failed') || v === 'ineligible') {
     return <Box w="10px" h="10px" borderRadius="full" bg="red.400" />;
   }
 
   if (v === 'contractor_revision_inbox') {
     return <Box w="10px" h="10px" borderRadius="full" bg="orange.400" />;
+  }
+
+  if (v === 'in_review') {
+    return <Box w="10px" h="10px" borderRadius="full" bg="blue.400" />;
   }
 
   return <Spinner size="xs" color="blue.500" />;
@@ -140,7 +159,9 @@ function pipelineStage(status?: string | null) {
   if (v.startsWith('genai_')) return 'GenAI';
   if (v === 'admin_review_inbox') return 'Admin Review';
   if (v === 'contractor_revision_inbox') return 'Contractor Revision';
-  if (v.startsWith('closed_')) return 'Closed';
+  if (v === 'in_review') return 'Review';
+  if (v === 'approved_pending' || v === 'approved_paid') return 'Approved';
+  if (v === 'ineligible') return 'Closed';
   return 'Pending';
 }
 
@@ -186,17 +207,16 @@ export default function SubmissionSimulatorAdminScreen() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const sessionIdFromUrl = getParam(location.search, 'session_id');
   const contractorIdFromUrl = getParam(location.search, 'contractor_id');
+  const submitterIdFromUrl = getParam(location.search, 'submitter_id');
   const runIdFromUrl = getParam(location.search, 'ingest_run_id');
 
-  const [sessionId, setSessionId] = useState(sessionIdFromUrl);
   const [contractorId, setContractorId] = useState(contractorIdFromUrl);
+  const [submitterId, setSubmitterId] = useState(submitterIdFromUrl);
   const [runId, setRunId] = useState(runIdFromUrl);
 
-  const [rulesets, setRulesets] = useState<RulesetRow[]>([]);
   const [contractors, setContractors] = useState<ContractorRow[]>([]);
-  const [rulesetId, setRulesetId] = useState('');
+  const [users, setUsers] = useState<UserRow[]>([]);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -218,27 +238,12 @@ export default function SubmissionSimulatorAdminScreen() {
   const [stepsLoading, setStepsLoading] = useState(false);
   const [stepsError, setStepsError] = useState('');
   const [steps, setSteps] = useState<StepRow[]>([]);
+  const [classifierResults, setClassifierResults] = useState<ClassifierResultRow[]>([]);
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
-  useEffect(() => setSessionId(sessionIdFromUrl), [sessionIdFromUrl]);
   useEffect(() => setContractorId(contractorIdFromUrl), [contractorIdFromUrl]);
+  useEffect(() => setSubmitterId(submitterIdFromUrl), [submitterIdFromUrl]);
   useEffect(() => setRunId(runIdFromUrl), [runIdFromUrl]);
-
-  const loadRulesets = async () => {
-    try {
-      const params = new URLSearchParams({ page: '1', per: '200', sort: 'updated_at:desc' });
-      const res = await fetch(`/api/claims/admin/validationgenai_rulesets?${params.toString()}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-      setRulesets(Array.isArray(data?.rows) ? data.rows : []);
-    } catch {
-      setRulesets([]);
-    }
-  };
 
   const loadContractors = async () => {
     try {
@@ -253,6 +258,22 @@ export default function SubmissionSimulatorAdminScreen() {
       setContractors(Array.isArray(data?.rows) ? data.rows : []);
     } catch {
       setContractors([]);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const params = new URLSearchParams({ page: '1', per: '200', sort: 'email:asc' });
+      const res = await fetch(`/api/claims/admin/users?${params.toString()}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      setUsers(Array.isArray(data?.rows) ? data.rows : []);
+    } catch {
+      setUsers([]);
     }
   };
 
@@ -308,17 +329,22 @@ export default function SubmissionSimulatorAdminScreen() {
       const params = new URLSearchParams({ limit: '500' });
       if (runId) params.set('ingest_run_id', runId);
 
-      const res = await fetch(`/api/claims/ingest/invoices/${encodeURIComponent(invoiceId)}/steps?${params.toString()}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
+      const res = await fetch(
+        `/api/claims/ingest/invoices/${encodeURIComponent(invoiceId)}/steps?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        },
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
       setSteps(Array.isArray(data?.rows) ? data.rows : []);
+      setClassifierResults(Array.isArray(data?.classifier_results) ? data.classifier_results : []);
     } catch (e: any) {
       setStepsError(e?.message || 'Failed to load step history.');
       setSteps([]);
+      setClassifierResults([]);
     } finally {
       setStepsLoading(false);
     }
@@ -331,8 +357,8 @@ export default function SubmissionSimulatorAdminScreen() {
   };
 
   useEffect(() => {
-    loadRulesets();
     loadContractors();
+    loadUsers();
   }, []);
 
   useEffect(() => {
@@ -364,13 +390,13 @@ export default function SubmissionSimulatorAdminScreen() {
     setSubmitError('');
     setSubmitOk('');
     try {
-      if (!rulesetId.trim()) throw new Error('Select a GenAI ruleset first.');
       if (!contractorId.trim()) throw new Error('Select a contractor first.');
+      if (!submitterId.trim()) throw new Error('Select a submitter first.');
       if (!selectedFiles.length) throw new Error('Select one or more PDF files.');
 
       const form = new FormData();
       if (contractorId.trim()) form.append('contractor_id', contractorId.trim());
-      form.append('validationgenai_ruleset_id', rulesetId.trim());
+      if (submitterId.trim()) form.append('submitter_id', submitterId.trim());
       selectedFiles.forEach((f) => form.append('pdfs[]', f, f.name));
 
       const res = await fetch('/api/claims/ingest/admin_submit_batch', {
@@ -387,12 +413,12 @@ export default function SubmissionSimulatorAdminScreen() {
       if (!nextRunId) throw new Error('Run started but no ingest_run_id returned.');
 
       setRunId(nextRunId);
-      if (nextSessionId) setSessionId(nextSessionId);
 
       setParams(navigate, location, {
         ingest_run_id: nextRunId,
         session_id: nextSessionId,
         contractor_id: contractorId,
+        submitter_id: submitterId,
       });
 
       setSubmitOk(`Submission simulation started. Run ${nextRunId}.`);
@@ -412,7 +438,9 @@ export default function SubmissionSimulatorAdminScreen() {
   const mergeStagedFiles = (files: File[]) => {
     const pdfsOnly = files.filter((f) => {
       const byType = String(f.type || '').toLowerCase() === 'application/pdf';
-      const byExt = String(f.name || '').toLowerCase().endsWith('.pdf');
+      const byExt = String(f.name || '')
+        .toLowerCase()
+        .endsWith('.pdf');
       return byType || byExt;
     });
 
@@ -466,25 +494,6 @@ export default function SubmissionSimulatorAdminScreen() {
 
   const clearStagedFiles = () => setSelectedFiles([]);
 
-  const clearRunContext = () => {
-    setRunId('');
-    setSessionId('');
-    setRunHeader(null);
-    setRunError('');
-    setInvoiceRows([]);
-    setRowsError('');
-    setSelectedInvoiceId('');
-    setSteps([]);
-    setStepsError('');
-    setSubmitOk('');
-    setSubmitError('');
-
-    setParams(navigate, location, {
-      ingest_run_id: '',
-      session_id: '',
-    });
-  };
-
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar title="Submission Simulator" />
@@ -493,25 +502,14 @@ export default function SubmissionSimulatorAdminScreen() {
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex justify="flex-end" mb={3}>
             <HStack spacing={2}>
-              <Tooltip label="Clear run context">
+              <Tooltip label="Help: staged submission and run tracking">
                 <IconButton
-                  aria-label="Clear run context"
-                  icon={<XCircle size={18} />}
+                  aria-label="Open submission simulator help"
+                  icon={<Question size={18} />}
                   variant="outline"
-                  colorScheme="red"
-                  onClick={clearRunContext}
-                  isDisabled={!runId && !sessionId && !invoiceRows.length && !steps.length}
+                  onClick={onHelpOpen}
                 />
               </Tooltip>
-
-            <Tooltip label="Help: staged submission and run tracking">
-              <IconButton
-                aria-label="Open submission simulator help"
-                icon={<Question size={18} />}
-                variant="outline"
-                onClick={onHelpOpen}
-              />
-            </Tooltip>
             </HStack>
           </Flex>
 
@@ -526,14 +524,17 @@ export default function SubmissionSimulatorAdminScreen() {
 
           <VStack spacing={4} align="stretch" mb={5}>
             <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-              <Text fontSize="sm" fontWeight="bold" mb={3}>Step 1: Run Context</Text>
+              <Text fontSize="sm" fontWeight="bold" mb={3}>
+                Step 1: Run Context
+              </Text>
+              <Text fontSize="xs" opacity={0.75} mb={3}>
+                A fresh session id is created automatically when the staged batch is submitted.
+              </Text>
               <HStack spacing={3} wrap="wrap" align="end">
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>session_id (auto created on submit)</Text>
-                  <Input value={runHeader?.session_id || sessionId || ''} readOnly fontFamily="mono" w="330px" />
-                </Box>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>Contractor</Text>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    Contractor
+                  </Text>
                   <Select value={contractorId} onChange={(e) => setContractorId(e.target.value)} w="330px">
                     <option value="">Select contractor…</option>
                     {contractors.map((c) => (
@@ -542,11 +543,15 @@ export default function SubmissionSimulatorAdminScreen() {
                   </Select>
                 </Box>
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>GenAI ruleset</Text>
-                  <Select value={rulesetId} onChange={(e) => setRulesetId(e.target.value)} w="330px">
-                    <option value="">Select ruleset…</option>
-                    {rulesets.map((r) => (
-                      <option key={r.id} value={r.id}>{`${r.ruleset_shortname || 'ruleset'} (${r.id})`}</option>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    Submitter
+                  </Text>
+                  <Select value={submitterId} onChange={(e) => setSubmitterId(e.target.value)} w="330px">
+                    <option value="">Select submitter...</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {`${u.name || [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'User'} (${u.id})`}
+                      </option>
                     ))}
                   </Select>
                 </Box>
@@ -555,9 +560,13 @@ export default function SubmissionSimulatorAdminScreen() {
 
             <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
               <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
-                <Text fontSize="sm" fontWeight="bold">Step 2: Stage PDF Files</Text>
+                <Text fontSize="sm" fontWeight="bold">
+                  Step 2: Stage PDF Files
+                </Text>
                 <HStack spacing={2}>
-                  <Button variant="outline" onClick={openFilePicker}>Add PDFs</Button>
+                  <Button variant="outline" onClick={openFilePicker}>
+                    Add PDFs
+                  </Button>
                   <Tooltip label="Clear all staged files">
                     <IconButton
                       aria-label="Clear all staged files"
@@ -586,8 +595,12 @@ export default function SubmissionSimulatorAdminScreen() {
                 onDragLeave={handleDropZoneDragLeave}
                 onDrop={handleDropZoneDrop}
               >
-                <Text fontSize="sm" fontWeight="bold">Drag and drop PDF files here</Text>
-                <Text fontSize="xs" opacity={0.75} mt={1}>or use Add PDFs to browse from your device</Text>
+                <Text fontSize="sm" fontWeight="bold">
+                  Drag and drop PDF files here
+                </Text>
+                <Text fontSize="xs" opacity={0.75} mt={1}>
+                  or use Add PDFs to browse from your device
+                </Text>
               </Box>
 
               <Box borderWidth="1px" borderRadius="md" overflow="auto">
@@ -617,7 +630,11 @@ export default function SubmissionSimulatorAdminScreen() {
                     ))}
                     {selectedFiles.length === 0 && (
                       <Tr>
-                        <Td colSpan={5}><Text fontSize="sm" opacity={0.7}>No staged PDFs yet. Click Add PDFs to build the batch.</Text></Td>
+                        <Td colSpan={5}>
+                          <Text fontSize="sm" opacity={0.7}>
+                            No staged PDFs yet. Click Add PDFs to build the batch.
+                          </Text>
+                        </Td>
                       </Tr>
                     )}
                   </Tbody>
@@ -626,15 +643,17 @@ export default function SubmissionSimulatorAdminScreen() {
             </Box>
 
             <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
-              <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
-                <Text fontSize="sm" fontWeight="bold">Step 3: Submit and Monitor</Text>
+              <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
+                <Text fontSize="sm" fontWeight="bold">
+                  Step 3: Submit and Monitor
+                </Text>
                 <HStack>
                   <Button
                     colorScheme="blue"
                     onClick={() => void handleRunSubmission()}
                     isLoading={submitLoading}
                     loadingText="Starting..."
-                    isDisabled={!selectedFiles.length || !contractorId || !rulesetId}
+                    isDisabled={!selectedFiles.length || !contractorId || !submitterId}
                   >
                     Submit Staged Files
                   </Button>
@@ -648,24 +667,47 @@ export default function SubmissionSimulatorAdminScreen() {
                   </Tooltip>
                 </HStack>
               </Flex>
-              {submitError && <Text fontSize="sm" color="red.700" mt={2}>{submitError}</Text>}
-              {submitOk && <Text fontSize="sm" color="green.700" mt={2}>{submitOk}</Text>}
+
+              {submitError && (
+                <Text fontSize="sm" color="red.700" mt={2}>
+                  {submitError}
+                </Text>
+              )}
+              {submitOk && (
+                <Text fontSize="sm" color="green.700" mt={2}>
+                  {submitOk}
+                </Text>
+              )}
             </Box>
           </VStack>
 
           <Box mb={4} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
             <HStack spacing={4} wrap="wrap" align="center">
-              <Text fontSize="sm" fontWeight="bold">Ingest Run Information</Text>
+              <Text fontSize="sm" fontWeight="bold">
+                Ingest Run Information
+              </Text>
               {runLoading && <Spinner size="sm" />}
-              <Text fontSize="xs" fontFamily="mono">run_id: {runHeader?.id || runId || '—'}</Text>
+              <Text fontSize="xs" fontFamily="mono">
+                run_id: {runHeader?.id || runId || '—'}
+              </Text>
               <Badge colorScheme={statusColor(runHeader?.status)}>{runHeader?.status || '—'}</Badge>
-              <Text fontSize="xs">files {runHeader?.completed_files ?? 0}/{runHeader?.total_files ?? 0}</Text>
+              <Text fontSize="xs">
+                files {runHeader?.completed_files ?? 0}/{runHeader?.total_files ?? 0}
+              </Text>
               <Text fontSize="xs">failed {runHeader?.failed_files ?? 0}</Text>
               <Text fontSize="xs">started {fmtTs(runHeader?.created_at)}</Text>
               <Text fontSize="xs">completed {fmtTs(runHeader?.completed_at)}</Text>
-              {shouldPoll && <Text fontSize="xs" color="gray.600">auto-refreshing every 3s</Text>}
+              {shouldPoll && (
+                <Text fontSize="xs" color="gray.600">
+                  auto-refreshing every 3s
+                </Text>
+              )}
             </HStack>
-            {runError && <Text fontSize="sm" color="red.700" mt={2}>{runError}</Text>}
+            {runError && (
+              <Text fontSize="sm" color="red.700" mt={2}>
+                {runError}
+              </Text>
+            )}
           </Box>
 
           <Tabs variant="line" isFitted colorScheme="gray">
@@ -675,7 +717,11 @@ export default function SubmissionSimulatorAdminScreen() {
             </TabList>
             <TabPanels>
               <TabPanel px={0}>
-                {rowsError && <Text fontSize="sm" color="red.700" mb={2}>{rowsError}</Text>}
+                {rowsError && (
+                  <Text fontSize="sm" color="red.700" mb={2}>
+                    {rowsError}
+                  </Text>
+                )}
                 <Box borderWidth="1px" borderRadius="md" overflow="auto">
                   <Table size="sm" minW="920px">
                     <Thead bg="gray.50">
@@ -700,7 +746,9 @@ export default function SubmissionSimulatorAdminScreen() {
                             _hover={{ bg: isSelected ? 'blue.100' : 'gray.50' }}
                             onClick={() => setSelectedInvoiceId(String(r.invoice_id))}
                           >
-                            <Td fontFamily="mono" fontSize="xs">{r.invoice_id}</Td>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {r.invoice_id}
+                            </Td>
                             <Td fontSize="xs">{r.original_filename || '—'}</Td>
                             <Td fontSize="xs">
                               <Badge colorScheme={statusColor(r.invoice_status)}>{r.invoice_status || '—'}</Badge>
@@ -715,7 +763,11 @@ export default function SubmissionSimulatorAdminScreen() {
 
                       {!rowsLoading && invoiceRows.length === 0 && (
                         <Tr>
-                          <Td colSpan={7}><Text fontSize="sm" opacity={0.7}>No invoice rows for this run yet.</Text></Td>
+                          <Td colSpan={7}>
+                            <Text fontSize="sm" opacity={0.7}>
+                              No invoice rows for this run yet.
+                            </Text>
+                          </Td>
                         </Tr>
                       )}
                     </Tbody>
@@ -725,11 +777,65 @@ export default function SubmissionSimulatorAdminScreen() {
 
               <TabPanel px={0}>
                 <HStack mb={3} spacing={3}>
-                  <Text fontSize="sm" fontWeight="bold">Selected invoice_id:</Text>
-                  <Text fontSize="sm" fontFamily="mono">{selectedInvoiceId || '—'}</Text>
+                  <Text fontSize="sm" fontWeight="bold">
+                    Selected invoice_id:
+                  </Text>
+                  <Text fontSize="sm" fontFamily="mono">
+                    {selectedInvoiceId || '—'}
+                  </Text>
                 </HStack>
 
-                {stepsError && <Text fontSize="sm" color="red.700" mb={2}>{stepsError}</Text>}
+                {stepsError && (
+                  <Text fontSize="sm" color="red.700" mb={2}>
+                    {stepsError}
+                  </Text>
+                )}
+
+                <Box mb={4}>
+                  <Text fontSize="sm" fontWeight="bold" mb={2}>
+                    Classifier results
+                  </Text>
+                  <Box borderWidth="1px" borderRadius="md" overflow="auto">
+                    <Table size="sm" minW="900px">
+                      <Thead bg="gray.50">
+                        <Tr>
+                          <Th>upgrade type</Th>
+                          <Th>confidence</Th>
+                          <Th>status</Th>
+                          <Th>evidence</Th>
+                          <Th>updated</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {classifierResults.map((r) => (
+                          <Tr key={r.id}>
+                            <Td fontSize="xs">
+                              <Text fontWeight="bold">{r.upgrade_type_description || r.upgrade_type_key || 'â€”'}</Text>
+                              <Text fontFamily="mono" opacity={0.7}>
+                                {r.upgrade_type_key || 'â€”'}
+                              </Text>
+                            </Td>
+                            <Td fontSize="xs">{r.confidence ?? 'â€”'}</Td>
+                            <Td fontSize="xs">
+                              <Badge colorScheme={statusColor(r.call_status)}>{r.call_status || 'â€”'}</Badge>
+                            </Td>
+                            <Td fontSize="xs">{r.evidence_text || r.classifier_notes || 'â€”'}</Td>
+                            <Td fontSize="xs">{fmtTs(r.updated_at)}</Td>
+                          </Tr>
+                        ))}
+                        {!stepsLoading && classifierResults.length === 0 && (
+                          <Tr>
+                            <Td colSpan={5}>
+                              <Text fontSize="sm" opacity={0.7}>
+                                No classifier rows yet for this invoice.
+                              </Text>
+                            </Td>
+                          </Tr>
+                        )}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                </Box>
 
                 <Box borderWidth="1px" borderRadius="md" overflow="auto">
                   <Table size="sm" minW="1000px">
@@ -746,7 +852,9 @@ export default function SubmissionSimulatorAdminScreen() {
                       {steps.map((s) => (
                         <Tr key={s.id}>
                           <Td fontSize="xs">{fmtTs(s.created_at)}</Td>
-                          <Td fontFamily="mono" fontSize="xs">{s.ingest_run_id || '—'}</Td>
+                          <Td fontFamily="mono" fontSize="xs">
+                            {s.ingest_run_id || '—'}
+                          </Td>
                           <Td fontSize="xs">{s.step_type || '—'}</Td>
                           <Td fontSize="xs">{renderStepState(s)}</Td>
                           <Td fontSize="xs">{s.error_text || '—'}</Td>
@@ -755,7 +863,11 @@ export default function SubmissionSimulatorAdminScreen() {
 
                       {!stepsLoading && steps.length === 0 && (
                         <Tr>
-                          <Td colSpan={5}><Text fontSize="sm" opacity={0.7}>No step rows for current selection.</Text></Td>
+                          <Td colSpan={5}>
+                            <Text fontSize="sm" opacity={0.7}>
+                              No step rows for current selection.
+                            </Text>
+                          </Td>
                         </Tr>
                       )}
                     </Tbody>
@@ -775,27 +887,49 @@ export default function SubmissionSimulatorAdminScreen() {
           <DrawerBody>
             <VStack align="stretch" spacing={4}>
               <Box>
-                <Text fontSize="sm" fontWeight="bold" mb={1}>How this screen works</Text>
-                <Text fontSize="sm">Step 1 sets run context, Step 2 stages PDFs, and Step 3 submits the staged batch.</Text>
-                <Text fontSize="sm" mt={1}>Files are staged in browser memory until you click Submit Staged Files.</Text>
+                <Text fontSize="sm" fontWeight="bold" mb={1}>
+                  How this screen works
+                </Text>
+                <Text fontSize="sm">
+                  Step 1 sets run context, Step 2 stages PDFs, and Step 3 submits the staged batch.
+                </Text>
+                <Text fontSize="sm" mt={1}>
+                  Files are staged in browser memory until you click Submit Staged Files.
+                </Text>
               </Box>
 
               <Box>
-                <Text fontSize="sm" fontWeight="bold" mb={1}>Overall tab</Text>
-                <Text fontSize="sm">One row per invoice in the selected ingest run. Click a row to inspect its step history.</Text>
-                <Text fontSize="sm" mt={1}>Progress indicator: spinner means active, green means complete, red means failed.</Text>
+                <Text fontSize="sm" fontWeight="bold" mb={1}>
+                  Overall tab
+                </Text>
+                <Text fontSize="sm">
+                  One row per invoice in the selected ingest run. Click a row to inspect its step history.
+                </Text>
+                <Text fontSize="sm" mt={1}>
+                  Progress indicator: spinner means active, green means complete, red means failed.
+                </Text>
               </Box>
 
               <Box>
-                <Text fontSize="sm" fontWeight="bold" mb={1}>Step History tab</Text>
+                <Text fontSize="sm" fontWeight="bold" mb={1}>
+                  Step History tab
+                </Text>
                 <Text fontSize="sm">Shows steps for the selected invoice in the current run.</Text>
-                <Text fontSize="sm" mt={1}>State values: queued, in progress, succeeded, failed.</Text>
+                <Text fontSize="sm" mt={1}>
+                  State values: queued, in progress, succeeded, failed.
+                </Text>
               </Box>
 
               <Box>
-                <Text fontSize="sm" fontWeight="bold" mb={1}>Troubleshooting</Text>
-                <Text fontSize="sm">If rows stay queued, verify Sidekiq claims worker is running and consuming claims queues.</Text>
-                <Text fontSize="sm" mt={1}>Use /sidekiq to inspect queue depth, busy jobs, retries, and active processes.</Text>
+                <Text fontSize="sm" fontWeight="bold" mb={1}>
+                  Troubleshooting
+                </Text>
+                <Text fontSize="sm">
+                  If rows stay queued, verify Sidekiq claims worker is running and consuming claims queues.
+                </Text>
+                <Text fontSize="sm" mt={1}>
+                  Use /sidekiq to inspect queue depth, busy jobs, retries, and active processes.
+                </Text>
               </Box>
             </VStack>
           </DrawerBody>

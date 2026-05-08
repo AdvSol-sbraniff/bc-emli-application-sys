@@ -29,7 +29,16 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, Info, PencilSimple, Question, Trash, XCircle } from '@phosphor-icons/react';
+import {
+  ArrowsClockwise,
+  CaretLeft,
+  CaretRight,
+  FileArrowUp,
+  Info,
+  Question,
+  Trash,
+  XCircle,
+} from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -41,28 +50,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 //   GET /api/claims/admin/sessions_with_contractors?q=&status=&sort=&page=&per=
 // - Row actions:
 //   - Details => opens Drawer with ALL fields from the view row
-//   - Open invoices => opens existing invoices grid in new tab with session_id prefilled
 // ============================================================
 
 type SessionRow = {
   // session fields (from s.* in the view)
   id: string;
-  contractor_id?: string | null;
-  submitter_id?: string | null;
-  status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  submitted_at?: string | null;
-
-  // denormalized contractor fields (aliased in the view)
-  contractor_business_name?: string | null;
-  contractor_number?: string | null;
-  contractor_email?: string | null;
-  contractor_phone_number?: string | null;
-  contractor_cellphone_number?: string | null;
-  contractor_city?: string | null;
-  contractor_postal_code?: string | null;
-  contractor_onboarded?: boolean | null;
 };
 
 type SessionsSearchResponse = {
@@ -97,12 +91,6 @@ function fmtDate(s?: string | null) {
   return raw.slice(0, 10);
 }
 
-function yn(v: any) {
-  if (v === true) return 'yes';
-  if (v === false) return 'no';
-  return '—';
-}
-
 function Field({ label, value }: { label: string; value: any }) {
   return (
     <Box>
@@ -125,7 +113,6 @@ export default function SessionsAdminScreen() {
   // ============================================================
 
   const q = getParam(location.search, 'q');
-  const status = getParam(location.search, 'status');
   const sort = getParam(location.search, 'sort') || 'updated_at:desc';
   const pageStr = getParam(location.search, 'page') || '1';
   const perStr = getParam(location.search, 'per') || '25';
@@ -142,6 +129,7 @@ export default function SessionsAdminScreen() {
   const [deletingSessionId, setDeletingSessionId] = useState('');
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [selectedSessionForUpload, setSelectedSessionForUpload] = useState<SessionRow | null>(null);
 
   const fetchSessions = async () => {
     setGridLoading(true);
@@ -150,7 +138,6 @@ export default function SessionsAdminScreen() {
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set('q', q.trim());
-      if (status.trim()) params.set('status', status.trim());
       params.set('sort', sort);
       params.set('page', String(page));
       params.set('per', String(per));
@@ -183,7 +170,7 @@ export default function SessionsAdminScreen() {
   useEffect(() => {
     fetchSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status, sort, page, per]);
+  }, [q, sort, page, per]);
 
   const totalPages = Math.max(1, Math.ceil((total || 0) / per));
 
@@ -192,11 +179,7 @@ export default function SessionsAdminScreen() {
   // ============================================================
 
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const {
-    isOpen: isHelpOpen,
-    onOpen: onHelpOpen,
-    onClose: onHelpClose,
-  } = useDisclosure();
+  const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selected, setSelected] = useState<SessionRow | null>(null);
 
   const openDrawer = (row: SessionRow) => {
@@ -213,18 +196,14 @@ export default function SessionsAdminScreen() {
   // SECTION 04 — OPEN INVOICES GRID
   // ============================================================
 
-  const openInvoicesGrid = (sessionId: string) => {
-    const url = `/invoices-admin?session_id=${encodeURIComponent(sessionId)}`;
+  const openUploadNewInvoice = (sessionId: string) => {
+    const url = `/upload-invoice-admin?session_id=${encodeURIComponent(sessionId)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const openEditSession = (sessionId: string) => {
-    window.open(`/edit-session-admin?id=${encodeURIComponent(sessionId)}`, '_blank', 'noopener,noreferrer');
   };
 
   const deleteSession = async (sessionId: string) => {
     const confirmed = window.confirm(
-      'Delete this session and all child claim records (invoices, versions, runs, step runs, and related artifacts)? This cannot be undone.'
+      'Delete this session and all child claim records (invoices, versions, runs, step runs, and related artifacts)? This cannot be undone.',
     );
     if (!confirmed) return;
 
@@ -268,7 +247,7 @@ export default function SessionsAdminScreen() {
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box flex="1" minW="280px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
-                Search (contractor name/number/email/city/postal, ids)
+                Search session id
               </Text>
               <Input
                 value={q}
@@ -276,22 +255,6 @@ export default function SessionsAdminScreen() {
                 placeholder="Search sessions..."
                 bg="white"
               />
-            </Box>
-
-            <Box w="220px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>
-                Status
-              </Text>
-              <Select
-                value={status}
-                onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
-                bg="white"
-              >
-                <option value="">(any)</option>
-                <option value="OPENBUTNOTSUBMITTED">OPENBUTNOTSUBMITTED</option>
-                <option value="OPENANDSUBMITTED">OPENANDSUBMITTED</option>
-                <option value="CLOSED">CLOSED</option>
-              </Select>
             </Box>
 
             <Box w="240px">
@@ -305,11 +268,6 @@ export default function SessionsAdminScreen() {
               >
                 <option value="updated_at:desc">updated_at desc</option>
                 <option value="created_at:desc">created_at desc</option>
-                <option value="submitted_at:desc">submitted_at desc</option>
-                <option value="status:asc">status asc</option>
-                <option value="status:desc">status desc</option>
-                <option value="contractor_business_name:asc">contractor name asc</option>
-                <option value="contractor_business_name:desc">contractor name desc</option>
               </Select>
             </Box>
 
@@ -346,13 +304,12 @@ export default function SessionsAdminScreen() {
                   onClick={() => {
                     setParams(navigate, location, {
                       q: '',
-                      status: '',
                       sort: 'updated_at:desc',
                       per: '25',
                       page: '1',
                     });
                   }}
-                  isDisabled={!q.trim() && !status.trim() && sort === 'updated_at:desc' && per === 25}
+                  isDisabled={!q.trim() && sort === 'updated_at:desc' && per === 25}
                 />
               </Tooltip>
 
@@ -377,22 +334,19 @@ export default function SessionsAdminScreen() {
           )}
 
           <Box borderWidth="1px" borderRadius="md" overflow="auto">
-            <Table size="sm" minW="980px">
-                <Thead bg="gray.50">
-                  <Tr>
-                    <Th>created</Th>
-                    <Th>contractor</Th>
-                    <Th>contractor #</Th>
-                    <Th>session status</Th>
-                    <Th>submitted</Th>
-                    <Th>session_id</Th>
-                    <Th></Th>
-                  </Tr>
-                </Thead>
+            <Table size="sm" minW="720px">
+              <Thead bg="gray.50">
+                <Tr>
+                  <Th>created</Th>
+                  <Th>updated</Th>
+                  <Th>session_id</Th>
+                  <Th></Th>
+                </Tr>
+              </Thead>
               <Tbody>
                 {gridLoading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={7}>
+                    <Td colSpan={4}>
                       <Flex align="center" gap={2} py={3}>
                         <Spinner size="sm" />
                         <Text>Loading sessions...</Text>
@@ -401,26 +355,23 @@ export default function SessionsAdminScreen() {
                   </Tr>
                 )}
 
-                  {rows.map((r) => (
-                    <Tr key={r.id} _hover={{ bg: 'gray.50' }}>
+                {rows.map((r) => {
+                  const isSelectedForUpload = selectedSessionForUpload?.id === r.id;
+
+                  return (
+                    <Tr
+                      key={r.id}
+                      bg={isSelectedForUpload ? 'blue.50' : undefined}
+                      cursor="pointer"
+                      _hover={{ bg: isSelectedForUpload ? 'blue.50' : 'gray.50' }}
+                      onClick={() => setSelectedSessionForUpload(r)}
+                    >
                       <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
                         {fmtDate(r.created_at)}
                       </Td>
 
-                      <Td fontSize="sm" whiteSpace="nowrap">
-                        {r.contractor_business_name ?? '—'}
-                      </Td>
-
                       <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
-                        {r.contractor_number ?? '—'}
-                      </Td>
-
-                      <Td fontFamily="mono" fontSize="xs">
-                        {r.status ?? '—'}
-                      </Td>
-
-                      <Td fontFamily="mono" fontSize="xs">
-                        {fmtTs(r.submitted_at)}
+                        {fmtDate(r.updated_at)}
                       </Td>
 
                       <Td fontFamily="mono" fontSize="xs">
@@ -435,16 +386,11 @@ export default function SessionsAdminScreen() {
                               size="xs"
                               variant="outline"
                               icon={<Info size={14} />}
-                              onClick={() => openDrawer(r)}
-                            />
-                          </Tooltip>
-                          <Tooltip label="Edit session">
-                            <IconButton
-                              aria-label="Edit session"
-                              size="xs"
-                              variant="outline"
-                              icon={<PencilSimple size={14} />}
-                              onClick={() => openEditSession(r.id)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedSessionForUpload(r);
+                                openDrawer(r);
+                              }}
                             />
                           </Tooltip>
                           <Tooltip label="Delete session and all child claim records">
@@ -454,28 +400,29 @@ export default function SessionsAdminScreen() {
                               variant="outline"
                               colorScheme="red"
                               icon={<Trash size={14} />}
-                              onClick={() => deleteSession(r.id)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                deleteSession(r.id);
+                              }}
                               isLoading={deletingSessionId === r.id}
                               isDisabled={gridLoading || (!!deletingSessionId && deletingSessionId !== r.id)}
                             />
                           </Tooltip>
-                          <Button size="xs" variant="outline" onClick={() => openInvoicesGrid(r.id)}>
-                            Open invoices
-                          </Button>
                         </HStack>
                       </Td>
                     </Tr>
-                  ))}
+                  );
+                })}
 
-                  {!gridLoading && rows.length === 0 && (
-                    <Tr>
-                      <Td colSpan={7}>
-                        <Text as="div" fontSize="sm" opacity={0.7} p={3}>
-                          No sessions found.
-                        </Text>
-                      </Td>
-                    </Tr>
-                  )}
+                {!gridLoading && rows.length === 0 && (
+                  <Tr>
+                    <Td colSpan={4}>
+                      <Text as="div" fontSize="sm" opacity={0.7} p={3}>
+                        No sessions found.
+                      </Text>
+                    </Td>
+                  </Tr>
+                )}
               </Tbody>
             </Table>
           </Box>
@@ -512,10 +459,24 @@ export default function SessionsAdminScreen() {
             </HStack>
           </Flex>
 
-          <Flex mt={3}>
+          <Flex mt={3} gap={3} align="center" wrap="wrap">
             <Button size="sm" onClick={() => navigate('/admin-create-session')}>
               Create new session
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<FileArrowUp size={16} />}
+              onClick={() => selectedSessionForUpload?.id && openUploadNewInvoice(selectedSessionForUpload.id)}
+              isDisabled={!selectedSessionForUpload?.id}
+            >
+              Add net new invoice to selected session
+            </Button>
+            {selectedSessionForUpload?.id && (
+              <Text fontSize="xs" opacity={0.7}>
+                Selected session: {selectedSessionForUpload.id}
+              </Text>
+            )}
           </Flex>
         </Box>
       </Container>
@@ -527,55 +488,68 @@ export default function SessionsAdminScreen() {
           <DrawerHeader>Sessions Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              A session is a folder that groups multiple invoice submissions together. Contractors can see and use this folder in their workflow, so admins also need to see it and understand it.
+              A session is a folder that groups multiple invoice submissions together. Contractors can see and use this
+              folder in their workflow, so admins also need to see it and understand it.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Why admins need this screen
             </Text>
             <Text fontSize="sm" mb={3}>
-              Even if many admin users do not work with sessions every day, they still need a mental map of this structure. When contractor-side information needs correction or investigation, sessions are part of how records are organized and traced.
+              Even if many admin users do not work with sessions every day, they still need a mental map of this
+              structure. When contractor-side information needs correction or investigation, sessions are part of how
+              records are organized and traced.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Important design tradeoff
             </Text>
             <Text fontSize="sm" mb={3}>
-              Needing to upload multiple invoices at once does not automatically require exposing a session object in the user interface. If contractors only had a simple multi-click upload flow with no visible session concept, this complexity would be much less visible in both contractor and admin UX.
+              Needing to upload multiple invoices at once does not automatically require exposing a session object in
+              the user interface. If contractors only had a simple multi-click upload flow with no visible session
+              concept, this complexity would be much less visible in both contractor and admin UX.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Why we still use sessions
             </Text>
             <Text fontSize="sm" mb={3}>
-              The session pattern is useful for larger contractor organizations and for broader government use cases where grouped submission tracking, review context, and auditability matter. Because it scales well, it is being adopted as a reusable pattern.
+              The session pattern is useful for larger contractor organizations and for broader government use cases
+              where grouped submission tracking, review context, and auditability matter. Because it scales well, it is
+              being adopted as a reusable pattern.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Day-to-day operations vs testing
             </Text>
             <Text fontSize="sm" mb={3}>
-              Admins may rarely create sessions in routine daily work. However, session behavior is still a core technical construct and must be tested in UAT and integration flows.
+              Admins may rarely create sessions in routine daily work. However, session behavior is still a core
+              technical construct and must be tested in UAT and integration flows.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Why this is in the GUI
             </Text>
             <Text fontSize="sm" mb={3}>
-              Testing cannot be only a technical activity. Business staff also need to run realistic scenarios. A GUI for sessions allows both technical and business teams to validate the same workflow, using the same screen, before release.
+              Testing cannot be only a technical activity. Business staff also need to run realistic scenarios. A GUI
+              for sessions allows both technical and business teams to validate the same workflow, using the same
+              screen, before release.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Simple examples
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 1: A contractor submits several invoices in one work package. The session groups those records so reviewers can follow them together.
+              Example 1: A contractor submits several invoices in one work package. The session groups those records so
+              reviewers can follow them together.
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 2: UAT team needs to prove status transitions from open to submitted to closed. Sessions Admin gives one place to verify those state changes.
+              Example 2: UAT team needs to prove invoices are grouped correctly after upload and AI processing. Sessions
+              Admin gives one place to verify that grouping.
             </Text>
             <Text fontSize="sm">
-              Example 3: A support issue references a contractor upload day. Session grouping helps admins narrow the investigation quickly.
+              Example 3: A support issue references a contractor upload day. Session grouping helps admins narrow the
+              investigation quickly.
             </Text>
           </DrawerBody>
         </DrawerContent>
@@ -586,9 +560,7 @@ export default function SessionsAdminScreen() {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>
-            Session {selected?.id ? selected.id.slice(0, 8) + '…' : ''}
-          </DrawerHeader>
+          <DrawerHeader>Session {selected?.id ? selected.id.slice(0, 8) + '…' : ''}</DrawerHeader>
 
           <DrawerBody>
             {!selected ? (
@@ -602,16 +574,10 @@ export default function SessionsAdminScreen() {
                     Summary
                   </Heading>
                   <Text fontSize="sm">
-                    <b>Contractor:</b> {selected.contractor_business_name ?? '—'}
-                  </Text>
-                  <Text fontSize="sm">
-                    <b>Status:</b> <Box as="span" fontFamily="mono">{selected.status ?? '—'}</Box>
-                  </Text>
-                  <Text fontSize="sm">
-                    <b>Updated:</b> <Box as="span" fontFamily="mono">{fmtTs(selected.updated_at)}</Box>
-                  </Text>
-                  <Text fontSize="sm">
-                    <b>Submitted:</b> <Box as="span" fontFamily="mono">{fmtTs(selected.submitted_at)}</Box>
+                    <b>Updated:</b>{' '}
+                    <Box as="span" fontFamily="mono">
+                      {fmtTs(selected.updated_at)}
+                    </Box>
                   </Text>
                 </Box>
 
@@ -622,28 +588,8 @@ export default function SessionsAdminScreen() {
                 </Heading>
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                   <Field label="id" value={selected.id} />
-                  <Field label="status" value={selected.status} />
-                  <Field label="contractor_id" value={selected.contractor_id} />
-                  <Field label="submitter_id" value={selected.submitter_id} />
                   <Field label="created_at" value={fmtTs(selected.created_at)} />
                   <Field label="updated_at" value={fmtTs(selected.updated_at)} />
-                  <Field label="submitted_at" value={fmtTs(selected.submitted_at)} />
-                </SimpleGrid>
-
-                <Divider my={4} />
-
-                <Heading size="sm" mb={2}>
-                  Contractor fields (denormalized)
-                </Heading>
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  <Field label="contractor_business_name" value={selected.contractor_business_name} />
-                  <Field label="contractor_number" value={selected.contractor_number} />
-                  <Field label="contractor_email" value={selected.contractor_email} />
-                  <Field label="contractor_phone_number" value={selected.contractor_phone_number} />
-                  <Field label="contractor_cellphone_number" value={selected.contractor_cellphone_number} />
-                  <Field label="contractor_city" value={selected.contractor_city} />
-                  <Field label="contractor_postal_code" value={selected.contractor_postal_code} />
-                  <Field label="contractor_onboarded" value={yn(selected.contractor_onboarded)} />
                 </SimpleGrid>
 
                 <Divider my={4} />

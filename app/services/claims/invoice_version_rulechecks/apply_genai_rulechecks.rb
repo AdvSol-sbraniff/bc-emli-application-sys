@@ -4,30 +4,42 @@
 module Claims
   module InvoiceVersionRulechecks
     class ApplyGenaiRulechecks
-      def self.call(invoice_version_id:, genai_payload:)
-        new(invoice_version_id: invoice_version_id, genai_payload: genai_payload).call
+      def self.call(
+        invoice_version_id:,
+        genai_payload:,
+        invoice_upgrade_type_id: nil
+      )
+        new(
+          invoice_version_id: invoice_version_id,
+          genai_payload: genai_payload,
+          invoice_upgrade_type_id: invoice_upgrade_type_id
+        ).call
       end
 
-      def initialize(invoice_version_id:, genai_payload:)
+      def initialize(
+        invoice_version_id:,
+        genai_payload:,
+        invoice_upgrade_type_id: nil
+      )
         @invoice_version_id = invoice_version_id
         @genai_payload = genai_payload
+        @invoice_upgrade_type_id =
+          invoice_upgrade_type_id || common_upgrade_type_id
       end
 
       def call
         rulechecks = extract_rulechecks(@genai_payload)
-        return { ok: true, replaced: 0 } if rulechecks.blank?
-
         now = Time.current
         rows = rulechecks.map { |r| build_row(r, now: now) }.compact
-        return { ok: true, replaced: 0 } if rows.empty?
 
         Claims::InvoiceVersionRulecheck.transaction do
           Claims::InvoiceVersionRulecheck.where(
             invoice_version_id: @invoice_version_id,
+            invoice_upgrade_type_id: @invoice_upgrade_type_id,
             source_engine: "genai"
           ).delete_all
 
-          Claims::InvoiceVersionRulecheck.insert_all!(rows)
+          Claims::InvoiceVersionRulecheck.insert_all!(rows) if rows.any?
         end
 
         { ok: true, replaced: rows.size }
@@ -52,39 +64,57 @@ module Claims
         rule_name = (r["rule_name"] || r[:rule_name]).to_s.strip
         rule_name = "rule_#{rule_number}" if rule_name.empty?
 
-        rule_pass_flag = coerce_bool_or_nil(r["rule_pass_flag"] || r[:rule_pass_flag])
+        rule_pass_flag =
+          coerce_bool_or_nil(r["rule_pass_flag"] || r[:rule_pass_flag])
+        rule_pass_flag = false if rule_pass_flag.nil?
         confidence = coerce_confidence(r["confidence"] || r[:confidence])
 
         # you decided strings – we’ll accept JSON too, but stringify it safely
-        expected_text = stringify_any(r["expected"] || r[:expected])
-        observed_text = stringify_any(r["observed"] || r[:observed])
+        expected_text =
+          stringify_any(
+            r["expected_text"] || r[:expected_text] || r["expected"] ||
+              r[:expected]
+          )
+        observed_text =
+          stringify_any(
+            r["observed_text"] || r[:observed_text] || r["observed"] ||
+              r[:observed]
+          )
 
-        {
+        attrs = {
           invoice_version_id: @invoice_version_id,
-
+          invoice_upgrade_type_id: @invoice_upgrade_type_id,
           source_engine: "genai",
           rule_number: rule_number,
           rule_name: rule_name,
-
           rule_pass_flag: rule_pass_flag,
           confidence: confidence,
-
           expected_text: expected_text,
           observed_text: observed_text,
-
           calculation: (r["calculation"] || r[:calculation]),
-          tolerance_notes: (r["tolerance_notes"] || r[:tolerance_notes]),
-
           evidence_text: (r["evidence_text"] || r[:evidence_text]),
-          evidence_hint: (r["evidence_hint"] || r[:evidence_hint]),
-
-          reason_and_likely_causes: (r["reason_and_likely_causes"] || r[:reason_and_likely_causes]),
-
-          notes: (r["notes"] || r[:notes]),
-
+          reason_and_likely_causes:
+            (r["reason_and_likely_causes"] || r[:reason_and_likely_causes]),
           created_at: now,
           updated_at: now
         }
+
+        optional_metadata = {
+          rule_key: r["rule_key"] || r[:rule_key],
+          source_requirement_id:
+            r["source_requirement_id"] || r[:source_requirement_id],
+          evidence_source: r["evidence_source"] || r[:evidence_source]
+        }
+
+        optional_metadata.each do |key, value|
+          attrs[
+            key
+          ] = value if Claims::InvoiceVersionRulecheck.column_names.include?(
+            key.to_s
+          )
+        end
+
+        attrs
       end
 
       def stringify_any(v)
@@ -93,7 +123,7 @@ module Claims
 
         # if model still returns {} for expected/observed, stringify it so UI is easy
         JSON.generate(v)
-      rescue
+      rescue StandardError
         v.to_s
       end
 
@@ -102,7 +132,7 @@ module Claims
         s = v.is_a?(String) ? v.strip : v
         return nil if s == ""
         Integer(s)
-      rescue
+      rescue StandardError
         nil
       end
 
@@ -116,8 +146,17 @@ module Claims
       end
 
       def coerce_confidence(v)
-        n = Integer(v || 0) rescue 0
+        n =
+          begin
+            Integer(v || 0)
+          rescue StandardError
+            0
+          end
         [[n, 0].max, 100].min
+      end
+
+      def common_upgrade_type_id
+        Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common").id
       end
     end
   end

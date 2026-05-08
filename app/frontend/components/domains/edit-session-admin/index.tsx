@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -42,7 +42,6 @@ type SessionDto = {
   id: string;
   contractor_id?: string | null;
   submitter_id?: string | null;
-  status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   submitted_at?: string | null;
@@ -116,7 +115,7 @@ export default function EditSessionAdminScreen() {
   const hasInvalidPair = Boolean(submitterId.trim()) !== Boolean(submittedAt.trim());
   const submitterTotalPages = Math.max(1, Math.ceil((submitterTotal || 0) / submitterPer));
 
-  const loadSession = async () => {
+  const loadSession = useCallback(async () => {
     setIsLoading(true);
     setError('');
 
@@ -132,7 +131,7 @@ export default function EditSessionAdminScreen() {
         credentials: 'include',
       });
 
-      const data: SessionDto = await res.json().catch(() => ({} as SessionDto));
+      const data: SessionDto = await res.json().catch(() => ({}) as SessionDto);
       if (!res.ok) {
         throw new Error((data as any)?.error || `HTTP ${res.status}`);
       }
@@ -148,9 +147,9 @@ export default function EditSessionAdminScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
 
-  const fetchSubmitters = async () => {
+  const fetchSubmitters = useCallback(async () => {
     setSubmitterLoading(true);
     setSubmitterError('');
 
@@ -181,7 +180,7 @@ export default function EditSessionAdminScreen() {
     } finally {
       setSubmitterLoading(false);
     }
-  };
+  }, [submitterPage, submitterPer, submitterQ, submitterSort]);
 
   const save = async () => {
     if (!id || hasInvalidPair) return;
@@ -199,7 +198,7 @@ export default function EditSessionAdminScreen() {
         }),
       });
 
-      const data: SessionDto = await res.json().catch(() => ({} as SessionDto));
+      const data: SessionDto = await res.json().catch(() => ({}) as SessionDto);
       if (!res.ok) {
         throw new Error((data as any)?.error || `HTTP ${res.status}`);
       }
@@ -219,11 +218,11 @@ export default function EditSessionAdminScreen() {
 
   useEffect(() => {
     loadSession();
-  }, [id]);
+  }, [loadSession]);
 
   useEffect(() => {
     fetchSubmitters();
-  }, [submitterQ, submitterSort, submitterPage, submitterPer]);
+  }, [fetchSubmitters]);
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
@@ -264,31 +263,47 @@ export default function EditSessionAdminScreen() {
 
                     <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
                       <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7}>session_id</Text>
-                        <Text as="div" fontSize="xs" fontFamily="mono">{session.id}</Text>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          session_id
+                        </Text>
+                        <Text as="div" fontSize="xs" fontFamily="mono">
+                          {session.id}
+                        </Text>
                       </Box>
                       <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7}>status</Text>
-                        <Text as="div" fontSize="sm" fontFamily="mono">{session.status || '--'}</Text>
-                      </Box>
-                      <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7}>created_at</Text>
-                        <Text as="div" fontSize="sm">{fmtTs(session.created_at)}</Text>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          created_at
+                        </Text>
+                        <Text as="div" fontSize="sm">
+                          {fmtTs(session.created_at)}
+                        </Text>
                       </Box>
                     </Flex>
 
                     <Flex mt={3} direction={{ base: 'column', md: 'row' }} gap={6}>
                       <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7}>contractor</Text>
-                        <Text as="div" fontSize="sm">{session.contractor?.business_name || '--'}</Text>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          contractor
+                        </Text>
+                        <Text as="div" fontSize="sm">
+                          {session.contractor?.business_name || '--'}
+                        </Text>
                       </Box>
                       <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7}>contractor_number</Text>
-                        <Text as="div" fontSize="sm" fontFamily="mono">{session.contractor?.contractor_number || '--'}</Text>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          contractor_number
+                        </Text>
+                        <Text as="div" fontSize="sm" fontFamily="mono">
+                          {session.contractor?.contractor_number || '--'}
+                        </Text>
                       </Box>
                       <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7}>updated_at</Text>
-                        <Text as="div" fontSize="sm">{fmtTs(session.updated_at)}</Text>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          updated_at
+                        </Text>
+                        <Text as="div" fontSize="sm">
+                          {fmtTs(session.updated_at)}
+                        </Text>
                       </Box>
                     </Flex>
                   </Box>
@@ -300,20 +315,36 @@ export default function EditSessionAdminScreen() {
 
                     <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
                       <Box flex="1">
-                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>submitter_id</Text>
-                        <Text as="div" fontSize="xs" fontFamily="mono">{submitterId || '--'}</Text>
-                        <Text as="div" fontSize="sm" mt={2}>{selectedSubmitter?.email || '--'}</Text>
-                        <Text as="div" fontSize="xs" opacity={0.7}>{displayName(selectedSubmitter)}</Text>
+                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                          submitter_id
+                        </Text>
+                        <Text as="div" fontSize="xs" fontFamily="mono">
+                          {submitterId || '--'}
+                        </Text>
+                        <Text as="div" fontSize="sm" mt={2}>
+                          {selectedSubmitter?.email || '--'}
+                        </Text>
+                        <Text as="div" fontSize="xs" opacity={0.7}>
+                          {displayName(selectedSubmitter)}
+                        </Text>
                       </Box>
 
                       <Box w={{ base: 'full', md: '260px' }}>
-                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>submitted_at</Text>
-                        <Input type="date" value={submittedAt} onChange={(e) => setSubmittedAt(e.target.value)} bg="white" />
+                        <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                          submitted_at
+                        </Text>
+                        <Input
+                          type="date"
+                          value={submittedAt}
+                          onChange={(e) => setSubmittedAt(e.target.value)}
+                          bg="white"
+                        />
                       </Box>
                     </Flex>
 
                     <Text as="div" fontSize="xs" opacity={0.7} mt={3}>
-                      Changing submitted_at may affect validation and reporting outcomes for invoices in this session.
+                      Sessions are only grouping containers. Editing submitter and submitted_at affects ownership and
+                      reporting context, not a session state machine.
                     </Text>
                   </Box>
 
@@ -339,7 +370,9 @@ export default function EditSessionAdminScreen() {
                       </Box>
 
                       <Box w="220px">
-                        <Text fontSize="xs" opacity={0.7} mb={1}>sort</Text>
+                        <Text fontSize="xs" opacity={0.7} mb={1}>
+                          sort
+                        </Text>
                         <Select
                           value={submitterSort}
                           onChange={(e) => {
@@ -358,7 +391,9 @@ export default function EditSessionAdminScreen() {
                       </Box>
 
                       <Box w="120px">
-                        <Text fontSize="xs" opacity={0.7} mb={1}>per</Text>
+                        <Text fontSize="xs" opacity={0.7} mb={1}>
+                          per
+                        </Text>
                         <Select
                           value={String(submitterPer)}
                           onChange={(e) => {
@@ -504,7 +539,12 @@ export default function EditSessionAdminScreen() {
                       <Button variant="outline" onClick={loadSession} isDisabled={isLoading || isSaving}>
                         Reload
                       </Button>
-                      <Button colorScheme="blue" onClick={save} isLoading={isSaving} isDisabled={!isDirty || hasInvalidPair}>
+                      <Button
+                        colorScheme="blue"
+                        onClick={save}
+                        isLoading={isSaving}
+                        isDisabled={!isDirty || hasInvalidPair}
+                      >
                         Save session
                       </Button>
                     </HStack>

@@ -4,40 +4,48 @@
 module Claims
   module InvoiceVersionLocatedFields
     class ApplyGenaiLocatedFields
-      def self.call(invoice_version_id:, genai_payload:)
-        new(invoice_version_id: invoice_version_id, genai_payload: genai_payload).call
+      def self.call(
+        invoice_version_id:,
+        genai_payload:,
+        invoice_upgrade_type_id: nil
+      )
+        new(
+          invoice_version_id: invoice_version_id,
+          genai_payload: genai_payload,
+          invoice_upgrade_type_id: invoice_upgrade_type_id
+        ).call
       end
 
-      def initialize(invoice_version_id:, genai_payload:)
+      def initialize(
+        invoice_version_id:,
+        genai_payload:,
+        invoice_upgrade_type_id: nil
+      )
         @invoice_version_id = invoice_version_id
         @genai_payload = genai_payload
+        @invoice_upgrade_type_id =
+          invoice_upgrade_type_id || common_upgrade_type_id
       end
 
+      def call
+        located_fields = extract_located_fields(@genai_payload)
+        now = Time.current
+        rows = located_fields.map { |f| build_row(f, now: now) }.compact
 
-def call
-  located_fields = extract_located_fields(@genai_payload)
-  return { ok: true, replaced: 0 } if located_fields.blank?
+        Claims::InvoiceVersionLocatedField.transaction do
+          Claims::InvoiceVersionLocatedField.where(
+            invoice_version_id: @invoice_version_id,
+            invoice_upgrade_type_id: @invoice_upgrade_type_id,
+            source_engine: "genai"
+          ).delete_all
 
-  now = Time.current
-  rows = located_fields.map { |f| build_row(f, now: now) }.compact
-  return { ok: true, replaced: 0 } if rows.empty?
+          Claims::InvoiceVersionLocatedField.insert_all!(rows) if rows.any?
+        end
 
-  Claims::InvoiceVersionLocatedField.transaction do
-    Claims::InvoiceVersionLocatedField.where(
-      invoice_version_id: @invoice_version_id,
-      source_engine: "genai"
-    ).delete_all
-
-    # no need for upsert now; we just replaced
-    Claims::InvoiceVersionLocatedField.insert_all!(rows)
-  end
-
-  { ok: true, replaced: rows.size }
-rescue => e
-  { ok: false, error: e.message, error_class: e.class.name }
-end
-
-
+        { ok: true, replaced: rows.size }
+      rescue => e
+        { ok: false, error: e.message, error_class: e.class.name }
+      end
 
       private
 
@@ -53,8 +61,8 @@ end
         field_key = (f["field_key"] || f[:field_key]).to_s.strip
         return nil if field_key.empty?
 
-line_number = coerce_int_or_nil(f["line_number"] || f[:line_number])
-line_number = 0 if line_number.nil? || line_number < 0
+        line_number = coerce_int_or_nil(f["line_number"] || f[:line_number])
+        line_number = 0 if line_number.nil? || line_number < 0
 
         value = f.key?("value") ? f["value"] : f[:value]
         value_type, value_text, value_json = coerce_value(value)
@@ -66,32 +74,24 @@ line_number = 0 if line_number.nil? || line_number < 0
 
         {
           invoice_version_id: @invoice_version_id,
-
+          invoice_upgrade_type_id: @invoice_upgrade_type_id,
           source_engine: "genai",
           field_key: field_key,
           line_number: line_number,
-
           value_type: value_type,
           value_text: value_text,
           value_json: value_json,
-          normalized_value: (f["normalized_value"] || f[:normalized_value]),
-
           confidence: confidence,
-
           page: page,
           polygon: polygon,
-
           evidence_text: (f["evidence_text"] || f[:evidence_text]),
-          evidence_hint: (f["evidence_hint"] || f[:evidence_hint]),
-          notes: (f["notes"] || f[:notes]),
-
           created_at: now,
           updated_at: now
         }
       end
 
       def coerce_value(v)
-        return ["text", nil, nil] if v.nil? # "not found" row allowed (both null)
+        return "text", nil, nil if v.nil? # "not found" row allowed (both null)
 
         case v
         when TrueClass, FalseClass
@@ -113,12 +113,19 @@ line_number = 0 if line_number.nil? || line_number < 0
         s = v.is_a?(String) ? v.strip : v
         return nil if s == ""
         Integer(s)
-      rescue
+      rescue StandardError
         nil
       end
 
       def coerce_confidence(v)
-        n = Integer(v || 0) rescue 0
+        n =
+          begin
+            Float(v || 0)
+          rescue StandardError
+            0
+          end
+        n *= 100 if n > 0 && n <= 1
+        n = n.round
         [[n, 0].max, 100].min
       end
 
@@ -129,10 +136,17 @@ line_number = 0 if line_number.nil? || line_number < 0
         if raw.is_a?(String)
           s = raw.strip
           return nil if s.empty?
-          raw = JSON.parse(s) rescue (return nil)
+          raw =
+            begin
+              JSON.parse(s)
+            rescue StandardError
+              (return nil)
+            end
         end
 
-        raw = raw["polygon"] || raw[:polygon] || raw["points"] || raw[:points] if raw.is_a?(Hash)
+        raw =
+          raw["polygon"] || raw[:polygon] || raw["points"] ||
+            raw[:points] if raw.is_a?(Hash)
         return nil unless raw.is_a?(Array)
         return nil if raw.empty?
 
@@ -142,7 +156,10 @@ line_number = 0 if line_number.nil? || line_number < 0
         end
 
         # B) DI-style points: [{x,y},...]
-        if raw.all? { |p| p.is_a?(Hash) && (p.key?("x") || p.key?(:x) || p.key?("X") || p.key?(:X)) }
+        if raw.all? { |p|
+             p.is_a?(Hash) &&
+               (p.key?("x") || p.key?(:x) || p.key?("X") || p.key?(:X))
+           }
           flat = []
           raw.each do |p|
             x = p["x"] || p[:x] || p["X"] || p[:X]
@@ -155,7 +172,10 @@ line_number = 0 if line_number.nil? || line_number < 0
         end
 
         # C) pairs: [[x,y],...]
-        if raw.all? { |p| p.is_a?(Array) && p.length == 2 && numericish?(p[0]) && numericish?(p[1]) }
+        if raw.all? { |p|
+             p.is_a?(Array) && p.length == 2 && numericish?(p[0]) &&
+               numericish?(p[1])
+           }
           return raw.flat_map { |p| [p[0].to_f, p[1].to_f] }
         end
 
@@ -166,6 +186,10 @@ line_number = 0 if line_number.nil? || line_number < 0
         return true if v.is_a?(Numeric)
         return false unless v.is_a?(String)
         v.strip.match?(/\A-?\d+(\.\d+)?\z/)
+      end
+
+      def common_upgrade_type_id
+        Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common").id
       end
     end
   end

@@ -274,41 +274,80 @@ export default function ReportsVolumeValueScreen() {
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box minW="220px" flex="1">
-              <Text fontSize="xs" opacity={0.7} mb={1}>Search</Text>
-              <Input value={q} onChange={(e) => setParams(navigate, location, { q: e.target.value, page: '1' })} placeholder="contractor, invoice #, ids" />
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Search
+              </Text>
+              <Input
+                value={q}
+                onChange={(e) => setParams(navigate, location, { q: e.target.value, page: '1' })}
+                placeholder="contractor, invoice #, ids"
+              />
             </Box>
 
             <Box minW="180px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>Status</Text>
-              <Select value={status} onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}>
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Status
+              </Text>
+              <Select
+                value={status}
+                onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
+              >
                 <option value="">(all)</option>
                 <option value="ocr_complete">ocr_complete</option>
                 <option value="genai_complete">genai_complete</option>
                 <option value="admin_review_inbox">admin_review_inbox</option>
                 <option value="contractor_revision_inbox">contractor_revision_inbox</option>
-                <option value="closed_success">closed_success</option>
-                <option value="closed_reject">closed_reject</option>
+                <option value="in_review">in_review</option>
+                <option value="approved_pending">approved_pending</option>
+                <option value="approved_paid">approved_paid</option>
+                <option value="ineligible">ineligible</option>
               </Select>
             </Box>
 
             <Box minW="160px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>Date from</Text>
-              <Input type="date" value={dateFrom} onChange={(e) => setParams(navigate, location, { date_from: e.target.value, page: '1' })} />
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Date from
+              </Text>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setParams(navigate, location, { date_from: e.target.value, page: '1' })}
+              />
             </Box>
 
             <Box minW="160px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>Date to</Text>
-              <Input type="date" value={dateTo} onChange={(e) => setParams(navigate, location, { date_to: e.target.value, page: '1' })} />
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Date to
+              </Text>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setParams(navigate, location, { date_to: e.target.value, page: '1' })}
+              />
             </Box>
 
             <Box minW="140px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>Min value</Text>
-              <Input type="number" step="0.01" value={minValue} onChange={(e) => setParams(navigate, location, { min_value: e.target.value, page: '1' })} />
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Min value
+              </Text>
+              <Input
+                type="number"
+                step="0.01"
+                value={minValue}
+                onChange={(e) => setParams(navigate, location, { min_value: e.target.value, page: '1' })}
+              />
             </Box>
 
             <Box minW="140px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>Max value</Text>
-              <Input type="number" step="0.01" value={maxValue} onChange={(e) => setParams(navigate, location, { max_value: e.target.value, page: '1' })} />
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Max value
+              </Text>
+              <Input
+                type="number"
+                step="0.01"
+                value={maxValue}
+                onChange={(e) => setParams(navigate, location, { max_value: e.target.value, page: '1' })}
+              />
             </Box>
 
             <Tooltip label="Refresh all tabs">
@@ -316,13 +355,20 @@ export default function ReportsVolumeValueScreen() {
             </Tooltip>
 
             <Tooltip label="Help: metric definitions, filters, and interpretation">
-              <IconButton aria-label="Open reports help" icon={<Question size={18} />} variant="outline" onClick={onHelpOpen} />
+              <IconButton
+                aria-label="Open reports help"
+                icon={<Question size={18} />}
+                variant="outline"
+                onClick={onHelpOpen}
+              />
             </Tooltip>
           </Flex>
 
           {error && (
             <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-              <Text fontSize="sm" color="red.700">{error}</Text>
+              <Text fontSize="sm" color="red.700">
+                {error}
+              </Text>
             </Box>
           )}
 
@@ -340,24 +386,44 @@ export default function ReportsVolumeValueScreen() {
                 ) : (
                   <Grid templateColumns={{ base: '1fr', md: 'repeat(5, 1fr)' }} gap={3}>
                     <GridItem borderWidth="1px" borderRadius="md" p={3}>
-                      <Text fontSize="xs" opacity={0.7}>Invoice count</Text>
-                      <Text fontSize="2xl" fontWeight="bold">{summary?.invoice_count ?? 0}</Text>
+                      <Text fontSize="xs" opacity={0.7}>
+                        Invoice count
+                      </Text>
+                      <Text fontSize="2xl" fontWeight="bold">
+                        {summary?.invoice_count ?? 0}
+                      </Text>
                     </GridItem>
                     <GridItem borderWidth="1px" borderRadius="md" p={3}>
-                      <Text fontSize="xs" opacity={0.7}>Total value</Text>
-                      <Text fontSize="2xl" fontWeight="bold">{toMoney(summary?.total_value_cad)}</Text>
+                      <Text fontSize="xs" opacity={0.7}>
+                        Total value
+                      </Text>
+                      <Text fontSize="2xl" fontWeight="bold">
+                        {toMoney(summary?.total_value_cad)}
+                      </Text>
                     </GridItem>
                     <GridItem borderWidth="1px" borderRadius="md" p={3}>
-                      <Text fontSize="xs" opacity={0.7}>Average value</Text>
-                      <Text fontSize="2xl" fontWeight="bold">{toMoney(summary?.avg_value_cad)}</Text>
+                      <Text fontSize="xs" opacity={0.7}>
+                        Average value
+                      </Text>
+                      <Text fontSize="2xl" fontWeight="bold">
+                        {toMoney(summary?.avg_value_cad)}
+                      </Text>
                     </GridItem>
                     <GridItem borderWidth="1px" borderRadius="md" p={3}>
-                      <Text fontSize="xs" opacity={0.7}>Median value</Text>
-                      <Text fontSize="2xl" fontWeight="bold">{toMoney(summary?.median_value_cad)}</Text>
+                      <Text fontSize="xs" opacity={0.7}>
+                        Median value
+                      </Text>
+                      <Text fontSize="2xl" fontWeight="bold">
+                        {toMoney(summary?.median_value_cad)}
+                      </Text>
                     </GridItem>
                     <GridItem borderWidth="1px" borderRadius="md" p={3}>
-                      <Text fontSize="xs" opacity={0.7}>Active contractors</Text>
-                      <Text fontSize="2xl" fontWeight="bold">{summary?.active_contractors ?? 0}</Text>
+                      <Text fontSize="xs" opacity={0.7}>
+                        Active contractors
+                      </Text>
+                      <Text fontSize="2xl" fontWeight="bold">
+                        {summary?.active_contractors ?? 0}
+                      </Text>
                     </GridItem>
                   </Grid>
                 )}
@@ -365,8 +431,14 @@ export default function ReportsVolumeValueScreen() {
 
               <TabPanel px={0} pt={4}>
                 <HStack mb={3}>
-                  <Text fontSize="sm" opacity={0.8}>Bucket</Text>
-                  <Select value={grain} w="180px" onChange={(e) => setParams(navigate, location, { grain: e.target.value, page: '1' })}>
+                  <Text fontSize="sm" opacity={0.8}>
+                    Bucket
+                  </Text>
+                  <Select
+                    value={grain}
+                    w="180px"
+                    onChange={(e) => setParams(navigate, location, { grain: e.target.value, page: '1' })}
+                  >
                     <option value="day">day</option>
                     <option value="week">week</option>
                     <option value="month">month</option>
@@ -386,22 +458,31 @@ export default function ReportsVolumeValueScreen() {
                     <Tbody>
                       {trendLoading && (
                         <Tr>
-                          <Td colSpan={4}><Spinner size="sm" /></Td>
+                          <Td colSpan={4}>
+                            <Spinner size="sm" />
+                          </Td>
                         </Tr>
                       )}
 
-                      {!trendLoading && trendRows.map((r) => (
-                        <Tr key={`${r.period_start}-${r.invoice_count}`}>
-                          <Td fontFamily="mono" fontSize="xs">{fmtDate(r.period_start)}</Td>
-                          <Td isNumeric>{r.invoice_count}</Td>
-                          <Td isNumeric>{toMoney(r.total_value_cad)}</Td>
-                          <Td isNumeric>{toMoney(r.invoice_count > 0 ? r.total_value_cad / r.invoice_count : 0)}</Td>
-                        </Tr>
-                      ))}
+                      {!trendLoading &&
+                        trendRows.map((r) => (
+                          <Tr key={`${r.period_start}-${r.invoice_count}`}>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {fmtDate(r.period_start)}
+                            </Td>
+                            <Td isNumeric>{r.invoice_count}</Td>
+                            <Td isNumeric>{toMoney(r.total_value_cad)}</Td>
+                            <Td isNumeric>{toMoney(r.invoice_count > 0 ? r.total_value_cad / r.invoice_count : 0)}</Td>
+                          </Tr>
+                        ))}
 
                       {!trendLoading && trendRows.length === 0 && (
                         <Tr>
-                          <Td colSpan={4}><Text fontSize="sm" opacity={0.7}>No trend rows for current filters.</Text></Td>
+                          <Td colSpan={4}>
+                            <Text fontSize="sm" opacity={0.7}>
+                              No trend rows for current filters.
+                            </Text>
+                          </Td>
                         </Tr>
                       )}
                     </Tbody>
@@ -412,8 +493,14 @@ export default function ReportsVolumeValueScreen() {
               <TabPanel px={0} pt={4}>
                 <Flex justify="space-between" align="center" mb={3} gap={3} wrap="wrap">
                   <HStack>
-                    <Text fontSize="sm" opacity={0.8}>Sort</Text>
-                    <Select value={sort} w="260px" onChange={(e) => setParams(navigate, location, { sort: e.target.value })}>
+                    <Text fontSize="sm" opacity={0.8}>
+                      Sort
+                    </Text>
+                    <Select
+                      value={sort}
+                      w="260px"
+                      onChange={(e) => setParams(navigate, location, { sort: e.target.value })}
+                    >
                       <option value="invoice_created_at:desc">invoice_created_at desc</option>
                       <option value="invoice_created_at:asc">invoice_created_at asc</option>
                       <option value="invoice_total_cad:desc">invoice_total_cad desc</option>
@@ -424,12 +511,21 @@ export default function ReportsVolumeValueScreen() {
                   </HStack>
 
                   <HStack>
-                    <Select value={String(per)} w="100px" onChange={(e) => setParams(navigate, location, { per: e.target.value, page: '1' })}>
+                    <Select
+                      value={String(per)}
+                      w="100px"
+                      onChange={(e) => setParams(navigate, location, { per: e.target.value, page: '1' })}
+                    >
                       <option value="25">25</option>
                       <option value="50">50</option>
                       <option value="100">100</option>
                     </Select>
-                    <IconButton aria-label="Export CSV" icon={<Text fontSize="xs">CSV</Text>} onClick={exportCsv} variant="outline" />
+                    <IconButton
+                      aria-label="Export CSV"
+                      icon={<Text fontSize="xs">CSV</Text>}
+                      onClick={exportCsv}
+                      variant="outline"
+                    />
                   </HStack>
                 </Flex>
 
@@ -449,25 +545,40 @@ export default function ReportsVolumeValueScreen() {
                     <Tbody>
                       {detailLoading && (
                         <Tr>
-                          <Td colSpan={7}><Spinner size="sm" /></Td>
+                          <Td colSpan={7}>
+                            <Spinner size="sm" />
+                          </Td>
                         </Tr>
                       )}
 
-                      {!detailLoading && detailRows.map((r) => (
-                        <Tr key={r.invoice_id}>
-                          <Td fontFamily="mono" fontSize="xs">{fmtDate(r.invoice_created_at)}</Td>
-                          <Td>{r.contractor_business_name || '—'}</Td>
-                          <Td fontFamily="mono" fontSize="xs">{r.contractor_number || '—'}</Td>
-                          <Td fontFamily="mono" fontSize="xs">{r.ocr_invoice_number || '—'}</Td>
-                          <Td>{r.invoice_status || '—'}</Td>
-                          <Td isNumeric>{toMoney(r.invoice_total_cad)}</Td>
-                          <Td fontFamily="mono" fontSize="xs">{r.invoice_id}</Td>
-                        </Tr>
-                      ))}
+                      {!detailLoading &&
+                        detailRows.map((r) => (
+                          <Tr key={r.invoice_id}>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {fmtDate(r.invoice_created_at)}
+                            </Td>
+                            <Td>{r.contractor_business_name || '—'}</Td>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {r.contractor_number || '—'}
+                            </Td>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {r.ocr_invoice_number || '—'}
+                            </Td>
+                            <Td>{r.invoice_status || '—'}</Td>
+                            <Td isNumeric>{toMoney(r.invoice_total_cad)}</Td>
+                            <Td fontFamily="mono" fontSize="xs">
+                              {r.invoice_id}
+                            </Td>
+                          </Tr>
+                        ))}
 
                       {!detailLoading && detailRows.length === 0 && (
                         <Tr>
-                          <Td colSpan={7}><Text fontSize="sm" opacity={0.7}>No invoices for current filters.</Text></Td>
+                          <Td colSpan={7}>
+                            <Text fontSize="sm" opacity={0.7}>
+                              No invoices for current filters.
+                            </Text>
+                          </Td>
                         </Tr>
                       )}
                     </Tbody>
@@ -475,12 +586,22 @@ export default function ReportsVolumeValueScreen() {
                 </Box>
 
                 <Flex mt={3} justify="space-between" align="center" gap={3} wrap="wrap">
-                  <Text fontSize="sm" opacity={0.8}>Total: {detailTotal}</Text>
+                  <Text fontSize="sm" opacity={0.8}>
+                    Total: {detailTotal}
+                  </Text>
                   <HStack>
-                    <Text fontSize="sm">Page {page} of {totalPages}</Text>
-                    <Select value={String(page)} w="100px" onChange={(e) => setParams(navigate, location, { page: e.target.value })}>
+                    <Text fontSize="sm">
+                      Page {page} of {totalPages}
+                    </Text>
+                    <Select
+                      value={String(page)}
+                      w="100px"
+                      onChange={(e) => setParams(navigate, location, { page: e.target.value })}
+                    >
                       {Array.from({ length: totalPages }).map((_, i) => (
-                        <option key={i + 1} value={String(i + 1)}>{i + 1}</option>
+                        <option key={i + 1} value={String(i + 1)}>
+                          {i + 1}
+                        </option>
                       ))}
                     </Select>
                   </HStack>
@@ -498,70 +619,131 @@ export default function ReportsVolumeValueScreen() {
           <DrawerHeader>Volume and Value Report Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This screen is a business reporting view over invoice data. It is designed to answer: how many invoices are flowing,
-              how much dollar value is represented, and which contractors or time periods are driving outcomes.
+              This screen is a business reporting view over invoice data. It is designed to answer: how many invoices
+              are flowing, how much dollar value is represented, and which contractors or time periods are driving
+              outcomes.
             </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Data scope and assumptions</Text>
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Data scope and assumptions
+            </Text>
             <Text fontSize="sm" mb={3}>
-              All tabs use the same filter set. Values are sourced from the reporting view backed by invoice business fields.
-              Dollar value comes from the latest OCR invoice total available for each invoice. If a value is missing for an invoice,
-              count metrics still include the invoice, while value metrics treat missing amounts as null and exclude them from average/median calculations.
+              All tabs use the same filter set. Values are sourced from the reporting view backed by invoice business
+              fields. Dollar value comes from the latest OCR invoice total available for each invoice. If a value is
+              missing for an invoice, count metrics still include the invoice, while value metrics treat missing amounts
+              as null and exclude them from average/median calculations.
             </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Global filters</Text>
-            <Text fontSize="sm" mb={2}><b>Search:</b> matches invoice id, session id, contractor name/number, and OCR invoice number.</Text>
-            <Text fontSize="sm" mb={2}><b>Status:</b> limits results to one business status at a time (for stage-specific reporting).</Text>
-            <Text fontSize="sm" mb={2}><b>Date from / Date to:</b> applied to invoice created date.</Text>
-            <Text fontSize="sm" mb={2}><b>Min / Max value:</b> applied to invoice total CAD.</Text>
-            <Text fontSize="sm" mb={3}><b>Refresh:</b> reloads all tabs (Overview, Trend, Detail) with current filters.</Text>
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Global filters
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Search:</b> matches invoice id, session id, contractor name/number, and OCR invoice number.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Status:</b> limits results to one business status at a time (for stage-specific reporting).
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Date from / Date to:</b> applied to invoice created date.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Min / Max value:</b> applied to invoice total CAD.
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              <b>Refresh:</b> reloads all tabs (Overview, Trend, Detail) with current filters.
+            </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Overview tab (KPI definitions)</Text>
-            <Text fontSize="sm" mb={2}><b>Invoice count:</b> number of invoices matching current filters.</Text>
-            <Text fontSize="sm" mb={2}><b>Total value:</b> sum of invoice total CAD for filtered invoices with non-null amounts.</Text>
-            <Text fontSize="sm" mb={2}><b>Average value:</b> arithmetic mean of non-null invoice total CAD values.</Text>
-            <Text fontSize="sm" mb={2}><b>Median value:</b> 50th percentile of non-null invoice total CAD values.</Text>
-            <Text fontSize="sm" mb={3}><b>Active contractors:</b> distinct contractor ids in filtered invoices.</Text>
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Overview tab (KPI definitions)
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Invoice count:</b> number of invoices matching current filters.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Total value:</b> sum of invoice total CAD for filtered invoices with non-null amounts.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Average value:</b> arithmetic mean of non-null invoice total CAD values.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Median value:</b> 50th percentile of non-null invoice total CAD values.
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              <b>Active contractors:</b> distinct contractor ids in filtered invoices.
+            </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Trend tab</Text>
-            <Text fontSize="sm" mb={2}><b>Bucket:</b> day/week/month changes grouping granularity.</Text>
-            <Text fontSize="sm" mb={2}><b>Invoice count:</b> invoices created in each period bucket.</Text>
-            <Text fontSize="sm" mb={2}><b>Total value:</b> sum of invoice values in each bucket.</Text>
-            <Text fontSize="sm" mb={3}><b>Avg value:</b> total value divided by count per bucket (display-only derived metric).</Text>
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Trend tab
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Bucket:</b> day/week/month changes grouping granularity.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Invoice count:</b> invoices created in each period bucket.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Total value:</b> sum of invoice values in each bucket.
+            </Text>
+            <Text fontSize="sm" mb={3}>
+              <b>Avg value:</b> total value divided by count per bucket (display-only derived metric).
+            </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Invoice Detail tab</Text>
-            <Text fontSize="sm" mb={2}><b>Sort:</b> controls ordering for the detailed rows endpoint.</Text>
-            <Text fontSize="sm" mb={2}><b>Per page / Page:</b> controls pagination for large result sets.</Text>
-            <Text fontSize="sm" mb={2}><b>CSV:</b> exports currently displayed detail rows in the table (page-scoped export).</Text>
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Invoice Detail tab
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Sort:</b> controls ordering for the detailed rows endpoint.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>Per page / Page:</b> controls pagination for large result sets.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              <b>CSV:</b> exports currently displayed detail rows in the table (page-scoped export).
+            </Text>
             <Text fontSize="sm" mb={3}>
               Columns include created date, contractor identifiers, OCR invoice number, status, value, and invoice id.
               This tab is the drill-down layer used to validate summary or trend changes.
             </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Interpretation guide</Text>
-            <Text fontSize="sm" mb={2}>
-              Use Overview first to detect changes in business volume/value, then use Trend to locate when the shift started,
-              and finally use Detail to identify which invoices or contractors explain the movement.
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Interpretation guide
             </Text>
             <Text fontSize="sm" mb={2}>
-              Large swings in total value with stable count usually indicate value-mix changes (fewer high-value invoices or more low-value invoices).
+              Use Overview first to detect changes in business volume/value, then use Trend to locate when the shift
+              started, and finally use Detail to identify which invoices or contractors explain the movement.
             </Text>
             <Text fontSize="sm" mb={2}>
-              Rising count with flat value usually indicates lower average invoice amount, often tied to submission mix changes.
+              Large swings in total value with stable count usually indicate value-mix changes (fewer high-value
+              invoices or more low-value invoices).
             </Text>
             <Text fontSize="sm" mb={2}>
-              If median diverges from average, check for outliers in Detail tab and verify whether large invoices are driving totals.
+              Rising count with flat value usually indicates lower average invoice amount, often tied to submission mix
+              changes.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              If median diverges from average, check for outliers in Detail tab and verify whether large invoices are
+              driving totals.
             </Text>
 
-            <Text fontSize="sm" fontWeight="bold" mb={1}>Common pitfalls</Text>
-            <Text fontSize="sm" mb={2}>Date filters are based on invoice creation time, not OCR date or closure date.</Text>
-            <Text fontSize="sm" mb={2}>Missing OCR totals lower value coverage; monitor count-to-value consistency before decision-making.</Text>
-            <Text fontSize="sm" mb={2}>CSV export is current page only; paginate if you need complete extracts.</Text>
-            <Text fontSize="sm" mb={4}>Status filter is single-select in v1 to keep comparisons clean and explicit.</Text>
+            <Text fontSize="sm" fontWeight="bold" mb={1}>
+              Common pitfalls
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Date filters are based on invoice creation time, not OCR date or closure date.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Missing OCR totals lower value coverage; monitor count-to-value consistency before decision-making.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              CSV export is current page only; paginate if you need complete extracts.
+            </Text>
+            <Text fontSize="sm" mb={4}>
+              Status filter is single-select in v1 to keep comparisons clean and explicit.
+            </Text>
 
             <Text fontSize="sm" opacity={0.75}>
-              Recommended workflow: set date window, check Overview, inspect Trend at week grain, switch to day grain for anomalies,
-              then confirm root causes in Invoice Detail.
+              Recommended workflow: set date window, check Overview, inspect Trend at week grain, switch to day grain
+              for anomalies, then confirm root causes in Invoice Detail.
             </Text>
           </DrawerBody>
         </DrawerContent>

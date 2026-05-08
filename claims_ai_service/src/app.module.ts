@@ -2,8 +2,10 @@ import { Module, Global } from '@nestjs/common';
 import { Pool } from 'pg';
 
 import { InvController } from './controllers/inv.controller';
+import { SimpleChatController } from './controllers/simple-chat.controller';
 import { InvService } from './services/inv.service';
 import { InvRepository } from './repositories/inv.repository';
+import { SimpleChatService } from './services/simple-chat.service';
 
 import { ConfigModule } from '@nestjs/config';
 
@@ -30,8 +32,9 @@ import { ConfigModule } from '@nestjs/config';
     },
     InvService,
     InvRepository, // (optional but you imported it; include if you use it)
+    SimpleChatService,
   ],
-  controllers: [InvController],
+  controllers: [InvController, SimpleChatController],
   exports: ['PG_POOL'],
 })
 export class AppModule {}

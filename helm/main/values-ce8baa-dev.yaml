@@ -1,5 +1,6 @@
 # /helm/main/values-ce8baa-dev.yaml 
 global:
+  licencePlate: ce8baa
   vault:
     role: ce8baa-nonprod
     subPath: ce8baa-dev
@@ -7,12 +8,70 @@ global:
 
   # Keep empty unless you confirm a pull secret in ce8baa-dev.
   imagePullSecrets: []
+  envSecretName: hesp
+  serviceAccountName: ce8baa-vault
+
+sharedConfig:
+  enabled: true
+
+  aws:
+    region: ca-central-1
+    defaultRegion: ca-central-1
+    parameterBasePath: ''
+
+  s3:
+    region: ca-central-1
+    endpoint: https://s3.ca-central-1.amazonaws.com
+    publicEndpoint: https://s3.ca-central-1.amazonaws.com
+    bucket: ''
+
+  app:
+    domain: hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca
+    clamscanEnabled: 'true'
+    fromEmail: 'no-reply@gov.bc.ca'
+    clamavHost: 'hesp-clamav'
+    clamavPort: '3310'
+
+  anycable:
+    rpcHost: hesp-anycable-rpc:50051
+    redisUrl: 'redis://redisMasterSet:6379/1'
+    redisSentinels: 'hesp-redis:26379'
+
+  auth:
+    keycloakUrl: https://dev.loginproxy.gov.bc.ca/
+    keycloakLogoutUrl: https://dev.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout
+    siteminderLogoutUrl: ''
+    bceidUrl: ''
+    bceidBusinessRegistrationUrl: ''
+    postLogoutRedirectUrl: https://hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca
 
 app:
   enabled: true
+  replicaCount: 2
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
     pullPolicy: Always
+
+  dependencyWait:
+    enabled: true
+    services:
+      - host: hesp-crunchydb-pgbouncer
+        port: 5432
+      - host: hesp-redis
+        port: 6379
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - hesp-app
+            topologyKey: kubernetes.io/hostname
 
   resources:
     requests:
@@ -20,46 +79,33 @@ app:
       memory: 512Mi
 
   env:
-    # Fill these once your gold routes/IdP endpoints are finalized.
-    'APP_DOMAIN': 'hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca'
     'INV_NODE_BASE_URL': 'http://hesp-claims-ai:3001'
     'SECURE_JWT_COOKIE': 'true'
     'VITE_ENABLE_TEMPLATE_FORCE_PUBLISH': 'true'
     'ENABLE_TEMPLATE_FORCE_PUBLISH': 'true'
     'ANYCABLE_URL': 'wss://hesp-anycable-go-ce8baa-dev.apps.gold.devops.gov.bc.ca/cable'
-    'KEYCLOAK_AUTH_URL': 'https://dev.loginproxy.gov.bc.ca/'
-    'VITE_SITEMINDER_LOGOUT_URL': ''
-    'VITE_BCEID_URL': ''
-    'VITE_BUSINESS_BCEID_REGISTRATION_URL': ''
-    'VITE_KEYCLOAK_LOGOUT_URL': 'https://dev.loginproxy.gov.bc.ca/auth/realms/standard/protocol/openid-connect/logout'
-    'VITE_POST_LOGOUT_REDIRECT_URL': 'https://hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca'
-
-    # File upload / object storage placeholders (override as needed).
-    'BCGOV_OBJECT_STORAGE_REGION': 'ca-central-1'
-    'BCGOV_OBJECT_STORAGE_ENDPOINT': 'https://s3.ca-central-1.amazonaws.com'
-    'BCGOV_OBJECT_STORAGE_PUBLIC_ENDPOINT': 'https://s3.ca-central-1.amazonaws.com'
-    'BCGOV_OBJECT_STORAGE_BUCKET': ''
-    'AWS_PARAMETER_BASE_PATH': ''
-    'AWS_REGION': 'ca-central-1'
-    'AWS_DEFAULT_REGION': 'ca-central-1'
-
-    # ClamAV
-    'CLAMAV_ENABLED': 'true'
-    'CLAMAV_HOST': 'hesp-clamav'
-    'CLAMAV_PORT': '3310'
     'CLAMAV_TIMEOUT': '30'
     'VIRUS_SCAN_TEMP_DIR': '/tmp/virus_scan'
     'UPLOAD_VIRUS_SCAN_TIMEOUT': '45'
 
   route:
     enabled: true
-    host: ''
+    host: 'hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca'
 
 sidekiq:
   enabled: true
+  replicaCount: 1
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
     pullPolicy: Always
+
+  dependencyWait:
+    enabled: true
+    services:
+      - host: hesp-crunchydb-pgbouncer
+        port: 5432
+      - host: hesp-redis
+        port: 6379
 
   resources:
     requests:
@@ -67,31 +113,26 @@ sidekiq:
       memory: 256Mi
 
   env:
-    'APP_DOMAIN': 'hesp-app-ce8baa-dev.apps.gold.devops.gov.bc.ca'
-    'FROM_EMAIL': 'no-reply@gov.bc.ca'
     'INV_NODE_BASE_URL': 'http://hesp-claims-ai:3001'
     'SIDEKIQ_QUEUES': 'default,virus_scan,file_processing,webhooks,websocket,model_callbacks'
-
-    'BCGOV_OBJECT_STORAGE_REGION': 'ca-central-1'
-    'BCGOV_OBJECT_STORAGE_ENDPOINT': 'https://s3.ca-central-1.amazonaws.com'
-    'BCGOV_OBJECT_STORAGE_PUBLIC_ENDPOINT': 'https://s3.ca-central-1.amazonaws.com'
-    'BCGOV_OBJECT_STORAGE_BUCKET': ''
-    'AWS_PARAMETER_BASE_PATH': ''
-    'AWS_REGION': 'ca-central-1'
-    'AWS_DEFAULT_REGION': 'ca-central-1'
-
-    'CLAMAV_ENABLED': 'true'
-    'CLAMAV_HOST': 'hesp-clamav'
-    'CLAMAV_PORT': '3310'
     'CLAMAV_TIMEOUT': '30'
     'VIRUS_SCAN_TEMP_DIR': '/tmp/virus_scan'
     'UPLOAD_VIRUS_SCAN_TIMEOUT': '45'
 
 sidekiqClaims:
   enabled: true
+  replicaCount: 1
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
     pullPolicy: Always
+
+  dependencyWait:
+    enabled: true
+    services:
+      - host: hesp-crunchydb-pgbouncer
+        port: 5432
+      - host: hesp-redis
+        port: 6379
 
   resources:
     requests:
@@ -119,6 +160,7 @@ claimsAi:
 
 anycable-rpc:
   enabled: true
+  replicaCount: 1
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-app
     pullPolicy: Always
@@ -126,29 +168,33 @@ anycable-rpc:
   nameOverride: hesp-anycable-rpc
   fullnameOverride: hesp-anycable-rpc
 
+  dependencyWait:
+    enabled: true
+    services:
+      - host: hesp-crunchydb-pgbouncer
+        port: 5432
+      - host: hesp-redis
+        port: 6379
+
   resources:
     requests:
       cpu: 50m
       memory: 128Mi
 
-  env:
-    'BCGOV_OBJECT_STORAGE_REGION': 'ca-central-1'
-    'BCGOV_OBJECT_STORAGE_ENDPOINT': 'https://s3.ca-central-1.amazonaws.com'
-    'BCGOV_OBJECT_STORAGE_PUBLIC_ENDPOINT': 'https://s3.ca-central-1.amazonaws.com'
-    'BCGOV_OBJECT_STORAGE_BUCKET': ''
-    'AWS_PARAMETER_BASE_PATH': ''
-    'AWS_REGION': 'ca-central-1'
-    'AWS_DEFAULT_REGION': 'ca-central-1'
+  env: {}
 
 crunchy-postgres:
   enabled: true
+  postgresVersion: 16
 
   instances:
-    replicas: 1
+    name: ha
+    replicas: 2
     dataVolumeClaimSpec:
-      storage: 1Gi
+      storage: 2Gi
+      storageClassName: netapp-block-standard
     requests:
-      cpu: 10m
+      cpu: 50m
       memory: 256Mi
     replicaCertCopy:
       requests:
@@ -156,37 +202,63 @@ crunchy-postgres:
         memory: 32Mi
 
   pgBackRest:
-    retention: '3'
+    retention: '1'
     retentionFullType: time
     repos:
+      schedules:
+        full: '0 0 1 1 *'
+        incremental: '0 0 1 1 *'
       volume:
         storage: 1Gi
+        storageClassName: netapp-file-backup
     repoHost:
       requests:
-        cpu: 1m
+        cpu: 10m
         memory: 64Mi
+        livenessProbe:
+          exec:
+            command:
+              - pgbackrest
+              - server-ping
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+          periodSeconds: 10
+          failureThreshold: 6
     sidecars:
       requests:
-        cpu: 1m
+        cpu: 10m
         memory: 64Mi
     s3:
       enabled: false
+      createS3Secret: false
+      s3Secret: pgbackrest-s3-credentials
+      s3Path: '/pgbackup-dev'
+      s3UriStyle: path
+      bucket: 'hesp-dev-cacentral1-s3pgbackup'
+      endpoint: 's3.ca-central-1.amazonaws.com'
+      region: 'ca-central-1'
+      key: ''
+      keySecret: ''
 
   patroni:
     postgresql:
-      pg_hba:
-        - 'host all all ::1/128 md5'
-        - 'host all all 0.0.0.0/0 md5'
+      pg_hba: 'host all all 0.0.0.0/0 md5'
       parameters:
-        shared_buffers: 16MB
-        wal_buffers: 64kB
+        shared_buffers: 64MB
+        wal_buffers: '64kB'
         min_wal_size: 32MB
         max_wal_size: 64MB
         max_slot_wal_keep_size: 128MB
+        wal_level: replica
+        max_wal_senders: 10
+        max_replication_slots: 10
+        hot_standby: 'on'
+        hot_standby_feedback: 'on'
+        wal_retrieve_retry_interval: '5s'
 
   proxy:
     pgBouncer:
-      replicas: 2
+      replicas: 1
       requests:
         cpu: 50m
         memory: 64Mi
@@ -200,16 +272,28 @@ crunchy-postgres:
 
 redis:
   enabled: true
+  replicaCount: 2
+  fullnameOverride: hesp-redis
   sentinel:
+    enabled: true
+    masterSet: redisMasterSet
     resources:
       requests:
         memory: 128Mi
         cpu: 20m
-  replica:
-    replicaCount: 1
+    replicas: 2
+  master:
     persistence:
       enabled: true
       size: 128Mi
+      storageClass: netapp-block-standard
+  replica:
+    replicaCount: 1
+    shareProcessNamespace: true
+    persistence:
+      enabled: true
+      size: 128Mi
+      storageClassName: netapp-block-standard
     resources:
       requests:
         memory: 128Mi
@@ -217,41 +301,61 @@ redis:
 
 elasticsearch:
   enabled: true
+  clusterHealthCheckParams: 'wait_for_status=yellow&timeout=5s'
 
   master:
     replicaCount: 1
-    heapSize: 128m
+    heapSize: 512m
     resources:
       requests:
-        cpu: 50m
-        memory: 256Mi
+        cpu: 100m
+        memory: 768Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
     persistence:
       enabled: true
       accessModes:
         - ReadWriteOnce
       size: 256Mi
+      storageClassName: netapp-block-standard
 
   data:
     replicaCount: 1
-    heapSize: 1024m
+    heapSize: 512m
     resources:
       requests:
-        cpu: 200m
-        memory: 512Mi
+        cpu: 100m
+        memory: 768Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
     persistence:
       enabled: true
       accessModes:
         - ReadWriteOnce
       size: 256Mi
+      storageClassName: netapp-block-standard
 
 anycableGo:
   enabled: true
+  replicas: 1
+  dependencyWait:
+    enabled: true
+    services:
+      - host: hesp-redis
+        port: 26379
+      - host: hesp-redis
+        port: 6379
   route:
     enabled: true
-    host: ''
+    host: 'hesp-anycable-go-ce8baa-dev.apps.gold.devops.gov.bc.ca'
   resources:
     requests:
-      cpu: 50m
+      cpu: 20m
+      memory: 128Mi
+    limits:
+      cpu: 100m
       memory: 256Mi
 
 clamav:

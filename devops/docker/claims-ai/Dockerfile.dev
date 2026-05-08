@@ -2,6 +2,10 @@ FROM node:20-bookworm-slim
 
 WORKDIR /claims_ai_service
 
+# Nest watch mode shells out to `ps` during restarts; slim images omit it.
+RUN apt-get update && apt-get install -y --no-install-recommends procps \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install deps first (cached if package files unchanged)
 COPY claims_ai_service/package.json claims_ai_service/package-lock.json ./
 RUN npm ci

@@ -9,39 +9,11 @@ CREATE SCHEMA claims;
 CREATE TABLE IF NOT EXISTS claims.sessions (
   id            uuid NOT NULL DEFAULT gen_random_uuid(),
 
-  contractor_id uuid NOT NULL,
-  submitter_id  uuid NULL,
-
-  status        character varying NOT NULL DEFAULT 'OPENBUTNOTSUBMITTED',
-
   created_at    timestamp(6) without time zone NOT NULL,
   updated_at    timestamp(6) without time zone NOT NULL,
-  submitted_at  timestamp(6) without time zone NULL,
 
-  CONSTRAINT sessions_pkey PRIMARY KEY (id),
-
-  CONSTRAINT sessions_status_chk
-    CHECK (status IN ('OPENBUTNOTSUBMITTED', 'OPENANDSUBMITTED', 'CLOSED')),
-
-  CONSTRAINT sessions_submit_fields_chk
-    CHECK (
-      (status = 'OPENBUTNOTSUBMITTED' AND submitter_id IS NULL AND submitted_at IS NULL)
-      OR
-      (status IN ('OPENANDSUBMITTED', 'CLOSED') AND submitter_id IS NOT NULL AND submitted_at IS NOT NULL)
-    ),
-
-  CONSTRAINT fk_sessions_contractor
-    FOREIGN KEY (contractor_id) REFERENCES public.contractors(id),
-
-  CONSTRAINT fk_sessions_submitter
-    FOREIGN KEY (submitter_id) REFERENCES public.users(id)
+  CONSTRAINT sessions_pkey PRIMARY KEY (id)
 );
-
-CREATE INDEX IF NOT EXISTS index_claims_sessions_on_contractor_id
-  ON claims.sessions (contractor_id);
-
-CREATE INDEX IF NOT EXISTS index_claims_sessions_on_status
-  ON claims.sessions (status);
 
 
 
@@ -52,11 +24,17 @@ CREATE INDEX IF NOT EXISTS index_claims_sessions_on_status
 CREATE TABLE IF NOT EXISTS claims.invoices (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   session_id     uuid NOT NULL,
+  contractor_id  uuid NOT NULL,
+  submitter_id   uuid NULL,
+  -- Legacy upgrade/domain choice. Points at public.permit_classifications
+  -- rows where type='SubmissionVariant' under the Invoice submission type.
+  upgrade_type_id uuid NULL,
 
   system_help_notes text NULL,
 
-  status character varying NOT NULL DEFAULT 'session_not_submitted',
+  status character varying NOT NULL DEFAULT 'upload_queued',
   status_updated_at timestamp(6) without time zone NULL,
+  submitted_at timestamp(6) without time zone NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
@@ -76,23 +54,46 @@ CHECK (status IN (
   'genai_queued',
   'genai_in_progress',
   'genai_failed',
-  'genai_complete',   -- this also means the invoice is with the contractor in review.
-  'admin_review_inbox',    -- this also means being actively reviewed. if admin finds a problem they send the status to the revision_required
-  'contractor_revision_inbox',   -- the next state after this is typically back to the upload_in_progress. In thoery a phone call or supplement-upload could allow the state to go to admin_review_inbox
-  'closed_success',
-  'closed_reject'
+  'genai_complete',         -- AI processing complete; contractor-owned draft until explicit submit.
+  'admin_review_inbox',    -- contractor submitted; waiting for admin review / screen-in.
+  'contractor_revision_inbox', -- admin requested contractor revisions before business review resumes.
+  'in_review',
+  'approved_pending',
+  'approved_paid',
+  'ineligible'
 )),
 
   CONSTRAINT fk_claims_invoices_session
-    FOREIGN KEY (session_id) REFERENCES claims.sessions(id)
+    FOREIGN KEY (session_id) REFERENCES claims.sessions(id),
+
+  CONSTRAINT fk_claims_invoices_contractor
+    FOREIGN KEY (contractor_id) REFERENCES public.contractors(id),
+
+  CONSTRAINT fk_claims_invoices_submitter
+    FOREIGN KEY (submitter_id) REFERENCES public.users(id),
+
+  CONSTRAINT fk_claims_invoices_upgrade_type
+    FOREIGN KEY (upgrade_type_id) REFERENCES public.permit_classifications(id)
 
 );
 
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_status
   ON claims.invoices (status);
 
+CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitted_at
+  ON claims.invoices (submitted_at);
+
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_session_id
   ON claims.invoices (session_id);
+
+CREATE INDEX IF NOT EXISTS index_claims_invoices_on_contractor_id
+  ON claims.invoices (contractor_id);
+
+CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitter_id
+  ON claims.invoices (submitter_id);
+
+CREATE INDEX IF NOT EXISTS index_claims_invoices_on_upgrade_type_id
+  ON claims.invoices (upgrade_type_id);
 
 
 
@@ -195,6 +196,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoice_versions_id_invoice_id
   ON claims.invoice_versions (id, invoice_id);
 
 
+--
+-- invoice_upgrade_types
+-- Catalogue of AI invoice upgrade domains, separate from legacy public.permit_classifications.
+--
+CREATE TABLE IF NOT EXISTS claims.invoice_upgrade_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  upgrade_type_key character varying NOT NULL, -- e.g. common, windows_doors, air_source_heat_pump_oil
+  description character varying(100) NULL,
+
+  created_at timestamp(6) without time zone NOT NULL,
+  updated_at timestamp(6) without time zone NOT NULL,
+
+  CONSTRAINT invoice_upgrade_types_pkey PRIMARY KEY (id),
+
+  CONSTRAINT invoice_upgrade_types_key_uniq
+    UNIQUE (upgrade_type_key)
+);
+
 
 -- 
 -- invoice_version_located_fields
@@ -204,6 +224,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_version_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL DEFAULT 'd5eaa9f3-342f-4f30-b444-d54ca0c142f2',
 
   source_engine text NOT NULL,   -- 'code' | 'genai'
   field_key     text NOT NULL,
@@ -213,7 +234,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
   value_type text NOT NULL,      -- 'text' | 'currency' | 'number' | 'date' | 'bool' | 'json'
   value_text text NULL,
   value_json jsonb NULL,         -- only used when value_type='json'
-  normalized_value text NULL,
 
   confidence smallint NOT NULL DEFAULT 0,  -- 0..100
 
@@ -221,9 +241,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
   polygon jsonb NULL,                        -- DI-style polygon array, or null
 
   evidence_text text NULL,
-  evidence_hint text NULL,
-
-  notes text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -234,6 +251,10 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
     FOREIGN KEY (invoice_version_id)
     REFERENCES claims.invoice_versions(id)
     ON DELETE CASCADE,
+
+  CONSTRAINT fk_invoice_version_located_fields_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
 
   CONSTRAINT invoice_version_located_fields_source_engine_chk
     CHECK (source_engine IN ('code','genai')),
@@ -253,7 +274,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
       (value_type <> 'json' AND value_text IS NOT NULL AND value_json IS NULL)
       OR
       (value_text IS NULL AND value_json IS NULL)  -- allow �not found� rows
-    ),
+    )
 
 --  CONSTRAINT invoice_version_located_fields_uniq
 --    UNIQUE (invoice_version_id, source_engine, field_key, line_number)
@@ -262,11 +283,14 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
 CREATE INDEX IF NOT EXISTS idx_ivlf_invoice_version
   ON claims.invoice_version_located_fields(invoice_version_id);
 
+CREATE INDEX IF NOT EXISTS idx_ivlf_upgrade_type
+  ON claims.invoice_version_located_fields(invoice_upgrade_type_id);
+
 CREATE INDEX IF NOT EXISTS idx_ivlf_lookup
-  ON claims.invoice_version_located_fields(invoice_version_id, field_key, line_number);
+  ON claims.invoice_version_located_fields(invoice_version_id, invoice_upgrade_type_id, field_key, line_number);
 
 CREATE INDEX IF NOT EXISTS idx_ivlf_engine
-  ON claims.invoice_version_located_fields(invoice_version_id, source_engine);
+  ON claims.invoice_version_located_fields(invoice_version_id, invoice_upgrade_type_id, source_engine);
 
 
 --
@@ -277,27 +301,27 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_version_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL DEFAULT 'd5eaa9f3-342f-4f30-b444-d54ca0c142f2',
 
   source_engine text NOT NULL,   -- 'code' | 'genai'
 
   rule_number integer NOT NULL,
+  rule_key text NULL,
+  source_requirement_id text NULL,
+  evidence_source text NULL,     -- invoice_pdf|supporting_document|database|external_list|admin_review, or pipe/comma combo
   rule_name   text NOT NULL,
 
-  rule_pass_flag boolean NULL,   -- null = unknown / not evaluated
+  rule_pass_flag boolean NOT NULL,
   confidence smallint NOT NULL DEFAULT 0,  -- 0..100
 
   expected_text text NULL,
   observed_text text NULL,
 
   calculation text NULL,
-  tolerance_notes text NULL,
 
   evidence_text text NULL,
-  evidence_hint text NULL,
 
   reason_and_likely_causes text NULL,
-
-  notes text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -309,6 +333,10 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
     REFERENCES claims.invoice_versions(id)
     ON DELETE CASCADE,
 
+  CONSTRAINT fk_invoice_version_rulechecks_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
   CONSTRAINT invoice_version_rulechecks_source_engine_chk
     CHECK (source_engine IN ('code','genai')),
 
@@ -319,14 +347,23 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
     CHECK (rule_number >= 0),
 
   CONSTRAINT invoice_version_rulechecks_uniq
-    UNIQUE (invoice_version_id, source_engine, rule_number)
+    UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine, rule_number)
 );
 
 CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_id
   ON claims.invoice_version_rulechecks (invoice_version_id);
 
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_upgrade_type_id
+  ON claims.invoice_version_rulechecks (invoice_upgrade_type_id);
+
 CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_id_se
-  ON claims.invoice_version_rulechecks (invoice_version_id, source_engine);
+  ON claims.invoice_version_rulechecks (invoice_version_id, invoice_upgrade_type_id, source_engine);
+
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
+  ON claims.invoice_version_rulechecks (rule_key);
+
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_source_requirement_id
+  ON claims.invoice_version_rulechecks (source_requirement_id);
 
 
 
@@ -337,6 +374,7 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_i
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_version_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL DEFAULT 'd5eaa9f3-342f-4f30-b444-d54ca0c142f2',
   lineitem_seqno     integer NOT NULL,
 
   -- Minimal canonical line-item OCR fields (trim/extend as needed)
@@ -361,6 +399,9 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_i
   CONSTRAINT fk_claims_lineitems_invoice_version
     FOREIGN KEY (invoice_version_id) REFERENCES claims.invoice_versions(id),
 
+  CONSTRAINT fk_claims_lineitems_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id) REFERENCES claims.invoice_upgrade_types(id),
+
   CONSTRAINT lineitems_invoice_version_seqno_uniq
     UNIQUE (invoice_version_id, lineitem_seqno),
 
@@ -370,6 +411,9 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_i
 
 CREATE INDEX IF NOT EXISTS index_claims_lineitems_on_invoice_version_id
   ON claims.lineitems (invoice_version_id);
+
+CREATE INDEX IF NOT EXISTS index_claims_lineitems_on_upgrade_type_id
+  ON claims.lineitems (invoice_upgrade_type_id);
 
 
 
@@ -458,19 +502,43 @@ CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_status
 
 
 --
+-- Validationgenai_config
+-- Singleton-style editable GenAI config, like env/config in table form for system admins.
+--
+CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  system_record character varying NULL,
+  classifier_system_record character varying NULL,
+  user_record0 character varying NULL,
+  admin_advice_intro character varying NULL,
+  admin_advice_closing character varying NULL,
+
+  created_at timestamp(6) without time zone NOT NULL,
+  updated_at timestamp(6) without time zone NOT NULL,
+
+  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id)
+);
+
+
+--
 -- Validationgenai_rulesets
 --
 CREATE TABLE IF NOT EXISTS claims.validationgenai_rulesets (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
+  invoice_upgrade_type_id uuid NOT NULL,
   ruleset_shortname character varying NOT NULL,
-  system_record character varying NULL,
   user_record1 character varying NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
   CONSTRAINT validationgenai_rulesets_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_validationgenai_rulesets_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
 
   -- lets you have multiple versions over time under the same shortname
   CONSTRAINT validationgenai_rulesets_shortname_created_uniq
@@ -480,10 +548,87 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_rulesets (
 CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_shortname
   ON claims.validationgenai_rulesets (ruleset_shortname);
 
+CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_upgrade_type_id
+  ON claims.validationgenai_rulesets (invoice_upgrade_type_id);
+
 CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_created_at
   ON claims.validationgenai_rulesets (created_at);
 
 
+--
+-- invoice_version_upgrade_types
+-- Manifest/result table for the upgrade types found on a specific invoice version.
+-- This is not a parent of lineitems/located_fields/rulechecks; those rows point
+-- directly at claims.invoice_upgrade_types.
+--
+CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_version_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+
+  source_engine text NOT NULL DEFAULT 'classifier',
+  call_status text NOT NULL DEFAULT 'classified',
+
+  confidence smallint NOT NULL DEFAULT 0,
+  evidence_text text NULL,
+  classifier_notes text NULL,
+  classifier_raw_json jsonb NULL,
+
+  validationgenai_ruleset_id uuid NULL,
+  genai_raw_json jsonb NULL,
+  genai_overall_confidence smallint NULL,
+  genai_all_rulechecks_pass_flag boolean NULL,
+  genai_admin_advice text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT invoice_version_upgrade_types_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_invoice_version_upgrade_types_invoice_version
+    FOREIGN KEY (invoice_version_id)
+    REFERENCES claims.invoice_versions(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_invoice_version_upgrade_types_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
+  CONSTRAINT fk_invoice_version_upgrade_types_ruleset
+    FOREIGN KEY (validationgenai_ruleset_id)
+    REFERENCES claims.validationgenai_rulesets(id),
+
+  CONSTRAINT invoice_version_upgrade_types_source_engine_chk
+    CHECK (source_engine IN ('classifier','genai')),
+
+  CONSTRAINT invoice_version_upgrade_types_call_status_chk
+    CHECK (call_status IN ('classified','queued','in_progress','succeeded','failed','skipped')),
+
+  CONSTRAINT invoice_version_upgrade_types_confidence_chk
+    CHECK (confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT invoice_version_upgrade_types_genai_confidence_chk
+    CHECK (
+      genai_overall_confidence IS NULL
+      OR genai_overall_confidence BETWEEN 0 AND 100
+    ),
+
+  CONSTRAINT invoice_version_upgrade_types_uniq
+    UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ivut_invoice_version
+  ON claims.invoice_version_upgrade_types (invoice_version_id);
+
+CREATE INDEX IF NOT EXISTS idx_ivut_upgrade_type
+  ON claims.invoice_version_upgrade_types (invoice_upgrade_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_ivut_ruleset
+  ON claims.invoice_version_upgrade_types (validationgenai_ruleset_id);
+
+CREATE INDEX IF NOT EXISTS idx_ivut_invoice_upgrade_status
+  ON claims.invoice_version_upgrade_types (invoice_version_id, invoice_upgrade_type_id, call_status);
 
 
   -- ============================================================
@@ -558,8 +703,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   -- Target invoice version (always required)
   invoice_version_id uuid NOT NULL,
 
+  -- GenAI subcall target. Null for upload/ocr/classifier/legacy genai summary rows.
+  invoice_upgrade_type_id uuid NULL,
+
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- 'ocr' | 'genai'
+  step_type text NOT NULL,  -- upload | ocr | classifier | genai | genai_common | genai_upgrade
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -596,8 +744,12 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     REFERENCES claims.invoice_versions(id)
     ON DELETE CASCADE,
 
+  CONSTRAINT fk_ingest_step_runs_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('ocr','genai')),
+    CHECK (step_type IN ('upload','ocr','classifier','genai','genai_common','genai_upgrade')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -612,12 +764,20 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       (status = 'failed' AND error_text IS NOT NULL)
     ),
 
-  -- Only require ruleset_id when step_type='genai'
+  -- Only require ruleset_id when the step is a GenAI validation call.
   CONSTRAINT ingest_step_runs_ruleset_required_for_genai_chk
     CHECK (
-      (step_type <> 'genai')
+      (step_type NOT IN ('genai','genai_common','genai_upgrade'))
       OR
       (validationgenai_ruleset_id IS NOT NULL)
+    ),
+
+  -- Only require upgrade type for the new typed GenAI calls.
+  CONSTRAINT ingest_step_runs_upgrade_type_required_for_typed_genai_chk
+    CHECK (
+      (step_type NOT IN ('genai_common','genai_upgrade'))
+      OR
+      (invoice_upgrade_type_id IS NOT NULL)
     ),
 
   CONSTRAINT fk_ingest_step_runs_ruleset
@@ -643,6 +803,12 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_invoice_version_step
 -- GenAI filtering
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ruleset_id
   ON claims.ingest_step_runs (validationgenai_ruleset_id);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_upgrade_type_id
+  ON claims.ingest_step_runs (invoice_upgrade_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
+  ON claims.ingest_step_runs (invoice_version_id, invoice_upgrade_type_id, step_type, created_at DESC);
 
 
 

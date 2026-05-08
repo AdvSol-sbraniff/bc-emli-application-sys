@@ -28,9 +28,39 @@ DB connection details (local compose)
 - Password: password
 - Database: app_development
 - Port: 5432
+- Important contrast:
+  - `claims_ai_service/.env` contains `invoice_app` / `app_pw` / `invoice_dev`
+  - that is **not** the active local Rails compose DB
+  - the actual local compose stack uses `DATABASE_URL=postgres://postgres:password@postgres:5432/app_development` from `docker-compose.yml`
+
+WSL psql status
+- On 2026-04-29/30, `psql` was installed in WSL successfully.
+- Verified:
+  - `command -v psql` => `/usr/bin/psql`
+  - `psql --version` => `PostgreSQL 16.13`
+- Important quirk:
+  - non-interactive `sudo apt-get ...` from PowerShell/WSL shell can hang because `sudo` waits for a password
+  - reliable install pattern was:
+    - `wsl -d Ubuntu -u root -e bash -lc 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql-client'`
+- This means future local DB work can use direct WSL `psql`, not only `docker exec ... psql`.
 
 Known-good sanity query
 - Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -tAc "select count(*) from claims.invoices;"
+
+Known-good local validation commands
+- Important shell nuance:
+  - for compose exec into app containers, prefer `bash -c`, not `bash -lc`
+  - `bash -lc` can reset `PATH` and accidentally pick `/usr/bin/node` (Node 12) instead of `/usr/local/node/bin/node`
+- Rails syntax check:
+  - `Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T app bash -c "cd /app && bundle exec ruby -c app/controllers/api/claims/ingest_controller.rb"`
+- Frontend lint check:
+  - `Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T app bash -c "cd /app && ./node_modules/.bin/eslint app/frontend/components/domains/ai-admin/index.tsx"`
+- If `eslint` is missing after container recreate:
+  - repopulate app node_modules volume with:
+    - `Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T app bash -c "cd /app && npm install --legacy-peer-deps --maxsockets=50"`
+- If image rebuild fails with nested Node modules from `claims_ai_service`:
+  - ensure `.dockerignore` contains:
+    - `claims_ai_service/node_modules`
 
 Run DDL SQL file from repo
 - Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -f /workspace/<repo-relative-path>.sql
@@ -39,6 +69,8 @@ Notes
 - Use -T for non-interactive compose exec.
 - Use psql -tAc for clean machine-readable query output.
 - Prefer DDL script workflow when user requests DB changes.
+- Direct WSL psql pattern now also works:
+  - `wsl -d Ubuntu -e bash -lc 'cd /home/sbraniff/bc-emli-application-sys && PGPASSWORD=password psql -h 127.0.0.1 -U postgres -d app_development -f claims_ai_service_ddl/<file>.sql'`
 
 ============================================================
 SECTION B - OPENSHIFT DEPLOYMENTS (GOLD)
@@ -94,8 +126,8 @@ OpenShift DB access pattern (confirmed working)
   2) Execute it with psql inside the DB pod:
      `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev exec hesp-crunchydb-ha-6bxt-0 -c database -- psql -v ON_ERROR_STOP=1 -U postgres -d hesp-crunchydb -f /tmp/<file>.sql'`
 - Confirmed on 2026-03-17:
-  - Ran `claims_ai_service_ddl/3_views.sql`
-  - Ran `claims_ai_service_ddl/4_reporting_views.sql`
+  - Ran `claims_ai_service_ddl/6_views.sql`
+  - Ran `claims_ai_service_ddl/7_reporting_views.sql`
   - This fixed `Reports - Volume and Value` 500s in OpenShift.
 - Root cause captured from live app logs:
   - `PG::UndefinedTable: relation "claims.v_reporting_invoice_business" does not exist`
@@ -107,19 +139,41 @@ OpenShift DB access pattern (confirmed working)
   2) Check app logs:
      `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev logs hesp-app-<pod> --since=5m | tail -n 200'`
 - Important dependency note:
-  - `4_reporting_views.sql` depends on `claims.v_invoice_grid`
-  - If reporting endpoints fail because `claims.v_reporting_invoice_business` is missing, run `3_views.sql` first, then `4_reporting_views.sql`
+  - `7_reporting_views.sql` depends on `claims.v_invoice_grid`
+  - If reporting endpoints fail because `claims.v_reporting_invoice_business` is missing, run `6_views.sql` first, then `7_reporting_views.sql`
 
 ============================================================
 SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
 ============================================================
 
 1) Read this file first.
-2) Confirm local DB command path works with compose -f UNC pattern.
-3) Confirm oc access with explicit shim path and namespace selection.
-4) Confirm app route responds (curl -I app URL).
-5) If login fails, check app logs first, then hesp secret keys.
-6) Before deploying frontend changes, verify deployed image tag and build freshness.
+2) Re-establish Git/SSH context before any push:
+   - Repo current preferred working branch after mainline integration:
+     - `test-update-mainline-2026-04-22`
+   - Safety branches to preserve:
+     - `backup-2026-04-22` = frozen pre-integration safety snapshot
+     - `my-change` = old pre-rebase working branch
+     - `main` = old personal base branch, not daily work branch
+   - Current remote model:
+     - `origin` = `git@github.com:AdvSol-sbraniff/bc-emli-application-sys.git`
+     - `upstream` = `git@github.com:bcgov/bc-emli-application-sys.git`
+     - `upstream` push remains `DISABLED`
+   - After reboot, SSH pushes will fail until the key is unlocked in WSL:
+     1) `eval "$(ssh-agent -s)"`
+     2) `ssh-add ~/.ssh/id_advsol_sbraniff`
+     3) Enter passphrase when prompted
+     4) `ssh -T git@github.com`
+   - Known-good SSH key identity:
+     - file: `~/.ssh/id_advsol_sbraniff`
+     - fingerprint: `SHA256:GXLPDu/nI/0qi4VvSMTBeaqffPAL4lsHQTkUpJJJWjo`
+   - Sanity check branch state:
+     - `git status -sb`
+     - `git branch -vv`
+3) Confirm local DB command path works with compose -f UNC pattern.
+4) Confirm oc access with explicit shim path and namespace selection.
+5) Confirm app route responds (curl -I app URL).
+6) If login fails, check app logs first, then hesp secret keys.
+7) Before deploying frontend changes, verify deployed image tag and build freshness.
 
 ============================================================
 SECTION D - MEMORY INTENT
@@ -127,6 +181,116 @@ SECTION D - MEMORY INTENT
 
 - This file is the durable runbook to survive VS Code conversation compression.
 - Prefer updating this file whenever a new blocker/fix pattern is discovered.
+
+============================================================
+SECTION I - LOCAL LEGACY APP / CONTRACTOR FLOW BOOTSTRAP
+============================================================
+
+Problem context
+- User is learning the old pre-AI app flow locally.
+- Local DB was provided thin / partially unseeded.
+- Logging in as contractor user `MiniMe1` initially landed on `/welcome` or spun forever because local data required by the contractor onboarding flow was missing or broken.
+
+Key routing/behavior facts
+- Contractor users are routed through `ContractorOnboardingScreen`, not directly to invoice pages.
+- Relevant code:
+  - `app/frontend/components/domains/home/index.tsx`
+  - `app/frontend/components/domains/home/contractor-onboarding.tsx`
+- `/welcome` is a fallback when contractor onboarding bootstrap fails.
+- The old contractor flow requires:
+  - program with slug `energy-savings-program`
+  - contractor onboarding requirement template + published template version
+  - invoice requirement templates + published template versions
+
+Local bootstrap script created
+- File:
+  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql`
+- Purpose:
+  - rerunnable minimal bootstrap for the old app flow
+  - creates/normalizes `energy-savings-program`
+  - ensures required permit classifications
+  - creates published requirement templates/template versions for:
+    - contractor onboarding
+    - participant application
+    - all invoice variants
+- Known-good run command:
+  - `wsl -d Ubuntu -e bash -lc 'cd /home/sbraniff/bc-emli-application-sys && PGPASSWORD=password psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d app_development -f claims_ai_service_ddl/3_seed_old_app_minimal.sql'`
+- Important local schema nuance:
+  - original script version failed because local DB lacked the expected unique constraint on `permit_classifications.code`
+  - script was patched to use `MERGE` instead of `ON CONFLICT (code)`
+- Successful run result observed:
+  - `BEGIN`
+  - `MERGE 8`
+  - `MERGE 7`
+  - `CREATE FUNCTION`
+  - `DO`
+  - `COMMIT`
+  - notice: `Legacy app bootstrap complete. Program id = ea5d4eca-cd26-4148-9341-2a473efa191d`
+- Verified program:
+  - `ea5d4eca-cd26-4148-9341-2a473efa191d | Energy Savings Program | energy-savings-program`
+- Verified published templates created:
+  - `ESP Contractor Onboarding`
+  - `ESP Participant Application`
+  - `Invoice - Electrical service upgrade`
+  - `Invoice - Health and safety remediation`
+  - `Invoice - Heat pump (space heating)`
+  - `Invoice - Heat pump water heater`
+  - `Invoice - Insulation`
+  - `Invoice - Ventilation`
+  - `Invoice - Windows and doors`
+
+MiniMe1 failure sequence learned
+- User `MiniMe1` authenticates successfully through contractor path.
+- First failed onboarding attempt happened before templates were seeded.
+- Rails created a contractor row but failed creating onboarding.
+- This left an orphan contractor record:
+  - contact user = `MiniMe1`
+  - `business_name = "TBD"`
+  - no permit applications
+  - no contractor_onboards
+- When that orphan exists, frontend finds contractor and then waits forever on missing onboarding.
+- App log signature seen:
+  - `ActiveRecord::RecordNotFound (Couldn't find RequirementTemplate ...)`
+  - then later repeated `/api/contractors/by-user/...` and `/api/contractor_onboards/<contractor-id>` with no onboarding
+
+Reusable local user reset script created
+- File:
+  - `claims_ai_service_ddl/delete_user_and_related.rb`
+- Purpose:
+  - delete a user and their related local records for a true reset
+  - identifier comes from `USER_IDENTIFIER`
+  - resolves by UUID, email, omniauth username, then unique first_name
+- Known-good run pattern:
+  - `docker exec -e USER_IDENTIFIER=MiniMe1 bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/delete_user_and_related.rb"`
+- What it cleans up:
+  - user row
+  - contractor rows where user is `contact_id`
+  - permit applications for both user submitter and contractor submitter
+  - contractor_onboards, contractor_employees, preferences, addresses, memberships, JWTs, audit logs, support/revision rows, collaborator rows, etc.
+  - nullifies historical references like `invited_by_id`, `deprecated_by_id`, `consumed_by_user_id`, `assignee_id`, and contractor onboard `suspended_by` / `deactivated_by`
+- Reindexes:
+  - `User`
+  - `Contractor`
+  - `PermitApplication`
+
+MiniMe1 specific reset history
+- One orphan contractor was deleted first by direct runner:
+  - contractor id `60bcd334-8632-4f1e-abc3-380e3f78da93`
+- Later full user reset was performed successfully:
+  - user id `98e6633f-d5d3-4a72-b506-f63b86f9e141`
+  - email `minime1@gmail.com`
+  - username `MiniMe1`
+  - contractor id deleted during reset: `f0f57ea8-eb46-474e-9aa8-20493e6a6082`
+  - onboarding permit application deleted during reset: `3d795a0f-39f8-40c4-9ad1-7e59de760f2c`
+
+Cold-boot guidance for this local legacy-flow issue
+1) If contractor login lands on `/welcome` or spins at `/?currentPage=1`, check Rails logs first:
+   - `docker logs --tail 200 bc-emli-application-sys-app-1`
+2) If log shows missing `RequirementTemplate`, rerun:
+   - `claims_ai_service_ddl/3_seed_old_app_minimal.sql`
+3) If log/user state suggests an orphan contractor/onboarding mismatch, use:
+   - `claims_ai_service_ddl/delete_user_and_related.rb`
+4) Then let the user log in again from scratch.
 
 ============================================================
 SECTION E - FAST DEPLOY METHOD (PREFERRED)
@@ -159,3 +323,289 @@ Steps
 Notes
 - This is the default path when user asks for rapid deploy of latest code.
 - Use in-cluster BuildConfig only if local build/push is blocked.
+
+============================================================
+SECTION F - HELM/VALUES AFTER UPSTREAM REBASE
+============================================================
+
+- Important repo nuance discovered on 2026-04-27:
+  - `helm/main` renders vendored dependency archives from `helm/main/charts/*.tgz`.
+  - The raw subchart folders (`helm/_app`, `helm/_sidekiq`, `helm/_anycable-rpc`, etc.) can be newer than those packaged archives after a rebase or merge.
+  - If Helm output still looks like old behavior, refresh dependencies first:
+    - `wsl -d Ubuntu -e bash -lc 'cd /home/sbraniff/bc-emli-application-sys/helm/main && helm dependency update'`
+  - Prefer `make upgrade` from `helm/main` because it already depends on `helm-dep`.
+- Important ce8baa-dev values alignment:
+  - The newer chart standard expects shared env in top-level `sharedConfig`, not repeated under `app.env`, `sidekiq.env`, and `anycable-rpc.env`.
+  - Before a Helm upgrade in `ce8baa-dev`, ensure `helm/main/values-ce8baa-dev.yaml` overrides `sharedConfig` for gold routes, auth, AWS, and S3 so Helm does not fall back to generic base defaults.
+
+============================================================
+SECTION G - WSL NODE/ASDF RECOVERY
+============================================================
+
+- On 2026-04-27 the WSL Node toolchain was broken because:
+  - repo `.tool-versions` requested `nodejs 20.10.0`
+  - that version was not installed in `asdf`
+  - WSL then fell through to the Windows `npm` wrapper, causing UNC-path failures and missing `nest`
+  - `claims_ai_service/node_modules` and `dist` were also stale/root-owned from earlier work
+- Recovery steps:
+  - `wsl -d Ubuntu -e bash -lc '. ~/.asdf/asdf.sh && asdf install nodejs 20.10.0 && asdf reshim nodejs'`
+  - Reinstall Node deps natively in WSL:
+    - `wsl -d Ubuntu -e bash -lc '. ~/.asdf/asdf.sh && cd /home/sbraniff/bc-emli-application-sys/claims_ai_service && rm -rf node_modules && npm ci'`
+  - If old generated folders are root-owned, fix them once as root:
+    - `wsl -d Ubuntu -u root -e bash -lc 'chown -R sbraniff:sbraniff /home/sbraniff/bc-emli-application-sys/claims_ai_service/dist /home/sbraniff/bc-emli-application-sys/claims_ai_service/node_modules'`
+  - Then build normally:
+    - `wsl -d Ubuntu -e bash -lc '. ~/.asdf/asdf.sh && cd /home/sbraniff/bc-emli-application-sys/claims_ai_service && npm run build'`
+- Healthy end state:
+  - `which node` => `/home/sbraniff/.asdf/shims/node`
+  - `which npm` => `/home/sbraniff/.asdf/shims/npm`
+  - `npm config get prefix` => `/home/sbraniff/.asdf/installs/nodejs/20.10.0`
+
+============================================================
+SECTION H - AZURE GOV SUBSCRIPTION VS SBRANIFF SUBSCRIPTION
+============================================================
+
+- Azure CLI was installed on Windows on 2026-04-28/29.
+  - Path: `C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd`
+  - If `az` is not on PATH in a fresh PowerShell, call the full path directly.
+  - Prefer running Azure CLI from `C:\` rather than a WSL UNC working dir to avoid the `CMD.EXE ... UNC paths are not supported` warning.
+- Auth pattern:
+  - Use `az login --use-device-code` when needed.
+  - Verified gov account: `SBRANIFF@gov.bc.ca`
+  - Verified dev subscription: `cbdb71-dev - Savings Program Application AI`
+  - Subscription ID: `55da4745-0ca8-4993-834e-f368541ac85b`
+- Gov Azure resource groups seen:
+  - `rg-energy-savings-program`
+  - `rg-energy-savings-program-dev`
+  - networking RG: `cbdb71-dev-networking`
+
+Gov subscription findings
+- Important contrast:
+  - Existing working Azure endpoint in local `.env` is the older/personal `sbraniff` Azure OpenAI subscription:
+    - `GENAI_BASE_URL=https://sbran-mkremrzw-eastus2.openai.azure.com/openai/v1/`
+    - `GENAI_DEPLOYMENT=gpt-5.2-chat`
+  - That older/personal Azure setup is already complete enough to be callable from OpenShift and has been used by the app for months.
+  - The new gov subscription is not at that maturity level yet; it currently lacks the network plumbing needed for private Azure OpenAI creation.
+- When attempting to create Azure OpenAI in gov subscription:
+  - RG creation succeeded.
+  - Resource create failed at validation because policy denied public network access on `Microsoft.CognitiveServices/accounts`.
+  - Denied resource name seen in activity log: `energy-savings-program-resource`
+  - Key deny policy set: `Deny-PublicPaaSEndpoints`
+  - Specific denies seen:
+    - `Cognitive Services accounts should disable public network access`
+    - `Azure AI Services resources should restrict network access`
+- Once `Network = Disabled` was selected in portal, Azure exposed private endpoint setup as expected.
+- The blocker is not user error in portal. The blocker is missing private networking prerequisites.
+
+Gov networking facts verified via Azure CLI
+- Only one VNet visible in the subscription:
+  - `cbdb71-dev-vwan-spoke`
+  - RG: `cbdb71-dev-networking`
+  - Region: `canadacentral`
+  - Address space: `10.46.78.0/24`
+  - DNS server: `10.53.244.4`
+  - It is peered to a central hub VNet in another subscription / managed landing-zone area.
+- Critical fact:
+  - `cbdb71-dev-vwan-spoke` currently has **zero subnets**.
+  - Because there are no subnets, the portal private endpoint subnet dropdown is empty.
+  - Therefore Azure OpenAI private endpoint creation cannot be completed yet.
+- Also verified in subscription:
+  - no private endpoints
+  - no private DNS zones
+  - no NSGs
+  - no route tables
+  - no Azure Firewall / virtual hub / vWAN objects in this app subscription beyond the spoke shell
+- Interpretation:
+  - subscription has landing-zone network shell only
+  - heavier shared network infra appears to live in the managed hub elsewhere
+  - app subscription is incomplete for private Azure OpenAI until a subnet / approved pattern is provided
+
+Gov RBAC facts verified
+- Visible role assignments for `SBRANIFF@gov.bc.ca`:
+  - `Azure AI User` at subscription scope
+  - `Azure AI User` on `rg-energy-savings-program-dev`
+  - `Azure AI User` on `rg-energy-savings-program`
+- No direct role assignments were found for:
+  - `cbdb71-dev-networking`
+  - `cbdb71-dev-vwan-spoke`
+- Working assumption:
+  - user can work with AI resources
+  - user does not currently have network-admin rights to build subnet/private-endpoint plumbing solo
+
+OpenShift + Azure reachability facts
+- Important distinction:
+  - OpenShift **cannot** reach local Qwen/vLLM endpoint at `chat.advsol.tech:8000`.
+    - DNS from pod to `chat.advsol.tech` failed with `ENOTFOUND`
+    - direct IP `159.249.137.22:8000` failed with `EHOSTUNREACH`
+  - OpenShift **can** reach public Azure endpoints.
+- Verified from `ce8baa-dev` `hesp-claims-ai` pod:
+  - DNS OK for:
+    - `sbran-mkremrzw-eastus2.openai.azure.com`
+    - `braniff-di.cognitiveservices.azure.com`
+  - TCP 443 OK to those hosts
+  - actual HTTPS GET to Azure OpenAI models endpoint returned HTTP 200
+- Therefore:
+  - current/personal public Azure endpoint is reachable from cluster
+  - future gov Azure OpenAI endpoint will only be known reachable after it exists
+  - if gov endpoint is private-only (likely), reachability from OpenShift cannot be assumed and must be tested after creation / DNS setup
+
+============================================================
+SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
+============================================================
+
+- Upstream Silver OpenShift access verified on 2026-04-30/05-01:
+  - cluster: `https://api.silver.devops.gov.bc.ca:6443`
+  - projects visible:
+    - `bfc7dd-dev`
+    - `bfc7dd-test`
+  - current Silver working project was `bfc7dd-dev`
+- Silver app/DB pod names observed:
+  - app: `hesp-app-74b9ff4ddd-8xqg9`
+  - postgres: `hesp-crunchydb-ha-62hq-0`
+  - db name: `hesp-crunchydb`
+- Silver export bundles created under `claims_ai_service_ddl/`:
+  - `silver_template_windows_and_doors.json`
+  - `silver_template_heat_pump.json`
+  - `silver_template_heat_pump_water_heater.json`
+  - `silver_template_insulation.json`
+  - `silver_template_ventilation.json`
+  - `silver_template_electrical_service_upgrade.json`
+  - `silver_template_health_and_safety_remediation.json`
+- Each file contains:
+  - `requirement_template` metadata snapshot
+  - `published_template_version` snapshot including:
+    - `form_json`
+    - `requirement_blocks_json`
+    - `denormalized_template_json`
+- The local import helper is:
+  - `claims_ai_service_ddl/import_silver_invoice_templates.rb`
+- Important importer fix:
+  - parse the bundle as raw JSON first
+  - only fall back to splitting on the first `|` if JSON parsing fails
+  - reason: real exported FormIO keys themselves contain `|`
+- Known-good local run command:
+  - `docker exec bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/import_silver_invoice_templates.rb"`
+- What the importer does:
+  - finds local invoice templates by:
+    - program slug `energy-savings-program`
+    - submission type name `Invoice`
+    - submission variant name from each Silver bundle
+  - updates local `requirement_templates.nickname/description`
+  - updates the local published `template_versions` row with Silver:
+    - `version_date`
+    - `form_json`
+    - `requirement_blocks_json`
+    - `denormalized_template_json`
+- Verified after import:
+  - local Windows and doors published template version date became `2026-03-03`
+  - local `form_json` now contains real Silver field labels such as `Type of home`
+- Important note:
+  - this workflow imports runtime template JSON into local template versions
+  - it does **not** recreate the full normalized builder tables from Silver
+  - goal is realistic local contractor invoice rendering/testing, not a perfect admin-builder clone
+  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql` must not clobber richer imported invoice template versions on rerun
+  - bootstrap preservation rule now is:
+    - only overwrite the published template version when it is blank or still contains the bootstrap sentinel text `Local bootstrap block`
+- Additional lookup/config parity work completed:
+  - compared likely Silver/local code tables:
+    - `permit_classifications`
+    - `programs`
+    - `revision_reasons`
+    - `site_configurations`
+  - conclusion:
+    - local `permit_classifications` were already sufficient for invoice/onboarding flows
+    - extra Silver `programs` looked like test noise and were not imported
+    - worthwhile local gap was singleton site configuration normalization plus revision reason attachment
+  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql` now also:
+    - ensures a `site_configurations` singleton row exists
+    - normalizes `display_sitewide_message = false`
+    - defaults `sitewide_message_color = theme.softRose`
+    - upserts revision reasons onto that singleton config:
+      - `zoning_non_compliance`
+      - `inaccurate_documentation`
+      - `failure_to_meet_building_code`
+      - `other`
+      - `contractor_onboarding_form`
+  - verified after rerun:
+    - local `site_configurations.sitewide_message_color = theme.softRose`
+    - local revision reasons all point at the singleton config and are not discarded
+
+Model/region caution
+- `Canada Central` is supported as an Azure AI Foundry region generally, but GPT-5 availability there was not confirmed from published Microsoft region/model tables during investigation.
+- Do not assume GPT-5.x is available in `Canada Central`.
+- App has been tested against GPT-5.x; GPT-4.x may work but may be insufficient as workflow complexity increases.
+
+Practical memory for next time
+- If asked to revisit gov Azure setup:
+  1) use Azure CLI on Windows with device-code login
+  2) inspect `rg-energy-savings-program` and activity log/policy again
+  3) remember that the current hard blocker is: no subnet in `cbdb71-dev-vwan-spoke`
+  4) do not waste time trying to force public Azure OpenAI creation; policy will deny it
+  5) likely next dependency is network/landing-zone guidance or a provided subnet/private endpoint pattern
+
+============================================================
+SECTION I - LOCAL LEGACY CONTRACTOR ONBOARDING LESSONS
+============================================================
+
+- The local old-app bootstrap script is:
+  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql`
+- That script must do more than create program/template rows. For contractor onboarding to work end-to-end, the seeded `form_json` must mimic the old legacy structure closely enough for both:
+  - page load / `lookup_props`
+  - submit / signoff
+  - approval / onboarding processor extraction
+
+Known required legacy form characteristics
+- `form_json` must be shaped as:
+  - template -> sections -> blocks -> requirements
+- The onboarding template must include the built-in completion/signoff section:
+  - section key: `section-completion-key`
+  - required checkbox key: `signed`
+  - real FormIO submit button key: `submit`
+- Requirement keys for onboarding approval must look like real legacy keys, e.g.:
+  - `formSubmissionDataRSTsection...|RB...|business_name`
+- A shallow key like just `business_name` is not enough for `PermitApplication::ContractorOnboardingProcessor#find_value_by_key_end`.
+
+MiniMe1 debugging history
+- First failure mode:
+  - login created orphan contractor rows before templates were valid
+  - result: redirect/spinner issues
+- Reusable reset script created:
+  - `claims_ai_service_ddl/delete_user_and_related.rb`
+  - run via:
+    - `docker exec -e USER_IDENTIFIER=MiniMe1 bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/delete_user_and_related.rb"`
+- Second failure mode:
+  - onboarding page loaded but submit only jitter-scrolled downward
+  - root cause: bootstrap template was missing the completion/signoff section
+- Third failure mode:
+  - staff clicked `Ready for training`, but `Approve` was unsafe
+  - root cause: approval processor extracted nil contractor fields because submission data lacked real legacy nested keys
+
+Known local MiniMe1 / contractor test data
+- Current successful onboarding record:
+  - permit application id: `5f1c0935-f5c8-4163-b1ca-8688c578ef6d`
+  - contractor id: `506f4e39-a648-4f2f-b5b3-a0efee9c9695`
+- After staff clicked `Ready for training`, permit application status became:
+  - `training_pending` (`status = 9`)
+- To make approval safe, current record submission_data was patched to include:
+  - section key:
+    - `sectionbbb20000000000000000000000002`
+  - nested legacy keys:
+    - `formSubmissionDataRSTsectionbbb20000000000000000000000000002|RBbbb30000000000000000000000000002|business_name`
+    - `formSubmissionDataRSTsectionbbb20000000000000000000000000002|RBbbb30000000000000000000000000002|business_name_notes`
+- After that patch, approval precheck succeeded:
+  - extracted contractor details returned `business_name => "Mini Windows and Heatpumps"`
+  - contractor validation passed for approval
+
+Local staff role helpers
+- `sbraniff` local user:
+  - id: `3e282c6c-56b6-469d-88c5-15c89e0f3e75`
+  - email: `sbraniff@gov.bc.ca`
+  - omniauth username: `SBRANIFF`
+- Role switch helper scripts:
+  - `claims_ai_service_ddl/set_sbraniff_regular_admin.sql`
+  - `claims_ai_service_ddl/set_sbraniff_system_admin.sql`
+- User enum reminder from `app/models/user.rb`:
+  - `admin = 2`
+  - `system_admin = 3`
+
+- Legacy invoice blank-screen fix: seed old-style PermitType(code=0 low_residential) and Activity(code=4 addition_alteration_renovation), wire them onto minimal requirement_templates, and expose permit_type/activity from PermitApplicationBlueprint with fallback to template_version.requirement_template. This made draft invoice payloads include top-level activity + permit_type again.
+

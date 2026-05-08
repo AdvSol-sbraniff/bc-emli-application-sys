@@ -1,4 +1,5 @@
 node_modules
+claims_ai_service/node_modules
 tmp
 .env
 claims_ai_service/.env

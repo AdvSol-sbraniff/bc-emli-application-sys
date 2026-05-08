@@ -370,7 +370,10 @@ export const PermitApplicationStoreModel = types
 
       return app;
     },
-    requestSupportingFiles: flow(function* (permitApplicationId: string, params: { note: string; audience_type_code?: string }) {
+    requestSupportingFiles: flow(function* (
+      permitApplicationId: string,
+      params: { note: string; audience_type_code?: string },
+    ) {
       const permitApplication = self.getPermitApplicationById(permitApplicationId);
       if (!permitApplication) return false;
 
@@ -426,11 +429,14 @@ export const PermitApplicationStoreModel = types
         },
       } as TSearchParams<EPermitApplicationSortFields, IEnergySavingsApplicationSearchFilters>;
 
-
       const currentProgramId = self.rootStore?.programStore?.currentProgram?.id;
 
       // Don't search if we don't have the required filters set
-      if (!searchParams.filters.userGroupTypeId || !searchParams.filters.submissionTypeId || (Array.isArray(searchParams.filters.submissionTypeId) && searchParams.filters.submissionTypeId.length === 0)) {
+      if (
+        !searchParams.filters.userGroupTypeId ||
+        !searchParams.filters.submissionTypeId ||
+        (Array.isArray(searchParams.filters.submissionTypeId) && searchParams.filters.submissionTypeId.length === 0)
+      ) {
         return false;
       }
 
@@ -478,9 +484,26 @@ export const PermitApplicationStoreModel = types
         self.normalizeSubmitter(permitApplication);
 
         permitApplication.isFullyLoaded = true;
-
-        self.mergeUpdate(permitApplication, 'permitApplicationMap');
-        return permitApplication;
+        try {
+          self.mergeUpdate(permitApplication, 'permitApplicationMap');
+          return permitApplication;
+        } catch (error) {
+          console.error('Temporary debug: fetchPermitApplication merge failed', {
+            id,
+            review,
+            error,
+            topLevelKeys: Object.keys(permitApplication || {}),
+            hasPermitType: Object.prototype.hasOwnProperty.call(permitApplication || {}, 'permitType'),
+            hasActivity: Object.prototype.hasOwnProperty.call(permitApplication || {}, 'activity'),
+            templateVersionKeys: Object.keys(permitApplication?.templateVersion || {}),
+            publishedTemplateVersionKeys: Object.keys(permitApplication?.publishedTemplateVersion || {}),
+            submitterKeys:
+              permitApplication?.submitter && typeof permitApplication.submitter === 'object'
+                ? Object.keys(permitApplication.submitter)
+                : permitApplication?.submitter,
+          });
+          throw error;
+        }
       }
     }),
 

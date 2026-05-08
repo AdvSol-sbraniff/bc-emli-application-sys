@@ -1,0 +1,4 @@
+curl --fail-with-body --max-time 20 -sS -X POST "http://chat.advsol.tech:8000/v1/responses" \
+  -H "Authorization: Bearer 1234" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"qwen-122b","input":[{"role":"user","content":[{"type":"input_text","text":"Say hello in one short sentence."}]}]}'
