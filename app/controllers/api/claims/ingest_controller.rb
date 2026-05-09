@@ -590,8 +590,8 @@ module Api
                   r.read_attribute("upgrade_type_description"),
                 call_status: r.call_status,
                 confidence: r.confidence,
-                evidence_text: r.evidence_text,
-                classifier_notes: r.classifier_notes,
+                evidence_text: r.raw_json&.dig("evidence_text"),
+                classifier_notes: r.raw_json&.dig("classification_explanation"),
                 updated_at: r.updated_at
               }
             end
@@ -616,19 +616,18 @@ module Api
       # SECTION 02.60 — ACTION: admin_submit_batch
       # ROUTE: POST /api/claims/ingest/admin_submit_batch
       # PURPOSE:
-      # - Simulates full contractor submission flow for multiple files:
-      #   create session (optional), upload each file, enqueue OCR->GenAI chain.
+      # - Simulates contractor draft creation for multiple files:
+      #   create session, upload each file, enqueue OCR->GenAI chain.
+      # - Does not submit to admin; submitter_id/submitted_at stay blank.
       # ============================================================
       def admin_submit_batch
         contractor_id = params[:contractor_id].to_s.strip
-        submitter_id = params[:submitter_id].to_s.strip
         validationgenai_ruleset_id =
           params[:validationgenai_ruleset_id].to_s.strip
         validationgenai_ruleset_id =
           resolve_default_ruleset_id_for_run_genai! if validationgenai_ruleset_id.empty?
 
         raise "Missing contractor_id" if contractor_id.empty?
-        raise "Missing submitter_id" if submitter_id.empty?
 
         files =
           Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
@@ -673,10 +672,10 @@ module Api
                 ::Claims::Invoice.create!(
                   session_id: session_id,
                   contractor_id: contractor_id,
-                  submitter_id: submitter_id,
+                  submitter_id: nil,
                   status: "upload_in_progress",
                   status_updated_at: Time.current,
-                  submitted_at: Time.current,
+                  submitted_at: nil,
                   created_at: Time.current,
                   updated_at: Time.current
                 )
@@ -765,6 +764,14 @@ module Api
               invoice_versionno: invoice_version.invoice_versionno
             }
           rescue => e
+            file_failed_msg =
+              "[claims][ingest][admin_submit_batch] file failed " \
+                "index=#{idx + 1} filename=#{name.inspect} " \
+                "invoice_id=#{invoice&.id} " \
+                "invoice_version_id=#{invoice_version&.id}: " \
+                "#{e.class}: #{e.message}"
+            Rails.logger.error(file_failed_msg)
+
             begin
               if invoice
                 failed_status =
@@ -815,6 +822,8 @@ module Api
         end
 
         ::Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run.id)
+        ingest_run.reload
+        mark_orphaned_ingest_failures!(ingest_run: ingest_run, results: results)
         ingest_run.reload
 
         render json: {
@@ -916,6 +925,61 @@ module Api
 
       def ingest_extract_storage_key(node_resp)
         node_resp.fetch("storage_key")
+      end
+
+      def mark_orphaned_ingest_failures!(ingest_run:, results:)
+        orphaned_failures =
+          results.count do |result|
+            result[:status] == "failed" &&
+              result[:invoice_version_id].to_s.strip.empty?
+          end
+
+        return if orphaned_failures.zero?
+
+        messages = parse_ingest_messages(ingest_run.messages)
+        messages +=
+          results
+            .select do |result|
+              result[:status] == "failed" &&
+                result[:invoice_version_id].to_s.strip.empty?
+            end
+            .map do |result|
+              {
+                level: "error",
+                file: result[:original_filename],
+                message: result[:error]
+              }
+            end
+
+        failed_files = ingest_run.failed_files.to_i + orphaned_failures
+        completed_files = ingest_run.completed_files.to_i
+        processed_files = completed_files + failed_files
+        total_files = [ingest_run.total_files.to_i, results.size].max
+
+        status =
+          if total_files.positive? && processed_files >= total_files
+            completed_files.positive? ? "partial" : "failed"
+          else
+            "running"
+          end
+
+        ingest_run.update!(
+          status: status,
+          total_files: total_files,
+          failed_files: failed_files,
+          messages: messages,
+          completed_at:
+            %w[succeeded failed partial].include?(status) ? Time.current : nil,
+          updated_at: Time.current
+        )
+      end
+
+      def parse_ingest_messages(messages)
+        return messages if messages.is_a?(Array)
+
+        JSON.parse(messages.to_s)
+      rescue JSON::ParserError, TypeError
+        []
       end
     end
   end

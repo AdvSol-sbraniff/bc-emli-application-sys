@@ -401,36 +401,14 @@ module Claims
           coerce_confidence(
             overall["overall_confidence"] || overall[:overall_confidence]
           ),
-        evidence_text: ruleset.ruleset_shortname,
         validationgenai_ruleset_id: ruleset.id,
-        genai_raw_json: payload,
-        genai_overall_confidence:
+        raw_json: payload,
+        result:
           (
             if payload
-              coerce_confidence(
-                overall["overall_confidence"] || overall[:overall_confidence]
-              )
+              coerce_overall_result(overall)
             else
-              row.genai_overall_confidence
-            end
-          ),
-        genai_all_rulechecks_pass_flag:
-          (
-            if payload
-              coerce_bool_or_nil(
-                overall["all_rulechecks_pass_flag"] ||
-                  overall[:all_rulechecks_pass_flag]
-              )
-            else
-              row.genai_all_rulechecks_pass_flag
-            end
-          ),
-        genai_admin_advice:
-          (
-            if payload
-              (overall["admin_advice"] || overall[:admin_advice])
-            else
-              row.genai_admin_advice
+              row.result
             end
           ),
         updated_at: Time.current
@@ -494,13 +472,8 @@ module Claims
             overall["overall_confidence"] || overall[:overall_confidence]
           )
         end
-      pass_values =
-        overall_rows.map do |overall|
-          coerce_bool_or_nil(
-            overall["all_rulechecks_pass_flag"] ||
-              overall[:all_rulechecks_pass_flag]
-          )
-        end
+      result_values =
+        overall_rows.map { |overall| coerce_overall_result(overall) }.compact
       advice =
         combined_admin_advice(config: config, ruleset_results: ruleset_results)
 
@@ -517,7 +490,7 @@ module Claims
             end
         },
         genai_overall_confidence: confidences.compact.min || 0,
-        genai_all_rulechecks_pass_flag: pass_values.any? && pass_values.all?,
+        genai_result: combined_result(result_values),
         genai_admin_advice: advice
       )
 
@@ -530,20 +503,8 @@ module Claims
     def combined_admin_advice(config:, ruleset_results:)
       sections =
         ruleset_results.filter_map do |result|
-          overall =
-            (
-              if result[:payload].is_a?(Hash)
-                (
-                  result[:payload]["overall"] || result[:payload][:overall] ||
-                    {}
-                )
-              else
-                {}
-              end
-            )
-          advice =
-            (overall["admin_advice"] || overall[:admin_advice]).to_s.strip
-          next if advice.empty?
+          advice = advice_from_rulechecks(result[:payload])
+          next if advice.blank?
 
           "#{result[:upgrade_type].description}\n#{advice}"
         end
@@ -555,6 +516,52 @@ module Claims
         sections.join("\n\n"),
         config&.admin_advice_closing.to_s.strip.presence
       ].compact.join("\n\n")
+    end
+
+    def advice_from_rulechecks(payload)
+      return nil unless payload.is_a?(Hash)
+
+      rows = payload["rulechecks"] || payload[:rulechecks]
+      bullets =
+        Array(rows).filter_map do |row|
+          next unless row.is_a?(Hash)
+
+          result = coerce_rule_result(row["rule_result"] || row[:rule_result])
+          next if result.blank? || result == "pass"
+
+          message = advice_message_for_rule(row)
+          next if message.blank?
+
+          rule_number = row["rule_number"] || row[:rule_number]
+          rule_key = (row["rule_key"] || row[:rule_key]).to_s.strip
+          rule_name = (row["rule_name"] || row[:rule_name]).to_s.strip
+
+          label_parts = []
+          label_parts << "Rule #{rule_number}" if rule_number.present?
+          label_parts << "(#{rule_key})" if rule_key.present?
+          label_parts << rule_name if label_parts.empty? && rule_name.present?
+
+          result_label =
+            case result
+            when "info"
+              "Helpful note"
+            when "warn"
+              "Please verify"
+            when "fail"
+              "Correction needed"
+            end
+
+          "- #{[label_parts.join(" ").presence, result_label].compact.join(": ")}: #{message}"
+        end
+
+      bullets.empty? ? nil : bullets.join("\n")
+    end
+
+    def advice_message_for_rule(row)
+      [
+        row["reason_and_likely_causes"] || row[:reason_and_likely_causes],
+        row["evidence_text"] || row[:evidence_text]
+      ].map { |value| value.to_s.strip }.find(&:present?)
     end
 
     def maybe_upsert_revision_request!(invoice_version:, advice:)
@@ -600,19 +607,35 @@ module Claims
       [[n, 0].max, 100].min
     end
 
-    def coerce_bool_or_nil(value)
-      return value if value == true || value == false
-      return nil if value.nil?
+    def coerce_overall_result(overall)
+      result =
+        (
+          overall["overall_result"] || overall[:overall_result] ||
+            overall["result"] || overall[:result]
+        ).to_s.strip.downcase
+      return result if %w[pass info warn fail].include?(result)
 
-      s = value.to_s.strip.downcase
-      return true if %w[true t 1 yes y].include?(s)
-      return false if %w[false f 0 no n].include?(s)
+      nil
+    end
+
+    def combined_result(results)
+      return nil if results.empty?
+      return "fail" if results.include?("fail")
+      return "warn" if results.include?("warn")
+      return "info" if results.include?("info")
+
+      "pass"
+    end
+
+    def coerce_rule_result(value)
+      result = value.to_s.strip.downcase
+      return result if %w[pass info warn fail].include?(result)
 
       nil
     end
 
     # ============================================================
-    # SECTION B — CONTEXT WINDOW JSON BUILDER
+    # SECTION B - CONTEXT WINDOW JSON BUILDER
     # PURPOSE:
     # - Ensure model sees:
     #   1) system_record (schema + constraints)

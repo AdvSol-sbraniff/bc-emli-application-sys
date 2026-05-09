@@ -52,9 +52,6 @@ const InvoicesAdminScreen = lazy(() =>
 const InvoiceVersionsAdminScreen = lazy(() =>
   import('../invoice-versions-admin').then((module) => ({ default: module.InvoiceVersionsAdminScreen })),
 );
-const InvoiceVersionByVersionScreen = lazy(() =>
-  import('../invoice-version-viewer-by-version').then((module) => ({ default: module.InvoiceVersionByVersionScreen })),
-);
 
 const UploadInvoiceAdminScreen = lazy(() =>
   import('../upload-invoice-admin').then((module) => ({ default: module.default })),
@@ -67,6 +64,9 @@ const SubmissionSimulatorAdminScreen = lazy(() =>
 );
 const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
   import('../invoice-supporting-documents-admin').then((module) => ({ default: module.default })),
+);
+const ContractorInvoiceReviewScreen = lazy(() =>
+  import('../contractor-invoice-review').then((module) => ({ default: module.default })),
 );
 
 const EligibilitycodesAdminScreen = lazy(() =>
@@ -789,11 +789,10 @@ const AppRoutes = observer(() => {
           }
         >
           <Route path="/invoice-versions/:id" element={<InvoiceVersionShowScreen />} />
+          <Route path="/invoices/:invoiceId/review" element={<InvoiceVersionShowScreen />} />
+          <Route path="/invoice-versions/:id/review" element={<InvoiceVersionShowScreen />} />
           <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
-          <Route
-            path="/invoice-versions-by-version/:invoiceVersionId/read"
-            element={<InvoiceVersionByVersionScreen />}
-          />
+          <Route path="/invoice-versions-by-version/:invoiceVersionId/read" element={<InvoiceVersionShowScreen />} />
           <Route path="/ai-admin" element={<AIAdminScreen />} />
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
@@ -805,6 +804,10 @@ const AppRoutes = observer(() => {
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
+          <Route
+            path="/contractor/sessions/:sessionId/invoices/:invoiceId/review"
+            element={<ContractorInvoiceReviewScreen />}
+          />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />

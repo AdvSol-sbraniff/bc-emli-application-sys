@@ -321,7 +321,7 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
           </Show>
 
           <RouterLinkButton
-            to={`/sessions/${row.sessionId}/invoices/${row.invoiceId}/read`}
+            to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review`}
             variant="secondary"
             w={{ base: 'full', md: 'fit-content' }}
             aria-label={`${actionLabel(row.status)} invoice submission for ${title}`}

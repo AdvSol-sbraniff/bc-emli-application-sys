@@ -7,6 +7,9 @@ module Api
       skip_before_action :authenticate_user!,
                          only: %i[
                            index_by_invoice
+                           read_current_by_invoice
+                           read_genai_current_by_invoice
+                           pdf_url_current_by_invoice
                            show
                            read_by_version
                            read_genai_by_version
@@ -15,6 +18,9 @@ module Api
       skip_before_action :require_confirmation,
                          only: %i[
                            index_by_invoice
+                           read_current_by_invoice
+                           read_genai_current_by_invoice
+                           pdf_url_current_by_invoice
                            show
                            read_by_version
                            read_genai_by_version
@@ -23,6 +29,9 @@ module Api
       skip_after_action :verify_authorized,
                         only: %i[
                           index_by_invoice
+                          read_current_by_invoice
+                          read_genai_current_by_invoice
+                          pdf_url_current_by_invoice
                           show
                           read_by_version
                           read_genai_by_version
@@ -30,6 +39,9 @@ module Api
                         ]
       skip_forgery_protection only: %i[
                                 index_by_invoice
+                                read_current_by_invoice
+                                read_genai_current_by_invoice
+                                pdf_url_current_by_invoice
                                 show
                                 read_by_version
                                 read_genai_by_version
@@ -99,6 +111,127 @@ module Api
                status: :unprocessable_entity
       end
 
+      # GET /api/claims/admin/invoices/:invoice_id/current_version/read
+      # PURPOSE: Read-screen payload for the latest/current version of one invoice.
+      # Bookmarks to this route follow future uploaded fixes.
+      def read_current_by_invoice
+        invoice_id = params[:invoice_id].to_s.strip
+        raise "Missing invoice_id" if invoice_id.empty?
+
+        invoice = ::Claims::Invoice.find_by(id: invoice_id)
+        if invoice.nil?
+          render json: {
+                   error: "Invoice not found",
+                   invoice_id: invoice_id
+                 },
+                 status: :not_found
+          return
+        end
+
+        iv = current_invoice_version_for(invoice_id)
+        if iv.nil?
+          render json: {
+                   error: "Current invoice version not found",
+                   invoice_id: invoice_id
+                 },
+                 status: :not_found
+          return
+        end
+
+        render json: {
+                 review_mode: "invoice_current",
+                 is_current_invoice_version: true,
+                 read: iv.as_json,
+                 invoice:
+                   invoice.as_json(
+                     only: %i[
+                       id
+                       session_id
+                       status
+                       status_updated_at
+                       created_at
+                       updated_at
+                     ]
+                   ),
+                 lineitems: serialize_lineitems(iv.id)
+               },
+               status: :ok
+      rescue => e
+        Rails.logger.error(
+          "[claims][invoice_versions_admin][read_current_by_invoice] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/claims/admin/invoices/:invoice_id/current_version/read_genai
+      def read_genai_current_by_invoice
+        invoice_id = params[:invoice_id].to_s.strip
+        raise "Missing invoice_id" if invoice_id.empty?
+
+        iv = current_invoice_version_for(invoice_id)
+        if iv.nil?
+          render json: {
+                   error: "Current invoice version not found",
+                   invoice_id: invoice_id
+                 },
+                 status: :not_found
+          return
+        end
+
+        located_rows = located_fields_for(iv.id, "genai")
+        code_located_rows = located_fields_for(iv.id, "code")
+        rule_rows = rulechecks_for(iv.id, "genai")
+        code_rule_rows = rulechecks_for(iv.id, "code")
+        upgrade_type_results = upgrade_type_results_for(iv.id)
+
+        render json: {
+                 review_mode: "invoice_current",
+                 is_current_invoice_version: true,
+                 invoice_version_id: iv.id,
+                 upgrade_type_results:
+                   serialize_upgrade_type_results(upgrade_type_results),
+                 located_fields: serialize_located_fields(located_rows),
+                 code_located_fields:
+                   serialize_located_fields(code_located_rows),
+                 rulechecks: serialize_rulechecks(rule_rows),
+                 code_rulechecks: serialize_rulechecks(code_rule_rows)
+               },
+               status: :ok
+      rescue => e
+        Rails.logger.error(
+          "[claims][invoice_versions_admin][read_genai_current_by_invoice] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/claims/admin/invoices/:invoice_id/current_version/pdf_url
+      def pdf_url_current_by_invoice
+        invoice_id = params[:invoice_id].to_s.strip
+        raise "Missing invoice_id" if invoice_id.empty?
+
+        iv = current_invoice_version_for(invoice_id)
+        if iv.nil?
+          render json: {
+                   error: "Current invoice version not found",
+                   invoice_id: invoice_id
+                 },
+                 status: :not_found
+          return
+        end
+
+        node_resp =
+          node_mint_sas!(
+            storage_key: iv.storage_key,
+            container: ENV["AZURE_BLOB_CONTAINER"]
+          )
+        render json: { sas_url: node_resp["sas_url"] }, status: :ok
+      rescue => e
+        Rails.logger.error(
+          "[claims][invoice_versions_admin][pdf_url_current_by_invoice] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       def show
         id = params[:id].to_s.strip
         raise "Missing id" if id.empty?
@@ -134,6 +267,9 @@ module Api
         lineitems = serialize_lineitems(iv.id)
 
         render json: {
+                 review_mode: "invoice_version_snapshot",
+                 is_current_invoice_version:
+                   current_invoice_version_for(iv.invoice_id)&.id == iv.id,
                  read: iv.as_json,
                  invoice:
                    invoice&.as_json(
@@ -175,6 +311,9 @@ module Api
         upgrade_type_results = upgrade_type_results_for(iv.id)
 
         render json: {
+                 review_mode: "invoice_version_snapshot",
+                 is_current_invoice_version:
+                   current_invoice_version_for(iv.invoice_id)&.id == iv.id,
                  invoice_version_id: iv.id,
                  upgrade_type_results:
                    serialize_upgrade_type_results(upgrade_type_results),
@@ -218,6 +357,13 @@ module Api
       end
 
       private
+
+      def current_invoice_version_for(invoice_id)
+        ::Claims::InvoiceVersion
+          .where(invoice_id: invoice_id)
+          .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+          .first
+      end
 
       def upgrade_type_select_sql(table_name)
         [
@@ -277,7 +423,7 @@ module Api
           .select(
             *upgrade_type_select_sql("claims.invoice_version_located_fields")
           )
-          .order(:field_key, :line_number, :created_at)
+          .order(:field_key, :created_at)
       end
 
       def rulechecks_for(invoice_version_id, source_engine)
@@ -317,7 +463,6 @@ module Api
               invoice_version_id
               invoice_upgrade_type_id
               field_key
-              line_number
               value_type
               value_text
               value_json
@@ -350,10 +495,9 @@ module Api
               evidence_source
               rule_number
               rule_name
-              rule_pass_flag
+              rule_result
               confidence
               expected_text
-              observed_text
               calculation
               evidence_text
               reason_and_likely_causes
@@ -378,12 +522,9 @@ module Api
               source_engine
               call_status
               confidence
-              evidence_text
-              classifier_notes
+              result
               validationgenai_ruleset_id
-              genai_overall_confidence
-              genai_all_rulechecks_pass_flag
-              genai_admin_advice
+              raw_json
               created_at
               updated_at
             ]

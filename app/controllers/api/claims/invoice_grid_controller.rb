@@ -4,11 +4,14 @@ module Api
   module Claims
     class InvoiceGridController < Api::ApplicationController
       # POC: no auth/policy for now (match your SessionsController approach)
-      skip_before_action :authenticate_user!, only: %i[index destroy]
-      skip_before_action :require_confirmation, only: %i[index destroy]
-      skip_after_action :verify_authorized, only: %i[index destroy]
+      skip_before_action :authenticate_user!,
+                         only: %i[index destroy status_transition]
+      skip_before_action :require_confirmation,
+                         only: %i[index destroy status_transition]
+      skip_after_action :verify_authorized,
+                        only: %i[index destroy status_transition]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[index destroy]
+      skip_forgery_protection only: %i[index destroy status_transition]
 
       # GET /api/claims/admin/invoices
       # Query:
@@ -27,7 +30,26 @@ module Api
         end
 
         if params[:invoice_status].present?
-          rel = rel.where(invoice_status: params[:invoice_status].to_s.strip)
+          invoice_status = params[:invoice_status].to_s.strip
+          rel =
+            if invoice_status == "failed"
+              rel.where(
+                invoice_status: %w[upload_failed ocr_failed genai_failed]
+              )
+            elsif invoice_status == "processing"
+              rel.where(
+                invoice_status: %w[
+                  upload_queued
+                  upload_in_progress
+                  ocr_queued
+                  ocr_in_progress
+                  genai_queued
+                  genai_in_progress
+                ]
+              )
+            else
+              rel.where(invoice_status: invoice_status)
+            end
         end
 
         upgrade_type_keys = parse_upgrade_type_keys(params[:upgrade_type_keys])
@@ -148,7 +170,98 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/claims/admin/invoices/:id/status_transition
+      # Body: { transition: "screen_in|request_revision|approve_pending|mark_paid" }
+      def status_transition
+        transition_key = params[:transition].to_s.strip
+        spec = status_transition_spec(transition_key)
+
+        if spec.nil?
+          render json: {
+                   error: "Unknown transition",
+                   transition: transition_key,
+                   allowed_transitions: status_transition_specs.keys
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
+        invoice = nil
+        previous_status = nil
+
+        ::Claims::Invoice.transaction do
+          invoice = ::Claims::Invoice.lock.find(params[:id])
+          previous_status = invoice.status.to_s
+
+          unless spec.fetch(:from).include?(previous_status)
+            render json: {
+                     error: "Transition not allowed from current status",
+                     transition: transition_key,
+                     current_status: previous_status,
+                     allowed_from: spec.fetch(:from),
+                     target_status: spec.fetch(:to)
+                   },
+                   status: :unprocessable_entity
+            raise ActiveRecord::Rollback
+          end
+
+          now = Time.current
+          invoice.update!(
+            status: spec.fetch(:to),
+            status_updated_at: now,
+            updated_at: now
+          )
+        end
+
+        return if performed?
+
+        render json: {
+                 ok: true,
+                 transition: transition_key,
+                 invoice:
+                   invoice.as_json(
+                     only: %i[id session_id status status_updated_at updated_at]
+                   ),
+                 previous_status: previous_status,
+                 status: invoice.status
+               },
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue => e
+        Rails.logger.error(
+          "[CLAIMS][INVOICE_GRID] status_transition failed id=#{params[:id]} transition=#{params[:transition]}: #{e.class}: #{e.message}"
+        )
+        Rails.logger.error(e.backtrace.join("\n"))
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
+
+      def status_transition_specs
+        {
+          "screen_in" => {
+            from: %w[admin_review_inbox],
+            to: "in_review"
+          },
+          "request_revision" => {
+            from: %w[admin_review_inbox in_review],
+            to: "contractor_revision_inbox"
+          },
+          "approve_pending" => {
+            from: %w[in_review],
+            to: "approved_pending"
+          },
+          "mark_paid" => {
+            from: %w[approved_pending],
+            to: "approved_paid"
+          }
+        }
+      end
+
+      def status_transition_spec(key)
+        status_transition_specs[key]
+      end
 
       def to_int(v, default)
         Integer(v)

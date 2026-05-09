@@ -114,12 +114,6 @@ function norm(v: any): string {
   return String(v).trim();
 }
 
-function displayVal(v: any): string {
-  if (v === null || v === undefined || v === '') return '—';
-  if (typeof v === 'object') return prettyJson(v);
-  return String(v);
-}
-
 function sortedByKey(items: any[], keyOf: (item: any) => string): any[] {
   return [...items].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
 }
@@ -132,7 +126,6 @@ const lineitemFields = [
 ];
 
 const locatedFieldDisplayFields = [
-  { key: 'line_number', label: 'Line' },
   { key: 'value', label: 'Value' },
   { key: 'confidence', label: 'Confidence' },
 ];
@@ -232,7 +225,7 @@ function diffContractor(a: DiffSnapshot, b: DiffSnapshot): ContractorDiff {
 function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
   const overallDefs = [
     { key: 'genai_overall_confidence', label: 'Overall confidence' },
-    { key: 'genai_all_rulechecks_pass_flag', label: 'All checks pass' },
+    { key: 'genai_result', label: 'Overall result' },
     { key: 'genai_admin_advice', label: 'Admin advice' },
   ];
 
@@ -244,7 +237,7 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
       after: norm(b.read?.[f.key]) || '—',
     }));
 
-  const fieldKey = (r: any) => `${String(r?.field_key ?? '')}|${String(r?.line_number ?? '')}`;
+  const fieldKey = (r: any) => String(r?.field_key ?? '');
   const baseFieldKey = (k: string) => String(k || '').split('|')[0] || k;
   const locatedMeaningfulChanged = (x: any, y: any): boolean => {
     const xValue = norm(x?.value);
@@ -256,7 +249,6 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
       fieldKey(r),
       {
         field_key: r?.field_key ?? '',
-        line_number: r?.line_number ?? null,
         value: r?.value_text ?? null,
         confidence: r?.confidence ?? null,
       },
@@ -267,7 +259,6 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
       fieldKey(r),
       {
         field_key: r?.field_key ?? '',
-        line_number: r?.line_number ?? null,
         value: r?.value_text ?? null,
         confidence: r?.confidence ?? null,
       },
@@ -327,7 +318,7 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
       ruleKey(r),
       {
         rule_name: r?.rule_name ?? null,
-        pass: r?.rule_pass_flag ?? null,
+        result: r?.rule_result ?? null,
         confidence: r?.confidence ?? null,
         expected: r?.expected_text ?? null,
         observed: r?.observed_text ?? null,
@@ -340,7 +331,7 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
       ruleKey(r),
       {
         rule_name: r?.rule_name ?? null,
-        pass: r?.rule_pass_flag ?? null,
+        result: r?.rule_result ?? null,
         confidence: r?.confidence ?? null,
         expected: r?.expected_text ?? null,
         observed: r?.observed_text ?? null,
@@ -835,7 +826,7 @@ export function InvoiceVersionsAdminScreen() {
                           mr={2}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const url = `/invoice-versions-by-version/${encodeURIComponent(r.id)}/read`;
+                            const url = `/invoice-versions/${encodeURIComponent(r.id)}/review`;
                             window.open(url, '_blank', 'noopener,noreferrer');
                           }}
                         />

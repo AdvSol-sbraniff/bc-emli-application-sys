@@ -486,16 +486,14 @@ INSERT INTO claims.invoice_versions (
 -- Insert testdata into claims.invoice_version_located_fields
 -- Assumptions:
 -- 1) parent invoice_versions.id exists: 00000001-0002-0001-0000-000000000000
--- 2) you dropped scope and you are using line_number NULL for these rows
--- 3) value_type uses: text|number|currency|date|bool|json
--- 4) polygon stored as jsonb array of numbers
+-- 2) value_type uses: text|number|currency|date|bool|json
+-- 3) polygon stored as jsonb array of numbers
 
 INSERT INTO claims.invoice_version_located_fields
 (
   invoice_version_id,
   source_engine,
   field_key,
-  line_number,
   value_type,
   value_text,
   value_json,
@@ -511,7 +509,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'contractor_gst_number',
-  NULL,
   'text',
   '105091532',
   NULL,
@@ -526,7 +523,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'eligibility_code',
-  NULL,
   'text',
   'ESP1-136a31ba',
   NULL,
@@ -541,7 +537,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'labour_cost_invoice_total',
-  NULL,
   'currency',
   NULL,
   NULL,
@@ -556,7 +551,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'customer_deposit',
-  NULL,
   'currency',
   NULL,
   NULL,
@@ -571,7 +565,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'nrcan_number',
-  NULL,
   'text',
   'NR5707-46721659-ES5',
   NULL,
@@ -586,7 +579,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'cpd_number',
-  NULL,
   'text',
   NULL,
   NULL,
@@ -601,7 +593,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'brand_and_model',
-  NULL,
   'text',
   'Centra Model 6800 ENERGY STAR windows',
   NULL,
@@ -616,7 +607,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'metric_u_factor',
-  NULL,
   'number',
   '1.14',
   NULL,
@@ -631,7 +621,6 @@ VALUES
   '00000001-0002-0001-0000-000000000000',
   'genai',
   'labour_per_unit',
-  NULL,
   'json',
   NULL,
   NULL,

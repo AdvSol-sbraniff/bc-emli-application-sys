@@ -40,14 +40,6 @@ type ContractorRow = {
   business_name?: string | null;
 };
 
-type UserRow = {
-  id: string;
-  email?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-  name?: string | null;
-};
-
 type RunHeader = {
   id: string;
   session_id: string;
@@ -103,6 +95,10 @@ type ClassifierResultRow = {
 function getParam(search: string, key: string): string {
   return new URLSearchParams(search).get(key) ?? '';
 }
+
+const contractorOptionLabel = (contractor: ContractorRow): string => {
+  return contractor.business_name?.trim() || 'Unnamed contractor';
+};
 
 function setParams(
   navigate: ReturnType<typeof useNavigate>,
@@ -208,15 +204,12 @@ export default function SubmissionSimulatorAdminScreen() {
   const navigate = useNavigate();
 
   const contractorIdFromUrl = getParam(location.search, 'contractor_id');
-  const submitterIdFromUrl = getParam(location.search, 'submitter_id');
   const runIdFromUrl = getParam(location.search, 'ingest_run_id');
 
   const [contractorId, setContractorId] = useState(contractorIdFromUrl);
-  const [submitterId, setSubmitterId] = useState(submitterIdFromUrl);
   const [runId, setRunId] = useState(runIdFromUrl);
 
   const [contractors, setContractors] = useState<ContractorRow[]>([]);
-  const [users, setUsers] = useState<UserRow[]>([]);
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -225,7 +218,6 @@ export default function SubmissionSimulatorAdminScreen() {
   const [submitError, setSubmitError] = useState('');
   const [submitOk, setSubmitOk] = useState('');
 
-  const [runLoading, setRunLoading] = useState(false);
   const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
   const [runError, setRunError] = useState('');
 
@@ -242,7 +234,6 @@ export default function SubmissionSimulatorAdminScreen() {
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
   useEffect(() => setContractorId(contractorIdFromUrl), [contractorIdFromUrl]);
-  useEffect(() => setSubmitterId(submitterIdFromUrl), [submitterIdFromUrl]);
   useEffect(() => setRunId(runIdFromUrl), [runIdFromUrl]);
 
   const loadContractors = async () => {
@@ -261,25 +252,8 @@ export default function SubmissionSimulatorAdminScreen() {
     }
   };
 
-  const loadUsers = async () => {
-    try {
-      const params = new URLSearchParams({ page: '1', per: '200', sort: 'email:asc' });
-      const res = await fetch(`/api/claims/admin/users?${params.toString()}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-      setUsers(Array.isArray(data?.rows) ? data.rows : []);
-    } catch {
-      setUsers([]);
-    }
-  };
-
   const loadRunHeader = async (id: string) => {
     if (!id) return;
-    setRunLoading(true);
     setRunError('');
     try {
       const res = await fetch(`/api/claims/ingest/runs/${encodeURIComponent(id)}`, {
@@ -293,8 +267,6 @@ export default function SubmissionSimulatorAdminScreen() {
     } catch (e: any) {
       setRunError(e?.message || 'Failed to load run header.');
       setRunHeader(null);
-    } finally {
-      setRunLoading(false);
     }
   };
 
@@ -358,7 +330,6 @@ export default function SubmissionSimulatorAdminScreen() {
 
   useEffect(() => {
     loadContractors();
-    loadUsers();
   }, []);
 
   useEffect(() => {
@@ -391,12 +362,10 @@ export default function SubmissionSimulatorAdminScreen() {
     setSubmitOk('');
     try {
       if (!contractorId.trim()) throw new Error('Select a contractor first.');
-      if (!submitterId.trim()) throw new Error('Select a submitter first.');
       if (!selectedFiles.length) throw new Error('Select one or more PDF files.');
 
       const form = new FormData();
       if (contractorId.trim()) form.append('contractor_id', contractorId.trim());
-      if (submitterId.trim()) form.append('submitter_id', submitterId.trim());
       selectedFiles.forEach((f) => form.append('pdfs[]', f, f.name));
 
       const res = await fetch('/api/claims/ingest/admin_submit_batch', {
@@ -418,14 +387,13 @@ export default function SubmissionSimulatorAdminScreen() {
         ingest_run_id: nextRunId,
         session_id: nextSessionId,
         contractor_id: contractorId,
-        submitter_id: submitterId,
       });
 
-      setSubmitOk(`Submission simulation started. Run ${nextRunId}.`);
+      setSubmitOk(`Contractor draft simulation started. Run ${nextRunId}.`);
       setSelectedFiles([]);
       await refreshAll();
     } catch (e: any) {
-      setSubmitError(e?.message || 'Failed to start submission simulation.');
+      setSubmitError(e?.message || 'Failed to start contractor draft simulation.');
     } finally {
       setSubmitLoading(false);
     }
@@ -496,15 +464,15 @@ export default function SubmissionSimulatorAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Submission Simulator" />
+      <ThinBlueTitleBar title="Contractor Draft Simulator" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex justify="flex-end" mb={3}>
             <HStack spacing={2}>
-              <Tooltip label="Help: staged submission and run tracking">
+              <Tooltip label="Help: staged contractor draft processing and run tracking">
                 <IconButton
-                  aria-label="Open submission simulator help"
+                  aria-label="Open contractor draft simulator help"
                   icon={<Question size={18} />}
                   variant="outline"
                   onClick={onHelpOpen}
@@ -536,21 +504,10 @@ export default function SubmissionSimulatorAdminScreen() {
                     Contractor
                   </Text>
                   <Select value={contractorId} onChange={(e) => setContractorId(e.target.value)} w="330px">
-                    <option value="">Select contractor…</option>
+                    <option value="">Select contractor...</option>
                     {contractors.map((c) => (
-                      <option key={c.id} value={c.id}>{`${c.business_name || 'Contractor'} (${c.id})`}</option>
-                    ))}
-                  </Select>
-                </Box>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>
-                    Submitter
-                  </Text>
-                  <Select value={submitterId} onChange={(e) => setSubmitterId(e.target.value)} w="330px">
-                    <option value="">Select submitter...</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {`${u.name || [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'User'} (${u.id})`}
+                      <option key={c.id} value={c.id}>
+                        {contractorOptionLabel(c)}
                       </option>
                     ))}
                   </Select>
@@ -653,9 +610,9 @@ export default function SubmissionSimulatorAdminScreen() {
                     onClick={() => void handleRunSubmission()}
                     isLoading={submitLoading}
                     loadingText="Starting..."
-                    isDisabled={!selectedFiles.length || !contractorId || !submitterId}
+                    isDisabled={!selectedFiles.length || !contractorId}
                   >
-                    Submit Staged Files
+                    Create Contractor Drafts
                   </Button>
                   <Tooltip label="Refresh run context and grids">
                     <IconButton
@@ -681,34 +638,11 @@ export default function SubmissionSimulatorAdminScreen() {
             </Box>
           </VStack>
 
-          <Box mb={4} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
-            <HStack spacing={4} wrap="wrap" align="center">
-              <Text fontSize="sm" fontWeight="bold">
-                Ingest Run Information
-              </Text>
-              {runLoading && <Spinner size="sm" />}
-              <Text fontSize="xs" fontFamily="mono">
-                run_id: {runHeader?.id || runId || '—'}
-              </Text>
-              <Badge colorScheme={statusColor(runHeader?.status)}>{runHeader?.status || '—'}</Badge>
-              <Text fontSize="xs">
-                files {runHeader?.completed_files ?? 0}/{runHeader?.total_files ?? 0}
-              </Text>
-              <Text fontSize="xs">failed {runHeader?.failed_files ?? 0}</Text>
-              <Text fontSize="xs">started {fmtTs(runHeader?.created_at)}</Text>
-              <Text fontSize="xs">completed {fmtTs(runHeader?.completed_at)}</Text>
-              {shouldPoll && (
-                <Text fontSize="xs" color="gray.600">
-                  auto-refreshing every 3s
-                </Text>
-              )}
-            </HStack>
-            {runError && (
-              <Text fontSize="sm" color="red.700" mt={2}>
-                {runError}
-              </Text>
-            )}
-          </Box>
+          {runError && (
+            <Text fontSize="sm" color="red.700" mb={4}>
+              {runError}
+            </Text>
+          )}
 
           <Tabs variant="line" isFitted colorScheme="gray">
             <TabList>
@@ -810,16 +744,16 @@ export default function SubmissionSimulatorAdminScreen() {
                         {classifierResults.map((r) => (
                           <Tr key={r.id}>
                             <Td fontSize="xs">
-                              <Text fontWeight="bold">{r.upgrade_type_description || r.upgrade_type_key || 'â€”'}</Text>
+                              <Text fontWeight="bold">{r.upgrade_type_description || r.upgrade_type_key || '-'}</Text>
                               <Text fontFamily="mono" opacity={0.7}>
-                                {r.upgrade_type_key || 'â€”'}
+                                {r.upgrade_type_key || '-'}
                               </Text>
                             </Td>
-                            <Td fontSize="xs">{r.confidence ?? 'â€”'}</Td>
+                            <Td fontSize="xs">{r.confidence ?? '-'}</Td>
                             <Td fontSize="xs">
-                              <Badge colorScheme={statusColor(r.call_status)}>{r.call_status || 'â€”'}</Badge>
+                              <Badge colorScheme={statusColor(r.call_status)}>{r.call_status || '-'}</Badge>
                             </Td>
-                            <Td fontSize="xs">{r.evidence_text || r.classifier_notes || 'â€”'}</Td>
+                            <Td fontSize="xs">{r.evidence_text || r.classifier_notes || '-'}</Td>
                             <Td fontSize="xs">{fmtTs(r.updated_at)}</Td>
                           </Tr>
                         ))}
@@ -883,7 +817,7 @@ export default function SubmissionSimulatorAdminScreen() {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Submission Simulator Help</DrawerHeader>
+          <DrawerHeader>Contractor Draft Simulator Help</DrawerHeader>
           <DrawerBody>
             <VStack align="stretch" spacing={4}>
               <Box>
@@ -891,10 +825,14 @@ export default function SubmissionSimulatorAdminScreen() {
                   How this screen works
                 </Text>
                 <Text fontSize="sm">
-                  Step 1 sets run context, Step 2 stages PDFs, and Step 3 submits the staged batch.
+                  Step 1 sets the contractor, Step 2 stages PDFs, and Step 3 creates contractor draft invoices.
                 </Text>
                 <Text fontSize="sm" mt={1}>
-                  Files are staged in browser memory until you click Submit Staged Files.
+                  Files are staged in browser memory until you click Create Contractor Drafts.
+                </Text>
+                <Text fontSize="sm" mt={1}>
+                  Created invoices stop at genai_complete after OCR and GenAI. They do not get a submitter_id or
+                  submitted_at until the contractor submits them to admin.
                 </Text>
               </Box>
 

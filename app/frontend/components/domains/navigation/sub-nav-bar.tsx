@@ -62,6 +62,9 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       : '/revision-requests-admin';
 
     const isInvoicePdfViewerPath =
+      /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/review$/.test(path) ||
+      /^\/invoices\/[^/]+\/review$/.test(path) ||
+      /^\/invoice-versions\/[^/]+\/review$/.test(path) ||
       /^\/sessions\/[^/]+\/invoices\/[^/]+\/read$/.test(path) ||
       /^\/invoice-versions\/[^/]+$/.test(path) ||
       /^\/invoice-versions-by-version\/[^/]+\/read$/.test(path);
@@ -105,7 +108,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/submission-simulator-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/submission-simulator-admin', title: 'Submission Simulator' },
+        { href: '/submission-simulator-admin', title: 'Contractor Draft Simulator' },
       ],
       '/ruleset-editor': [
         { href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') },
@@ -137,13 +140,19 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
     }
 
     if (isInvoicePdfViewerPath) {
-      const isByVersionViewer = /^\/invoice-versions-by-version\/[^/]+\/read$/.test(path);
+      const isContractorViewer = /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/review$/.test(path);
+      const isByVersionViewer =
+        /^\/invoice-versions\/[^/]+\/review$/.test(path) || /^\/invoice-versions-by-version\/[^/]+\/read$/.test(path);
       setIncludeHome(false);
       setBreadcrumbs([
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         {
           href: path,
-          title: isByVersionViewer ? 'Invoices Admin - PDF Viewer (By Version)' : 'Invoices Admin - PDF Viewer',
+          title: isContractorViewer
+            ? 'Contractor Invoice Review'
+            : isByVersionViewer
+              ? 'Invoice Version Snapshot'
+              : 'Invoice Review - Current Version',
         },
       ]);
       return;

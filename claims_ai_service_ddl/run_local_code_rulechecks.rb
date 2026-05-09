@@ -70,7 +70,7 @@ puts
 Claims::InvoiceVersionRulecheck
   .where(invoice_version_id: invoice_version.id, source_engine: "code")
   .order(:rule_number)
-  .pluck(:rule_number, :rule_key, :rule_pass_flag, :confidence, :observed_text)
+  .pluck(:rule_number, :rule_key, :rule_result, :confidence, :observed_text)
   .each do |rule_number, rule_key, pass_flag, confidence, observed|
     status = pass_flag ? "PASS" : "FAIL"
     puts [

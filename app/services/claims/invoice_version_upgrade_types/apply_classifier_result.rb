@@ -32,11 +32,7 @@ module Claims
               call_status: "classified",
               confidence:
                 coerce_confidence(row["confidence"] || row[:confidence]),
-              evidence_text: row["evidence_text"] || row[:evidence_text],
-              classifier_notes:
-                row["classifier_notes"] || row[:classifier_notes] ||
-                  classifier_notes,
-              classifier_raw_json: row,
+              raw_json: row,
               created_at: now,
               updated_at: now
             }
@@ -70,11 +66,6 @@ module Claims
           @classifier_payload["detected_upgrade_types"] ||
             @classifier_payload[:detected_upgrade_types]
         rows.is_a?(Array) ? rows : []
-      end
-
-      def classifier_notes
-        @classifier_payload["classifier_notes"] ||
-          @classifier_payload[:classifier_notes]
       end
 
       def extract_lineitem_mappings

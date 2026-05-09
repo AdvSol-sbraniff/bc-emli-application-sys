@@ -64,9 +64,7 @@ module Claims
         rule_name = (r["rule_name"] || r[:rule_name]).to_s.strip
         rule_name = "rule_#{rule_number}" if rule_name.empty?
 
-        rule_pass_flag =
-          coerce_bool_or_nil(r["rule_pass_flag"] || r[:rule_pass_flag])
-        rule_pass_flag = false if rule_pass_flag.nil?
+        rule_result = coerce_rule_result(r)
         confidence = coerce_confidence(r["confidence"] || r[:confidence])
 
         # you decided strings – we’ll accept JSON too, but stringify it safely
@@ -75,24 +73,17 @@ module Claims
             r["expected_text"] || r[:expected_text] || r["expected"] ||
               r[:expected]
           )
-        observed_text =
-          stringify_any(
-            r["observed_text"] || r[:observed_text] || r["observed"] ||
-              r[:observed]
-          )
-
         attrs = {
           invoice_version_id: @invoice_version_id,
           invoice_upgrade_type_id: @invoice_upgrade_type_id,
           source_engine: "genai",
           rule_number: rule_number,
           rule_name: rule_name,
-          rule_pass_flag: rule_pass_flag,
+          rule_result: rule_result,
           confidence: confidence,
           expected_text: expected_text,
-          observed_text: observed_text,
           calculation: (r["calculation"] || r[:calculation]),
-          evidence_text: (r["evidence_text"] || r[:evidence_text]),
+          evidence_text: stringify_any(r["evidence_text"] || r[:evidence_text]),
           reason_and_likely_causes:
             (r["reason_and_likely_causes"] || r[:reason_and_likely_causes]),
           created_at: now,
@@ -121,7 +112,7 @@ module Claims
         return nil if v.nil?
         return v if v.is_a?(String)
 
-        # if model still returns {} for expected/observed, stringify it so UI is easy
+        # If model still returns structured expected/evidence values, stringify them for the UI.
         JSON.generate(v)
       rescue StandardError
         v.to_s
@@ -136,13 +127,12 @@ module Claims
         nil
       end
 
-      def coerce_bool_or_nil(v)
-        return nil if v.nil?
-        return v if v == true || v == false
-        s = v.to_s.strip.downcase
-        return true if %w[true t 1 yes y].include?(s)
-        return false if %w[false f 0 no n].include?(s)
-        nil
+      def coerce_rule_result(row)
+        raw = row["rule_result"] || row[:rule_result]
+        result = raw.to_s.strip.downcase
+        return result if %w[pass info warn fail].include?(result)
+
+        "fail"
       end
 
       def coerce_confidence(v)

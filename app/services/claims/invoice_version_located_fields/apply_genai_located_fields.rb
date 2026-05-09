@@ -61,9 +61,6 @@ module Claims
         field_key = (f["field_key"] || f[:field_key]).to_s.strip
         return nil if field_key.empty?
 
-        line_number = coerce_int_or_nil(f["line_number"] || f[:line_number])
-        line_number = 0 if line_number.nil? || line_number < 0
-
         value = f.key?("value") ? f["value"] : f[:value]
         value_type, value_text, value_json = coerce_value(value)
 
@@ -77,7 +74,6 @@ module Claims
           invoice_upgrade_type_id: @invoice_upgrade_type_id,
           source_engine: "genai",
           field_key: field_key,
-          line_number: line_number,
           value_type: value_type,
           value_text: value_text,
           value_json: value_json,

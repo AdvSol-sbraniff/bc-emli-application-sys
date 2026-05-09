@@ -99,7 +99,7 @@ type InvoiceGridRow = {
   latest_di_ocr_vendor_name?: string | null;
   latest_di_ocr_invoice_total?: string | number | null;
 
-  latest_genai_all_rulechecks_pass_flag?: boolean | null;
+  latest_genai_result?: 'pass' | 'warn' | 'fail' | string | null;
   latest_genai_overall_confidence?: number | null;
   latest_detected_upgrade_type_keys?: string[] | null;
   latest_detected_upgrade_types_json?: DetectedUpgradeType[] | null;
@@ -132,9 +132,17 @@ const fmtMoney = (v?: string | number | null) => {
   return n.toLocaleString(undefined, { style: 'currency', currency: 'CAD' });
 };
 
-function PassDot({ val }: { val: boolean | null | undefined }) {
-  // neutral dot if null/undefined
-  const bg = val === true ? 'green.400' : val === false ? 'red.400' : 'gray.300';
+const normalizeResult = (result: unknown): 'pass' | 'warn' | 'fail' | null => {
+  const value = String(result ?? '')
+    .trim()
+    .toLowerCase();
+  return value === 'pass' || value === 'warn' || value === 'fail' ? value : null;
+};
+
+function ResultDot({ val }: { val: unknown }) {
+  const result = normalizeResult(val);
+  const bg =
+    result === 'pass' ? 'green.400' : result === 'warn' ? 'yellow.400' : result === 'fail' ? 'red.400' : 'gray.300';
   return <Box w="10px" h="10px" borderRadius="full" bg={bg} display="inline-block" />;
 }
 
@@ -375,8 +383,11 @@ export function InvoicesAdminScreen() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleOpenDetailsWithPdf = (sessionId: string, invoiceId: string) => {
-    const url = `/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read`;
+  const handleOpenDetailsWithPdf = (row: InvoiceGridRow) => {
+    const invoiceId = String(row.invoice_id || '').trim();
+    if (!invoiceId) return;
+
+    const url = `/invoices/${encodeURIComponent(invoiceId)}/review`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -485,7 +496,7 @@ export function InvoicesAdminScreen() {
 
             <Box minW="180px" maxW="220px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
-                invoice_status
+                status
               </Text>
               <Select
                 value={invoiceStatus}
@@ -498,18 +509,9 @@ export function InvoicesAdminScreen() {
                 bg="white"
               >
                 <option value="">(all)</option>
-                <option value="upload_queued">upload_queued</option>
-                <option value="upload_in_progress">upload_in_progress</option>
-                <option value="upload_failed">upload_failed</option>
-                <option value="upload_complete">upload_complete</option>
-                <option value="ocr_queued">ocr_queued</option>
-                <option value="ocr_in_progress">ocr_in_progress</option>
-                <option value="ocr_failed">ocr_failed</option>
-                <option value="ocr_complete">ocr_complete</option>
-                <option value="genai_queued">genai_queued</option>
-                <option value="genai_in_progress">genai_in_progress</option>
-                <option value="genai_failed">genai_failed</option>
-                <option value="genai_complete">genai_complete</option>
+                <option value="processing">processing (queued / in progress)</option>
+                <option value="failed">failed (upload / OCR / GenAI)</option>
+                <option value="genai_complete">genai_complete - contractor reviewing</option>
                 <option value="admin_review_inbox">admin_review_inbox</option>
                 <option value="contractor_revision_inbox">contractor_revision_inbox</option>
                 <option value="in_review">in_review</option>
@@ -532,10 +534,11 @@ export function InvoicesAdminScreen() {
                 }}
                 allItems={upgradeTypeFilterItems}
                 placeholder="All upgrade types"
+                menuListMinW="420px"
               />
             </Box>
 
-            <Box minW="220px" maxW="280px">
+            <Box minW="180px" maxW="210px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 sort
               </Text>
@@ -578,7 +581,7 @@ export function InvoicesAdminScreen() {
               </Select>
             </Box>
 
-            <HStack spacing={2} pb={1} flexShrink={0} alignSelf="flex-end">
+            <HStack spacing={1.5} pb={1} flexShrink={0} alignSelf="flex-end">
               <Tooltip label="Help: upload fix, OCR / AI, inspect versions">
                 <IconButton
                   aria-label="Open invoices help"
@@ -649,7 +652,7 @@ export function InvoicesAdminScreen() {
               {loading && <Spinner size="sm" />}
             </Flex>
 
-            <Table size="sm" minW="920px">
+            <Table size="sm" minW="980px">
               <Thead bg="gray.50">
                 <Tr>
                   <Th>version updated</Th>
@@ -657,8 +660,11 @@ export function InvoicesAdminScreen() {
                   <Th>status</Th>
                   <Th minW="180px">upgrade types</Th>
                   <Th>AI</Th>
-                  <Th minW="360px" textAlign="right">
+                  <Th minW="160px" textAlign="right">
                     Actions
+                  </Th>
+                  <Th minW="260px" textAlign="right">
+                    Admin Tools
                   </Th>
                 </Tr>
               </Thead>
@@ -717,19 +723,14 @@ export function InvoicesAdminScreen() {
 
                       <Td>
                         <HStack spacing={2}>
-                          <PassDot val={r.latest_genai_all_rulechecks_pass_flag} />
+                          <ResultDot val={r.latest_genai_result} />
                           <Text fontSize="xs" opacity={0.8}>
-                            {r.latest_genai_all_rulechecks_pass_flag === null ||
-                            r.latest_genai_all_rulechecks_pass_flag === undefined
-                              ? 'unknown'
-                              : r.latest_genai_all_rulechecks_pass_flag
-                                ? 'pass'
-                                : 'fail'}
+                            {normalizeResult(r.latest_genai_result) ?? 'unknown'}
                           </Text>
                         </HStack>
                       </Td>
 
-                      <Td whiteSpace="nowrap" minW="360px">
+                      <Td whiteSpace="nowrap" minW="160px">
                         <Flex justify="flex-end" align="center" gap={2} wrap="nowrap" minW="max-content">
                           <Tooltip label="Open details drawer">
                             <IconButton
@@ -748,35 +749,7 @@ export function InvoicesAdminScreen() {
                               size="xs"
                               variant="outline"
                               icon={<FilePdf size={14} />}
-                              onClick={() => handleOpenDetailsWithPdf(r.session_id, String(r.invoice_id))}
-                              isDisabled={!hasInvoice}
-                            />
-                          </Tooltip>
-
-                          <Tooltip label="Delete invoice and all child claim records">
-                            <IconButton
-                              aria-label="Delete invoice"
-                              size="xs"
-                              variant="outline"
-                              colorScheme="red"
-                              icon={<Trash size={14} />}
-                              onClick={() => handleDeleteInvoice(String(r.invoice_id))}
-                              isDisabled={
-                                !hasInvoice ||
-                                loading ||
-                                (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))
-                              }
-                              isLoading={deletingInvoiceId === String(r.invoice_id)}
-                            />
-                          </Tooltip>
-
-                          <Tooltip label="inspect prior versions of this invoice">
-                            <IconButton
-                              aria-label="Inspect invoice versions"
-                              size="xs"
-                              variant="outline"
-                              icon={<MagnifyingGlass size={14} />}
-                              onClick={() => handleOpenVersions(String(r.invoice_id))}
+                              onClick={() => handleOpenDetailsWithPdf(r)}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
@@ -788,6 +761,21 @@ export function InvoicesAdminScreen() {
                               variant="outline"
                               icon={<GitBranch size={14} />}
                               onClick={() => handleOpenRevisions(r)}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
+                        </Flex>
+                      </Td>
+
+                      <Td whiteSpace="nowrap" minW="260px">
+                        <Flex justify="flex-end" align="center" gap={2} wrap="nowrap" minW="max-content">
+                          <Tooltip label="inspect prior versions of this invoice">
+                            <IconButton
+                              aria-label="Inspect invoice versions"
+                              size="xs"
+                              variant="outline"
+                              icon={<MagnifyingGlass size={14} />}
+                              onClick={() => handleOpenVersions(String(r.invoice_id))}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
@@ -829,6 +817,23 @@ export function InvoicesAdminScreen() {
                               isDisabled={!hasInvoice || !r.latest_invoice_version_id}
                             />
                           </Tooltip>
+
+                          <Tooltip label="Delete invoice and all child claim records">
+                            <IconButton
+                              aria-label="Delete invoice"
+                              size="xs"
+                              variant="outline"
+                              colorScheme="red"
+                              icon={<Trash size={14} />}
+                              onClick={() => handleDeleteInvoice(String(r.invoice_id))}
+                              isDisabled={
+                                !hasInvoice ||
+                                loading ||
+                                (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))
+                              }
+                              isLoading={deletingInvoiceId === String(r.invoice_id)}
+                            />
+                          </Tooltip>
                         </Flex>
                       </Td>
                     </Tr>
@@ -837,7 +842,7 @@ export function InvoicesAdminScreen() {
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={6}>
+                    <Td colSpan={7}>
                       <Text fontSize="sm" opacity={0.7}>
                         No rows. Adjust filters or click Refresh.
                       </Text>
@@ -1047,14 +1052,9 @@ export function InvoicesAdminScreen() {
                       <Text fontSize="sm">
                         <b>GenAI:</b>
                       </Text>
-                      <PassDot val={selected.latest_genai_all_rulechecks_pass_flag} />
+                      <ResultDot val={selected.latest_genai_result} />
                       <Text fontSize="sm" opacity={0.85}>
-                        {selected.latest_genai_all_rulechecks_pass_flag === null ||
-                        selected.latest_genai_all_rulechecks_pass_flag === undefined
-                          ? 'unknown'
-                          : selected.latest_genai_all_rulechecks_pass_flag
-                            ? 'pass'
-                            : 'fail'}
+                        {normalizeResult(selected.latest_genai_result) ?? 'unknown'}
                       </Text>
                       <Text fontSize="sm" opacity={0.85}>
                         (confidence {selected.latest_genai_overall_confidence ?? '—'})

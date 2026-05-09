@@ -95,7 +95,6 @@ module Claims
       # Writes "code engine" snapshot facts into invoice_version_located_fields.
       #
       # - source_engine='code'
-      # - line_number=0
       # - confidence=100 (DB facts)
       #
       def self.persist_code_located_fields!(
@@ -116,7 +115,6 @@ module Claims
               invoice_version_id: invoice_version_id,
               source_engine: "code",
               field_key: field_key,
-              line_number: 0,
               value_type: value_type,
               value_text: value_text,
               value_json: nil,

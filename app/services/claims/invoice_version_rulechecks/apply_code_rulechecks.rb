@@ -49,32 +49,34 @@ module Claims
 
         if invoice_date.blank?
           return(
-            fail_row(
-              rule_number: 1001,
+            warn_row(
+              rule_number: 1,
               rule_key: "source_vintage_applies",
               source_requirement_id: "ESP-2026-COM-001",
               rule_name: "Source vintage applies",
               expected_text:
-                "Invoice date is on or after #{SOURCE_VINTAGE_DATE.iso8601}.",
-              observed_text: "Invoice date was not found."
+                "Invoice date determines which RER vintage applies.",
+              detail_text:
+                "Invoice date was not found, so the correct requirements vintage needs admin confirmation."
             )
           )
         end
 
         pass = invoice_date >= SOURCE_VINTAGE_DATE
+        result = pass ? "pass" : "warn"
 
         row(
-          rule_number: 1001,
+          rule_number: 1,
           rule_key: "source_vintage_applies",
           source_requirement_id: "ESP-2026-COM-001",
           rule_name: "Source vintage applies",
-          rule_pass_flag: pass,
+          rule_result: result,
           confidence: 100,
           expected_text:
-            "Invoice date is on or after #{SOURCE_VINTAGE_DATE.iso8601}.",
-          observed_text: "Invoice date=#{invoice_date.iso8601}.",
+            "Invoice date determines whether the current #{SOURCE_VINTAGE_DATE.iso8601} RER vintage applies or prior requirements may apply.",
+          detail_text: "Invoice date=#{invoice_date.iso8601}.",
           calculation:
-            "#{invoice_date.iso8601} >= #{SOURCE_VINTAGE_DATE.iso8601} => #{pass}",
+            "#{invoice_date.iso8601} >= #{SOURCE_VINTAGE_DATE.iso8601} => #{pass}; result=#{result}",
           evidence_text: "invoice_versions.di_ocr_invoice_date"
         )
       end
@@ -97,14 +99,14 @@ module Claims
         pass = missing.empty?
 
         row(
-          rule_number: 1002,
+          rule_number: 2,
           rule_key: "first_class_invoice_fields_present",
           source_requirement_id: "ESP-2026-COM-015",
           rule_name: "Required invoice fields present",
-          rule_pass_flag: pass,
+          rule_result: pass ? "pass" : "warn",
           confidence: 100,
           expected_text: "OCR first-class invoice fields are present.",
-          observed_text:
+          detail_text:
             (
               if pass
                 "All tracked first-class fields are present."
@@ -118,7 +120,7 @@ module Claims
               if pass
                 nil
               else
-                "The invoice may be missing information, or OCR may not have recognized it."
+                "Admin should verify the missing first-class invoice fields in the PDF. This is a warning because OCR may have missed fields that are still visible on the invoice."
               end
             )
         )
@@ -134,13 +136,13 @@ module Claims
 
         if missing.any?
           return(
-            fail_row(
-              rule_number: 1003,
+            warn_row(
+              rule_number: 3,
               rule_key: "submission_within_six_months",
               source_requirement_id: "ESP-2026-COM-017",
               rule_name: "Submission within six months",
               expected_text: "submitted_at <= invoice_date + 6 months.",
-              observed_text: "Missing #{missing.join(" and ")}."
+              detail_text: "Missing #{missing.join(" and ")}."
             )
           )
         end
@@ -150,14 +152,14 @@ module Claims
         pass = submitted_date <= deadline
 
         row(
-          rule_number: 1003,
+          rule_number: 3,
           rule_key: "submission_within_six_months",
           source_requirement_id: "ESP-2026-COM-017",
           rule_name: "Submission within six months",
-          rule_pass_flag: pass,
+          rule_result: pass ? "pass" : "fail",
           confidence: 100,
           expected_text: "submitted_at <= invoice_date + 6 months.",
-          observed_text:
+          detail_text:
             "invoice_date=#{invoice_date.iso8601}; submitted_at=#{submitted_date.iso8601}.",
           calculation:
             "#{invoice_date.iso8601} + 6 months = #{deadline.iso8601}; #{submitted_date.iso8601} <= #{deadline.iso8601} => #{pass}",
@@ -184,14 +186,14 @@ module Claims
 
         if missing.any?
           return(
-            fail_row(
-              rule_number: 1004,
+            warn_row(
+              rule_number: 4,
               rule_key: "eligibility_code_valid_for_invoice_date",
               source_requirement_id: "ESP-2026-COM-008",
               rule_name: "Eligibility code valid for invoice date",
               expected_text:
                 "Invoice date is within the eligibility-code validity window.",
-              observed_text: "Missing #{missing.join(" and ")}."
+              detail_text: "Missing #{missing.join(" and ")}."
             )
           )
         end
@@ -202,15 +204,15 @@ module Claims
         pass = invoice_date >= approved_date && invoice_date <= deadline
 
         row(
-          rule_number: 1004,
+          rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
           source_requirement_id: "ESP-2026-COM-008",
           rule_name: "Eligibility code valid for invoice date",
-          rule_pass_flag: pass,
+          rule_result: pass ? "pass" : "fail",
           confidence: 100,
           expected_text:
             "Invoice date is on or after eligibility-code approval and on or before eligibility-code expiry.",
-          observed_text:
+          detail_text:
             "eligibility_code=#{eligibility_code.presence || "missing"}; approved_at=#{approved_date.iso8601}; expiry=#{deadline.iso8601}; invoice_date=#{invoice_date.iso8601}.",
           calculation:
             "#{approved_date.iso8601} <= #{invoice_date.iso8601} <= #{deadline.iso8601} => #{pass}",
@@ -218,14 +220,14 @@ module Claims
             "claims.users_eligibilitycodes + invoice_versions.di_ocr_invoice_date"
         )
       rescue ArgumentError
-        fail_row(
-          rule_number: 1004,
+        warn_row(
+          rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
           source_requirement_id: "ESP-2026-COM-008",
           rule_name: "Eligibility code valid for invoice date",
           expected_text:
             "Eligibility approval/expiry dates are parseable dates.",
-          observed_text: "Could not parse eligibility-code dates."
+          detail_text: "Could not parse eligibility-code dates."
         )
       end
 
@@ -253,26 +255,26 @@ module Claims
         Date.iso8601(value.to_s)
       end
 
-      def fail_row(
+      def warn_row(
         rule_number:,
         rule_key:,
         source_requirement_id:,
         rule_name:,
         expected_text:,
-        observed_text:
+        detail_text:
       )
         row(
           rule_number: rule_number,
           rule_key: rule_key,
           source_requirement_id: source_requirement_id,
           rule_name: rule_name,
-          rule_pass_flag: false,
+          rule_result: "warn",
           confidence: 0,
           expected_text: expected_text,
-          observed_text: observed_text,
+          detail_text: detail_text,
           evidence_text: nil,
           reason_and_likely_causes:
-            "Required evidence was not available for deterministic validation."
+            "Required evidence was not available for deterministic validation. Admin should verify this specific missing context before treating it as a material failure."
         )
       end
 
@@ -281,10 +283,10 @@ module Claims
         rule_key:,
         source_requirement_id:,
         rule_name:,
-        rule_pass_flag:,
+        rule_result:,
         confidence:,
         expected_text:,
-        observed_text:,
+        detail_text:,
         calculation: nil,
         evidence_text: nil,
         reason_and_likely_causes: nil
@@ -296,12 +298,11 @@ module Claims
           source_engine: "code",
           rule_number: rule_number,
           rule_name: "#{rule_key}: #{rule_name}",
-          rule_pass_flag: rule_pass_flag,
+          rule_result: rule_result,
           confidence: confidence,
           expected_text: expected_text,
-          observed_text: observed_text,
           calculation: calculation,
-          evidence_text: evidence_text,
+          evidence_text: evidence_text.presence || detail_text,
           reason_and_likely_causes: reason_and_likely_causes,
           created_at: now,
           updated_at: now

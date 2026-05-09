@@ -57,7 +57,6 @@ type LocatedField = {
   upgrade_type_description?: string | null;
   upgrade_type_key?: string | null;
   field_key?: string | null;
-  line_number?: number | null;
   page?: number | string | null;
   polygon?: unknown;
   value_text?: string | null;
@@ -76,11 +75,11 @@ type Rulecheck = {
   evidence_source?: string | null;
   rule_number?: number | null;
   rule_name?: string | null;
-  rule_pass_flag?: boolean | null;
+  rule_result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
   confidence?: number | null;
   expected_text?: string | null;
-  observed_text?: string | null;
   calculation?: string | null;
+  evidence_text?: string | null;
   reason_and_likely_causes?: string | null;
 };
 
@@ -91,18 +90,61 @@ type UpgradeTypeResult = {
   upgrade_type_description?: string | null;
   upgrade_type_key?: string | null;
   confidence?: number | null;
-  evidence_text?: string | null;
-  classifier_notes?: string | null;
+  raw_json?: unknown;
   validationgenai_ruleset_id?: string | null;
-  genai_overall_confidence?: number | null;
-  genai_all_rulechecks_pass_flag?: boolean | null;
-  genai_admin_advice?: string | null;
+  result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
 };
 
 type ReadPayload = {
   read?: any;
   invoice?: any;
   lineitems?: LineItem[];
+};
+
+const normalizeResult = (result: unknown): 'pass' | 'info' | 'warn' | 'fail' | null => {
+  const value = String(result ?? '')
+    .trim()
+    .toLowerCase();
+  return value === 'pass' || value === 'info' || value === 'warn' || value === 'fail' ? value : null;
+};
+
+const resultLabel = (result: unknown): string => normalizeResult(result)?.toUpperCase() ?? 'UNKNOWN';
+
+const resultColorScheme = (result: unknown): string => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'green';
+  if (normalized === 'info') return 'blue';
+  if (normalized === 'warn') return 'yellow';
+  if (normalized === 'fail') return 'red';
+  return 'gray';
+};
+
+const resultDotColor = (result: unknown): string => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'green.400';
+  if (normalized === 'info') return 'blue.400';
+  if (normalized === 'warn') return 'yellow.400';
+  if (normalized === 'fail') return 'red.400';
+  return 'gray.400';
+};
+
+const resultTooltip = (result: unknown): string => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'pass: do not show in advice; admin can skim or ignore.';
+  if (normalized === 'info') return 'info: may show in advice as helpful context, not a requested fix.';
+  if (normalized === 'warn') return 'warn: always show, framed as admin/contractor verification.';
+  if (normalized === 'fail') return 'fail: always show, framed as correction needed.';
+  return 'unknown: rule result was not recognized.';
+};
+
+const StatusDot = ({ result }: { result: unknown }) => {
+  const bg = resultDotColor(result);
+
+  return (
+    <Tooltip label={resultTooltip(result)} hasArrow placement="top">
+      <Box as="span" w="10px" h="10px" borderRadius="full" display="inline-block" bg={bg} flexShrink={0} />
+    </Tooltip>
+  );
 };
 
 type GenaiPayload = {
@@ -137,6 +179,25 @@ const upgradeTypeKeyFor = (row: any) => String(row?.upgrade_type_key || 'common'
 const upgradeTypeDescriptionFor = (row: any) => {
   const upgradeTypeKey = upgradeTypeKeyFor(row);
   return row?.upgrade_type_description || getInvoiceUpgradeTypeMeta(upgradeTypeKey).label;
+};
+
+const classifierRawJsonFor = (row: any): Record<string, any> => {
+  const raw = row?.raw_json;
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+};
+
+const classifierExplanationFor = (row: any): string => {
+  const raw = classifierRawJsonFor(row);
+  return String(raw.classification_explanation || '').trim();
 };
 
 type ActiveHighlight = {
@@ -262,7 +323,7 @@ export const InvoiceVersionByVersionScreen = () => {
     if (!readData) return null;
     return {
       confidence: readData.genai_overall_confidence,
-      passFlag: readData.genai_all_rulechecks_pass_flag,
+      result: readData.genai_result,
       advice: readData.genai_admin_advice,
     };
   }, [readData]);
@@ -371,21 +432,21 @@ export const InvoiceVersionByVersionScreen = () => {
             <Text fontSize="sm" opacity={0.8}>
               invoice_version_id:{' '}
               <Box as="span" fontFamily="mono">
-                {invoiceVersionId || '—'}
+                {invoiceVersionId || '-'}
               </Box>
             </Text>
 
             <Text fontSize="sm" opacity={0.8}>
               invoice_id:{' '}
               <Box as="span" fontFamily="mono">
-                {readData?.invoice_id || '—'}
+                {readData?.invoice_id || '-'}
               </Box>
             </Text>
 
             <Text fontSize="sm" opacity={0.8}>
               session_id:{' '}
               <Box as="span" fontFamily="mono">
-                {invoiceData?.session_id || '—'}
+                {invoiceData?.session_id || '-'}
               </Box>
             </Text>
 
@@ -480,7 +541,7 @@ export const InvoiceVersionByVersionScreen = () => {
                               <Badge colorScheme="blue">{r.source_engine || 'code'}</Badge>
                             </Flex>
                             <Text fontSize="sm">
-                              {r.value_text || (r.value_json ? JSON.stringify(r.value_json) : 'â€”')}
+                              {r.value_text || (r.value_json ? JSON.stringify(r.value_json) : '-')}
                             </Text>
                           </Box>
                         ))}
@@ -545,43 +606,22 @@ export const InvoiceVersionByVersionScreen = () => {
                               <Box display="flex" flexDirection="column" gap="8px">
                                 {group.results.map((r) => (
                                   <Box key={r.id} borderWidth="1px" borderColor="gray.100" borderRadius="md" p="8px">
-                                    <Flex align="center" gap="6px" mb="2px" wrap="wrap">
-                                      <Badge colorScheme={r.source_engine === 'classifier' ? 'teal' : 'purple'}>
-                                        {r.source_engine || 'genai'}
-                                      </Badge>
-                                      <Badge
-                                        colorScheme={
-                                          r.call_status === 'succeeded' || r.call_status === 'classified'
-                                            ? 'green'
-                                            : r.call_status === 'failed'
-                                              ? 'red'
-                                              : 'gray'
-                                        }
-                                      >
-                                        {r.call_status || 'unknown'}
-                                      </Badge>
-                                      {r.genai_all_rulechecks_pass_flag != null && (
-                                        <Badge colorScheme={r.genai_all_rulechecks_pass_flag ? 'green' : 'red'}>
-                                          {r.genai_all_rulechecks_pass_flag ? 'PASS' : 'FAIL'}
-                                        </Badge>
-                                      )}
-                                    </Flex>
+                                    {r.result != null && (
+                                      <Flex align="center" gap="6px" mb="2px" wrap="wrap">
+                                        <Badge colorScheme={resultColorScheme(r.result)}>{resultLabel(r.result)}</Badge>
+                                      </Flex>
+                                    )}
                                     <Text fontSize="xs" opacity={0.8}>
-                                      confidence: {r.genai_overall_confidence ?? r.confidence ?? '—'}
+                                      confidence: {r.confidence ?? '-'}
                                     </Text>
-                                    {r.evidence_text && (
+                                    {classifierRawJsonFor(r).evidence_text && (
                                       <Text fontSize="xs" mt="2px">
-                                        evidence: {r.evidence_text}
+                                        evidence: {String(classifierRawJsonFor(r).evidence_text)}
                                       </Text>
                                     )}
-                                    {r.classifier_notes && (
-                                      <Text fontSize="xs" mt="2px">
-                                        notes: {r.classifier_notes}
-                                      </Text>
-                                    )}
-                                    {r.genai_admin_advice && (
+                                    {classifierExplanationFor(r) && (
                                       <Text fontSize="xs" mt="2px" whiteSpace="pre-wrap">
-                                        advice: {r.genai_admin_advice}
+                                        explanation: {classifierExplanationFor(r)}
                                       </Text>
                                     )}
                                   </Box>
@@ -602,7 +642,6 @@ export const InvoiceVersionByVersionScreen = () => {
                               <Box display="flex" flexDirection="column" gap="8px">
                                 {group.fields.map((r) => {
                                   const pageNumber = coercePageNumber(r.page);
-                                  const hasPolygon = !!normalizePolygon(r.polygon);
                                   const isActive = activeHighlight?.id === r.id;
 
                                   return (
@@ -625,17 +664,14 @@ export const InvoiceVersionByVersionScreen = () => {
                                     >
                                       <Flex align="center" gap="6px" mb="2px" wrap="wrap">
                                         <Text fontSize="xs" opacity={0.7}>
-                                          {r.field_key || 'field'} (line {r.line_number ?? '—'})
+                                          {r.field_key || 'field'}
                                         </Text>
-                                        <Badge colorScheme="purple">{r.source_engine || 'genai'}</Badge>
-                                        {pageNumber && <Badge colorScheme="cyan">page {pageNumber}</Badge>}
-                                        {hasPolygon && <Badge colorScheme="green">polygon</Badge>}
                                       </Flex>
                                       <Text fontSize="sm">
-                                        {r.value_text || (r.value_json ? JSON.stringify(r.value_json) : '—')}
+                                        {r.value_text || (r.value_json ? JSON.stringify(r.value_json) : '-')}
                                       </Text>
                                       <Text fontSize="xs" opacity={0.8}>
-                                        confidence: {r.confidence ?? '—'}
+                                        confidence: {r.confidence ?? '-'}
                                       </Text>
                                     </Box>
                                   );
@@ -657,35 +693,30 @@ export const InvoiceVersionByVersionScreen = () => {
                                 {group.rulechecks.map((r) => (
                                   <Box key={r.id} borderWidth="1px" borderColor="gray.100" borderRadius="md" p="8px">
                                     <Flex align="center" gap="8px" mb="4px">
+                                      <StatusDot result={r.rule_result} />
                                       <Text fontSize="sm" fontWeight="bold">
-                                        Rule {r.rule_number ?? '—'}: {r.rule_name || ''}
+                                        Rule {r.rule_number ?? '-'}: {r.rule_name || ''}
                                       </Text>
-                                      <Badge colorScheme={r.source_engine === 'code' ? 'blue' : 'purple'}>
-                                        {r.source_engine || 'genai'}
-                                      </Badge>
-                                      <Badge colorScheme={r.rule_pass_flag ? 'green' : 'red'}>
-                                        {r.rule_pass_flag ? 'PASS' : 'FAIL'}
-                                      </Badge>
                                     </Flex>
-                                    {(r.source_requirement_id || r.evidence_source) && (
+                                    {r.source_requirement_id && (
                                       <Text fontSize="xs" opacity={0.7}>
-                                        {[r.source_requirement_id, r.evidence_source].filter(Boolean).join(' • ')}
+                                        {r.source_requirement_id}
                                       </Text>
                                     )}
                                     <Text fontSize="xs" opacity={0.8}>
-                                      confidence: {r.confidence ?? '—'}
+                                      confidence: {r.confidence ?? '-'}
                                     </Text>
                                     <Text fontSize="xs" mt="2px">
-                                      expected: {r.expected_text || '—'}
+                                      expected: {r.expected_text || '-'}
                                     </Text>
                                     <Text fontSize="xs" mt="2px">
-                                      observed: {r.observed_text || '—'}
+                                      calculation: {r.calculation || '-'}
                                     </Text>
                                     <Text fontSize="xs" mt="2px">
-                                      calculation: {r.calculation || '—'}
+                                      evidence: {r.evidence_text || '-'}
                                     </Text>
                                     <Text fontSize="xs" mt="2px">
-                                      reason: {r.reason_and_likely_causes || '—'}
+                                      reason: {r.reason_and_likely_causes || '-'}
                                     </Text>
                                   </Box>
                                 ))}
@@ -706,12 +737,12 @@ export const InvoiceVersionByVersionScreen = () => {
                                 {group.lineitems.map((li) => (
                                   <Box key={li.id} borderWidth="1px" borderColor="gray.100" borderRadius="md" p="8px">
                                     <Text fontSize="xs" opacity={0.7}>
-                                      Line {(li.lineitem_seqno ?? '—').toString()}
+                                      Line {(li.lineitem_seqno ?? '-').toString()}
                                     </Text>
-                                    <Text fontSize="sm">{li.ocr_description || '—'}</Text>
+                                    <Text fontSize="sm">{li.ocr_description || '-'}</Text>
                                     <Text fontSize="xs" opacity={0.8}>
-                                      qty: {li.ocr_quantity ?? '—'} | unit: {li.ocr_unit_price ?? '—'} | amount:{' '}
-                                      {li.ocr_amount ?? '—'}
+                                      qty: {li.ocr_quantity ?? '-'} | unit: {li.ocr_unit_price ?? '-'} | amount:{' '}
+                                      {li.ocr_amount ?? '-'}
                                     </Text>
                                   </Box>
                                 ))}
@@ -745,12 +776,12 @@ export const InvoiceVersionByVersionScreen = () => {
                             {lineitems.map((li) => (
                               <Box key={li.id} borderWidth="1px" borderColor="gray.100" borderRadius="md" p="8px">
                                 <Text fontSize="xs" opacity={0.7}>
-                                  Line {(li.lineitem_seqno ?? '—').toString()}
+                                  Line {(li.lineitem_seqno ?? '-').toString()}
                                 </Text>
-                                <Text fontSize="sm">{li.ocr_description || '—'}</Text>
+                                <Text fontSize="sm">{li.ocr_description || '-'}</Text>
                                 <Text fontSize="xs" opacity={0.8}>
-                                  qty: {li.ocr_quantity ?? '—'} | unit: {li.ocr_unit_price ?? '—'} | amount:{' '}
-                                  {li.ocr_amount ?? '—'}
+                                  qty: {li.ocr_quantity ?? '-'} | unit: {li.ocr_unit_price ?? '-'} | amount:{' '}
+                                  {li.ocr_amount ?? '-'}
                                 </Text>
                               </Box>
                             ))}
@@ -778,11 +809,11 @@ export const InvoiceVersionByVersionScreen = () => {
                             {locatedFields.map((r) => (
                               <Box key={r.id} borderWidth="1px" borderColor="gray.100" borderRadius="md" p="8px">
                                 <Text fontSize="xs" opacity={0.7}>
-                                  {r.field_key || 'field'} (line {r.line_number ?? '—'})
+                                  {r.field_key || 'field'}
                                 </Text>
-                                <Text fontSize="sm">{r.value_text || '—'}</Text>
+                                <Text fontSize="sm">{r.value_text || '-'}</Text>
                                 <Text fontSize="xs" opacity={0.8}>
-                                  confidence: {r.confidence ?? '—'}
+                                  confidence: {r.confidence ?? '-'}
                                 </Text>
                               </Box>
                             ))}
@@ -812,7 +843,7 @@ export const InvoiceVersionByVersionScreen = () => {
                                 <Text fontSize="xs" opacity={0.7}>
                                   {r.field_key || 'field'}
                                 </Text>
-                                <Text fontSize="sm">{r.value_text || '—'}</Text>
+                                <Text fontSize="sm">{r.value_text || '-'}</Text>
                               </Box>
                             ))}
                           </Box>
@@ -834,12 +865,10 @@ export const InvoiceVersionByVersionScreen = () => {
                           <Text fontSize="xs" opacity={0.7}>
                             Overall
                           </Text>
-                          <Text fontSize="sm">confidence: {overall?.confidence ?? '—'}</Text>
-                          <Text fontSize="sm">
-                            pass: {overall?.passFlag == null ? '—' : overall.passFlag ? 'true' : 'false'}
-                          </Text>
+                          <Text fontSize="sm">confidence: {overall?.confidence ?? '-'}</Text>
+                          <Text fontSize="sm">result: {resultLabel(overall?.result)}</Text>
                           <Text fontSize="sm" whiteSpace="pre-wrap">
-                            advice: {overall?.advice || '—'}
+                            advice: {overall?.advice || '-'}
                           </Text>
                         </Box>
 
@@ -852,32 +881,27 @@ export const InvoiceVersionByVersionScreen = () => {
                             {rulechecks.map((r) => (
                               <Box key={r.id} borderWidth="1px" borderColor="gray.100" borderRadius="md" p="8px">
                                 <Flex align="center" gap="8px" mb="4px">
+                                  <StatusDot result={r.rule_result} />
                                   <Text fontSize="sm" fontWeight="bold">
-                                    Rule {r.rule_number ?? '—'}: {r.rule_name || ''}
+                                    Rule {r.rule_number ?? '-'}: {r.rule_name || ''}
                                   </Text>
-                                  <Badge colorScheme={r.source_engine === 'code' ? 'blue' : 'purple'}>
-                                    {r.source_engine || 'genai'}
-                                  </Badge>
-                                  <Badge colorScheme={r.rule_pass_flag ? 'green' : 'red'}>
-                                    {r.rule_pass_flag ? 'PASS' : 'FAIL'}
-                                  </Badge>
                                 </Flex>
-                                {(r.source_requirement_id || r.evidence_source) && (
+                                {r.source_requirement_id && (
                                   <Text fontSize="xs" opacity={0.7}>
-                                    {[r.source_requirement_id, r.evidence_source].filter(Boolean).join(' • ')}
+                                    {r.source_requirement_id}
                                   </Text>
                                 )}
                                 <Text fontSize="xs" opacity={0.8}>
-                                  confidence: {r.confidence ?? '—'}
+                                  confidence: {r.confidence ?? '-'}
                                 </Text>
                                 <Text fontSize="xs" mt="2px">
-                                  expected: {r.expected_text || '—'}
+                                  expected: {r.expected_text || '-'}
                                 </Text>
                                 <Text fontSize="xs" mt="2px">
-                                  observed: {r.observed_text || '—'}
+                                  evidence: {r.evidence_text || '-'}
                                 </Text>
                                 <Text fontSize="xs" mt="2px">
-                                  reason: {r.reason_and_likely_causes || '—'}
+                                  reason: {r.reason_and_likely_causes || '-'}
                                 </Text>
                               </Box>
                             ))}
@@ -911,7 +935,7 @@ export const InvoiceVersionByVersionScreen = () => {
                     Prev
                   </Button>
                   <Text fontSize="sm">
-                    Page {activePageNumber} / {numPages || '?'}
+                    Page {activePageNumber} / {numPages || '-'}
                   </Text>
                   <Button
                     size="sm"
@@ -973,8 +997,7 @@ export const InvoiceVersionByVersionScreen = () => {
                 </Document>
               )}
               <Text fontSize="xs" opacity={0.6} mt="8px">
-                Active PDF evidence: {activeHighlight?.fieldKey || '-'} | page {activePageNumber} / {numPages || '?'}
-                {activeHighlight?.polygon ? ' | polygon selected' : ''}
+                Active PDF evidence: {activeHighlight?.fieldKey || '-'} | page {activePageNumber} / {numPages || '-'}
               </Text>
             </Box>
           </Box>

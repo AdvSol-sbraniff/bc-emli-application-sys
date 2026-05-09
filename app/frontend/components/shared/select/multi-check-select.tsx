@@ -8,6 +8,7 @@ interface IMultiCheckSelectProps<T extends string> {
   allItems: { label: string; value: T }[];
   placeholder?: string;
   label?: string;
+  menuListMinW?: string;
 }
 
 export const MultiCheckSelect = <T extends string>({
@@ -16,6 +17,7 @@ export const MultiCheckSelect = <T extends string>({
   allItems,
   label,
   placeholder = 'Select items...',
+  menuListMinW,
 }: IMultiCheckSelectProps<T>) => {
   const toggleItem = (value: T) => {
     const newValues = selectedValues.includes(value)
@@ -33,7 +35,7 @@ export const MultiCheckSelect = <T extends string>({
   return (
     <FormControl>
       {label && <FormLabel fontWeight="bold">{label}</FormLabel>}
-      <Menu isLazy matchWidth closeOnSelect={false}>
+      <Menu isLazy matchWidth={!menuListMinW} closeOnSelect={false}>
         <MenuButton
           as={Button}
           w="full"
@@ -50,7 +52,7 @@ export const MultiCheckSelect = <T extends string>({
         >
           {selectedLabels || placeholder}
         </MenuButton>
-        <MenuList maxH="200px" overflowY="auto">
+        <MenuList maxH="200px" minW={menuListMinW} overflowY="auto">
           {allItems.map((item) => (
             <MenuItem key={item.value} onClick={() => toggleItem(item.value)}>
               <Checkbox isChecked={selectedValues.includes(item.value)} pointerEvents="none">

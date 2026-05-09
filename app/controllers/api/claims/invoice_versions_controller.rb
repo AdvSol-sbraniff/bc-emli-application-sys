@@ -221,7 +221,7 @@ module Api
           .select(
             *upgrade_type_select_sql("claims.invoice_version_located_fields")
           )
-          .order(:field_key, :line_number, :created_at)
+          .order(:field_key, :created_at)
       end
 
       def rulechecks_for(invoice_version_id, source_engine)
@@ -261,7 +261,6 @@ module Api
               invoice_version_id
               invoice_upgrade_type_id
               field_key
-              line_number
               value_type
               value_text
               value_json
@@ -294,10 +293,9 @@ module Api
               evidence_source
               rule_number
               rule_name
-              rule_pass_flag
+              rule_result
               confidence
               expected_text
-              observed_text
               calculation
               evidence_text
               reason_and_likely_causes
@@ -322,12 +320,9 @@ module Api
               source_engine
               call_status
               confidence
-              evidence_text
-              classifier_notes
+              result
               validationgenai_ruleset_id
-              genai_overall_confidence
-              genai_all_rulechecks_pass_flag
-              genai_admin_advice
+              raw_json
               created_at
               updated_at
             ]

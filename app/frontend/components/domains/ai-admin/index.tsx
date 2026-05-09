@@ -62,7 +62,7 @@ type InvoiceGridRow = {
   latest_di_ocr_invoice_date?: string | null;
   latest_di_ocr_vendor_name?: string | null;
   latest_di_ocr_invoice_id?: string | null;
-  latest_genai_all_rulechecks_pass_flag?: boolean | null;
+  latest_genai_result?: 'pass' | 'warn' | 'fail' | string | null;
   latest_genai_overall_confidence?: number | null;
 };
 
@@ -523,14 +523,10 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                       </Box>
                       <Box>
                         <Text as="div" fontSize="xs" opacity={0.7}>
-                          GenAI all checks pass
+                          GenAI result
                         </Text>
                         <Text as="div" fontSize="xs">
-                          {ctxRow.latest_genai_all_rulechecks_pass_flag == null
-                            ? '-'
-                            : ctxRow.latest_genai_all_rulechecks_pass_flag
-                              ? 'true'
-                              : 'false'}
+                          {ctxRow.latest_genai_result ?? '-'}
                         </Text>
                       </Box>
                     </SimpleGrid>

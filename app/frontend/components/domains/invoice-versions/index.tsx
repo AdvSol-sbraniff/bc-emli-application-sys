@@ -23,6 +23,7 @@ import {
   IconButton,
   Tooltip,
   useDisclosure,
+  useToast,
 } from '@chakra-ui/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import {
@@ -33,7 +34,7 @@ import {
 import { Question } from '@phosphor-icons/react';
 
 // ============================================================
-// SECTION 00 — FILE OVERVIEW
+// SECTION 00 - FILE OVERVIEW
 // PURPOSE: Invoice read screen with left fields + PDF viewer + DI polygon highlight
 // ============================================================
 
@@ -44,12 +45,12 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { useMst } from '../../../setup/root';
 
-//import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+//import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs-url";
 //pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 // ============================================================
-// SECTION 01.01 — UI COMPONENTS
+// SECTION 01.01 - UI COMPONENTS
 // PURPOSE: Small reusable row widgets for left-hand field list
 // ============================================================
 
@@ -116,21 +117,149 @@ const upgradeTypeDescriptionFor = (row: any) => {
   return row?.upgrade_type_description || getInvoiceUpgradeTypeMeta(upgradeTypeKey).label;
 };
 
-// ============================================================
-// SECTION 01.02 — UI COMPONENTS (STATUS DOT)
-// PURPOSE: Small red/green/gray dot for pass/fail
-// ============================================================
+const classifierRawJsonFor = (row: any): Record<string, any> => {
+  const raw = row?.raw_json;
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+};
 
-type StatusDotProps = { pass: boolean | null | undefined };
+const classifierExplanationFor = (row: any): string => {
+  const raw = classifierRawJsonFor(row);
+  return String(raw.classification_explanation || '').trim();
+};
 
-const StatusDot = ({ pass }: StatusDotProps) => {
-  const bg = pass === true ? 'green.400' : 'red.400';
-
-  return <Box as="span" w="10px" h="10px" borderRadius="full" display="inline-block" bg={bg} flexShrink={0} />;
+const uniqueClassifierEvidenceFor = (row: any): string[] => {
+  const raw = classifierRawJsonFor(row);
+  const seen = new Set<string>();
+  return [raw.evidence_text]
+    .map((value) => String(value ?? '').trim())
+    .filter((value) => {
+      if (!value || seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
 };
 
 // ============================================================
-// SECTION 02.02 — FIELD CATALOG
+// SECTION 01.02 - UI COMPONENTS (STATUS DOT)
+// PURPOSE: Small green/yellow/red/gray dot for rule result
+// ============================================================
+
+type RuleResult = 'pass' | 'info' | 'warn' | 'fail' | null | undefined;
+
+const normalizeResult = (result: unknown): RuleResult => {
+  const value = String(result ?? '')
+    .trim()
+    .toLowerCase();
+  return value === 'pass' || value === 'info' || value === 'warn' || value === 'fail' ? value : null;
+};
+
+const resultLabel = (result: unknown): string => normalizeResult(result)?.toUpperCase() ?? 'UNKNOWN';
+
+const resultColorScheme = (result: unknown): string => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'green';
+  if (normalized === 'info') return 'blue';
+  if (normalized === 'warn') return 'yellow';
+  if (normalized === 'fail') return 'red';
+  return 'gray';
+};
+
+const resultDotColor = (result: unknown): string => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'green.400';
+  if (normalized === 'info') return 'blue.400';
+  if (normalized === 'warn') return 'yellow.400';
+  if (normalized === 'fail') return 'red.400';
+  return 'gray.400';
+};
+
+const resultTooltip = (result: unknown): string => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'pass: do not show in advice; admin can skim or ignore.';
+  if (normalized === 'info') return 'info: may show in advice as helpful context, not a requested fix.';
+  if (normalized === 'warn') return 'warn: always show, framed as admin/contractor verification.';
+  if (normalized === 'fail') return 'fail: always show, framed as correction needed.';
+  return 'unknown: rule result was not recognized.';
+};
+
+const StatusDot = ({ result }: { result: unknown }) => {
+  const bg = resultDotColor(result);
+
+  return (
+    <Tooltip label={resultTooltip(result)} hasArrow placement="top">
+      <Box as="span" w="10px" h="10px" borderRadius="full" display="inline-block" bg={bg} flexShrink={0} />
+    </Tooltip>
+  );
+};
+
+type InvoiceStatusTransition = 'screen_in' | 'request_revision' | 'approve_pending' | 'mark_paid';
+
+const invoiceStatusLabel = (status: unknown): string => {
+  const value = String(status ?? '').trim();
+  if (!value) return 'unknown';
+  if (value === 'genai_complete') return 'genai_complete - contractor reviewing';
+  return value;
+};
+
+const INVOICE_STATUS_ACTIONS: Array<{
+  key: InvoiceStatusTransition;
+  label: string;
+  validFrom: string[];
+  targetStatus: string;
+  colorScheme: string;
+  tooltip: string;
+}> = [
+  {
+    key: 'screen_in',
+    label: 'Send to Supervisor',
+    validFrom: ['admin_review_inbox'],
+    targetStatus: 'in_review',
+    colorScheme: 'blue',
+    tooltip:
+      'First approval level. Regular admins use this after reviewing an invoice in admin_review_inbox. Moves status to in_review for supervisor approval.',
+  },
+  {
+    key: 'request_revision',
+    label: 'Request Revision',
+    validFrom: ['admin_review_inbox', 'in_review'],
+    targetStatus: 'contractor_revision_inbox',
+    colorScheme: 'orange',
+    tooltip:
+      'Use when an invoice in admin_review_inbox or in_review needs contractor fixes or supporting information. Moves status to contractor_revision_inbox.',
+  },
+  {
+    key: 'approve_pending',
+    label: 'Approve Pending',
+    validFrom: ['in_review'],
+    targetStatus: 'approved_pending',
+    colorScheme: 'green',
+    tooltip:
+      'Second approval level. Supervisors use this after reviewing an invoice in in_review. Moves status to approved_pending.',
+  },
+  {
+    key: 'mark_paid',
+    label: 'Mark Paid',
+    validFrom: ['approved_pending'],
+    targetStatus: 'approved_paid',
+    colorScheme: 'green',
+    tooltip:
+      'Third approval level. Use after payment has been issued or confirmed for an invoice in approved_pending. Moves status to approved_paid.',
+  },
+];
+
+const CAN_CREATE_REVISION_RECORD_FROM = ['admin_review_inbox', 'in_review'];
+
+// ============================================================
+// SECTION 02.02 - FIELD CATALOG
 // PURPOSE: Single source of truth for left-panel rows + highlight mapping
 // ============================================================
 
@@ -231,22 +360,33 @@ const DI_FIELDS: FieldCatalogItem[] = [
 ];
 
 // ============================================================
-// SECTION 03.01 — SCREEN COMPONENT
+// SECTION 03.01 - SCREEN COMPONENT
 // PURPOSE: Main screen component + hooks + render
 // ============================================================
 export const InvoiceVersionShowScreen = () => {
   // ============================================================
-  // SECTION 04.01 — ROUTE PARAMS
+  // SECTION 04.01 - ROUTE PARAMS
   // PURPOSE: Read sessionId/invoiceId from URL + create navigate() helper
   // ============================================================
 
-  const { sessionId, invoiceId, id } = useParams();
+  const { sessionId, invoiceId, id, invoiceVersionId } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const { userStore } = useMst();
   const currentUserId = (userStore as any)?.currentUser?.id ? String((userStore as any).currentUser.id) : '';
+  const routeInvoiceVersionId = String(id || invoiceVersionId || '').trim();
+  const routeInvoiceId = String(invoiceId || '').trim();
+  const isVersionSnapshotRoute = !!routeInvoiceVersionId;
+  const isInvoiceCurrentRoute = !!routeInvoiceId && !sessionId && !isVersionSnapshotRoute;
+  const isLegacySessionCurrentRoute = !!routeInvoiceId && !!sessionId && !isVersionSnapshotRoute;
+  const canRunWorkflowActions = isInvoiceCurrentRoute;
+  const titleText = isVersionSnapshotRoute ? 'Invoice Version Snapshot' : 'Invoice Review - Current Version';
+  const bookmarkHelpText = isVersionSnapshotRoute
+    ? 'This bookmark shows one fixed invoice version. It will not move when newer fixes are uploaded.'
+    : 'This bookmark follows the invoice and always shows the latest uploaded invoice version.';
 
   // ============================================================
-  // SECTION 05.01 — STATE
+  // SECTION 05.01 - STATE
   // PURPOSE: invoiceIds + readData + pdf viewer state + highlight state
   // ============================================================
 
@@ -259,7 +399,7 @@ export const InvoiceVersionShowScreen = () => {
   const [activeHighlightKey, setActiveHighlightKey] = useState<string>('invoice_id');
   const [activePageNumber, setActivePageNumber] = useState<number>(1);
 
-  // We’ll render Page at an explicit width (in px) so we can map coords accurately
+  // We'll render Page at an explicit width (in px) so we can map coords accurately
   const pdfWrapRef = useRef<HTMLDivElement | null>(null);
   const [pageWidthPx, setPageWidthPx] = useState<number>(900); // default fallback
   const [pdfPaneHeightPx, setPdfPaneHeightPx] = useState<number>(700);
@@ -279,7 +419,7 @@ export const InvoiceVersionShowScreen = () => {
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
   // ============================================================
-  // SECTION 05.01.01 — ACTIVE HIGHLIGHT (SINGLE SOURCE OF TRUTH)
+  // SECTION 05.01.01 - ACTIVE HIGHLIGHT (SINGLE SOURCE OF TRUTH)
   // PURPOSE: BOTH header fields and GenAI rows set this (page + polygon)
   // ============================================================
 
@@ -292,15 +432,16 @@ export const InvoiceVersionShowScreen = () => {
   } | null>(null);
 
   // ============================================================
-  // SECTION 05.02 — GENAI STATE
+  // SECTION 05.02 - GENAI STATE
   // PURPOSE: Store GenAI located fields (from /read_genai endpoint)
   // ============================================================
 
   const [genAiFields, setGenAiFields] = useState<any[]>([]);
   const [genAiError, setGenAiError] = useState<string | null>(null);
+  const [upgradeTypeResults, setUpgradeTypeResults] = useState<any[]>([]);
 
   // ============================================================
-  // SECTION 05.03 — GENAI RULECHECKS STATE
+  // SECTION 05.03 - GENAI RULECHECKS STATE
   // PURPOSE: Store GenAI rulechecks (from /read_genai_rulechecks endpoint)
   // ============================================================
 
@@ -308,16 +449,18 @@ export const InvoiceVersionShowScreen = () => {
   const [genAiRulechecksError, setGenAiRulechecksError] = useState<string | null>(null);
 
   // ============================================================
-  // SECTION 05.04 — LINEITEMS STATE
+  // SECTION 05.04 - LINEITEMS STATE
   // PURPOSE: Store OCR lineitems (from /read response)
   // ============================================================
   const [lineitems, setLineitems] = useState<any[]>([]);
   const [lineitemsError] = useState<string | null>(null);
   const [isCreatingRevision, setIsCreatingRevision] = useState<boolean>(false);
   const [revisionError, setRevisionError] = useState<string | null>(null);
+  const [statusActionLoading, setStatusActionLoading] = useState<InvoiceStatusTransition | null>(null);
+  const [statusActionError, setStatusActionError] = useState<string | null>(null);
 
   // ============================================================
-  // SECTION 06.01 — LOAD INVOICE NAV LIST
+  // SECTION 06.01 - LOAD INVOICE NAV LIST
   // PURPOSE: Fetch ordered invoice_ids for Prev/Next navigation
   // ============================================================
 
@@ -335,17 +478,27 @@ export const InvoiceVersionShowScreen = () => {
   }, [sessionId]);
 
   // ============================================================
-  // SECTION 06.01.02 — LOAD PDF SAS URL (STRICT + DEBUG)
+  // SECTION 06.01.02 - LOAD PDF SAS URL (STRICT + DEBUG)
   // PURPOSE: Fetch signed SAS URL for current invoice PDF
   // ============================================================
   useEffect(() => {
     const run = async () => {
-      if (!sessionId || !invoiceId) return;
+      if (!routeInvoiceVersionId && !routeInvoiceId) return;
 
       try {
         setPdfUrlError(null);
 
-        const resp = await fetch(`/api/claims/sessions/${sessionId}/invoices/${invoiceId}/pdf_url`, {
+        let pdfEndpoint = '';
+        if (routeInvoiceVersionId) {
+          pdfEndpoint = `/api/claims/admin/invoice_versions/${encodeURIComponent(routeInvoiceVersionId)}/pdf_url`;
+        } else if (isInvoiceCurrentRoute) {
+          pdfEndpoint = `/api/claims/admin/invoices/${encodeURIComponent(routeInvoiceId)}/current_version/pdf_url`;
+        } else if (isLegacySessionCurrentRoute) {
+          pdfEndpoint = `/api/claims/sessions/${sessionId}/invoices/${routeInvoiceId}/pdf_url`;
+        }
+        if (!pdfEndpoint) return;
+
+        const resp = await fetch(pdfEndpoint, {
           headers: { Accept: 'application/json' },
           credentials: 'include',
         });
@@ -367,14 +520,14 @@ export const InvoiceVersionShowScreen = () => {
           return;
         }
 
-        const url = String(json?.sas_url ?? '').trim();
-        if (!url) {
+        const sasUrl = String(json?.sas_url ?? '').trim();
+        if (!sasUrl) {
           setPdfUrl(null);
           setPdfUrlError(`pdf_url returned empty sas_url. full response: ${bodyText}`);
           return;
         }
 
-        setPdfUrl(url);
+        setPdfUrl(sasUrl);
       } catch (e: any) {
         setPdfUrl(null);
         setPdfUrlError(String(e?.message ?? e));
@@ -382,41 +535,72 @@ export const InvoiceVersionShowScreen = () => {
     };
 
     run();
-  }, [sessionId, invoiceId]);
+  }, [isInvoiceCurrentRoute, isLegacySessionCurrentRoute, routeInvoiceId, routeInvoiceVersionId, sessionId]);
 
   // ============================================================
-  // SECTION 06.02 — LOAD INVOICE READ DATA
+  // SECTION 06.02 - LOAD INVOICE READ DATA
   // PURPOSE: Fetch invoice header fields + DI metadata used by viewer/highlights
   // ============================================================
 
   useEffect(() => {
     const run = async () => {
-      if (!sessionId || !invoiceId) return;
-      const resp = await fetch(`/api/claims/sessions/${sessionId}/invoices/${invoiceId}/read`, {
+      if (!routeInvoiceVersionId && !routeInvoiceId) return;
+
+      let readEndpoint = '';
+      if (routeInvoiceVersionId) {
+        readEndpoint = `/api/claims/admin/invoice_versions/${encodeURIComponent(routeInvoiceVersionId)}/read`;
+      } else if (isInvoiceCurrentRoute) {
+        readEndpoint = `/api/claims/admin/invoices/${encodeURIComponent(routeInvoiceId)}/current_version/read`;
+      } else if (isLegacySessionCurrentRoute) {
+        readEndpoint = `/api/claims/sessions/${sessionId}/invoices/${routeInvoiceId}/read`;
+      }
+      if (!readEndpoint) return;
+
+      const resp = await fetch(readEndpoint, {
         headers: { Accept: 'application/json' },
         credentials: 'include',
       });
       const json = await resp.json();
 
-      setReadData(json.read ?? null);
+      const read = json.read ?? null;
+      const invoice = json.invoice ?? null;
+      setReadData(
+        read
+          ? {
+              ...read,
+              invoice_status: read.invoice_status ?? invoice?.status ?? null,
+              session_id: read.session_id ?? invoice?.session_id ?? null,
+            }
+          : null,
+      );
       setLineitems(Array.isArray(json.lineitems) ? json.lineitems : []);
     };
     run();
-  }, [sessionId, invoiceId]);
+  }, [isInvoiceCurrentRoute, isLegacySessionCurrentRoute, routeInvoiceId, routeInvoiceVersionId, sessionId]);
 
   // ============================================================
-  // SECTION 06.02.01 — LOAD GENAI LOCATED FIELDS (+ optional rulechecks)
+  // SECTION 06.02.01 - LOAD GENAI LOCATED FIELDS (+ optional rulechecks)
   // PURPOSE: Fetch GenAI located fields for the current invoice_version
   // ============================================================
 
   useEffect(() => {
     const run = async () => {
-      if (!sessionId || !invoiceId) return;
+      if (!routeInvoiceVersionId && !routeInvoiceId) return;
 
       try {
         setGenAiError(null);
 
-        const resp = await fetch(`/api/claims/sessions/${sessionId}/invoices/${invoiceId}/read_genai`, {
+        let genaiEndpoint = '';
+        if (routeInvoiceVersionId) {
+          genaiEndpoint = `/api/claims/admin/invoice_versions/${encodeURIComponent(routeInvoiceVersionId)}/read_genai`;
+        } else if (isInvoiceCurrentRoute) {
+          genaiEndpoint = `/api/claims/admin/invoices/${encodeURIComponent(routeInvoiceId)}/current_version/read_genai`;
+        } else if (isLegacySessionCurrentRoute) {
+          genaiEndpoint = `/api/claims/sessions/${sessionId}/invoices/${routeInvoiceId}/read_genai`;
+        }
+        if (!genaiEndpoint) return;
+
+        const resp = await fetch(genaiEndpoint, {
           headers: { Accept: 'application/json' },
           credentials: 'include',
         });
@@ -424,6 +608,7 @@ export const InvoiceVersionShowScreen = () => {
         if (!resp.ok) {
           const txt = await resp.text();
           setGenAiFields([]);
+          setUpgradeTypeResults([]);
           setGenAiError(`read_genai failed (${resp.status}): ${txt}`);
           return;
         }
@@ -431,13 +616,14 @@ export const InvoiceVersionShowScreen = () => {
         const json = await resp.json();
 
         // ============================================================
-        // SECTION 06.02.01.01 — LOCATED FIELDS
+        // SECTION 06.02.01.01 - LOCATED FIELDS
         // ============================================================
         setGenAiFields(Array.isArray(json?.located_fields) ? json.located_fields : []);
         setCodeFields(Array.isArray(json?.code_located_fields) ? json.code_located_fields : []);
+        setUpgradeTypeResults(Array.isArray(json?.upgrade_type_results) ? json.upgrade_type_results : []);
 
         // ============================================================
-        // SECTION 06.02.01.10 — RULECHECKS (ONLY IF PRESENT)
+        // SECTION 06.02.01.10 - RULECHECKS (ONLY IF PRESENT)
         // ============================================================
         if ('rulechecks' in (json ?? {})) {
           setGenAiRulechecks([
@@ -448,15 +634,16 @@ export const InvoiceVersionShowScreen = () => {
         }
       } catch (e: any) {
         setGenAiFields([]);
+        setUpgradeTypeResults([]);
         setGenAiError(`read_genai error: ${String(e?.message ?? e)}`);
       }
     };
 
     run();
-  }, [sessionId, invoiceId]);
+  }, [isInvoiceCurrentRoute, isLegacySessionCurrentRoute, routeInvoiceId, routeInvoiceVersionId, sessionId]);
 
   // ============================================================
-  // SECTION 06.03 — URL SANITY / AUTO-REDIRECT
+  // SECTION 06.03 - URL SANITY / AUTO-REDIRECT
   // PURPOSE: If invoiceId missing/invalid, redirect to first invoice in session
   // ============================================================
 
@@ -471,11 +658,8 @@ export const InvoiceVersionShowScreen = () => {
     }
   }, [sessionId, invoiceId, invoiceIds, navigate]);
 
-  const idxRaw = invoiceIds.indexOf(invoiceId ?? '');
-  const idx = idxRaw >= 0 ? idxRaw : 0;
-
   // ============================================================
-  // SECTION 06.04 — PDF PANE SIZE OBSERVER
+  // SECTION 06.04 - PDF PANE SIZE OBSERVER
   // PURPOSE: Measure PDF container width/height so fit/zoom math stays correct
   // ============================================================
   useEffect(() => {
@@ -510,28 +694,12 @@ export const InvoiceVersionShowScreen = () => {
     return () => ro.disconnect();
   }, [showPdf]);
 
-  // ============================================================
-  // SECTION 06.05 — NAV ACTIONS
-  // PURPOSE: Prev/Next invoice navigation (updates URL)
-  // ============================================================
-
-  const goPrev = () => {
-    if (!sessionId) return;
-    if (idx <= 0) return;
-    navigate(`/sessions/${sessionId}/invoices/${invoiceIds[idx - 1]}/read`);
-  };
-
-  const goNext = () => {
-    if (!sessionId) return;
-    if (idx >= invoiceIds.length - 1) return;
-    navigate(`/sessions/${sessionId}/invoices/${invoiceIds[idx + 1]}/read`);
-  };
-
   const openRevisionEditor = (revisionRequestId: string, invoiceVersionId: string) => {
     const params = new URLSearchParams();
+    const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
     params.set('id', revisionRequestId);
     params.set('invoice_version_id', invoiceVersionId);
-    if (invoiceId) params.set('invoice_id', String(invoiceId));
+    if (invoiceRecordId) params.set('invoice_id', invoiceRecordId);
     if (sessionId) params.set('session_id', String(sessionId));
     if (readData?.session_created_at) params.set('session_created_at', String(readData.session_created_at));
     if (readData?.contractor_business_name)
@@ -541,7 +709,7 @@ export const InvoiceVersionShowScreen = () => {
       params.set('invoice_versionno', String(readData.invoice_versionno));
     }
     if (readData?.di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(readData.di_ocr_invoice_id));
-    const url = `/revision-request-editor?${params.toString()}`;
+    const url = `/revision-request-editor-${params.toString()}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -560,13 +728,13 @@ export const InvoiceVersionShowScreen = () => {
     }
 
     const genAiAdvice = String(readData?.genai_admin_advice ?? '').trim();
-    const passFail = readData?.genai_all_rulechecks_pass_flag === true ? 'PASS' : 'FAIL';
+    const overallResult = resultLabel(readData?.genai_result);
     const conf = readData?.genai_overall_confidence;
 
     const draftText = genAiAdvice
-      ? `Overall (GenAI)\n\n${passFail} • conf ${conf ?? 0}\n\n${genAiAdvice}`
+      ? `Overall (GenAI)\n\n${overallResult} - conf ${conf ?? 0}\n\n${genAiAdvice}`
       : [
-          `Draft revision request for invoice version ${readData?.invoice_versionno ?? '—'}.`,
+          `Draft revision request for invoice version ${readData?.invoice_versionno ?? '-'}.`,
           'Please review OCR/AI findings and update this request before sending.',
           'Expected contractor action: upload corrected invoice details and respond to this request.',
         ].join('\n');
@@ -574,14 +742,15 @@ export const InvoiceVersionShowScreen = () => {
     setIsCreatingRevision(true);
     try {
       // Reuse existing OPEN revision request for this invoice_version if present.
-      if (invoiceId) {
+      const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
+      if (invoiceRecordId) {
         const lookupParams = new URLSearchParams();
-        lookupParams.set('invoice_id', String(invoiceId));
+        lookupParams.set('invoice_id', invoiceRecordId);
         lookupParams.set('sort', 'revision_request_updated_at:desc');
         lookupParams.set('page', '1');
         lookupParams.set('per', '200');
 
-        const lookupResp = await fetch(`/api/claims/admin/revision_requests?${lookupParams.toString()}`, {
+        const lookupResp = await fetch(`/api/claims/admin/revision_requests-${lookupParams.toString()}`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
           credentials: 'include',
@@ -633,9 +802,77 @@ export const InvoiceVersionShowScreen = () => {
     }
   };
 
+  const runStatusTransition = async (transition: InvoiceStatusTransition) => {
+    if (!canRunWorkflowActions) return;
+
+    const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
+    const action = INVOICE_STATUS_ACTIONS.find((candidate) => candidate.key === transition);
+    if (!invoiceRecordId || !action) return;
+
+    const currentStatus = String(readData?.invoice_status || '').trim();
+    if (!action.validFrom.includes(currentStatus)) {
+      setStatusActionError(`${action.label} is not valid while this invoice is ${invoiceStatusLabel(currentStatus)}.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${action.label}?\n\nCurrent status: ${invoiceStatusLabel(currentStatus)}\nNew status: ${invoiceStatusLabel(
+        action.targetStatus,
+      )}`,
+    );
+    if (!confirmed) return;
+
+    setStatusActionError(null);
+    setStatusActionLoading(transition);
+    try {
+      const resp = await fetch(`/api/claims/admin/invoices/${encodeURIComponent(invoiceRecordId)}/status_transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ transition }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || data?.message || `Status update failed (${resp.status}).`);
+
+      const nextStatus = String(data?.status || data?.invoice?.status || action.targetStatus);
+      setReadData((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              invoice_status: nextStatus,
+            }
+          : prev,
+      );
+
+      toast({
+        title: 'Invoice status updated',
+        description: `${invoiceStatusLabel(currentStatus)} -> ${invoiceStatusLabel(nextStatus)}`,
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+
+      if (transition === 'request_revision') {
+        void openDraftRevision();
+      }
+    } catch (e: any) {
+      const message = e?.message || 'Failed to update invoice status.';
+      setStatusActionError(message);
+      toast({
+        title: 'Status update failed',
+        description: message,
+        status: 'error',
+        duration: 6000,
+        isClosable: true,
+      });
+    } finally {
+      setStatusActionLoading(null);
+    }
+  };
+
   // ============================================================
-  // SECTION 06.06 — ACTIVE HIGHLIGHT RESOLVER
-  // PURPOSE: Lookup active field config → (pageNumber + polygon)
+  // SECTION 06.06 - ACTIVE HIGHLIGHT RESOLVER
+  // PURPOSE: Lookup active field config > (pageNumber + polygon)
   // ============================================================
 
   const activeField = useMemo(() => {
@@ -643,7 +880,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [activeHighlightKey]);
 
   // ============================================================
-  // SECTION 06.06.01 — DEFAULT ACTIVE HIGHLIGHT (DI)
+  // SECTION 06.06.01 - DEFAULT ACTIVE HIGHLIGHT (DI)
   // PURPOSE: When DI field changes, set the *state* activeHighlight
   // ============================================================
 
@@ -660,7 +897,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [readData, activeField]);
 
   // ============================================================
-  // SECTION 06.07 — SYNC ACTIVE PAGE TO HIGHLIGHT
+  // SECTION 06.07 - SYNC ACTIVE PAGE TO HIGHLIGHT
   // PURPOSE: When active highlight changes, jump PDF to that page
   // ============================================================
 
@@ -686,7 +923,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [readData?.di_page_map, activeHighlight?.pageNumber]);
 
   // ============================================================
-  // SECTION 06.07.01 — PDF RENDER GEOMETRY aka the renderWidthPx block
+  // SECTION 06.07.01 - PDF RENDER GEOMETRY aka the renderWidthPx block
   // PURPOSE: Compute render width/height for zoom + fit modes
   // ============================================================
   const renderWidthPx = useMemo(() => {
@@ -703,7 +940,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [activePageMeta, fitMode, pageWidthPx, pdfPaneHeightPx, zoom]);
 
   // ============================================================
-  // SECTION 06.07.02 — SVG POLYGON (INCHES → PIXELS)
+  // SECTION 06.07.02 - SVG POLYGON (INCHES > PIXELS)
   // PURPOSE: Convert DI polygon coords (inches) into SVG points that
   //          match the *current rendered PDF width* (overlayWidthPx),
   //          so zoom/fit keeps the red highlight aligned.
@@ -767,7 +1004,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [activeHighlight?.polygon, activePageMeta, renderWidthPx]);
 
   // ============================================================
-  // SECTION 06.07.03 — OVERLAY HEIGHT SOURCE OF TRUTH
+  // SECTION 06.07.03 - OVERLAY HEIGHT SOURCE OF TRUTH
   // PURPOSE: Compute overlay height to match rendered PDF height
   // ============================================================
 
@@ -777,7 +1014,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [activePageMeta, renderWidthPx]);
 
   // ============================================================
-  // SECTION 06.07.10 — SYNC PAGE INPUT TO ACTIVE PAGE
+  // SECTION 06.07.10 - SYNC PAGE INPUT TO ACTIVE PAGE
   // PURPOSE: Keep the page textbox updated when page changes via
   //          highlights, Prev/Next, or manual nav
   // ============================================================
@@ -786,7 +1023,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [activePageNumber]);
 
   // ------------------------------------------------------------
-  // SECTION 06.08.01 — OVERLAY WIDTH SOURCE OF TRUTH
+  // SECTION 06.08.01 - OVERLAY WIDTH SOURCE OF TRUTH
   // PURPOSE: Keep SVG overlay width locked to the rendered PDF width
   // ------------------------------------------------------------
 
@@ -799,6 +1036,7 @@ export const InvoiceVersionShowScreen = () => {
         description: string;
         fields: any[];
         lineitems: any[];
+        results: any[];
         rulechecks: any[];
         upgradeTypeKey: string;
       }
@@ -813,6 +1051,7 @@ export const InvoiceVersionShowScreen = () => {
         description: upgradeTypeDescriptionFor(row),
         fields: [],
         lineitems: [],
+        results: [],
         rulechecks: [],
         upgradeTypeKey,
       };
@@ -822,6 +1061,7 @@ export const InvoiceVersionShowScreen = () => {
 
     genAiFields.forEach((row) => ensureGroup(row).fields.push(row));
     lineitems.forEach((row) => ensureGroup(row).lineitems.push(row));
+    upgradeTypeResults.forEach((row) => ensureGroup(row).results.push(row));
     genAiRulechecks.forEach((row) => ensureGroup(row).rulechecks.push(row));
 
     return Array.from(groups.values()).sort((a, b) => {
@@ -830,65 +1070,88 @@ export const InvoiceVersionShowScreen = () => {
       if (sortA !== sortB) return sortA - sortB;
       return a.description.localeCompare(b.description);
     });
-  }, [genAiFields, genAiRulechecks, lineitems]);
+  }, [genAiFields, genAiRulechecks, lineitems, upgradeTypeResults]);
+
+  const currentInvoiceStatus = String(readData?.invoice_status || '').trim();
+  const canCreateRevisionRecord =
+    canRunWorkflowActions && CAN_CREATE_REVISION_RECORD_FROM.includes(currentInvoiceStatus);
 
   // ============================================================
-  // SECTION 07.01 — MAIN RETURN
+  // SECTION 07.01 - MAIN RETURN
   // PURPOSE: JSX layout tree (header + nav + split panes)
   // ============================================================
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Invoices Admin - PDF Viewer (By Session)" />
+      <ThinBlueTitleBar title={titleText} />
       <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
         <Box display="flex" flexDirection="column" height="100%">
           {/* keep your existing content, but REMOVE your old <Heading ...>Admin Full Details</Heading>
             (BlueTitleBar replaces it) */}
           {/* ============================================================
-        SECTION 07.02 — PAGE LAYOUT
+        SECTION 07.02 - PAGE LAYOUT
         PURPOSE: Outer column layout: title, nav bar, main split view
         ============================================================ */}
           <Box display="flex" flexDirection="column" height="100%">
             {/* ============================================================
-        SECTION 07.03 — NAV BAR
+        SECTION 07.03 - NAV BAR
         PURPOSE: Prev/Next invoice navigation + position indicator
         ============================================================ */}
-            <Box display="flex" alignItems="center" gap="8px" mb="12px">
-              <Button size="sm" isDisabled={!sessionId || idx <= 0} onClick={goPrev}>
-                ←
-              </Button>
-
-              <Text fontSize="sm" opacity={0.8}>
-                Invoice {invoiceIds.length === 0 ? 0 : idx + 1} of {invoiceIds.length}
+            <Box display="flex" alignItems="center" gap="8px" mb="12px" flexWrap="wrap">
+              <Text fontSize="xs" opacity={0.75} flexBasis="100%">
+                {bookmarkHelpText}
               </Text>
-
-              <Button
-                size="sm"
-                isDisabled={!sessionId || invoiceIds.length === 0 || idx >= invoiceIds.length - 1}
-                onClick={goNext}
-              >
-                →
-              </Button>
-
+              <Badge colorScheme="gray">Status: {invoiceStatusLabel(currentInvoiceStatus)}</Badge>
+              {isVersionSnapshotRoute && <Badge colorScheme="purple">Fixed version bookmark</Badge>}
+              {!isVersionSnapshotRoute && <Badge colorScheme="blue">Latest version bookmark</Badge>}
               <Button size="xs" variant="outline" onClick={() => setShowPdf((v) => !v)}>
                 {showPdf ? 'Hide PDF' : 'Show PDF'}
               </Button>
 
-              <Tooltip label="Create a draft revision request from this invoice version">
-                <Button size="xs" variant="outline" onClick={openDraftRevision} isLoading={isCreatingRevision}>
-                  Revision
+              {canRunWorkflowActions ? (
+                INVOICE_STATUS_ACTIONS.map((action) => {
+                  const isValidNow = action.validFrom.includes(currentInvoiceStatus);
+                  const disabledReason = ' This action is not available for this invoice status.';
+                  return (
+                    <Tooltip key={action.key} label={`${action.tooltip} ${isValidNow ? '' : disabledReason}`} hasArrow>
+                      <Button
+                        size="xs"
+                        colorScheme={action.colorScheme}
+                        variant={isValidNow ? 'solid' : 'outline'}
+                        onClick={() => runStatusTransition(action.key)}
+                        isDisabled={!isValidNow || !!statusActionLoading || !readData?.invoice_id}
+                        isLoading={statusActionLoading === action.key}
+                      >
+                        {action.label}
+                      </Button>
+                    </Tooltip>
+                  );
+                })
+              ) : (
+                <Tooltip label="Workflow buttons are hidden because this bookmark is for a fixed historical invoice version. Open the invoice-level review bookmark to act on the latest version.">
+                  <Badge colorScheme="gray">Workflow actions hidden</Badge>
+                </Tooltip>
+              )}
+
+              <Tooltip
+                label={
+                  canCreateRevisionRecord
+                    ? 'Create or open a draft revision record. This does not change invoice status; use Request Revision to move the invoice to contractor_revision_inbox.'
+                    : isVersionSnapshotRoute
+                      ? 'Revision actions are disabled for fixed invoice-version snapshots. Open the invoice-level current review bookmark to act on the latest version.'
+                      : 'Create Revision Record is only available when invoice status is admin_review_inbox or in_review.'
+                }
+              >
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={openDraftRevision}
+                  isLoading={isCreatingRevision}
+                  isDisabled={!canCreateRevisionRecord}
+                >
+                  Create Revision Record
                 </Button>
               </Tooltip>
-
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => {
-                  console.log('[STUB] Draft revision request', { invoice_version_id: id ?? null });
-                }}
-              >
-                Lets Chat
-              </Button>
 
               <Box ml="auto">
                 <Tooltip label="Help: how this viewer is grouped and what each section means">
@@ -909,13 +1172,20 @@ export const InvoiceVersionShowScreen = () => {
                 </Text>
               </Box>
             )}
+            {statusActionError && (
+              <Box mb="8px">
+                <Text fontSize="xs" color="red.700">
+                  {statusActionError}
+                </Text>
+              </Box>
+            )}
             {/* ============================================================
-        SECTION 07.04 — MAIN SPLIT VIEW
+        SECTION 07.04 - MAIN SPLIT VIEW
         PURPOSE: Left fields + Right PDF viewer
         ============================================================ */}
             <Box display="flex" gap="16px" flex="1" minH={0}>
               {/* ============================================================
-    SECTION 07.05 — LEFT PANEL (ACCORDION WRAPPER)
+    SECTION 07.05 - LEFT PANEL (ACCORDION WRAPPER)
     PURPOSE: Put header fields inside a collapsible accordion
     ============================================================ */}
 
@@ -934,16 +1204,16 @@ export const InvoiceVersionShowScreen = () => {
                 flexShrink={0}
               >
                 {/* ============================================================
-      SECTION 07.05.01 — FIELDS ACCORDION
+      SECTION 07.05.01 - FIELDS ACCORDION
       PURPOSE: Collapsible container for the DI header fields list
       NOTES:
-      - allowToggle lets user collapse the open section
-      - defaultIndex={[0]} keeps it open by default
+      ? allowToggle lets user collapse the open section
+      ? defaultIndex={[0]} keeps it open by default
       ============================================================ */}
 
                 <Accordion allowMultiple defaultIndex={[0, 1, 2]}>
                   {/* ============================================================
-      SECTION 07.05.10 — ACCORDION ITEM: INVOICE HEADER FIELDS
+      SECTION 07.05.10 - ACCORDION ITEM: INVOICE HEADER FIELDS
       PURPOSE: Existing DI header FieldRows (clickable for polygon)
       ============================================================ */}
                   <AccordionItem border="none">
@@ -1009,7 +1279,7 @@ export const InvoiceVersionShowScreen = () => {
                       ) : (
                         <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                           {codeFields.map((r: any) => {
-                            const label = `${r.field_key || 'field'}${r.line_number != null ? ` (line ${r.line_number})` : ''}`;
+                            const label = r.field_key || 'field';
                             const value = displayLocatedFieldValue(r);
 
                             return (
@@ -1020,14 +1290,13 @@ export const InvoiceVersionShowScreen = () => {
                                 mb="6px"
                                 borderRadius="md"
                                 borderWidth="1px"
-                                borderColor="blue.100"
-                                bg="blue.50"
+                                borderColor="gray.200"
+                                bg="white"
                               >
                                 <Flex align="center" gap="6px" mb="2px" wrap="wrap">
                                   <Text fontSize="xs" opacity={0.7}>
                                     {label}
                                   </Text>
-                                  <Badge colorScheme="blue">{r.source_engine || 'code'}</Badge>
                                 </Flex>
                                 <Text fontSize="sm" noOfLines={3}>
                                   {value}
@@ -1058,21 +1327,9 @@ export const InvoiceVersionShowScreen = () => {
                     <AccordionPanel px="0" pt="8px">
                       <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p="10px" bg="gray.50">
                         <Flex align="center" gap="8px" mb="6px" wrap="wrap">
-                          <StatusDot pass={readData?.genai_all_rulechecks_pass_flag} />
-                          <Badge
-                            colorScheme={
-                              readData?.genai_all_rulechecks_pass_flag === true
-                                ? 'green'
-                                : readData?.genai_all_rulechecks_pass_flag === false
-                                  ? 'red'
-                                  : 'gray'
-                            }
-                          >
-                            {readData?.genai_all_rulechecks_pass_flag === true
-                              ? 'PASS'
-                              : readData?.genai_all_rulechecks_pass_flag === false
-                                ? 'FAIL'
-                                : 'UNKNOWN'}
+                          <StatusDot result={readData?.genai_result} />
+                          <Badge colorScheme={resultColorScheme(readData?.genai_result)}>
+                            {resultLabel(readData?.genai_result)}
                           </Badge>
                           <Text fontSize="xs" opacity={0.75}>
                             confidence: {readData?.genai_overall_confidence ?? '-'}
@@ -1107,6 +1364,7 @@ export const InvoiceVersionShowScreen = () => {
                       const foundFieldCount = group.fields.length;
                       const rulecheckCount = group.rulechecks.length;
                       const lineitemCount = group.lineitems.length;
+                      const classifierResults = group.results.filter((r: any) => r.source_engine === 'classifier');
 
                       return (
                         <AccordionItem key={group.upgradeTypeKey} borderTopWidth="1px" borderColor="gray.200">
@@ -1123,7 +1381,7 @@ export const InvoiceVersionShowScreen = () => {
                                     {meta.label}
                                   </Text>
                                   <Text fontSize="xs" opacity={0.65}>
-                                    {foundFieldCount} fields • {rulecheckCount} rules • {lineitemCount} line items
+                                    {foundFieldCount} fields - {rulecheckCount} rules - {lineitemCount} line items
                                   </Text>
                                 </Box>
                               </Flex>
@@ -1132,6 +1390,55 @@ export const InvoiceVersionShowScreen = () => {
                           </h2>
 
                           <AccordionPanel px="0" pt="8px">
+                            <Box mb="14px">
+                              <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
+                                Classification
+                              </Text>
+                              {classifierResults.length === 0 ? (
+                                <Text fontSize="sm" opacity={0.7}>
+                                  No classifier explanation for this upgrade type.
+                                </Text>
+                              ) : (
+                                <Box display="flex" flexDirection="column" gap="8px">
+                                  {classifierResults.map((r: any) => {
+                                    const explanation = classifierExplanationFor(r);
+                                    const evidenceRows = uniqueClassifierEvidenceFor(r);
+
+                                    return (
+                                      <Box
+                                        key={r.id}
+                                        px="10px"
+                                        py="8px"
+                                        borderRadius="md"
+                                        borderWidth="1px"
+                                        borderColor="blue.100"
+                                        bg="blue.50"
+                                      >
+                                        <Text fontSize="xs" opacity={0.75} mb="4px">
+                                          confidence: {r.confidence ?? '-'}
+                                        </Text>
+
+                                        {explanation && (
+                                          <Text fontSize="sm" whiteSpace="pre-wrap" mb="6px">
+                                            {explanation}
+                                          </Text>
+                                        )}
+
+                                        {evidenceRows.length > 0 && (
+                                          <Text fontSize="xs" whiteSpace="pre-wrap">
+                                            <Box as="span" opacity={0.65}>
+                                              evidence:{' '}
+                                            </Box>
+                                            {evidenceRows.join('\n')}
+                                          </Text>
+                                        )}
+                                      </Box>
+                                    );
+                                  })}
+                                </Box>
+                              )}
+                            </Box>
+
                             <Box mb="14px">
                               <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
                                 Found fields
@@ -1148,22 +1455,20 @@ export const InvoiceVersionShowScreen = () => {
                               ) : (
                                 <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                                   {group.fields.map((r: any) => {
-                                    const label = `${r.field_key || 'field'}${r.line_number != null ? ` (line ${r.line_number})` : ''}`;
+                                    const label = r.field_key || 'field';
                                     const value = displayLocatedFieldValue(r);
                                     const highlightKey = `found_${r.id}`;
                                     const metaText = [
-                                      r.page != null ? `p${r.page}` : null,
-                                      r.polygon != null ? 'polygon' : null,
                                       r.confidence != null ? `conf ${Number(r.confidence).toFixed(0)}` : null,
                                     ]
                                       .filter(Boolean)
-                                      .join(' • ');
+                                      .join(' - ');
                                     const clickable = r.page != null;
 
                                     return (
                                       <FieldRow
                                         key={r.id}
-                                        label={`${label}${metaText ? ` — ${metaText}` : ''}`}
+                                        label={`${label}${metaText ? ` - ${metaText}` : ''}`}
                                         value={value}
                                         active={activeHighlightKey === highlightKey}
                                         disabled={!clickable}
@@ -1205,14 +1510,12 @@ export const InvoiceVersionShowScreen = () => {
                                   {group.rulechecks.map((r: any) => {
                                     const num = r.rule_number != null ? Number(r.rule_number) : null;
                                     const title =
-                                      `${num != null ? `Rule ${num}` : 'Rule'} — ${String(r.rule_name ?? '')}`.trim();
+                                      `${num != null ? `Rule ${num}` : 'Rule'} - ${String(r.rule_name ?? '')}`.trim();
                                     const expected = r.expected_text ?? r.expected ?? '';
-                                    const observed = r.observed_text ?? r.observed ?? '';
                                     const calc = r.calculation ?? '';
                                     const reason = r.reason_and_likely_causes ?? '';
                                     const evText = r.evidence_text ?? '';
                                     const sourceRequirement = r.source_requirement_id ?? '';
-                                    const evidenceSource = r.evidence_source ?? '';
 
                                     return (
                                       <Box
@@ -1225,20 +1528,14 @@ export const InvoiceVersionShowScreen = () => {
                                         bg="white"
                                       >
                                         <Flex align="center" gap="8px" mb="4px">
-                                          <StatusDot pass={r.rule_pass_flag} />
+                                          <StatusDot result={r.rule_result} />
                                           <Text fontSize="xs" opacity={0.75}>
                                             {title}
                                           </Text>
-                                          <Badge colorScheme={r.source_engine === 'code' ? 'blue' : 'purple'}>
-                                            {r.source_engine ?? 'genai'}
-                                          </Badge>
-                                          <Badge colorScheme={r.rule_pass_flag ? 'green' : 'red'}>
-                                            {r.rule_pass_flag ? 'PASS' : 'FAIL'}
-                                          </Badge>
                                         </Flex>
-                                        {(sourceRequirement || evidenceSource) && (
+                                        {sourceRequirement && (
                                           <Text fontSize="xs" opacity={0.65} mb="6px">
-                                            {[sourceRequirement, evidenceSource].filter(Boolean).join(' • ')}
+                                            {sourceRequirement}
                                           </Text>
                                         )}
                                         {expected && (
@@ -1247,14 +1544,6 @@ export const InvoiceVersionShowScreen = () => {
                                               expected:{' '}
                                             </Box>
                                             {String(expected)}
-                                          </Text>
-                                        )}
-                                        {observed && (
-                                          <Text fontSize="xs" whiteSpace="pre-wrap">
-                                            <Box as="span" opacity={0.65}>
-                                              observed:{' '}
-                                            </Box>
-                                            {String(observed)}
                                           </Text>
                                         )}
                                         {calc && (
@@ -1304,7 +1593,7 @@ export const InvoiceVersionShowScreen = () => {
                               ) : (
                                 <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                                   {group.lineitems.map((li: any) => {
-                                    const seq = li.lineitem_seqno ?? li.seqno ?? '?';
+                                    const seq = li.lineitem_seqno ?? li.seqno ?? '-';
                                     const rows = [
                                       {
                                         subKey: 'desc',
@@ -1343,7 +1632,7 @@ export const InvoiceVersionShowScreen = () => {
                                       return (
                                         <FieldRow
                                           key={`${li.id ?? `li-${seq}`}-${row.subKey}`}
-                                          label={`Line ${seq} — ${row.label}`}
+                                          label={`Line ${seq} - ${row.label}`}
                                           value={row.value}
                                           active={activeHighlightKey === highlightKey}
                                           disabled={!clickable}
@@ -1376,7 +1665,7 @@ export const InvoiceVersionShowScreen = () => {
                   {false && (
                     <>
                       {/* ============================================================
-    SECTION 07.05.15 — ACCORDION ITEM: LINE ITEMS (OCR)
+    SECTION 07.05.15 - ACCORDION ITEM: LINE ITEMS (OCR)
     PURPOSE: Show claims.lineitems + click to highlight polygon
     ============================================================ */}
                       <AccordionItem borderTopWidth="1px" borderColor="gray.200">
@@ -1404,7 +1693,7 @@ export const InvoiceVersionShowScreen = () => {
 
                           <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                             {lineitems.map((li: any) => {
-                              const seq = li.lineitem_seqno ?? li.seqno ?? '?';
+                              const seq = li.lineitem_seqno ?? li.seqno ?? '-';
 
                               // helper to build a FieldRow-like entry
                               const makeRow = (opts: {
@@ -1423,7 +1712,7 @@ export const InvoiceVersionShowScreen = () => {
                                 return (
                                   <FieldRow
                                     key={`${li.id ?? `li-${seq}`}-${opts.subKey}`}
-                                    label={`Line ${seq} — ${opts.label}`}
+                                    label={`Line ${seq} - ${opts.label}`}
                                     value={opts.value}
                                     active={isActive}
                                     disabled={!clickable}
@@ -1485,7 +1774,7 @@ export const InvoiceVersionShowScreen = () => {
                       </AccordionItem>
 
                       {/* ============================================================
-      SECTION 07.05.20 — ACCORDION ITEM: GENAI LOCATED FIELDS
+      SECTION 07.05.20 - ACCORDION ITEM: GENAI LOCATED FIELDS
       PURPOSE: Simple display of /read_genai results (not clickable yet)
       ============================================================ */}
                       <AccordionItem borderTopWidth="1px" borderColor="gray.200">
@@ -1500,7 +1789,7 @@ export const InvoiceVersionShowScreen = () => {
 
                         <AccordionPanel px="0" pt="8px">
                           {/* ============================================================
-          SECTION 07.05.21 — GENAI ERROR
+          SECTION 07.05.21 - GENAI ERROR
           PURPOSE: show fetch error if endpoint fails
           ============================================================ */}
                           {genAiError && (
@@ -1510,7 +1799,7 @@ export const InvoiceVersionShowScreen = () => {
                           )}
 
                           {/* ============================================================
-          SECTION 07.05.22 — GENAI EMPTY
+          SECTION 07.05.22 - GENAI EMPTY
           PURPOSE: show message when no rows returned
           ============================================================ */}
                           {!genAiError && genAiFields.length === 0 && (
@@ -1520,20 +1809,17 @@ export const InvoiceVersionShowScreen = () => {
                           )}
 
                           {/* ============================================================
-          SECTION 07.05.23 — GENAI LIST
+          SECTION 07.05.23 - GENAI LIST
           PURPOSE: minimal list: field_key + value + (page/confidence)
           ============================================================ */}
                           <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                             {genAiFields.map((r: any) => {
-                              const label = `${r.field_key}${r.line_number != null ? ` (line ${r.line_number})` : ''}`;
+                              const label = r.field_key || 'field';
                               const value = displayLocatedFieldValue(r);
 
-                              const meta = [
-                                r.page != null ? `p${r.page}` : null,
-                                r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null,
-                              ]
+                              const meta = [r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null]
                                 .filter(Boolean)
-                                .join(' • ');
+                                .join(' - ');
 
                               return (
                                 <Box
@@ -1558,7 +1844,7 @@ export const InvoiceVersionShowScreen = () => {
                                   _hover={{ bg: 'gray.50', borderColor: 'gray.300' }}
                                   onClick={() => {
                                     // ============================================================
-                                    // SECTION 07.05.23.01 — GENAI CLICK → SET ACTIVE HIGHLIGHT
+                                    // SECTION 07.05.23.01 - GENAI CLICK > SET ACTIVE HIGHLIGHT
                                     // PURPOSE: Move PDF to page + draw polygon using same overlay code
                                     // ============================================================
                                     setActiveHighlight({
@@ -1615,15 +1901,12 @@ export const InvoiceVersionShowScreen = () => {
                           <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                             {/* list */}
                             {codeFields.map((r: any) => {
-                              const label = `${r.field_key}${r.line_number != null ? ` (line ${r.line_number})` : ''}`;
+                              const label = r.field_key || 'field';
                               const value = displayLocatedFieldValue(r);
 
-                              const meta = [
-                                r.page != null ? `p${r.page}` : null,
-                                r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null,
-                              ]
+                              const meta = [r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null]
                                 .filter(Boolean)
-                                .join(' • ');
+                                .join(' - ');
 
                               return (
                                 <Box
@@ -1674,7 +1957,7 @@ export const InvoiceVersionShowScreen = () => {
                       </AccordionItem>
 
                       {/* ============================================================
-      SECTION 07.05.30 — ACCORDION ITEM: GENAI RULECHECKS
+      SECTION 07.05.30 - ACCORDION ITEM: GENAI RULECHECKS
       PURPOSE: Display rules from claims.invoice_version_rulechecks
       ============================================================ */}
                       <AccordionItem borderTopWidth="1px" borderColor="gray.200">
@@ -1689,12 +1972,12 @@ export const InvoiceVersionShowScreen = () => {
 
                         <AccordionPanel px="0" pt="8px">
                           {/* ============================================================
-    SECTION 07.05.30.05 — GENAI OVERALL SUMMARY (from /read)
+    SECTION 07.05.30.05 - GENAI OVERALL SUMMARY (from /read)
     PURPOSE: Quiet summary at top of Rule Checks panel
     REQUIRES: readData includes these invoice_versions columns:
-      - genai_overall_confidence
-      - genai_all_rulechecks_pass_flag
-      - genai_admin_advice
+      ? genai_overall_confidence
+      ? genai_result
+      ? genai_admin_advice
    ============================================================ */}
                           <Box
                             mb="10px"
@@ -1717,18 +2000,11 @@ export const InvoiceVersionShowScreen = () => {
                                   h="10px"
                                   borderRadius="full"
                                   display="inline-block"
-                                  bg={
-                                    readData?.genai_all_rulechecks_pass_flag === true
-                                      ? 'green.400'
-                                      : readData?.genai_all_rulechecks_pass_flag === false
-                                        ? 'red.400'
-                                        : 'gray.400'
-                                  }
+                                  bg={resultDotColor(readData?.genai_result)}
                                 />
 
                                 <Text fontSize="xs" opacity={0.6}>
-                                  {readData?.genai_all_rulechecks_pass_flag === true ? 'PASS' : 'FAIL'} • conf{' '}
-                                  {readData?.genai_overall_confidence ?? 0}
+                                  {resultLabel(readData?.genai_result)} - conf {readData?.genai_overall_confidence ?? 0}
                                 </Text>
                               </Flex>
                             </Flex>
@@ -1762,25 +2038,21 @@ export const InvoiceVersionShowScreen = () => {
                           {genAiRulechecks.map((r: any) => {
                             const num = r.rule_number != null ? Number(r.rule_number) : null;
                             const title =
-                              `${num != null ? `Rule ${num}` : 'Rule'} — ${String(r.rule_name ?? '')}`.trim();
-
-                            const pass = r.rule_pass_flag === true ? 'PASS' : 'FAIL';
+                              `${num != null ? `Rule ${num}` : 'Rule'} - ${String(r.rule_name ?? '')}`.trim();
 
                             const conf =
                               r.confidence != null && r.confidence !== ''
                                 ? `conf ${Number(r.confidence).toFixed(0)}`
                                 : '';
 
-                            const meta = [pass, conf].filter(Boolean).join(' • ');
+                            const meta = conf;
 
-                            // you said you want strings: expected/observed/calculation etc.
+                            // Keep rule explanations compact but readable in the admin viewer.
                             const expected = r.expected_text ?? r.expected ?? '';
-                            const observed = r.observed_text ?? r.observed ?? '';
                             const calc = r.calculation ?? '';
                             const reason = r.reason_and_likely_causes ?? '';
                             const evText = r.evidence_text ?? '';
                             const sourceRequirement = r.source_requirement_id ?? '';
-                            const evidenceSource = r.evidence_source ?? '';
 
                             return (
                               <Box
@@ -1794,13 +2066,10 @@ export const InvoiceVersionShowScreen = () => {
                                 bg="white"
                               >
                                 <Flex align="center" gap="8px">
-                                  <StatusDot pass={r.rule_pass_flag} />
+                                  <StatusDot result={r.rule_result} />
                                   <Text fontSize="xs" opacity={0.7}>
                                     {title}
                                   </Text>
-                                  <Badge colorScheme={r.source_engine === 'code' ? 'blue' : 'purple'}>
-                                    {r.source_engine ?? 'genai'}
-                                  </Badge>
                                 </Flex>
 
                                 {meta && (
@@ -1809,9 +2078,9 @@ export const InvoiceVersionShowScreen = () => {
                                   </Text>
                                 )}
 
-                                {(sourceRequirement || evidenceSource) && (
+                                {sourceRequirement && (
                                   <Text fontSize="xs" opacity={0.65} mb="6px">
-                                    {[sourceRequirement, evidenceSource].filter(Boolean).join(' • ')}
+                                    {sourceRequirement}
                                   </Text>
                                 )}
 
@@ -1822,17 +2091,6 @@ export const InvoiceVersionShowScreen = () => {
                                     </Text>
                                     <Text fontSize="sm" whiteSpace="pre-wrap">
                                       {String(expected)}
-                                    </Text>
-                                  </Box>
-                                )}
-
-                                {observed && (
-                                  <Box mb="6px">
-                                    <Text fontSize="xs" opacity={0.7}>
-                                      observed
-                                    </Text>
-                                    <Text fontSize="sm" whiteSpace="pre-wrap">
-                                      {String(observed)}
                                     </Text>
                                   </Box>
                                 )}
@@ -1880,7 +2138,7 @@ export const InvoiceVersionShowScreen = () => {
               </Box>
 
               {/* ============================================================
-        SECTION 07.06 — RIGHT PANEL (PDF)
+        SECTION 07.06 - RIGHT PANEL (PDF)
         PURPOSE: PDF viewer + overlay highlight + toolbar
         ============================================================ */}
 
@@ -1898,7 +2156,7 @@ export const InvoiceVersionShowScreen = () => {
                 >
                   <Box position="relative" width="100%">
                     {/* ============================================================
-        SECTION 07.07 — PDF TOOLBAR
+        SECTION 07.07 - PDF TOOLBAR
         PURPOSE: Page nav + zoom/fit/rotate + open
         ============================================================ */}
 
@@ -1951,7 +2209,7 @@ export const InvoiceVersionShowScreen = () => {
                         />
 
                         <Text fontSize="sm" opacity={0.8}>
-                          / {numPages || '?'}
+                          / {numPages || '-'}
                         </Text>
 
                         <Button
@@ -1966,7 +2224,7 @@ export const InvoiceVersionShowScreen = () => {
                       {/* Right: zoom/fit/rotate/actions */}
                       <Box display="flex" alignItems="center" gap="8px" flexWrap="wrap" justifyContent="flex-end">
                         <Button size="sm" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}>
-                          −
+                          -
                         </Button>
 
                         <Text fontSize="sm" minW="56px" textAlign="center">
@@ -2017,16 +2275,16 @@ export const InvoiceVersionShowScreen = () => {
                     </Box>
 
                     {/* ============================================================
-    SECTION 07.08 — PDF DOCUMENT + OVERLAY RENDER (DYNAMIC)
+    SECTION 07.08 - PDF DOCUMENT + OVERLAY RENDER (DYNAMIC)
     PURPOSE: Render the PDF page + draw polygon overlay
     NOTES:
-    - ONLY ONE Document should exist in this pane
-    - We render Document only when pdfUrl is present
+    ? ONLY ONE Document should exist in this pane
+    ? We render Document only when pdfUrl is present
     ============================================================ */}
 
                     {/* 1) pdf_url error */}
                     {/* ============================================================
-    SECTION 07.08.10 — DEBUG PDF URL
+    SECTION 07.08.10 - DEBUG PDF URL
     PURPOSE: show whether pdfUrl is actually being set
    ============================================================ */}
                     <Text fontSize="xs" opacity={0.6} mb="6px">
@@ -2090,20 +2348,20 @@ export const InvoiceVersionShowScreen = () => {
                       {activeHighlight?.source === 'di'
                         ? activeHighlight?.key ?? '-'
                         : `genai ${activeHighlight?.genaiId ?? '-'}`}{' '}
-                      | page {activePageNumber} / {numPages || '?'} | unit {activePageMeta?.unit ?? '-'}
+                      | page {activePageNumber} / {numPages || '-'} | unit {activePageMeta?.unit ?? '-'}
                     </Text>
                   </Box>{' '}
                   {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
                 </Box>
               ) : null}
             </Box>{' '}
-            {/* ✅ ADD: closes SECTION 07.04 main split view <Box display="flex" ...> */}
+            {/*  ADD: closes SECTION 07.04 main split view <Box display="flex" ...> */}
           </Box>{' '}
-          {/* ✅ ADD: closes SECTION 07.02 page layout <Box display="flex" flexDirection="column" ...> */}
+          {/*  ADD: closes SECTION 07.02 page layout <Box display="flex" flexDirection="column" ...> */}
         </Box>{' '}
-        {/* ✅ ADD THIS: closes the first Box inside Container (Box A) */}
+        {/*  ADD THIS: closes the first Box inside Container (Box A) */}
       </Container>{' '}
-      {/* ✅ THIS is the closecontainer line */}
+      {/*  THIS is the closecontainer line */}
       <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
         <DrawerOverlay />
         <DrawerContent>
@@ -2116,46 +2374,32 @@ export const InvoiceVersionShowScreen = () => {
                   What This Screen Shows
                 </Heading>
                 <Text as="div" fontSize="sm">
-                  This screen shows the current invoice version for invoices in one session.
+                  This screen shows the current invoice version and the PDF evidence used during admin review.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  The left and right arrows move through the current invoices in that same session.
+                  Older invoice versions are review history. Workflow status buttons belong on the current invoice only.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  So you are not leaving the session. You are moving invoice by invoice inside the same group.
+                  Use the action buttons at the top to screen in, request revisions, approve pending, or mark paid.
                 </Text>
               </Box>
 
               <Box>
                 <Heading size="sm" mb={2}>
-                  Why Session Grouping Matters
+                  Status Actions
                 </Heading>
                 <Text as="div" fontSize="sm">
-                  Contractors work in sessions. Their invoice work is grouped by session.
+                  Screen In moves a submitted invoice from admin_review_inbox to in_review.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  Admins should view the same grouping so both sides are looking at work in the same way.
+                  Request Revision moves the invoice to contractor_revision_inbox and opens the revision request
+                  workflow.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  This keeps the contractor mental map and admin mental map aligned and reduces confusion.
-                </Text>
-              </Box>
-
-              <Box>
-                <Heading size="sm" mb={2}>
-                  Small vs Large Sessions
-                </Heading>
-                <Text as="div" fontSize="sm">
-                  If a session has only one invoice, the left and right navigation can feel a little odd.
+                  Approve Pending moves an in-review invoice to approved_pending after admin/supervisor review.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  That is expected because there is nothing else to move to.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  For larger contractor organizations with many invoices in a session, this navigation is very useful.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  It lets you review many related invoices quickly without jumping between unrelated screens.
+                  Mark Paid moves an approved_pending invoice to approved_paid after payment is handled elsewhere.
                 </Text>
               </Box>
 

@@ -57,6 +57,10 @@ Rails.application.routes.draw do
     # sbra20260130 claims subsystem (stable bookmark = invoice_id)
     scope module: :claims, path: "claims" do
       get "contractor/invoices", to: "contractor_portal#index"
+      get "contractor/invoices/:invoice_id/revision_requests",
+          to: "contractor_portal#revision_requests"
+      post "contractor/invoices/:invoice_id/submit_to_admin",
+           to: "contractor_portal#submit_to_admin"
 
       # ============================================================
       # SECTION 10 — READ / NAV (existing)
@@ -85,6 +89,8 @@ Rails.application.routes.draw do
       get "admin/invoices", to: "invoice_grid#index"
 
       delete "admin/invoices/:id", to: "invoice_grid#destroy"
+      post "admin/invoices/:id/status_transition",
+           to: "invoice_grid#status_transition"
       get "admin/invoices/:invoice_id/supporting_documents/context",
           to: "invoice_supporting_documents#context"
       get "admin/invoices/:invoice_id/supporting_documents",
@@ -142,6 +148,12 @@ Rails.application.routes.draw do
       # Screen B: list ALL invoice_versions for an invoice_id (grid)
       get "admin/invoices/:invoice_id/invoice_versions",
           to: "invoice_versions_admin#index_by_invoice"
+      get "admin/invoices/:invoice_id/current_version/read",
+          to: "invoice_versions_admin#read_current_by_invoice"
+      get "admin/invoices/:invoice_id/current_version/read_genai",
+          to: "invoice_versions_admin#read_genai_current_by_invoice"
+      get "admin/invoices/:invoice_id/current_version/pdf_url",
+          to: "invoice_versions_admin#pdf_url_current_by_invoice"
 
       # Screen B: fetch raw JSON blobs for one invoice_version (tabs)
       get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"

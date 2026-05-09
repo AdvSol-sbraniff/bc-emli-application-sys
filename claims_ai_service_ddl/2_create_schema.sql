@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   -- from the genai
   genai_raw_json jsonb NULL,
   genai_overall_confidence  smallint NOT NULL DEFAULT 0,
-  genai_all_rulechecks_pass_flag boolean NULL,
+  genai_result text NULL,
   genai_admin_advice text NULL,
 
   -- any parent level genai outputs such as overall conf and overall pass flags
@@ -172,7 +172,10 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
     UNIQUE (invoice_id, invoice_versionno),
 
   CONSTRAINT invoice_versions_versionno_chk
-    CHECK (invoice_versionno >= 1)
+    CHECK (invoice_versionno >= 1),
+
+  CONSTRAINT invoice_versions_genai_result_chk
+    CHECK (genai_result IS NULL OR genai_result IN ('pass','info','warn','fail'))
 );
 
 -- Common access paths
@@ -229,8 +232,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
   source_engine text NOT NULL,   -- 'code' | 'genai'
   field_key     text NOT NULL,
 
-  line_number   integer NOT NULL DEFAULT 0,  
-
   value_type text NOT NULL,      -- 'text' | 'currency' | 'number' | 'date' | 'bool' | 'json'
   value_text text NULL,
   value_json jsonb NULL,         -- only used when value_type='json'
@@ -273,11 +274,11 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
       OR
       (value_type <> 'json' AND value_text IS NOT NULL AND value_json IS NULL)
       OR
-      (value_text IS NULL AND value_json IS NULL)  -- allow �not found� rows
+      (value_text IS NULL AND value_json IS NULL)  -- allow not found rows
     )
 
 --  CONSTRAINT invoice_version_located_fields_uniq
---    UNIQUE (invoice_version_id, source_engine, field_key, line_number)
+--    UNIQUE (invoice_version_id, source_engine, field_key)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ivlf_invoice_version
@@ -287,7 +288,7 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_upgrade_type
   ON claims.invoice_version_located_fields(invoice_upgrade_type_id);
 
 CREATE INDEX IF NOT EXISTS idx_ivlf_lookup
-  ON claims.invoice_version_located_fields(invoice_version_id, invoice_upgrade_type_id, field_key, line_number);
+  ON claims.invoice_version_located_fields(invoice_version_id, invoice_upgrade_type_id, field_key);
 
 CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   ON claims.invoice_version_located_fields(invoice_version_id, invoice_upgrade_type_id, source_engine);
@@ -311,12 +312,10 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   evidence_source text NULL,     -- invoice_pdf|supporting_document|database|external_list|admin_review, or pipe/comma combo
   rule_name   text NOT NULL,
 
-  rule_pass_flag boolean NOT NULL,
+  rule_result text NOT NULL DEFAULT 'fail',
   confidence smallint NOT NULL DEFAULT 0,  -- 0..100
 
   expected_text text NULL,
-  observed_text text NULL,
-
   calculation text NULL,
 
   evidence_text text NULL,
@@ -339,6 +338,9 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
 
   CONSTRAINT invoice_version_rulechecks_source_engine_chk
     CHECK (source_engine IN ('code','genai')),
+
+  CONSTRAINT invoice_version_rulechecks_rule_result_chk
+    CHECK (rule_result IN ('pass','info','warn','fail')),
 
   CONSTRAINT invoice_version_rulechecks_confidence_chk
     CHECK (confidence BETWEEN 0 AND 100),
@@ -571,15 +573,9 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   call_status text NOT NULL DEFAULT 'classified',
 
   confidence smallint NOT NULL DEFAULT 0,
-  evidence_text text NULL,
-  classifier_notes text NULL,
-  classifier_raw_json jsonb NULL,
-
+  result text NULL,
   validationgenai_ruleset_id uuid NULL,
-  genai_raw_json jsonb NULL,
-  genai_overall_confidence smallint NULL,
-  genai_all_rulechecks_pass_flag boolean NULL,
-  genai_admin_advice text NULL,
+  raw_json jsonb NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -608,11 +604,8 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   CONSTRAINT invoice_version_upgrade_types_confidence_chk
     CHECK (confidence BETWEEN 0 AND 100),
 
-  CONSTRAINT invoice_version_upgrade_types_genai_confidence_chk
-    CHECK (
-      genai_overall_confidence IS NULL
-      OR genai_overall_confidence BETWEEN 0 AND 100
-    ),
+  CONSTRAINT invoice_version_upgrade_types_result_chk
+    CHECK (result IS NULL OR result IN ('pass','info','warn','fail')),
 
   CONSTRAINT invoice_version_upgrade_types_uniq
     UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine)
@@ -852,3 +845,4 @@ CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_user_id
 
 CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_expires_at
   ON claims.users_eligibilitycodes (expires_at);
+
