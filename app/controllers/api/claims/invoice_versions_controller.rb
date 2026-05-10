@@ -4,10 +4,8 @@ module Api
     class InvoiceVersionsController < Api::ApplicationController
       # For the POC: don’t require login + don’t require policy checks
 
-      skip_before_action :authenticate_user!,
-                         only: %i[current_invoices read read_genai pdf_url]
-      skip_before_action :require_confirmation,
-                         only: %i[current_invoices read read_genai pdf_url]
+      before_action :require_claims_invoice_reader!,
+                    only: %i[current_invoices read read_genai pdf_url]
       skip_after_action :verify_authorized,
                         only: %i[current_invoices read read_genai pdf_url]
 
@@ -161,6 +159,40 @@ module Api
                  rulechecks: serialize_rulechecks(rule_rows),
                  code_rulechecks: serialize_rulechecks(code_rule_rows)
                }
+      end
+
+      private
+
+      def require_claims_invoice_reader!
+        if current_user&.admin? || current_user&.admin_manager? ||
+             current_user&.system_admin?
+          return
+        end
+
+        invoice =
+          if params[:invoice_id].present?
+            ::Claims::Invoice.find_by(
+              id: params[:invoice_id].to_s,
+              session_id: params[:session_id].to_s
+            )
+          elsif params[:session_id].present?
+            ::Claims::Invoice.where(session_id: params[:session_id].to_s).first
+          end
+
+        allowed =
+          invoice.present? &&
+            ::Contractor
+              .left_joins(:contractor_employees)
+              .where(id: invoice.contractor_id)
+              .where(
+                "contractors.contact_id = :user_id OR contractor_employees.employee_id = :user_id",
+                user_id: current_user&.id
+              )
+              .exists?
+
+        return if allowed
+
+        render json: { error: "Invoice access denied." }, status: :forbidden
       end
 
       def upgrade_type_select_sql(table_name)

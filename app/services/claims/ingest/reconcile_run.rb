@@ -4,6 +4,7 @@ module Claims
   module Ingest
     class ReconcileRun
       TERMINAL_STATUSES = %w[succeeded failed partial].freeze
+      GENAI_STEP_TYPES = %w[genai classifier genai_common genai_upgrade].freeze
 
       def self.call(ingest_run_id:)
         new(ingest_run_id: ingest_run_id).call
@@ -19,10 +20,11 @@ module Claims
         run = ::Claims::IngestRun.find_by(id: @ingest_run_id)
         return unless run
 
-        invoice_version_ids = ::Claims::IngestStepRun
-          .where(ingest_run_id: run.id)
-          .distinct
-          .pluck(:invoice_version_id)
+        invoice_version_ids =
+          ::Claims::IngestStepRun
+            .where(ingest_run_id: run.id)
+            .distinct
+            .pluck(:invoice_version_id)
 
         total_files = run.total_files.to_i
         total_files = invoice_version_ids.size if total_files <= 0
@@ -33,7 +35,6 @@ module Claims
 
         invoice_version_ids.each do |invoice_version_id|
           ocr = latest_step(run.id, invoice_version_id, "ocr")
-          genai = latest_step(run.id, invoice_version_id, "genai")
 
           if ocr.nil?
             running += 1
@@ -51,12 +52,17 @@ module Claims
           end
 
           # OCR succeeded
-          if genai.nil?
-            running += 1
-          elsif genai.status == "succeeded"
+          genai_steps = latest_genai_steps(run.id, invoice_version_id)
+          invoice_status = invoice_status_for(invoice_version_id)
+
+          if genai_steps.empty?
             succeeded += 1
-          elsif genai.status == "failed"
+          elsif genai_steps.any? { |step| step.status == "failed" } ||
+                invoice_status == "genai_failed"
             failed += 1
+          elsif invoice_status == "genai_complete" &&
+                genai_steps.all? { |step| step.status == "succeeded" }
+            succeeded += 1
           else
             running += 1
           end
@@ -64,19 +70,20 @@ module Claims
 
         processed = succeeded + failed
 
-        status = if total_files.positive? && processed >= total_files
-          if failed.zero?
-            "succeeded"
-          elsif succeeded.zero?
-            "failed"
+        status =
+          if total_files.positive? && processed >= total_files
+            if failed.zero?
+              "succeeded"
+            elsif succeeded.zero?
+              "failed"
+            else
+              "partial"
+            end
+          elsif processed.positive? || running.positive?
+            "running"
           else
-            "partial"
+            "queued"
           end
-        elsif processed.positive? || running.positive?
-          "running"
-        else
-          "queued"
-        end
 
         completed_at = TERMINAL_STATUSES.include?(status) ? Time.current : nil
 
@@ -101,6 +108,24 @@ module Claims
           )
           .order(created_at: :desc)
           .first
+      end
+
+      def latest_genai_steps(ingest_run_id, invoice_version_id)
+        ::Claims::IngestStepRun.where(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: GENAI_STEP_TYPES
+        ).order(created_at: :desc)
+      end
+
+      def invoice_status_for(invoice_version_id)
+        ::Claims::InvoiceVersion
+          .joins(
+            "JOIN claims.invoices i ON i.id = claims.invoice_versions.invoice_id"
+          )
+          .where(id: invoice_version_id)
+          .pick("i.status")
+          .to_s
       end
     end
   end

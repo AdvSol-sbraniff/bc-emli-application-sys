@@ -48,6 +48,11 @@ type ContractorPortalRow = {
   latestInvoiceVersionno?: number | null;
   latestOriginalFilename?: string | null;
   latestInvoiceVersionUpdatedAt?: string | null;
+  latestDiOcrInvoiceId?: string | null;
+  latestDiOcrInvoiceDate?: string | null;
+  latestDiOcrInvoiceTotal?: number | string | null;
+  latestDiOcrVendorName?: string | null;
+  latestDiOcrCustomerName?: string | null;
   latestDetectedUpgradeTypeKeys?: string[] | null;
 };
 
@@ -72,6 +77,13 @@ function formatTimestamp(value?: string | null) {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function formatMoney(value?: number | string | null) {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return n.toLocaleString(undefined, { style: 'currency', currency: 'CAD' });
 }
 
 function contractorStatusLabel(status?: string | null) {
@@ -159,6 +171,13 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
   const title = row.latestOriginalFilename || `Invoice ${row.invoiceId.slice(0, 8)}`;
   const subtitle = upgradeTypeSummary(row);
   const upgradeTypeKeys = displayUpgradeTypeKeys(row);
+  const statusHint = `Claims status: ${row.status || 'unknown'}`;
+  const ocrFacts = [
+    row.latestDiOcrInvoiceId ? ['Invoice #', row.latestDiOcrInvoiceId] : null,
+    row.latestDiOcrCustomerName ? ['Customer', row.latestDiOcrCustomerName] : null,
+    row.latestDiOcrInvoiceDate ? ['Invoice date', formatTimestamp(row.latestDiOcrInvoiceDate)] : null,
+    row.latestDiOcrInvoiceTotal ? ['Invoice total', formatMoney(row.latestDiOcrInvoiceTotal)] : null,
+  ].filter(Boolean) as Array<[string, string]>;
 
   return (
     <Flex
@@ -231,9 +250,11 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
                 </Tooltip>
               )}
             </Flex>
-            <Badge colorScheme={contractorStatusColor(row.status)} borderRadius="full" px={3} py={1} flexShrink={0}>
-              {contractorStatusLabel(row.status)}
-            </Badge>
+            <Tooltip label={statusHint}>
+              <Badge colorScheme={contractorStatusColor(row.status)} borderRadius="full" px={3} py={1} flexShrink={0}>
+                {contractorStatusLabel(row.status)}
+              </Badge>
+            </Tooltip>
           </Flex>
         </Show>
 
@@ -258,6 +279,19 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
             <Box flex="1" alignContent="center">
               <GreenLineSmall />
             </Box>
+
+            {ocrFacts.length ? (
+              <Flex gap={3} wrap="wrap">
+                {ocrFacts.map(([label, value]) => (
+                  <Box key={`${row.invoiceId}-${label}`} minW="130px">
+                    <Text fontSize="xs" color="greys.grey01" fontWeight="bold" textTransform="uppercase">
+                      {label}
+                    </Text>
+                    <Text fontSize="sm">{value}</Text>
+                  </Box>
+                ))}
+              </Flex>
+            ) : null}
 
             <Flex gap={4} flex="1" alignItems="end" wrap="wrap">
               <Text>
@@ -309,19 +343,15 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
 
         <Flex direction="column" align="flex-end" gap={4} flex={{ base: 0, md: 1 }} maxW={{ base: '100%', md: '25%' }}>
           <Show above="md">
-            <Badge colorScheme={contractorStatusColor(row.status)} borderRadius="full" px={3} py={1}>
-              {contractorStatusLabel(row.status)}
-            </Badge>
-            <Box>
-              <Text align="right" variant="tiny_uppercase">
-                Claims status
-              </Text>
-              <Text align="right">{row.status}</Text>
-            </Box>
+            <Tooltip label={statusHint}>
+              <Badge colorScheme={contractorStatusColor(row.status)} borderRadius="full" px={3} py={1}>
+                {contractorStatusLabel(row.status)}
+              </Badge>
+            </Tooltip>
           </Show>
 
           <RouterLinkButton
-            to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review`}
+            to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
             variant="secondary"
             w={{ base: 'full', md: 'fit-content' }}
             aria-label={`${actionLabel(row.status)} invoice submission for ${title}`}
@@ -403,6 +433,9 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
         row.sessionId,
         row.status,
         contractorStatusLabel(row.status),
+        row.latestDiOcrInvoiceId,
+        row.latestDiOcrCustomerName,
+        row.latestDiOcrVendorName,
         ...(row.latestDetectedUpgradeTypeKeys || []),
       ]
         .filter(Boolean)
@@ -489,17 +522,17 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                   direction={{ base: 'column', md: 'row' }}
                 >
                   <RouterLinkButton
-                    to={'/new-invoice'}
+                    to={'/contractor/upload-invoices'}
                     variant="primary"
                     w={{ base: 'full', md: 'fit-content' }}
                     aria-label={
                       isSubmitInvoiceDisabled
                         ? t('contractor.suspended.buttonDisabled')
-                        : `${t('landing.contractor.dashboard.submitInvoice')} - ${t('energySavingsApplication.newInvoiceSubmission')}`
+                        : 'Upload invoice PDFs for AI review'
                     }
                     isDisabled={isSubmitInvoiceDisabled}
                   >
-                    {t('landing.contractor.dashboard.submitInvoice')}
+                    Upload invoice(s)
                   </RouterLinkButton>
 
                   <Flex

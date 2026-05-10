@@ -37,6 +37,10 @@ module Claims
         raise "Missing invoice_versions.di_raw_json. Run OCR first for invoice_version_id=#{iv.id}."
       end
 
+      # GenAI reruns must not leave stale classifier/common/upgrade results
+      # from a prior run. OCR/DI fields and lineitems remain intact.
+      ::Claims::InvoiceVersions::ResetAiOutputs.call(invoice_version_id: iv.id)
+
       step =
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
@@ -573,20 +577,19 @@ module Claims
           .where(
             invoice_version_id: invoice_version.id,
             requester_id: requester_id,
-            status: "OPEN"
+            message_type: "admin_revision_request"
           )
           .order(updated_at: :desc)
           .first
 
       if record
-        record.update!(request_text: advice, response_text: nil, closed_at: nil)
+        record.update!(request_text: advice)
       else
         Claims::AdminRevisionRequest.create!(
           invoice_version_id: invoice_version.id,
           requester_id: requester_id,
-          status: "OPEN",
+          message_type: "admin_revision_request",
           request_text: advice,
-          response_text: nil,
           created_at: Time.current,
           updated_at: Time.current
         )

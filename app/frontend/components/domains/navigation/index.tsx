@@ -22,6 +22,7 @@ import { ContractorEmployeeIndexScreen } from '../contractor-management/employee
 import { ContractorProgramResourcesScreen } from '../contractor-management/contractor-program-resources-screen';
 import { ContractorDashboardScreen } from '../contractor-dashboard/contractor-dashboard-screen';
 import { AiContractorDashboardScreen } from '../ai-contractor-dashboard/ai-contractor-dashboard-screen';
+import ContractorUploadInvoicesScreen from '../contractor-upload-invoices';
 import { ContractorOnboardingImport } from '../contractor-landing/import';
 import { SuspendReasonPage } from '../contractor-management/suspend-reason-page';
 import { RemoveReasonPage } from '../contractor-management/remove-reason-page';
@@ -67,6 +68,9 @@ const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
 );
 const ContractorInvoiceReviewScreen = lazy(() =>
   import('../contractor-invoice-review').then((module) => ({ default: module.default })),
+);
+const ContractorInvoiceMessagesScreen = lazy(() =>
+  import('../contractor-invoice-messages').then((module) => ({ default: module.default })),
 );
 
 const EligibilitycodesAdminScreen = lazy(() =>
@@ -631,6 +635,14 @@ const AppRoutes = observer(() => {
 
   //const mustAcceptEula = loggedIn && !currentUser.eulaAccepted && !currentUser.isSuperAdmin;
   const mustAcceptEula = loggedIn && currentUser && !currentUser.eulaAccepted;
+  const isClaimsAdminUser = Boolean(
+    loggedIn &&
+      !mustAcceptEula &&
+      currentUser &&
+      (currentUser.isAdminManager || currentUser.isAdmin || currentUser.isSystemAdmin),
+  );
+  const isClaimsContractorUser = Boolean(loggedIn && !mustAcceptEula && currentUser && currentUser.isContractor);
+
   return (
     <>
       <Routes location={background || location}>
@@ -650,14 +662,23 @@ const AppRoutes = observer(() => {
         <Route
           element={
             <ProtectedRoute
-              isAllowed={loggedIn && !mustAcceptEula}
-              redirectPath={mustAcceptEula ? '/' : '/contractor'}
+              isAllowed={isClaimsContractorUser}
+              redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/contractor'}
             />
           }
         >
           <Route path="/contractor-dashboard" element={<ContractorDashboardScreen />} />
           <Route path="/ai-contractor-dashboard" element={<AiContractorDashboardScreen />} />
+          <Route path="/contractor/upload-invoices" element={<ContractorUploadInvoicesScreen />} />
           <Route path="/contractor/applications/:permitApplicationId/edit" element={<EditPermitApplicationScreen />} />
+          <Route
+            path="/contractor/sessions/:sessionId/invoices/:invoiceId/review"
+            element={<ContractorInvoiceReviewScreen />}
+          />
+          <Route
+            path="/contractor/sessions/:sessionId/invoices/:invoiceId/messages"
+            element={<ContractorInvoiceMessagesScreen />}
+          />
         </Route>
 
         <Route
@@ -783,8 +804,8 @@ const AppRoutes = observer(() => {
         <Route
           element={
             <ProtectedRoute
-              isAllowed={loggedIn && !mustAcceptEula}
-              redirectPath={(mustAcceptEula && '/') || '/login'}
+              isAllowed={isClaimsAdminUser}
+              redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/admin'}
             />
           }
         >
@@ -804,10 +825,6 @@ const AppRoutes = observer(() => {
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
-          <Route
-            path="/contractor/sessions/:sessionId/invoices/:invoiceId/review"
-            element={<ContractorInvoiceReviewScreen />}
-          />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />

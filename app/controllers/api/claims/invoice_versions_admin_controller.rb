@@ -4,6 +4,8 @@ require "json"
 module Api
   module Claims
     class InvoiceVersionsAdminController < Api::ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       skip_before_action :authenticate_user!,
                          only: %i[
                            index_by_invoice
@@ -141,6 +143,8 @@ module Api
         render json: {
                  review_mode: "invoice_current",
                  is_current_invoice_version: true,
+                 invoice_version_count:
+                   ::Claims::InvoiceVersion.where(invoice_id: invoice_id).count,
                  read: iv.as_json,
                  invoice:
                    invoice.as_json(
@@ -270,6 +274,10 @@ module Api
                  review_mode: "invoice_version_snapshot",
                  is_current_invoice_version:
                    current_invoice_version_for(iv.invoice_id)&.id == iv.id,
+                 invoice_version_count:
+                   ::Claims::InvoiceVersion.where(
+                     invoice_id: iv.invoice_id
+                   ).count,
                  read: iv.as_json,
                  invoice:
                    invoice&.as_json(

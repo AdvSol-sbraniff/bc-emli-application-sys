@@ -2,6 +2,8 @@
 module Api
   module Claims
     class SessionsController < Api::ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       # For the POC: don’t require login + don’t require policy checks
       skip_before_action :verify_authenticity_token, only: %i[create]
       skip_before_action :authenticate_user!, only: %i[create]

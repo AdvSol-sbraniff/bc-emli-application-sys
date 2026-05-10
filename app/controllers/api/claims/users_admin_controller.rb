@@ -3,9 +3,14 @@
 module Api
   module Claims
     class UsersAdminController < ApplicationController
-      skip_before_action :authenticate_user!, only: %i[index show create update destroy]
-      skip_before_action :require_confirmation, only: %i[index show create update destroy]
-      skip_after_action :verify_authorized, only: %i[index show create update destroy]
+      include Api::Claims::Concerns::AdminAuthorization
+
+      skip_before_action :authenticate_user!,
+                         only: %i[index show create update destroy]
+      skip_before_action :require_confirmation,
+                         only: %i[index show create update destroy]
+      skip_after_action :verify_authorized,
+                        only: %i[index show create update destroy]
       skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[index show create update destroy]
 
@@ -22,8 +27,7 @@ module Api
 
         if q.present?
           like = "%#{sanitize_sql_like(q)}%"
-          scope = scope.where(
-            <<~SQL.squish,
+          scope = scope.where(<<~SQL.squish, like: like)
               CAST(users.id AS text) ILIKE :like
               OR users.email ILIKE :like
               OR users.first_name ILIKE :like
@@ -35,29 +39,31 @@ module Api
               OR users.omniauth_email ILIKE :like
               OR users.omniauth_username ILIKE :like
             SQL
-            like: like
-          )
         end
 
         scope = scope.order(order_clause(sort))
         total = scope.count
 
-        rows = scope
-          .offset((page - 1) * per)
-          .limit(per)
-          .map { |user| serialize_user(user) }
+        rows =
+          scope
+            .offset((page - 1) * per)
+            .limit(per)
+            .map { |user| serialize_user(user) }
 
         render json: {
-          rows: rows,
-          meta: {
-            total: total,
-            page: page,
-            per: per,
-            sort: sort,
-            role_options: ROLE_OPTIONS,
-            filters: { q: q.presence }
-          }
-        }, status: :ok
+                 rows: rows,
+                 meta: {
+                   total: total,
+                   page: page,
+                   per: per,
+                   sort: sort,
+                   role_options: ROLE_OPTIONS,
+                   filters: {
+                     q: q.presence
+                   }
+                 }
+               },
+               status: :ok
       end
 
       # GET /api/claims/admin/users/:id
@@ -67,31 +73,36 @@ module Api
 
       # POST /api/claims/admin/users
       def create
-        user = ::User.new(
-          create_params.merge(
-            discarded_at: nil,
-            password: Devise.friendly_token[0, 20]
+        user =
+          ::User.new(
+            create_params.merge(
+              discarded_at: nil,
+              password: Devise.friendly_token[0, 20]
+            )
           )
-        )
 
         user.save!
 
         render json: serialize_user(user), status: :created
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
       end
 
       # PATCH /api/claims/admin/users/:id
       def update
         user = find_user
 
-        with_claims_role_editor do
-          user.update!(update_params)
-        end
+        with_claims_role_editor { user.update!(update_params) }
 
         render json: serialize_user(user), status: :ok
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
       end
 
       # DELETE /api/claims/admin/users/:id
@@ -99,14 +110,20 @@ module Api
         user = find_user
 
         if current_user.present? && current_user.id == user.id
-          render json: { error: "You cannot delete your own user." }, status: :forbidden
+          render json: {
+                   error: "You cannot delete your own user."
+                 },
+                 status: :forbidden
           return
         end
 
         if user.discard
           render json: { ok: true, id: user.id }, status: :ok
         else
-          render json: { error: "Failed to delete user." }, status: :unprocessable_entity
+          render json: {
+                   error: "Failed to delete user."
+                 },
+                 status: :unprocessable_entity
         end
       end
 
@@ -117,45 +134,43 @@ module Api
       end
 
       def create_params
-        permitted = params.permit(
-          :email,
-          :organization,
-          :role,
-          :first_name,
-          :last_name,
-          :reviewed,
-          :certified,
-          :omniauth_provider,
-          :omniauth_uid,
-          :omniauth_email,
-          :omniauth_username
-        )
+        permitted =
+          params.permit(
+            :email,
+            :organization,
+            :role,
+            :first_name,
+            :last_name,
+            :reviewed,
+            :certified,
+            :omniauth_provider,
+            :omniauth_uid,
+            :omniauth_email,
+            :omniauth_username
+          )
 
-        if permitted.key?(:role)
-          permitted[:role] = permitted[:role].to_s.strip
-        end
+        permitted[:role] = permitted[:role].to_s.strip if permitted.key?(:role)
 
         permitted
       end
 
       def update_params
-        permitted = params.permit(
-          :email,
-          :organization,
-          :role,
-          :first_name,
-          :last_name,
-          :reviewed,
-          :certified,
-          :omniauth_provider,
-          :omniauth_uid,
-          :omniauth_email,
-          :omniauth_username
-        )
+        permitted =
+          params.permit(
+            :email,
+            :organization,
+            :role,
+            :first_name,
+            :last_name,
+            :reviewed,
+            :certified,
+            :omniauth_provider,
+            :omniauth_uid,
+            :omniauth_email,
+            :omniauth_username
+          )
 
-        if permitted.key?(:role)
-          permitted[:role] = permitted[:role].to_s.strip
-        end
+        permitted[:role] = permitted[:role].to_s.strip if permitted.key?(:role)
 
         permitted
       end
@@ -189,7 +204,12 @@ module Api
       end
 
       def clamp_int(value, default, min, max)
-        n = Integer(value) rescue default
+        n =
+          begin
+            Integer(value)
+          rescue StandardError
+            default
+          end
         n = default if n.nil?
         n = min if n < min
         n = max if n > max
@@ -206,14 +226,22 @@ module Api
 
         column =
           case key
-          when "email" then "users.email"
-          when "first_name" then "users.first_name"
-          when "last_name" then "users.last_name"
-          when "organization" then "users.organization"
-          when "role" then "users.role"
-          when "created_at" then "users.created_at"
-          when "updated_at" then "users.updated_at"
-          when "last_sign_in_at" then "users.last_sign_in_at"
+          when "email"
+            "users.email"
+          when "first_name"
+            "users.first_name"
+          when "last_name"
+            "users.last_name"
+          when "organization"
+            "users.organization"
+          when "role"
+            "users.role"
+          when "created_at"
+            "users.created_at"
+          when "updated_at"
+            "users.updated_at"
+          when "last_sign_in_at"
+            "users.last_sign_in_at"
           else
             "users.updated_at"
           end

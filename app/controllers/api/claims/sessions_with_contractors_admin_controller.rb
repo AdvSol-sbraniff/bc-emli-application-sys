@@ -3,6 +3,8 @@
 module Api
   module Claims
     class SessionsWithContractorsAdminController < ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       # TEMP: allow local dev to hit this without auth until KC is wired
       skip_before_action :authenticate_user!, only: %i[index destroy]
       skip_before_action :require_confirmation, only: %i[index destroy]

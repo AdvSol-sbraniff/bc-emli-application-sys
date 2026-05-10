@@ -2,9 +2,24 @@ module Api
   module Claims
     class ContractorPortalController < Api::ApplicationController
       skip_after_action :verify_authorized,
-                        only: %i[index revision_requests submit_to_admin]
+                        only: %i[
+                          index
+                          upload_batch
+                          revision_requests
+                          create_revision_request
+                          update_revision_request
+                          submit_to_admin
+                          ingest_run_show
+                          ingest_run_invoices
+                          ingest_invoice_steps
+                        ]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[submit_to_admin]
+      skip_forgery_protection only: %i[
+                                upload_batch
+                                create_revision_request
+                                update_revision_request
+                                submit_to_admin
+                              ]
 
       # GET /api/claims/contractor/invoices
       def index
@@ -23,6 +38,21 @@ module Api
               "COALESCE(invoice_status_updated_at, latest_invoice_version_updated_at, invoice_updated_at, invoice_created_at) DESC, invoice_created_at DESC"
             )
           )
+
+        latest_version_ids =
+          invoices
+            .map do |invoice|
+              if invoice.respond_to?(:latest_invoice_version_id)
+                invoice.latest_invoice_version_id
+              end
+            end
+            .compact
+
+        customer_by_version =
+          ::Claims::InvoiceVersion
+            .where(id: latest_version_ids)
+            .pluck(:id, :di_ocr_customer_name)
+            .to_h
 
         rows =
           invoices.map do |invoice|
@@ -50,6 +80,12 @@ module Api
               latest_original_filename: invoice.latest_original_filename,
               latest_invoice_version_updated_at:
                 invoice.latest_invoice_version_updated_at,
+              latest_di_ocr_invoice_id: invoice.latest_di_ocr_invoice_id,
+              latest_di_ocr_invoice_date: invoice.latest_di_ocr_invoice_date,
+              latest_di_ocr_invoice_total: invoice.latest_di_ocr_invoice_total,
+              latest_di_ocr_vendor_name: invoice.latest_di_ocr_vendor_name,
+              latest_di_ocr_customer_name:
+                customer_by_version[invoice.latest_invoice_version_id],
               latest_detected_upgrade_type_keys:
                 (
                   if invoice.respond_to?(:latest_detected_upgrade_type_keys)
@@ -72,6 +108,41 @@ module Api
                status: :ok
       end
 
+      # POST /api/claims/contractor/invoices/upload_batch
+      def upload_batch
+        contractor = current_contractor
+        if contractor.nil?
+          render json: {
+                   error: "Contractor not found for current user."
+                 },
+                 status: :not_found
+          return
+        end
+
+        files =
+          Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
+            Array(params[:files]) + Array(params[:file])
+
+        result =
+          ::Claims::Ingest::CreateDraftBatch.call(
+            contractor_id: contractor.id,
+            files: files,
+            validationgenai_ruleset_id: nil,
+            log_prefix: "contractor_upload_batch"
+          )
+
+        render json: result, status: :ok
+      rescue => e
+        Rails.logger.error(
+          "[claims][contractor_portal][upload_batch] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: {
+                 ok: false,
+                 error: e.message
+               },
+               status: :unprocessable_entity
+      end
+
       # GET /api/claims/contractor/invoices/:invoice_id/revision_requests
       def revision_requests
         invoice = contractor_invoice!
@@ -91,12 +162,10 @@ module Api
                        invoice_version_id: row.invoice_version_id,
                        invoice_versionno: row.invoice_versionno,
                        revreq_seqno: row.revision_request_seqno,
-                       status: row.revision_request_status,
+                       message_type: row.revision_request_message_type,
                        request_text: row.revision_request_text,
-                       response_text: row.revision_request_response_text,
                        created_at: row.revision_request_created_at,
-                       updated_at: row.revision_request_updated_at,
-                       closed_at: row.revision_request_closed_at
+                       updated_at: row.revision_request_updated_at
                      }
                    end
                },
@@ -110,15 +179,95 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # POST /api/claims/contractor/invoices/:invoice_id/revision_requests
+      def create_revision_request
+        invoice = contractor_invoice!
+        invoice_version = latest_invoice_version!(invoice)
+        text = params[:request_text].to_s.strip
+
+        if text.empty?
+          render json: {
+                   error: "Message text is required."
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
+        record =
+          ::Claims::AdminRevisionRequest.create!(
+            invoice_version_id: invoice_version.id,
+            requester_id: current_user.id,
+            message_type: "contractor_note",
+            request_text: text
+          )
+
+        render json: serialize_revision_request(record), status: :created
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue ActiveRecord::RecordInvalid => e
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
+      rescue => e
+        Rails.logger.error(
+          "[claims][contractor_portal][create_revision_request] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # PATCH /api/claims/contractor/invoices/:invoice_id/revision_requests/:id
+      def update_revision_request
+        invoice = contractor_invoice!
+        record =
+          ::Claims::AdminRevisionRequest
+            .includes(:invoice_version)
+            .where(
+              id: params[:id].to_s,
+              message_type: "contractor_note",
+              requester_id: current_user.id
+            )
+            .first!
+        unless record.invoice_version&.invoice_id == invoice.id
+          raise ActiveRecord::RecordNotFound
+        end
+
+        text = params[:request_text].to_s.strip
+        if text.empty?
+          render json: {
+                   error: "Message text is required."
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
+        record.update!(request_text: text)
+
+        render json: serialize_revision_request(record), status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Message not found" }, status: :not_found
+      rescue ActiveRecord::RecordInvalid => e
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
+      rescue => e
+        Rails.logger.error(
+          "[claims][contractor_portal][update_revision_request] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       # POST /api/claims/contractor/invoices/:invoice_id/submit_to_admin
       def submit_to_admin
         invoice = contractor_invoice!
 
-        unless invoice.status == "genai_complete"
+        allowed_submit_statuses = %w[genai_complete contractor_revision_inbox]
+        unless allowed_submit_statuses.include?(invoice.status)
           render json: {
                    error: "Invoice is not ready to submit",
                    status: invoice.status,
-                   expected_status: "genai_complete"
+                   expected_statuses: allowed_submit_statuses
                  },
                  status: :unprocessable_entity
           return
@@ -127,6 +276,7 @@ module Api
         now = Time.current
         invoice.update!(
           status: "admin_review_inbox",
+          submitter_id: invoice.submitter_id || current_user.id,
           submitted_at: invoice.submitted_at || now,
           status_updated_at: now,
           updated_at: now
@@ -156,7 +306,196 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # GET /api/claims/contractor/ingest/runs/:ingest_run_id
+      def ingest_run_show
+        run = contractor_ingest_run!
+
+        render json: {
+                 id: run.id,
+                 session_id: run.session_id,
+                 status: run.status,
+                 total_files: run.total_files,
+                 completed_files: run.completed_files,
+                 failed_files: run.failed_files,
+                 messages: run.messages,
+                 created_at: run.created_at,
+                 updated_at: run.updated_at,
+                 completed_at: run.completed_at
+               },
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Ingest run not found" }, status: :not_found
+      rescue => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/claims/contractor/ingest/runs/:ingest_run_id/invoices
+      def ingest_run_invoices
+        run = contractor_ingest_run!
+
+        invoice_version_ids =
+          ::Claims::IngestStepRun
+            .where(ingest_run_id: run.id)
+            .distinct
+            .pluck(:invoice_version_id)
+
+        rows =
+          ::Claims::InvoiceVersion
+            .joins(:invoice)
+            .where(id: invoice_version_ids)
+            .where("claims.invoices.contractor_id = ?", current_contractor.id)
+            .order(created_at: :asc)
+            .map do |iv|
+              invoice = iv.invoice
+              {
+                invoice_id: invoice.id,
+                invoice_status: invoice.status,
+                invoice_status_updated_at: invoice.status_updated_at,
+                invoice_version_id: iv.id,
+                invoice_versionno: iv.invoice_versionno,
+                original_filename: iv.original_filename,
+                created_at: iv.created_at,
+                updated_at: iv.updated_at
+              }
+            end
+
+        render json: { rows: rows }, status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: {
+                 rows: [],
+                 error: "Ingest run not found"
+               },
+               status: :not_found
+      rescue => e
+        render json: {
+                 rows: [],
+                 error: e.message
+               },
+               status: :unprocessable_entity
+      end
+
+      # GET /api/claims/contractor/ingest/invoices/:invoice_id/steps
+      def ingest_invoice_steps
+        invoice = contractor_invoice!
+        ingest_run_id = params[:ingest_run_id].to_s.strip.presence
+        limit = params[:limit].to_i
+        limit = 200 if limit <= 0
+        limit = 500 if limit > 500
+
+        scope =
+          ::Claims::IngestStepRun.joins(
+            "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
+          ).where("iv.invoice_id = ?", invoice.id)
+
+        scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+
+        rows =
+          scope
+            .order(created_at: :desc)
+            .limit(limit)
+            .map do |step|
+              iv = ::Claims::InvoiceVersion.find_by(id: step.invoice_version_id)
+              {
+                id: step.id,
+                ingest_run_id: step.ingest_run_id,
+                session_id: step.session_id,
+                invoice_id: invoice.id,
+                invoice_version_id: step.invoice_version_id,
+                invoice_versionno: iv&.invoice_versionno,
+                original_filename: iv&.original_filename,
+                invoice_status: invoice.status,
+                step_type: step.step_type,
+                status: step.status,
+                error_text: step.error_text,
+                validationgenai_ruleset_id: step.validationgenai_ruleset_id,
+                created_at: step.created_at,
+                updated_at: step.updated_at
+              }
+            end
+
+        classifier_invoice_version_ids =
+          (
+            if ingest_run_id
+              scope.distinct.pluck("claims.ingest_step_runs.invoice_version_id")
+            else
+              []
+            end
+          )
+
+        classifier_results =
+          ::Claims::InvoiceVersionUpgradeType
+            .joins(
+              "JOIN claims.invoice_versions iv ON iv.id = claims.invoice_version_upgrade_types.invoice_version_id"
+            )
+            .joins(
+              "JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
+            )
+            .select(
+              "claims.invoice_version_upgrade_types.*",
+              "iut.upgrade_type_key AS upgrade_type_key",
+              "iut.description AS upgrade_type_description"
+            )
+            .where("iv.invoice_id = ?", invoice.id)
+            .where(source_engine: "classifier")
+            .where(invoice_version_id: classifier_invoice_version_ids)
+            .order(updated_at: :desc)
+            .map do |row|
+              {
+                id: row.id,
+                invoice_version_id: row.invoice_version_id,
+                invoice_upgrade_type_id: row.invoice_upgrade_type_id,
+                upgrade_type_key: row.read_attribute("upgrade_type_key"),
+                upgrade_type_description:
+                  row.read_attribute("upgrade_type_description"),
+                call_status: row.call_status,
+                confidence: row.confidence,
+                evidence_text: row.raw_json&.dig("evidence_text"),
+                classifier_notes:
+                  row.raw_json&.dig("classification_explanation"),
+                updated_at: row.updated_at
+              }
+            end
+
+        render json: {
+                 rows: rows,
+                 classifier_results: classifier_results
+               },
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: {
+                 rows: [],
+                 error: "Invoice not found"
+               },
+               status: :not_found
+      rescue => e
+        render json: {
+                 rows: [],
+                 error: e.message
+               },
+               status: :unprocessable_entity
+      end
+
       private
+
+      def serialize_revision_request(record)
+        {
+          id: record.id,
+          invoice_version_id: record.invoice_version_id,
+          invoice_versionno: record.invoice_version&.invoice_versionno,
+          revreq_seqno: record.revreq_seqno,
+          message_type: record.message_type,
+          request_text: record.request_text,
+          created_at: record.created_at,
+          updated_at: record.updated_at
+        }
+      end
+
+      def latest_invoice_version!(invoice)
+        ::Claims::InvoiceVersion
+          .where(invoice_id: invoice.id)
+          .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+          .first!
+      end
 
       def current_contractor
         ::Contractor
@@ -177,6 +516,22 @@ module Api
           id: params[:invoice_id].to_s.strip,
           contractor_id: contractor.id
         )
+      end
+
+      def contractor_ingest_run!
+        contractor = current_contractor
+        raise ActiveRecord::RecordNotFound if contractor.nil?
+
+        run = ::Claims::IngestRun.find(params[:ingest_run_id].to_s.strip)
+        has_owned_invoice =
+          ::Claims::Invoice.where(
+            session_id: run.session_id,
+            contractor_id: contractor.id
+          ).exists?
+
+        raise ActiveRecord::RecordNotFound unless has_owned_invoice
+
+        run
       end
     end
   end

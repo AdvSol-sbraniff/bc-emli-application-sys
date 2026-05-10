@@ -6,6 +6,8 @@ require "net/http"
 module Api
   module Claims
     class HelloAiController < ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       skip_before_action :authenticate_user!, only: %i[create]
       skip_before_action :require_confirmation, only: %i[create]
       skip_after_action :verify_authorized, only: %i[create]

@@ -81,7 +81,10 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canUpload = useMemo(() => invoiceId.trim().length > 0 && selectedFiles.length > 0 && !uploading, [invoiceId, selectedFiles, uploading]);
+  const canUpload = useMemo(
+    () => invoiceId.trim().length > 0 && selectedFiles.length > 0 && !uploading,
+    [invoiceId, selectedFiles, uploading],
+  );
 
   const loadData = async () => {
     if (!invoiceId.trim()) {
@@ -132,7 +135,9 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
   const mergeFiles = (incoming: File[]) => {
     const pdfsOnly = incoming.filter((f) => {
       const byType = String(f.type || '').toLowerCase() === 'application/pdf';
-      const byExt = String(f.name || '').toLowerCase().endsWith('.pdf');
+      const byExt = String(f.name || '')
+        .toLowerCase()
+        .endsWith('.pdf');
       return byType || byExt;
     });
 
@@ -174,29 +179,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
       setError(e?.message || 'Failed to upload supporting PDFs.');
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleOpenInvoicePdf = async () => {
-    if (!context?.session_id || !context?.invoice_id) return;
-
-    try {
-      const res = await fetch(
-        `/api/claims/sessions/${encodeURIComponent(context.session_id)}/invoices/${encodeURIComponent(context.invoice_id)}/pdf_url`,
-        {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          credentials: 'include',
-        }
-      );
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      if (!data?.sas_url) throw new Error('Invoice PDF URL not returned.');
-
-      window.open(String(data.sas_url), '_blank', 'noopener,noreferrer');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to open invoice PDF.');
     }
   };
 
@@ -250,17 +232,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
       <ThinBlueTitleBar title="Invoice Supporting Documents" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
-        <Flex justify="flex-end" align="center" mb={4} gap={3} wrap="wrap">
-          <Button
-            colorScheme="blue"
-            leftIcon={<FilePdf size={16} />}
-            onClick={() => void handleOpenInvoicePdf()}
-            isDisabled={!context?.session_id || !context?.invoice_id}
-          >
-            Open Invoice PDF
-          </Button>
-        </Flex>
-
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white" mb={5}>
           <Text fontSize="sm" fontWeight="bold" mb={4}>
             Invoice Context
@@ -271,19 +242,27 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
           ) : (
             <Flex wrap="wrap" gap={6}>
               <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7}>session_created_at</Text>
+                <Text fontSize="xs" opacity={0.7}>
+                  session_created_at
+                </Text>
                 <Text fontSize="sm">{fmtDateOnly(context?.session_created_at)}</Text>
               </Box>
               <Box minW="240px">
-                <Text fontSize="xs" opacity={0.7}>contractor</Text>
+                <Text fontSize="xs" opacity={0.7}>
+                  contractor
+                </Text>
                 <Text fontSize="sm">{context?.contractor_business_name || '—'}</Text>
               </Box>
               <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7}>invoice_created_at</Text>
+                <Text fontSize="xs" opacity={0.7}>
+                  invoice_created_at
+                </Text>
                 <Text fontSize="sm">{fmtTs(context?.invoice_created_at)}</Text>
               </Box>
               <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7}>latest OCR invoice number</Text>
+                <Text fontSize="xs" opacity={0.7}>
+                  latest OCR invoice number
+                </Text>
                 <Text fontSize="sm">{context?.latest_ocr_invoice_number || '—'}</Text>
               </Box>
             </Flex>
@@ -333,32 +312,55 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
               mergeFiles(Array.from(e.dataTransfer.files || []));
             }}
           >
-            <Text fontWeight="bold" mb={2}>Drag and drop PDF files here</Text>
+            <Text fontWeight="bold" mb={2}>
+              Drag and drop PDF files here
+            </Text>
             <Text fontSize="sm" opacity={0.8} mb={4}>
               Files upload directly to this invoice. No staging area is used.
             </Text>
-            <Button variant="outline" leftIcon={<UploadSimple size={16} />} onClick={() => fileInputRef.current?.click()}>
+            <Button
+              variant="outline"
+              leftIcon={<UploadSimple size={16} />}
+              onClick={() => fileInputRef.current?.click()}
+            >
               Select Files
             </Button>
           </Box>
 
           <Box mt={4}>
-            <Text fontSize="xs" opacity={0.7} mb={2}>Selected files</Text>
+            <Text fontSize="xs" opacity={0.7} mb={2}>
+              Selected files
+            </Text>
             {selectedFiles.length ? (
               selectedFiles.map((file) => (
-                <Flex key={`${file.name}:${file.size}:${file.lastModified}`} justify="space-between" align="center" py={1}>
+                <Flex
+                  key={`${file.name}:${file.size}:${file.lastModified}`}
+                  justify="space-between"
+                  align="center"
+                  py={1}
+                >
                   <Text fontSize="sm">{file.name}</Text>
-                  <Text fontSize="xs" opacity={0.7}>{fmtBytes(file.size)}</Text>
+                  <Text fontSize="xs" opacity={0.7}>
+                    {fmtBytes(file.size)}
+                  </Text>
                 </Flex>
               ))
             ) : (
-              <Text fontSize="sm" opacity={0.7}>No files selected.</Text>
+              <Text fontSize="sm" opacity={0.7}>
+                No files selected.
+              </Text>
             )}
           </Box>
 
           <HStack mt={4} spacing={3}>
-            <Button colorScheme="blue" onClick={() => void handleUpload()} isLoading={uploading} isDisabled={!canUpload}>
-              Upload {selectedFiles.length ? `${selectedFiles.length} PDF${selectedFiles.length === 1 ? '' : 's'}` : 'PDFs'}
+            <Button
+              colorScheme="blue"
+              onClick={() => void handleUpload()}
+              isLoading={uploading}
+              isDisabled={!canUpload}
+            >
+              Upload{' '}
+              {selectedFiles.length ? `${selectedFiles.length} PDF${selectedFiles.length === 1 ? '' : 's'}` : 'PDFs'}
             </Button>
             {!!selectedFiles.length && (
               <Button variant="outline" onClick={() => setSelectedFiles([])} isDisabled={uploading}>
@@ -370,19 +372,25 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
 
         {error && (
           <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-            <Text fontSize="sm" color="red.700">{error}</Text>
+            <Text fontSize="sm" color="red.700">
+              {error}
+            </Text>
           </Box>
         )}
 
         {success && (
           <Box mb={4} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-            <Text fontSize="sm" color="green.700">{success}</Text>
+            <Text fontSize="sm" color="green.700">
+              {success}
+            </Text>
           </Box>
         )}
 
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex justify="space-between" align="center" mb={3}>
-            <Text fontSize="sm" fontWeight="bold">Supporting Documents For This Invoice</Text>
+            <Text fontSize="sm" fontWeight="bold">
+              Supporting Documents For This Invoice
+            </Text>
             {loading && <Spinner size="sm" />}
           </Flex>
 
@@ -399,10 +407,14 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
             <Tbody>
               {rows.map((row) => (
                 <Tr key={row.id}>
-                  <Td fontSize="xs" whiteSpace="nowrap">{fmtTs(row.created_at)}</Td>
+                  <Td fontSize="xs" whiteSpace="nowrap">
+                    {fmtTs(row.created_at)}
+                  </Td>
                   <Td fontSize="sm">{row.original_filename || '—'}</Td>
                   <Td fontSize="xs">{row.content_type || '—'}</Td>
-                  <Td isNumeric fontSize="xs">{fmtBytes(row.byte_size)}</Td>
+                  <Td isNumeric fontSize="xs">
+                    {fmtBytes(row.byte_size)}
+                  </Td>
                   <Td>
                     <HStack spacing={2}>
                       <Tooltip label="Open supporting PDF in a new browser tab">
@@ -433,7 +445,9 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
               {!loading && rows.length === 0 && (
                 <Tr>
                   <Td colSpan={5}>
-                    <Text fontSize="sm" opacity={0.7}>No supporting documents uploaded for this invoice yet.</Text>
+                    <Text fontSize="sm" opacity={0.7}>
+                      No supporting documents uploaded for this invoice yet.
+                    </Text>
                   </Td>
                 </Tr>
               )}

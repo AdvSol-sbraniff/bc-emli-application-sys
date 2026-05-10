@@ -3,9 +3,14 @@
 module Api
   module Claims
     class RevisionRequestsAdminController < ApplicationController
-      skip_before_action :authenticate_user!, only: %i[index show create update destroy]
-      skip_before_action :require_confirmation, only: %i[index show create update destroy]
-      skip_after_action :verify_authorized, only: %i[index show create update destroy]
+      include Api::Claims::Concerns::AdminAuthorization
+
+      skip_before_action :authenticate_user!,
+                         only: %i[index show create update destroy]
+      skip_before_action :require_confirmation,
+                         only: %i[index show create update destroy]
+      skip_after_action :verify_authorized,
+                        only: %i[index show create update destroy]
       skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[index show create update destroy]
 
@@ -14,31 +19,28 @@ module Api
         per = clamp_int(params[:per], 25, 1, 200)
         page = clamp_int(params[:page], 1, 1, 10_000)
         q = params[:q].to_s.strip
-        revision_status = params[:revision_request_status].to_s.strip
         session_id = params[:session_id].to_s.strip
         invoice_id = params[:invoice_id].to_s.strip
-        sort = params[:sort].to_s.strip.presence || "revision_request_updated_at:desc"
+        sort =
+          params[:sort].to_s.strip.presence ||
+            "revision_request_updated_at:desc"
 
-        scope = ::Claims::RevisionRequestGrid.all
+        scope =
+          ::Claims::RevisionRequestGrid.where.not(revision_request_id: nil)
 
         scope = scope.where(session_id: session_id) if session_id.present?
         scope = scope.where(invoice_id: invoice_id) if invoice_id.present?
-        scope = scope.where(revision_request_status: revision_status) if revision_status.present?
 
         if q.present?
           like = "%#{sanitize_sql_like(q)}%"
-          scope = scope.where(
-            <<~SQL.squish,
+          scope = scope.where(<<~SQL.squish, like: like)
               CAST(claims.v_revision_request_grid.session_id AS text) ILIKE :like
               OR CAST(claims.v_revision_request_grid.invoice_id AS text) ILIKE :like
               OR CAST(claims.v_revision_request_grid.invoice_version_id AS text) ILIKE :like
               OR CAST(claims.v_revision_request_grid.revision_request_id AS text) ILIKE :like
-              OR claims.v_revision_request_grid.revision_request_status ILIKE :like
+              OR claims.v_revision_request_grid.revision_request_message_type ILIKE :like
               OR claims.v_revision_request_grid.revision_request_text ILIKE :like
-              OR claims.v_revision_request_grid.revision_request_response_text ILIKE :like
             SQL
-            like: like
-          )
         end
 
         scope = scope.order(order_clause(sort))
@@ -51,10 +53,11 @@ module Api
         contractor_by_invoice = {}
 
         if invoice_ids.any?
-          contractor_by_invoice = ::Claims::InvoiceGrid
-            .where(invoice_id: invoice_ids)
-            .pluck(:invoice_id, :contractor_business_name)
-            .to_h
+          contractor_by_invoice =
+            ::Claims::InvoiceGrid
+              .where(invoice_id: invoice_ids)
+              .pluck(:invoice_id, :contractor_business_name)
+              .to_h
         end
 
         rows_json.each do |r|
@@ -62,22 +65,24 @@ module Api
         end
 
         render json: {
-          rows: rows_json,
-          meta: {
-            total: total,
-            page: page,
-            per: per,
-            sort: sort,
-            filters: {
-              q: q.presence,
-              revision_request_status: revision_status.presence,
-              session_id: session_id.presence,
-              invoice_id: invoice_id.presence
-            }
-          }
-        }, status: :ok
+                 rows: rows_json,
+                 meta: {
+                   total: total,
+                   page: page,
+                   per: per,
+                   sort: sort,
+                   filters: {
+                     q: q.presence,
+                     session_id: session_id.presence,
+                     invoice_id: invoice_id.presence
+                   }
+                 }
+               },
+               status: :ok
       rescue => e
-        Rails.logger.error("[CLAIMS][REVISION_REQUEST_GRID] ERROR: #{e.class}: #{e.message}")
+        Rails.logger.error(
+          "[CLAIMS][REVISION_REQUEST_GRID] ERROR: #{e.class}: #{e.message}"
+        )
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :internal_server_error
       end
@@ -91,6 +96,19 @@ module Api
 
       # POST /api/claims/admin/revision_requests
       def create
+        invoice_version =
+          ::Claims::InvoiceVersion.includes(:invoice).find(
+            create_params[:invoice_version_id]
+          )
+        unless revision_request_create_status?(invoice_version.invoice&.status)
+          render json: {
+                   error:
+                     "Admin messages can only be created while invoice status is admin_review_inbox, in_review, or contractor_revision_inbox."
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
         attempts = 0
 
         begin
@@ -104,7 +122,12 @@ module Api
 
         render json: serialize_record(record), status: :created
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
+      rescue ActiveRecord::RecordNotFound => e
+        render json: { error: e.message }, status: :not_found
       rescue ActiveRecord::NotNullViolation, ActiveRecord::StatementInvalid => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -116,7 +139,10 @@ module Api
 
         render json: serialize_record(record), status: :ok
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_entity
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
       end
 
       # DELETE /api/claims/admin/revision_requests/:id
@@ -133,15 +159,19 @@ module Api
         params.permit(
           :invoice_version_id,
           :requester_id,
-          :status,
-          :request_text,
-          :response_text,
-          :closed_at
+          :message_type,
+          :request_text
         )
       end
 
       def update_params
-        params.permit(:status, :request_text, :response_text, :closed_at)
+        params.permit(:message_type, :request_text)
+      end
+
+      def revision_request_create_status?(status)
+        %w[admin_review_inbox in_review contractor_revision_inbox].include?(
+          status.to_s
+        )
       end
 
       def serialize_record(record)
@@ -150,26 +180,30 @@ module Api
           invoice_version_id: record.invoice_version_id,
           revreq_seqno: record.revreq_seqno,
           requester_id: record.requester_id,
-          status: record.status,
+          message_type: record.message_type,
           request_text: record.request_text,
-          response_text: record.response_text,
-          closed_at: record.closed_at,
           created_at: record.created_at,
           updated_at: record.updated_at
         }
       end
 
       def context_from_grid(record)
-        row = ::Claims::RevisionRequestGrid
-          .where(revision_request_id: record.id)
-          .order(Arel.sql("revision_request_updated_at DESC NULLS LAST"))
-          .first
+        row =
+          ::Claims::RevisionRequestGrid
+            .where(revision_request_id: record.id)
+            .order(Arel.sql("revision_request_updated_at DESC NULLS LAST"))
+            .first
 
         return {} unless row
 
         contractor_name = nil
         if row.invoice_id.present?
-          contractor_name = ::Claims::InvoiceGrid.where(invoice_id: row.invoice_id).limit(1).pluck(:contractor_business_name).first
+          contractor_name =
+            ::Claims::InvoiceGrid
+              .where(invoice_id: row.invoice_id)
+              .limit(1)
+              .pluck(:contractor_business_name)
+              .first
         end
 
         {
@@ -184,7 +218,12 @@ module Api
       end
 
       def clamp_int(value, default, min, max)
-        n = Integer(value) rescue default
+        n =
+          begin
+            Integer(value)
+          rescue StandardError
+            default
+          end
         n = default if n.nil?
         n = min if n < min
         n = max if n > max
@@ -201,12 +240,16 @@ module Api
 
         column =
           case key
-          when "revision_request_updated_at" then "claims.v_revision_request_grid.revision_request_updated_at"
-          when "revision_request_created_at" then "claims.v_revision_request_grid.revision_request_created_at"
-          when "session_created_at" then "claims.v_revision_request_grid.session_created_at"
-          when "invoice_version_updated_at" then "claims.v_revision_request_grid.invoice_version_updated_at"
-          when "revision_request_status" then "claims.v_revision_request_grid.revision_request_status"
-          when "invoice_versionno" then "claims.v_revision_request_grid.invoice_versionno"
+          when "revision_request_updated_at"
+            "claims.v_revision_request_grid.revision_request_updated_at"
+          when "revision_request_created_at"
+            "claims.v_revision_request_grid.revision_request_created_at"
+          when "session_created_at"
+            "claims.v_revision_request_grid.session_created_at"
+          when "invoice_version_updated_at"
+            "claims.v_revision_request_grid.invoice_version_updated_at"
+          when "invoice_versionno"
+            "claims.v_revision_request_grid.invoice_versionno"
           else
             "claims.v_revision_request_grid.revision_request_updated_at"
           end

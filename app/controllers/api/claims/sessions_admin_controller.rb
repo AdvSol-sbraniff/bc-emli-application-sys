@@ -3,6 +3,8 @@
 module Api
   module Claims
     class SessionsAdminController < ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       skip_before_action :authenticate_user!, only: %i[show update]
       skip_before_action :require_confirmation, only: %i[show update]
       skip_after_action :verify_authorized, only: %i[show update]

@@ -32,9 +32,9 @@ import {
   ArrowsClockwise,
   CaretLeft,
   CaretRight,
+  ChatDots,
   Files,
   FilePdf,
-  GitBranch,
   Info,
   MagnifyingGlass,
   Question,
@@ -415,11 +415,13 @@ export function InvoicesAdminScreen() {
     if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
     if (row.session_id) params.set('context_session_id', String(row.session_id));
     if (row.session_created_at) params.set('context_session_created_at', String(row.session_created_at));
-    if (row.session_status) params.set('context_session_status', String(row.session_status));
     if (row.invoice_status) params.set('context_invoice_status', String(row.invoice_status));
     if (row.contractor_business_name)
       params.set('context_contractor_business_name', String(row.contractor_business_name));
     if (row.latest_di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
+    if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
+    if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined)
+      params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
     const url = `/revision-requests-admin?${params.toString()}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -652,10 +654,11 @@ export function InvoicesAdminScreen() {
               {loading && <Spinner size="sm" />}
             </Flex>
 
-            <Table size="sm" minW="980px">
+            <Table size="sm" minW="990px">
               <Thead bg="gray.50">
                 <Tr>
                   <Th>version updated</Th>
+                  <Th w="86px">version #</Th>
                   <Th>contractor</Th>
                   <Th>status</Th>
                   <Th minW="180px">upgrade types</Th>
@@ -663,7 +666,7 @@ export function InvoicesAdminScreen() {
                   <Th minW="160px" textAlign="right">
                     Actions
                   </Th>
-                  <Th minW="260px" textAlign="right">
+                  <Th minW="180px" textAlign="right">
                     Admin Tools
                   </Th>
                 </Tr>
@@ -676,6 +679,12 @@ export function InvoicesAdminScreen() {
                     <Tr key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}>
                       <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
                         {fmtDate(r.latest_invoice_version_updated_at ?? r.invoice_updated_at)}
+                      </Td>
+
+                      <Td whiteSpace="nowrap">
+                        <Badge colorScheme={(r.latest_invoice_versionno ?? 1) > 1 ? 'orange' : 'gray'}>
+                          v{r.latest_invoice_versionno ?? 1}
+                        </Badge>
                       </Td>
 
                       <Td fontSize="sm" whiteSpace="nowrap">
@@ -731,7 +740,7 @@ export function InvoicesAdminScreen() {
                       </Td>
 
                       <Td whiteSpace="nowrap" minW="160px">
-                        <Flex justify="flex-end" align="center" gap={2} wrap="nowrap" minW="max-content">
+                        <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
                           <Tooltip label="Open details drawer">
                             <IconButton
                               aria-label="Open details drawer"
@@ -759,16 +768,12 @@ export function InvoicesAdminScreen() {
                               aria-label="Open revision requests"
                               size="xs"
                               variant="outline"
-                              icon={<GitBranch size={14} />}
+                              icon={<ChatDots size={14} />}
                               onClick={() => handleOpenRevisions(r)}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
-                        </Flex>
-                      </Td>
 
-                      <Td whiteSpace="nowrap" minW="260px">
-                        <Flex justify="flex-end" align="center" gap={2} wrap="nowrap" minW="max-content">
                           <Tooltip label="inspect prior versions of this invoice">
                             <IconButton
                               aria-label="Inspect invoice versions"
@@ -779,7 +784,11 @@ export function InvoicesAdminScreen() {
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
+                        </Flex>
+                      </Td>
 
+                      <Td whiteSpace="nowrap" minW="180px">
+                        <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
                           <Tooltip label="Re-run OCR and AI jobs for this invoice">
                             <IconButton
                               aria-label="Run OCR and AI jobs"
@@ -842,7 +851,7 @@ export function InvoicesAdminScreen() {
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={7}>
+                    <Td colSpan={8}>
                       <Text fontSize="sm" opacity={0.7}>
                         No rows. Adjust filters or click Refresh.
                       </Text>

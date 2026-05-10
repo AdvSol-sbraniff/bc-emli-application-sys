@@ -2,6 +2,8 @@
 module Api
   module Claims
     class ValidationgenaiRulesetsController < Api::ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       # POC: mirror your SessionsController approach (no auth for now)
       skip_before_action :verify_authenticity_token,
                          only: %i[

@@ -43,7 +43,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { useMst } from '../../../setup/root';
 
 //import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs-url";
 //pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -229,12 +228,12 @@ const INVOICE_STATUS_ACTIONS: Array<{
   },
   {
     key: 'request_revision',
-    label: 'Request Revision',
+    label: 'Send to Contractor for Revision',
     validFrom: ['admin_review_inbox', 'in_review'],
     targetStatus: 'contractor_revision_inbox',
     colorScheme: 'orange',
     tooltip:
-      'Use when an invoice in admin_review_inbox or in_review needs contractor fixes or supporting information. Moves status to contractor_revision_inbox.',
+      'Use when an invoice in admin_review_inbox or in_review needs contractor fixes or supporting information. Moves status to contractor_revision_inbox. The actual message to the contractor is handled as a separate revision request record.',
   },
   {
     key: 'approve_pending',
@@ -255,8 +254,6 @@ const INVOICE_STATUS_ACTIONS: Array<{
       'Third approval level. Use after payment has been issued or confirmed for an invoice in approved_pending. Moves status to approved_paid.',
   },
 ];
-
-const CAN_CREATE_REVISION_RECORD_FROM = ['admin_review_inbox', 'in_review'];
 
 // ============================================================
 // SECTION 02.02 - FIELD CATALOG
@@ -372,8 +369,6 @@ export const InvoiceVersionShowScreen = () => {
   const { sessionId, invoiceId, id, invoiceVersionId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { userStore } = useMst();
-  const currentUserId = (userStore as any)?.currentUser?.id ? String((userStore as any).currentUser.id) : '';
   const routeInvoiceVersionId = String(id || invoiceVersionId || '').trim();
   const routeInvoiceId = String(invoiceId || '').trim();
   const isVersionSnapshotRoute = !!routeInvoiceVersionId;
@@ -394,6 +389,7 @@ export const InvoiceVersionShowScreen = () => {
 
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
   const [readData, setReadData] = useState<any>(null);
+  const [invoiceVersionCount, setInvoiceVersionCount] = useState<number | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
 
   const [activeHighlightKey, setActiveHighlightKey] = useState<string>('invoice_id');
@@ -454,8 +450,6 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
   const [lineitems, setLineitems] = useState<any[]>([]);
   const [lineitemsError] = useState<string | null>(null);
-  const [isCreatingRevision, setIsCreatingRevision] = useState<boolean>(false);
-  const [revisionError, setRevisionError] = useState<string | null>(null);
   const [statusActionLoading, setStatusActionLoading] = useState<InvoiceStatusTransition | null>(null);
   const [statusActionError, setStatusActionError] = useState<string | null>(null);
 
@@ -564,6 +558,8 @@ export const InvoiceVersionShowScreen = () => {
 
       const read = json.read ?? null;
       const invoice = json.invoice ?? null;
+      const versionCount = Number(json.invoice_version_count);
+      setInvoiceVersionCount(Number.isFinite(versionCount) && versionCount > 0 ? versionCount : null);
       setReadData(
         read
           ? {
@@ -694,112 +690,26 @@ export const InvoiceVersionShowScreen = () => {
     return () => ro.disconnect();
   }, [showPdf]);
 
-  const openRevisionEditor = (revisionRequestId: string, invoiceVersionId: string) => {
+  const openRevisionMessages = () => {
     const params = new URLSearchParams();
     const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
-    params.set('id', revisionRequestId);
-    params.set('invoice_version_id', invoiceVersionId);
-    if (invoiceRecordId) params.set('invoice_id', invoiceRecordId);
-    if (sessionId) params.set('session_id', String(sessionId));
-    if (readData?.session_created_at) params.set('session_created_at', String(readData.session_created_at));
+    if (!invoiceRecordId) {
+      setStatusActionError('Could not determine invoice_id for messages.');
+      return;
+    }
+
+    params.set('invoice_id', invoiceRecordId);
+    if (sessionId || readData?.session_id) params.set('context_session_id', String(sessionId || readData.session_id));
+    if (readData?.session_created_at) params.set('context_session_created_at', String(readData.session_created_at));
+    if (readData?.invoice_status) params.set('context_invoice_status', String(readData.invoice_status));
     if (readData?.contractor_business_name)
-      params.set('contractor_business_name', String(readData.contractor_business_name));
-    if (readData?.created_at) params.set('invoice_version_created_at', String(readData.created_at));
+      params.set('context_contractor_business_name', String(readData.contractor_business_name));
+    if (readData?.di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(readData.di_ocr_invoice_id));
+    if (readData?.id) params.set('latest_invoice_version_id', String(readData.id));
     if (readData?.invoice_versionno !== null && readData?.invoice_versionno !== undefined) {
-      params.set('invoice_versionno', String(readData.invoice_versionno));
+      params.set('latest_invoice_versionno', String(readData.invoice_versionno));
     }
-    if (readData?.di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(readData.di_ocr_invoice_id));
-    const url = `/revision-request-editor-${params.toString()}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
-  const openDraftRevision = async () => {
-    setRevisionError(null);
-
-    const invoiceVersionId = String(readData?.id || id || '').trim();
-    if (!invoiceVersionId) {
-      setRevisionError('Could not determine invoice_version_id for this screen.');
-      return;
-    }
-
-    if (!currentUserId) {
-      setRevisionError('Could not determine current user for requester_id.');
-      return;
-    }
-
-    const genAiAdvice = String(readData?.genai_admin_advice ?? '').trim();
-    const overallResult = resultLabel(readData?.genai_result);
-    const conf = readData?.genai_overall_confidence;
-
-    const draftText = genAiAdvice
-      ? `Overall (GenAI)\n\n${overallResult} - conf ${conf ?? 0}\n\n${genAiAdvice}`
-      : [
-          `Draft revision request for invoice version ${readData?.invoice_versionno ?? '-'}.`,
-          'Please review OCR/AI findings and update this request before sending.',
-          'Expected contractor action: upload corrected invoice details and respond to this request.',
-        ].join('\n');
-
-    setIsCreatingRevision(true);
-    try {
-      // Reuse existing OPEN revision request for this invoice_version if present.
-      const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
-      if (invoiceRecordId) {
-        const lookupParams = new URLSearchParams();
-        lookupParams.set('invoice_id', invoiceRecordId);
-        lookupParams.set('sort', 'revision_request_updated_at:desc');
-        lookupParams.set('page', '1');
-        lookupParams.set('per', '200');
-
-        const lookupResp = await fetch(`/api/claims/admin/revision_requests-${lookupParams.toString()}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          credentials: 'include',
-        });
-
-        if (lookupResp.ok) {
-          const lookupJson = await lookupResp.json().catch(() => ({}));
-          const rows = Array.isArray(lookupJson?.rows) ? lookupJson.rows : [];
-          const existing = rows.find(
-            (r: any) =>
-              String(r?.invoice_version_id || '') === invoiceVersionId &&
-              String(r?.revision_request_status || '').toUpperCase() === 'OPEN' &&
-              !!r?.revision_request_id,
-          );
-
-          if (existing?.revision_request_id) {
-            openRevisionEditor(String(existing.revision_request_id), invoiceVersionId);
-            return;
-          }
-        }
-      }
-
-      const resp = await fetch('/api/claims/admin/revision_requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          invoice_version_id: invoiceVersionId,
-          requester_id: currentUserId,
-          status: 'OPEN',
-          request_text: draftText,
-          response_text: '',
-          closed_at: null,
-        }),
-      });
-
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        throw new Error(data?.error || data?.message || `Create failed (${resp.status}).`);
-      }
-
-      const createdId = String(data?.id || '').trim();
-      if (!createdId) throw new Error('Create succeeded but no revision request id returned.');
-      openRevisionEditor(createdId, invoiceVersionId);
-    } catch (e: any) {
-      setRevisionError(e?.message || 'Failed to create revision request.');
-    } finally {
-      setIsCreatingRevision(false);
-    }
+    window.open(`/revision-requests-admin?${params.toString()}`, '_blank', 'noopener,noreferrer');
   };
 
   const runStatusTransition = async (transition: InvoiceStatusTransition) => {
@@ -815,10 +725,14 @@ export const InvoiceVersionShowScreen = () => {
       return;
     }
 
+    const revisionReminder =
+      transition === 'request_revision'
+        ? '\n\nReminder: this status move sends the invoice back to the contractor workflow, but the message itself is a separate revision request step. Use the revision request record to tell the contractor what needs to change or what supporting information is needed.'
+        : '';
     const confirmed = window.confirm(
       `${action.label}?\n\nCurrent status: ${invoiceStatusLabel(currentStatus)}\nNew status: ${invoiceStatusLabel(
         action.targetStatus,
-      )}`,
+      )}${revisionReminder}`,
     );
     if (!confirmed) return;
 
@@ -853,7 +767,7 @@ export const InvoiceVersionShowScreen = () => {
       });
 
       if (transition === 'request_revision') {
-        void openDraftRevision();
+        openRevisionMessages();
       }
     } catch (e: any) {
       const message = e?.message || 'Failed to update invoice status.';
@@ -1073,8 +987,13 @@ export const InvoiceVersionShowScreen = () => {
   }, [genAiFields, genAiRulechecks, lineitems, upgradeTypeResults]);
 
   const currentInvoiceStatus = String(readData?.invoice_status || '').trim();
-  const canCreateRevisionRecord =
-    canRunWorkflowActions && CAN_CREATE_REVISION_RECORD_FROM.includes(currentInvoiceStatus);
+  const invoiceVersionNo = Number(readData?.invoice_versionno);
+  const invoiceVersionLabel = Number.isFinite(invoiceVersionNo)
+    ? invoiceVersionCount
+      ? `Version ${invoiceVersionNo} of ${invoiceVersionCount}`
+      : `Version ${invoiceVersionNo}`
+    : null;
+  const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
 
   // ============================================================
   // SECTION 07.01 - MAIN RETURN
@@ -1102,6 +1021,7 @@ export const InvoiceVersionShowScreen = () => {
                 {bookmarkHelpText}
               </Text>
               <Badge colorScheme="gray">Status: {invoiceStatusLabel(currentInvoiceStatus)}</Badge>
+              {invoiceVersionLabel && <Badge colorScheme="teal">{invoiceVersionLabel}</Badge>}
               {isVersionSnapshotRoute && <Badge colorScheme="purple">Fixed version bookmark</Badge>}
               {!isVersionSnapshotRoute && <Badge colorScheme="blue">Latest version bookmark</Badge>}
               <Button size="xs" variant="outline" onClick={() => setShowPdf((v) => !v)}>
@@ -1135,21 +1055,20 @@ export const InvoiceVersionShowScreen = () => {
 
               <Tooltip
                 label={
-                  canCreateRevisionRecord
-                    ? 'Create or open a draft revision record. This does not change invoice status; use Request Revision to move the invoice to contractor_revision_inbox.'
+                  canOpenRevisionMessages
+                    ? 'Open the admin/contractor message thread. Sending a new admin message is available from admin_review_inbox or in_review.'
                     : isVersionSnapshotRoute
                       ? 'Revision actions are disabled for fixed invoice-version snapshots. Open the invoice-level current review bookmark to act on the latest version.'
-                      : 'Create Revision Record is only available when invoice status is admin_review_inbox or in_review.'
+                      : 'Messages are only available on the invoice-level current review bookmark.'
                 }
               >
                 <Button
                   size="xs"
                   variant="outline"
-                  onClick={openDraftRevision}
-                  isLoading={isCreatingRevision}
-                  isDisabled={!canCreateRevisionRecord}
+                  onClick={openRevisionMessages}
+                  isDisabled={!canOpenRevisionMessages}
                 >
-                  Create Revision Record
+                  Messages & Requested Changes
                 </Button>
               </Tooltip>
 
@@ -1165,13 +1084,6 @@ export const InvoiceVersionShowScreen = () => {
                 </Tooltip>
               </Box>
             </Box>
-            {revisionError && (
-              <Box mb="8px">
-                <Text fontSize="xs" color="red.700">
-                  {revisionError}
-                </Text>
-              </Box>
-            )}
             {statusActionError && (
               <Box mb="8px">
                 <Text fontSize="xs" color="red.700">
@@ -2380,7 +2292,8 @@ export const InvoiceVersionShowScreen = () => {
                   Older invoice versions are review history. Workflow status buttons belong on the current invoice only.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  Use the action buttons at the top to screen in, request revisions, approve pending, or mark paid.
+                  Use the action buttons at the top to screen in, send to contractor for revision, approve pending, or
+                  mark paid.
                 </Text>
               </Box>
 
@@ -2392,8 +2305,9 @@ export const InvoiceVersionShowScreen = () => {
                   Screen In moves a submitted invoice from admin_review_inbox to in_review.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  Request Revision moves the invoice to contractor_revision_inbox and opens the revision request
-                  workflow.
+                  Send to Contractor for Revision moves the invoice to contractor_revision_inbox. The message to the
+                  contractor is a separate revision request record so admins can clearly state what must be fixed or
+                  provided.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
                   Approve Pending moves an in-review invoice to approved_pending after admin/supervisor review.

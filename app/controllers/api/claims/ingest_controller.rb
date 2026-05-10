@@ -20,6 +20,8 @@ require "securerandom"
 module Api
   module Claims
     class IngestController < Api::ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       # POC: don’t require login + don’t require policy checks
 
       # ============================================================
@@ -30,7 +32,6 @@ module Api
       skip_before_action :authenticate_user!,
                          only: %i[
                            upload
-                           upload_fix
                            runs_index
                            steps_index
                            steps_by_session_index
@@ -41,10 +42,11 @@ module Api
                            steps_by_invoice_index
                            admin_submit_batch
                          ]
+      skip_before_action :require_claims_admin!, only: %i[upload_fix]
+      before_action :require_upload_fix_actor!, only: %i[upload_fix]
       skip_before_action :require_confirmation,
                          only: %i[
                            upload
-                           upload_fix
                            runs_index
                            steps_index
                            steps_by_session_index
@@ -307,11 +309,16 @@ module Api
             Array(params[:files]) + Array(params[:file])
 
         files = files.flatten.compact
+        validationgenai_ruleset_id =
+          params[:validationgenai_ruleset_id].to_s.strip
+        validationgenai_ruleset_id =
+          resolve_default_ruleset_id_for_run_genai! if validationgenai_ruleset_id.empty?
 
         result =
           ::Claims::Ingest::UploadFixPdf.call(
             invoice_id: invoice_id,
-            files: files
+            files: files,
+            validationgenai_ruleset_id: validationgenai_ruleset_id
           )
 
         render json: result.to_h, status: :ok
@@ -564,7 +571,14 @@ module Api
               }
             end
 
-        classifier_results =
+        classifier_invoice_version_ids =
+          if ingest_run_id
+            scope.distinct.pluck("claims.ingest_step_runs.invoice_version_id")
+          else
+            []
+          end
+
+        classifier_scope =
           ::Claims::InvoiceVersionUpgradeType
             .joins(
               "JOIN claims.invoice_versions iv ON iv.id = claims.invoice_version_upgrade_types.invoice_version_id"
@@ -579,6 +593,14 @@ module Api
             )
             .where("iv.invoice_id = ?", invoice_id)
             .where(source_engine: "classifier")
+
+        classifier_scope =
+          classifier_scope.where(
+            invoice_version_id: classifier_invoice_version_ids
+          )
+
+        classifier_results =
+          classifier_scope
             .order(updated_at: :desc)
             .map do |r|
               {
@@ -850,6 +872,32 @@ module Api
       end
 
       private
+
+      def require_upload_fix_actor!
+        if current_user&.admin? || current_user&.admin_manager? ||
+             current_user&.system_admin?
+          return
+        end
+
+        invoice = ::Claims::Invoice.find_by(id: params[:invoice_id].to_s)
+        allowed =
+          invoice.present? &&
+            ::Contractor
+              .left_joins(:contractor_employees)
+              .where(id: invoice.contractor_id)
+              .where(
+                "contractors.contact_id = :user_id OR contractor_employees.employee_id = :user_id",
+                user_id: current_user&.id
+              )
+              .exists?
+
+        return if allowed
+
+        render json: {
+                 error: "Invoice upload-fix access denied."
+               },
+               status: :forbidden
+      end
 
       def resolve_default_ruleset_id_for_run_genai!
         row =

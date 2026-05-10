@@ -62,6 +62,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       : '/revision-requests-admin';
 
     const isInvoicePdfViewerPath =
+      /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/messages$/.test(path) ||
       /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/review$/.test(path) ||
       /^\/invoices\/[^/]+\/review$/.test(path) ||
       /^\/invoice-versions\/[^/]+\/review$/.test(path) ||
@@ -110,6 +111,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/submission-simulator-admin', title: 'Contractor Draft Simulator' },
       ],
+      '/contractor/upload-invoices': [
+        { href: '/ai-contractor-dashboard', title: 'AI contractor portal' },
+        { href: '/contractor/upload-invoices', title: 'Upload Invoice(s)' },
+      ],
       '/ruleset-editor': [
         { href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') },
         { href: '/ruleset-editor', title: 'Ruleset editor' },
@@ -141,20 +146,33 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
 
     if (isInvoicePdfViewerPath) {
       const isContractorViewer = /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/review$/.test(path);
+      const isContractorMessages = /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/messages$/.test(path);
       const isByVersionViewer =
         /^\/invoice-versions\/[^/]+\/review$/.test(path) || /^\/invoice-versions-by-version\/[^/]+\/read$/.test(path);
       setIncludeHome(false);
-      setBreadcrumbs([
-        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        {
-          href: path,
-          title: isContractorViewer
-            ? 'Contractor Invoice Review'
-            : isByVersionViewer
-              ? 'Invoice Version Snapshot'
-              : 'Invoice Review - Current Version',
-        },
-      ]);
+      setBreadcrumbs(
+        isContractorViewer
+          ? [
+              { href: '/ai-contractor-dashboard', title: 'AI contractor portal' },
+              { href: path, title: 'Contractor Invoice Review' },
+            ]
+          : isContractorMessages
+            ? [
+                { href: '/ai-contractor-dashboard', title: 'AI contractor portal' },
+                {
+                  href: `${path.replace(/\/messages$/, '/review')}?source=portal`,
+                  title: 'Contractor Invoice Review',
+                },
+                { href: path, title: 'Messages & Requested Changes' },
+              ]
+            : [
+                { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+                {
+                  href: path,
+                  title: isByVersionViewer ? 'Invoice Version Snapshot' : 'Invoice Review - Current Version',
+                },
+              ],
+      );
       return;
     }
 

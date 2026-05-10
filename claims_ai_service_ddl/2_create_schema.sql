@@ -463,15 +463,13 @@ CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
   invoice_version_id uuid NOT NULL,
   revreq_seqno       integer NOT NULL,
 
-  requester_id uuid NOT NULL,   -- admin user (public.users.id)
-  status character varying NOT NULL DEFAULT 'OPEN',
+  requester_id uuid NOT NULL,   -- message author (public.users.id)
+  message_type text NOT NULL DEFAULT 'admin_revision_request',
 
-  request_text  text NOT NULL,
-  response_text text NULL,
+  request_text  text NOT NULL,  -- single message body for both admin requests and contractor notes
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
-  closed_at  timestamp(6) without time zone NULL,
 
   CONSTRAINT revision_requests_pkey PRIMARY KEY (id),
 
@@ -481,8 +479,8 @@ CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
   CONSTRAINT fk_revision_requests_requester
     FOREIGN KEY (requester_id) REFERENCES public.users(id),
 
-  CONSTRAINT revision_requests_status_chk
-    CHECK (status IN ('OPEN', 'CLOSED')),
+  CONSTRAINT revision_requests_message_type_chk
+    CHECK (message_type IN ('admin_revision_request', 'contractor_note')),
 
   CONSTRAINT revision_requests_seqno_chk
     CHECK (revreq_seqno >= 1),
@@ -497,8 +495,8 @@ CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_invoice_version_id
 CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_requester_id
   ON claims.admin_revision_requests (requester_id);
 
-CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_status
-  ON claims.admin_revision_requests (status);
+CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_message_type
+  ON claims.admin_revision_requests (message_type);
 
 
 

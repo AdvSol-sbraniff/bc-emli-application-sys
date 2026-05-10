@@ -68,6 +68,8 @@ Rules:
 - Use rule_result="info" when the rule passes, but there is helpful context worth surfacing to the admin/contractor. Info is blue: not a requested fix, not a verification task, and not a risk flag.
 - Use rule_result="warn" when there is no visible contradiction or material failure, but an admin should verify one specific context, supporting document, versioning question, duplicate-history question, or ambiguous value. A warning is targeted review, not a contractor failure.
 - Use rule_result="fail" when visible evidence contradicts the rule, a material requirement is clearly not met, or visible math clearly fails.
+- Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn.
+- For identity and record-matching rules, visible invoice values that clearly identify a different contractor, homeowner/customer, eligibility-code owner, property, claimant, or other matched party than the supplied database record should be fail, not warn.
 - Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice as useful context, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
 - For every info, reason_and_likely_causes must explain why this is helpful context only, why no correction or verification is requested, and what the admin/contractor should understand.
 - For every warn, reason_and_likely_causes must explain exactly what level of admin review is needed, why this is a warning rather than a failure, and what evidence would turn it into pass or fail.

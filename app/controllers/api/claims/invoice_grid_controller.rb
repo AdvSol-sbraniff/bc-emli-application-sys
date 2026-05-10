@@ -3,6 +3,8 @@
 module Api
   module Claims
     class InvoiceGridController < Api::ApplicationController
+      include Api::Claims::Concerns::AdminAuthorization
+
       # POC: no auth/policy for now (match your SessionsController approach)
       skip_before_action :authenticate_user!,
                          only: %i[index destroy status_transition]

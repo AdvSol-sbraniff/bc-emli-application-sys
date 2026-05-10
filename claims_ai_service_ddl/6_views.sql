@@ -399,12 +399,10 @@ SELECT
   rr.invoice_version_id AS revision_request_invoice_version_id,
   rr.revreq_seqno  AS revision_request_seqno,
   rr.requester_id  AS revision_request_requester_id,
-  rr.status        AS revision_request_status,
+  rr.message_type  AS revision_request_message_type,
   rr.request_text  AS revision_request_text,
-  rr.response_text AS revision_request_response_text,
   rr.created_at    AS revision_request_created_at,
-  rr.updated_at    AS revision_request_updated_at,
-  rr.closed_at     AS revision_request_closed_at
+  rr.updated_at    AS revision_request_updated_at
 
 FROM claims.invoice_versions iv
 JOIN claims.invoices i

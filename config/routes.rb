@@ -57,10 +57,22 @@ Rails.application.routes.draw do
     # sbra20260130 claims subsystem (stable bookmark = invoice_id)
     scope module: :claims, path: "claims" do
       get "contractor/invoices", to: "contractor_portal#index"
+      post "contractor/invoices/upload_batch",
+           to: "contractor_portal#upload_batch"
       get "contractor/invoices/:invoice_id/revision_requests",
           to: "contractor_portal#revision_requests"
+      post "contractor/invoices/:invoice_id/revision_requests",
+           to: "contractor_portal#create_revision_request"
+      patch "contractor/invoices/:invoice_id/revision_requests/:id",
+            to: "contractor_portal#update_revision_request"
       post "contractor/invoices/:invoice_id/submit_to_admin",
            to: "contractor_portal#submit_to_admin"
+      get "contractor/ingest/runs/:ingest_run_id",
+          to: "contractor_portal#ingest_run_show"
+      get "contractor/ingest/runs/:ingest_run_id/invoices",
+          to: "contractor_portal#ingest_run_invoices"
+      get "contractor/ingest/invoices/:invoice_id/steps",
+          to: "contractor_portal#ingest_invoice_steps"
 
       # ============================================================
       # SECTION 10 — READ / NAV (existing)
