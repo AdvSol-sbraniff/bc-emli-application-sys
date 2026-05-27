@@ -1,3 +1,44 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:ab108de8fff1155b51a68a473fd66eb396138e348f62ad21d4038e22373250aa
-size 774
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 230 >>
+stream
+BT
+/F1 18 Tf
+72 720 Td
+(UTILITY BILL SUPPORTING DOCUMENT) Tj
+0 -28 Td
+(BC Hydro account statement) Tj
+0 -28 Td
+(Service address: 123 Test Street) Tj
+0 -28 Td
+(Account number: 99887766) Tj
+0 -28 Td
+(Billing period: May 2026) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000521 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+591
+%%EOF
