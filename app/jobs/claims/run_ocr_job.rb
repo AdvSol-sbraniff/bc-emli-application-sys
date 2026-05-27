@@ -13,10 +13,18 @@ module Claims
     # - invoice_version_id (required)
     # - ingest_run_id (optional)  => link to batch run
     # - validationgenai_ruleset_id (optional) => enqueue GenAI after OCR success
+    # - model_id (optional) => DI model, default prebuilt-invoice
+    # - enqueue_genai_after (optional) => whether to queue RunGenaiJob after OCR
+    # - genai_mode (optional) => RunGenaiJob mode when enqueueing
+    # - step_type (optional) => ingest step type
     def perform(
       invoice_version_id,
       ingest_run_id = nil,
-      validationgenai_ruleset_id = nil
+      validationgenai_ruleset_id = nil,
+      model_id = "prebuilt-invoice",
+      enqueue_genai_after = true,
+      genai_mode = "normal",
+      step_type = "ocr"
     )
       Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
 
@@ -32,7 +40,7 @@ module Claims
             .where(
               ingest_run_id: ingest_run_id,
               invoice_version_id: iv.id,
-              step_type: "ocr"
+              step_type: step_type
             )
             .where(status: %w[queued in_progress])
             .order(created_at: :asc)
@@ -44,7 +52,7 @@ module Claims
           ingest_run_id: ingest_run_id,
           session_id: sess.id,
           invoice_version_id: iv.id,
-          step_type: "ocr",
+          step_type: step_type,
           status: "queued",
           error_text: nil,
           created_at: Time.current,
@@ -59,7 +67,10 @@ module Claims
 
       # OCR reruns make all AI-derived outputs stale for this invoice version.
       # Fresh uploads usually have nothing to clear, but admin/manual reruns do.
-      ::Claims::InvoiceVersions::ResetAiOutputs.call(invoice_version_id: iv.id)
+      ::Claims::InvoiceVersions::ResetAiOutputs.call(
+        invoice_version_id: iv.id,
+        preserve_classifier: (genai_mode == "use_existing_classifier")
+      )
 
       # 2) set invoice status
       inv.update!(status: "ocr_in_progress", status_updated_at: Time.current)
@@ -70,8 +81,7 @@ module Claims
 
       req = Net::HTTP::Post.new(uri)
       req["Content-Type"] = "application/json"
-      req.body =
-        JSON.generate(storageKey: iv.storage_key, modelId: "prebuilt-invoice")
+      req.body = JSON.generate(storageKey: iv.storage_key, modelId: model_id)
 
       http = Net::HTTP.new(uri.host, uri.port)
       http.open_timeout = 5
@@ -89,27 +99,44 @@ module Claims
         # 4) persist DI payload
         iv.update!(di_raw_json: di_raw)
 
-        # 4b) populate first-class fields on invoice_versions from di_raw_json
-        result =
-          ::Claims::InvoiceVersions::ApplyDiResult.call(
-            invoice_version_id: iv.id,
-            di_json: di_raw
-          )
+        if model_id == "prebuilt-invoice"
+          # 4b) populate first-class fields on invoice_versions from di_raw_json
+          result =
+            ::Claims::InvoiceVersions::ApplyDiResult.call(
+              invoice_version_id: iv.id,
+              di_json: di_raw
+            )
 
-        # 4c) fail if mapping failed
-        unless result[:ok] || result["ok"]
-          raise "ApplyDiResult failed: #{result[:error] || result["error"] || "unknown error"}"
-        end
+          # 4c) fail if mapping failed
+          unless result[:ok] || result["ok"]
+            raise "ApplyDiResult failed: #{result[:error] || result["error"] || "unknown error"}"
+          end
 
-        # 4d) populate lineitems from di_raw_json
-        li_result =
-          ::Claims::Lineitems::ApplyDiLineitems.call(
-            invoice_version_id: iv.id,
-            di_json: di_raw
-          )
+          # 4d) populate lineitems from di_raw_json
+          li_result =
+            ::Claims::Lineitems::ApplyDiLineitems.call(
+              invoice_version_id: iv.id,
+              di_json: di_raw
+            )
 
-        unless li_result[:ok] || li_result["ok"]
-          raise "ApplyDiLineitems failed: #{li_result[:error] || li_result["error"] || "unknown error"}"
+          unless li_result[:ok] || li_result["ok"]
+            raise "ApplyDiLineitems failed: #{li_result[:error] || li_result["error"] || "unknown error"}"
+          end
+
+          if genai_mode == "use_existing_classifier"
+            classifier_payload =
+              existing_classifier_payload_for(invoice_version_id: iv.id)
+            if classifier_payload.present?
+              classifier_result =
+                ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
+                  invoice_version_id: iv.id,
+                  classifier_payload: classifier_payload
+                )
+              unless classifier_result[:ok]
+                raise "ApplyClassifierResult failed: #{classifier_result.inspect}"
+              end
+            end
+          end
         end
       end
 
@@ -122,18 +149,18 @@ module Claims
       )
       inv.update!(status: "ocr_complete", status_updated_at: Time.current)
 
-      if validationgenai_ruleset_id.present?
-        if ingest_run_id.present?
+      if validationgenai_ruleset_id.present? && enqueue_genai_after
+        if ingest_run_id.present? && genai_mode != "use_existing_classifier"
           Claims::IngestStepRun.find_or_create_by!(
             ingest_run_id: ingest_run_id,
             invoice_version_id: iv.id,
             step_type: "classifier"
-          ) do |queued_classifier|
-            queued_classifier.session_id = sess.id
-            queued_classifier.status = "queued"
-            queued_classifier.error_text = nil
-            queued_classifier.created_at = Time.current
-            queued_classifier.updated_at = Time.current
+          ) do |queued_step|
+            queued_step.session_id = sess.id
+            queued_step.status = "queued"
+            queued_step.error_text = nil
+            queued_step.created_at = Time.current
+            queued_step.updated_at = Time.current
           end
         end
 
@@ -143,12 +170,20 @@ module Claims
           sess.id,
           iv.id,
           validationgenai_ruleset_id,
-          ingest_run_id
+          ingest_run_id,
+          genai_mode
         )
       end
 
       if ingest_run_id.present?
-        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+        if %w[ocr_read ocr_invoice].include?(step_type)
+          Claims::Ingest::AdvanceBundleRun.call(
+            ingest_run_id: ingest_run_id,
+            validationgenai_ruleset_id: validationgenai_ruleset_id
+          )
+        else
+          Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+        end
       end
     rescue => e
       # mark failed (best-effort)
@@ -170,13 +205,37 @@ module Claims
 
       begin
         if ingest_run_id.present?
-          Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+          if %w[ocr_read ocr_invoice].include?(step_type)
+            Claims::Ingest::AdvanceBundleRun.call(
+              ingest_run_id: ingest_run_id,
+              validationgenai_ruleset_id: validationgenai_ruleset_id
+            )
+          else
+            Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+          end
         end
       rescue StandardError
         # ignore
       end
 
       raise
+    end
+
+    private
+
+    def existing_classifier_payload_for(invoice_version_id:)
+      step =
+        Claims::IngestStepRun
+          .where(
+            invoice_version_id: invoice_version_id,
+            step_type: %w[triage_classifier classifier],
+            status: "succeeded"
+          )
+          .order(created_at: :desc)
+          .first
+
+      payload = step&.genai_results_json
+      payload.is_a?(Hash) ? payload : nil
     end
   end
 end

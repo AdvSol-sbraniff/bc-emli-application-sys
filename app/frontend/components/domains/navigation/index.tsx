@@ -36,11 +36,22 @@ const InvoiceVersionShowScreen = lazy(() =>
   import('../invoice-versions').then((module) => ({ default: module.InvoiceVersionShowScreen })),
 );
 const AIAdminScreen = lazy(() => import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })));
-const RulesetEditorScreen = lazy(() => import('../ruleset-editor').then((module) => ({ default: module.default })));
-const RulesetConfigEditorScreen = lazy(() =>
+const ValidationRulesAdminScreen = lazy(() =>
+  import('../validation-rules-admin').then((module) => ({ default: module.default })),
+);
+const ValidationRulesConfigScreen = lazy(() =>
   import('../ruleset-config-editor').then((module) => ({ default: module.default })),
 );
-const RulesetsAdminScreen = lazy(() => import('../rulesets-admin').then((module) => ({ default: module.default })));
+const SupportingDocumentTypesAdminScreen = lazy(() =>
+  import('../supporting-document-types-admin').then((module) => ({ default: module.default })),
+);
+const HeatPumpProductListAdminScreen = lazy(() =>
+  import('../heat-pump-product-list-admin').then((module) => ({ default: module.default })),
+);
+const HpwhProductListAdminScreen = lazy(() =>
+  import('../hpwh-product-list-admin').then((module) => ({ default: module.default })),
+);
+const DownloadsAdminScreen = lazy(() => import('../downloads-admin').then((module) => ({ default: module.default })));
 const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
 
 // the invoicesadmin is in ../invoices-admin/
@@ -817,9 +828,12 @@ const AppRoutes = observer(() => {
           <Route path="/ai-admin" element={<AIAdminScreen />} />
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
-          <Route path="/ruleset-editor" element={<RulesetEditorScreen />} />
-          <Route path="/ruleset-config-editor" element={<RulesetConfigEditorScreen />} />
-          <Route path="/rulesets-admin" element={<RulesetsAdminScreen />} />
+          <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
+          <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />
+          <Route path="/supporting-document-types-admin" element={<SupportingDocumentTypesAdminScreen />} />
+          <Route path="/downloads-admin" element={<DownloadsAdminScreen />} />
+          <Route path="/heat-pump-product-list-admin" element={<HeatPumpProductListAdminScreen />} />
+          <Route path="/hpwh-product-list-admin" element={<HpwhProductListAdminScreen />} />
           <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />

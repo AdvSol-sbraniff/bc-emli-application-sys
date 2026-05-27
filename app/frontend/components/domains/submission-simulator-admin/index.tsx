@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -56,7 +56,7 @@ type RunInvoiceRow = {
   invoice_id: string;
   invoice_status?: string | null;
   invoice_status_updated_at?: string | null;
-  invoice_version_id: string;
+  invoice_version_id?: string | null;
   invoice_versionno?: number | null;
   original_filename?: string | null;
   created_at?: string | null;
@@ -66,10 +66,12 @@ type RunInvoiceRow = {
 type StepRow = {
   id: string;
   ingest_run_id?: string | null;
+  ingest_document_id?: string | null;
   invoice_id?: string | null;
   invoice_version_id?: string | null;
   invoice_versionno?: number | null;
   original_filename?: string | null;
+  document_kind?: string | null;
   invoice_status?: string | null;
   step_type?: string | null;
   status?: string | null;
@@ -236,7 +238,7 @@ export default function SubmissionSimulatorAdminScreen() {
   useEffect(() => setContractorId(contractorIdFromUrl), [contractorIdFromUrl]);
   useEffect(() => setRunId(runIdFromUrl), [runIdFromUrl]);
 
-  const loadContractors = async () => {
+  const loadContractors = useCallback(async () => {
     try {
       const params = new URLSearchParams({ page: '1', per: '200', sort: 'business_name:asc' });
       const res = await fetch(`/api/claims/admin/contractors?${params.toString()}`, {
@@ -250,9 +252,9 @@ export default function SubmissionSimulatorAdminScreen() {
     } catch {
       setContractors([]);
     }
-  };
+  }, []);
 
-  const loadRunHeader = async (id: string) => {
+  const loadRunHeader = useCallback(async (id: string) => {
     if (!id) return;
     setRunError('');
     try {
@@ -268,9 +270,9 @@ export default function SubmissionSimulatorAdminScreen() {
       setRunError(e?.message || 'Failed to load run header.');
       setRunHeader(null);
     }
-  };
+  }, []);
 
-  const loadRunInvoices = async (id: string) => {
+  const loadRunInvoices = useCallback(async (id: string) => {
     if (!id) return;
     setRowsLoading(true);
     setRowsError('');
@@ -291,9 +293,9 @@ export default function SubmissionSimulatorAdminScreen() {
     } finally {
       setRowsLoading(false);
     }
-  };
+  }, [selectedInvoiceId]);
 
-  const loadInvoiceSteps = async (invoiceId: string) => {
+  const loadInvoiceSteps = useCallback(async (invoiceId: string) => {
     if (!invoiceId) return;
     setStepsLoading(true);
     setStepsError('');
@@ -320,28 +322,28 @@ export default function SubmissionSimulatorAdminScreen() {
     } finally {
       setStepsLoading(false);
     }
-  };
+  }, [runId]);
 
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async () => {
     if (!runId) return;
     await Promise.all([loadRunHeader(runId), loadRunInvoices(runId)]);
     if (selectedInvoiceId) await loadInvoiceSteps(selectedInvoiceId);
-  };
+  }, [loadInvoiceSteps, loadRunHeader, loadRunInvoices, runId, selectedInvoiceId]);
 
   useEffect(() => {
-    loadContractors();
-  }, []);
+    void loadContractors();
+  }, [loadContractors]);
 
   useEffect(() => {
     if (!runId) return;
     void loadRunHeader(runId);
     void loadRunInvoices(runId);
-  }, [runId]);
+  }, [loadRunHeader, loadRunInvoices, runId]);
 
   useEffect(() => {
     if (!selectedInvoiceId) return;
     void loadInvoiceSteps(selectedInvoiceId);
-  }, [selectedInvoiceId, runId]);
+  }, [loadInvoiceSteps, selectedInvoiceId, runId]);
 
   const shouldPoll = useMemo(() => {
     const s = String(runHeader?.status || '').toLowerCase();
@@ -354,7 +356,7 @@ export default function SubmissionSimulatorAdminScreen() {
       void refreshAll();
     }, 3000);
     return () => window.clearInterval(id);
-  }, [shouldPoll, runId, selectedInvoiceId]);
+  }, [refreshAll, selectedInvoiceId, shouldPoll, runId]);
 
   const handleRunSubmission = async () => {
     setSubmitLoading(true);
@@ -647,7 +649,7 @@ export default function SubmissionSimulatorAdminScreen() {
           <Tabs variant="line" isFitted colorScheme="gray">
             <TabList>
               <Tab>Overall</Tab>
-              <Tab>Step History for Selected Invoice</Tab>
+              <Tab>Step History for Selected Bundle</Tab>
             </TabList>
             <TabPanels>
               <TabPanel px={0}>
@@ -776,6 +778,7 @@ export default function SubmissionSimulatorAdminScreen() {
                     <Thead bg="gray.50">
                       <Tr>
                         <Th>created</Th>
+                        <Th>document</Th>
                         <Th>run</Th>
                         <Th>step</Th>
                         <Th>state</Th>
@@ -786,6 +789,10 @@ export default function SubmissionSimulatorAdminScreen() {
                       {steps.map((s) => (
                         <Tr key={s.id}>
                           <Td fontSize="xs">{fmtTs(s.created_at)}</Td>
+                          <Td fontSize="xs">
+                            <Text>{s.original_filename || 'â€”'}</Text>
+                            <Text opacity={0.7}>{s.document_kind || 'â€”'}</Text>
+                          </Td>
                           <Td fontFamily="mono" fontSize="xs">
                             {s.ingest_run_id || '—'}
                           </Td>
@@ -797,7 +804,7 @@ export default function SubmissionSimulatorAdminScreen() {
 
                       {!stepsLoading && steps.length === 0 && (
                         <Tr>
-                          <Td colSpan={5}>
+                          <Td colSpan={6}>
                             <Text fontSize="sm" opacity={0.7}>
                               No step rows for current selection.
                             </Text>
@@ -841,7 +848,7 @@ export default function SubmissionSimulatorAdminScreen() {
                   Overall tab
                 </Text>
                 <Text fontSize="sm">
-                  One row per invoice in the selected ingest run. Click a row to inspect its step history.
+                  One row per ingest bundle shell invoice in the selected run. Click it to inspect both staged-file and resolved invoice step history.
                 </Text>
                 <Text fontSize="sm" mt={1}>
                   Progress indicator: spinner means active, green means complete, red means failed.
@@ -852,7 +859,9 @@ export default function SubmissionSimulatorAdminScreen() {
                 <Text fontSize="sm" fontWeight="bold" mb={1}>
                   Step History tab
                 </Text>
-                <Text fontSize="sm">Shows steps for the selected invoice in the current run.</Text>
+                <Text fontSize="sm">
+                  Shows both staged-file steps and the later resolved invoice steps for the selected bundle invoice.
+                </Text>
                 <Text fontSize="sm" mt={1}>
                   State values: queued, in progress, succeeded, failed.
                 </Text>

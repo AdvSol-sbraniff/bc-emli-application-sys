@@ -332,32 +332,11 @@ module Api
       # GET /api/claims/contractor/ingest/runs/:ingest_run_id/invoices
       def ingest_run_invoices
         run = contractor_ingest_run!
-
-        invoice_version_ids =
-          ::Claims::IngestStepRun
-            .where(ingest_run_id: run.id)
-            .distinct
-            .pluck(:invoice_version_id)
-
         rows =
-          ::Claims::InvoiceVersion
-            .joins(:invoice)
-            .where(id: invoice_version_ids)
-            .where("claims.invoices.contractor_id = ?", current_contractor.id)
-            .order(created_at: :asc)
-            .map do |iv|
-              invoice = iv.invoice
-              {
-                invoice_id: invoice.id,
-                invoice_status: invoice.status,
-                invoice_status_updated_at: invoice.status_updated_at,
-                invoice_version_id: iv.id,
-                invoice_versionno: iv.invoice_versionno,
-                original_filename: iv.original_filename,
-                created_at: iv.created_at,
-                updated_at: iv.updated_at
-              }
-            end
+          contractor_ingest_run_invoice_rows(
+            ingest_run_id: run.id,
+            contractor_id: current_contractor.id
+          )
 
         render json: { rows: rows }, status: :ok
       rescue ActiveRecord::RecordNotFound
@@ -382,79 +361,17 @@ module Api
         limit = 200 if limit <= 0
         limit = 500 if limit > 500
 
-        scope =
-          ::Claims::IngestStepRun.joins(
-            "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
-          ).where("iv.invoice_id = ?", invoice.id)
-
-        scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
-
         rows =
-          scope
-            .order(created_at: :desc)
-            .limit(limit)
-            .map do |step|
-              iv = ::Claims::InvoiceVersion.find_by(id: step.invoice_version_id)
-              {
-                id: step.id,
-                ingest_run_id: step.ingest_run_id,
-                session_id: step.session_id,
-                invoice_id: invoice.id,
-                invoice_version_id: step.invoice_version_id,
-                invoice_versionno: iv&.invoice_versionno,
-                original_filename: iv&.original_filename,
-                invoice_status: invoice.status,
-                step_type: step.step_type,
-                status: step.status,
-                error_text: step.error_text,
-                validationgenai_ruleset_id: step.validationgenai_ruleset_id,
-                created_at: step.created_at,
-                updated_at: step.updated_at
-              }
-            end
-
-        classifier_invoice_version_ids =
-          (
-            if ingest_run_id
-              scope.distinct.pluck("claims.ingest_step_runs.invoice_version_id")
-            else
-              []
-            end
+          contractor_ingest_invoice_step_rows(
+            invoice_id: invoice.id,
+            ingest_run_id: ingest_run_id,
+            limit: limit
           )
-
         classifier_results =
-          ::Claims::InvoiceVersionUpgradeType
-            .joins(
-              "JOIN claims.invoice_versions iv ON iv.id = claims.invoice_version_upgrade_types.invoice_version_id"
-            )
-            .joins(
-              "JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
-            )
-            .select(
-              "claims.invoice_version_upgrade_types.*",
-              "iut.upgrade_type_key AS upgrade_type_key",
-              "iut.description AS upgrade_type_description"
-            )
-            .where("iv.invoice_id = ?", invoice.id)
-            .where(source_engine: "classifier")
-            .where(invoice_version_id: classifier_invoice_version_ids)
-            .order(updated_at: :desc)
-            .map do |row|
-              {
-                id: row.id,
-                invoice_version_id: row.invoice_version_id,
-                invoice_upgrade_type_id: row.invoice_upgrade_type_id,
-                upgrade_type_key: row.read_attribute("upgrade_type_key"),
-                upgrade_type_description:
-                  row.read_attribute("upgrade_type_description"),
-                call_status: row.call_status,
-                confidence: row.confidence,
-                evidence_text: row.raw_json&.dig("evidence_text"),
-                classifier_notes:
-                  row.raw_json&.dig("classification_explanation"),
-                updated_at: row.updated_at
-              }
-            end
+          contractor_ingest_invoice_classifier_results(
+            invoice_id: invoice.id,
+            ingest_run_id: ingest_run_id
+          )
 
         render json: {
                  rows: rows,
@@ -476,6 +393,229 @@ module Api
       end
 
       private
+
+      def contractor_ingest_run_invoice_rows(ingest_run_id:, contractor_id:)
+        rows_by_invoice_id = {}
+
+        documents =
+          ::Claims::IngestDocument
+            .where(ingest_run_id: ingest_run_id, contractor_id: contractor_id)
+            .where.not(resolved_invoice_id: nil)
+            .order(created_at: :asc)
+            .to_a
+
+        documents.group_by(&:resolved_invoice_id).each do |invoice_id, docs|
+          invoice = ::Claims::Invoice.find_by(id: invoice_id, contractor_id: contractor_id)
+          next if invoice.nil?
+
+          primary_doc =
+            docs.find { |doc| doc.document_kind == "invoice" } || docs.first
+          invoice_version =
+            ::Claims::InvoiceVersion.find_by(
+              id:
+                primary_doc&.resolved_invoice_version_id ||
+                  docs.map(&:resolved_invoice_version_id).compact.first
+            )
+
+          rows_by_invoice_id[invoice.id] = {
+            invoice_id: invoice.id,
+            invoice_status: invoice.status,
+            invoice_status_updated_at: invoice.status_updated_at,
+            invoice_version_id: invoice_version&.id,
+            invoice_versionno: invoice_version&.invoice_versionno,
+            original_filename:
+              primary_doc&.original_filename || invoice_version&.original_filename,
+            created_at: invoice.created_at,
+            updated_at: invoice.updated_at
+          }
+        end
+
+        invoice_version_ids =
+          ::Claims::IngestStepRun
+            .where(ingest_run_id: ingest_run_id)
+            .where.not(invoice_version_id: nil)
+            .distinct
+            .pluck(:invoice_version_id)
+
+        ::Claims::InvoiceVersion
+          .joins(:invoice)
+          .where(id: invoice_version_ids)
+          .where("claims.invoices.contractor_id = ?", contractor_id)
+          .order(created_at: :asc)
+          .each do |invoice_version|
+            invoice = invoice_version.invoice
+            rows_by_invoice_id[invoice.id] ||= {
+              invoice_id: invoice.id,
+              invoice_status: invoice.status,
+              invoice_status_updated_at: invoice.status_updated_at,
+              invoice_version_id: invoice_version.id,
+              invoice_versionno: invoice_version.invoice_versionno,
+              original_filename: invoice_version.original_filename,
+              created_at: invoice.created_at,
+              updated_at: invoice.updated_at
+            }
+          end
+
+        rows_by_invoice_id.values.sort_by { |row| row[:created_at] || Time.at(0) }
+      end
+
+      def contractor_ingest_invoice_step_rows(invoice_id:, ingest_run_id:, limit:)
+        invoice = contractor_invoice!
+        document_scope =
+          ::Claims::IngestDocument.where(resolved_invoice_id: invoice.id)
+        document_scope =
+          document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+        documents = document_scope.order(created_at: :asc).to_a
+        documents_by_id = documents.index_by(&:id)
+
+        document_steps =
+          if documents_by_id.empty?
+            []
+          else
+            scope =
+              ::Claims::IngestStepRun.where(
+                ingest_document_id: documents_by_id.keys
+              )
+            scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+            scope.to_a
+          end
+
+        invoice_step_scope =
+          ::Claims::IngestStepRun.joins(
+            "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
+          ).where("iv.invoice_id = ?", invoice.id)
+        invoice_step_scope =
+          invoice_step_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+        invoice_steps = invoice_step_scope.to_a
+        invoice_versions_by_id =
+          ::Claims::InvoiceVersion
+            .where(id: invoice_steps.map(&:invoice_version_id).compact.uniq)
+            .index_by(&:id)
+
+        rows =
+          document_steps.map do |step|
+            document = documents_by_id[step.ingest_document_id]
+            {
+              id: step.id,
+              ingest_run_id: step.ingest_run_id,
+              session_id: step.session_id,
+              invoice_id: invoice.id,
+              ingest_document_id: step.ingest_document_id,
+              invoice_version_id: document&.resolved_invoice_version_id,
+              invoice_versionno: nil,
+              original_filename: document&.original_filename,
+              document_kind: document&.document_kind,
+              invoice_status: invoice.status,
+              step_type: step.step_type,
+              status: step.status,
+              error_text: step.error_text,
+              validationgenai_ruleset_id: step.validationgenai_ruleset_id,
+              created_at: step.created_at,
+              updated_at: step.updated_at
+            }
+          end
+
+        rows.concat(
+          invoice_steps.map do |step|
+            invoice_version = invoice_versions_by_id[step.invoice_version_id]
+            {
+              id: step.id,
+              ingest_run_id: step.ingest_run_id,
+              session_id: step.session_id,
+              invoice_id: invoice.id,
+              ingest_document_id: nil,
+              invoice_version_id: step.invoice_version_id,
+              invoice_versionno: invoice_version&.invoice_versionno,
+              original_filename: invoice_version&.original_filename,
+              document_kind: "invoice",
+              invoice_status: invoice.status,
+              step_type: step.step_type,
+              status: step.status,
+              error_text: step.error_text,
+              validationgenai_ruleset_id: step.validationgenai_ruleset_id,
+              created_at: step.created_at,
+              updated_at: step.updated_at
+            }
+          end
+        )
+
+        rows.sort_by { |row| row[:created_at] || Time.at(0) }.reverse.first(limit)
+      end
+
+      def contractor_ingest_invoice_classifier_results(invoice_id:, ingest_run_id:)
+        invoice_version_ids =
+          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).pluck(:id)
+
+        if invoice_version_ids.any?
+          rows =
+            ::Claims::InvoiceVersionUpgradeType
+              .joins(
+                "JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
+              )
+              .select(
+                "claims.invoice_version_upgrade_types.*",
+                "iut.upgrade_type_key AS upgrade_type_key",
+                "iut.description AS upgrade_type_description"
+              )
+              .where(invoice_version_id: invoice_version_ids, source_engine: "classifier")
+              .order(updated_at: :desc)
+              .map do |row|
+                {
+                  id: row.id,
+                  invoice_version_id: row.invoice_version_id,
+                  invoice_upgrade_type_id: row.invoice_upgrade_type_id,
+                  upgrade_type_key: row.read_attribute("upgrade_type_key"),
+                  upgrade_type_description:
+                    row.read_attribute("upgrade_type_description"),
+                  call_status: row.call_status,
+                  confidence: row.confidence,
+                  evidence_text: row.raw_json&.dig("evidence_text"),
+                  classifier_notes:
+                    row.raw_json&.dig("classification_explanation"),
+                  updated_at: row.updated_at
+                }
+              end
+          return rows if rows.any?
+        end
+
+        document_scope =
+          ::Claims::IngestDocument.where(
+            resolved_invoice_id: invoice_id,
+            document_kind: "invoice"
+          )
+        document_scope =
+          document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+        document = document_scope.order(created_at: :asc).first
+        payload = document&.classifier_raw_json
+        return [] unless payload.is_a?(Hash)
+
+        detected =
+          payload["detected_upgrade_types"] || payload[:detected_upgrade_types]
+        return [] unless detected.is_a?(Array)
+
+        detected.filter_map.with_index do |row, index|
+          next unless row.is_a?(Hash)
+
+          {
+            id: "staged-classifier-#{index}",
+            invoice_version_id: document&.resolved_invoice_version_id,
+            invoice_upgrade_type_id: nil,
+            upgrade_type_key:
+              (row["upgrade_type_key"] || row[:upgrade_type_key]).to_s.presence,
+            upgrade_type_description:
+              (row["upgrade_type_description"] || row[:upgrade_type_description])
+                .to_s
+                .presence,
+            call_status: "classified",
+            confidence: row["confidence"] || row[:confidence],
+            evidence_text: row["evidence_text"] || row[:evidence_text],
+            classifier_notes:
+              row["classification_explanation"] ||
+                row[:classification_explanation],
+            updated_at: document&.classified_at || document&.updated_at
+          }
+        end
+      end
 
       def serialize_revision_request(record)
         {

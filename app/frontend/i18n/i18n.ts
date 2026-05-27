@@ -2148,7 +2148,7 @@ const options = {
           sessionsAdminTitle: 'Sessions admin',
           invoicesAdminTitle: 'Invoices admin',
           uploadInvoiceAdminTitle: 'Upload invoice',
-          rulesetsAdminTitle: 'Rulesets admin',
+          rulesetsAdminTitle: 'GenAI Rulesets Admin',
           eligibilityAdminTitle: 'Eligibility admin',
           usersAdminTitle: 'Users admin',
           configureUsersTitle: 'Configure users',

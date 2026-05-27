@@ -3,21 +3,28 @@
 module Claims
   module InvoiceVersions
     class ResetAiOutputs
-      def self.call(invoice_version_id:)
-        new(invoice_version_id: invoice_version_id).call
+      def self.call(invoice_version_id:, preserve_classifier: false)
+        new(
+          invoice_version_id: invoice_version_id,
+          preserve_classifier: preserve_classifier
+        ).call
       end
 
-      def initialize(invoice_version_id:)
+      def initialize(invoice_version_id:, preserve_classifier:)
         @invoice_version_id = invoice_version_id
+        @preserve_classifier = preserve_classifier
       end
 
       def call
         invoice_version = ::Claims::InvoiceVersion.find(@invoice_version_id)
 
         ::Claims::InvoiceVersion.transaction do
-          ::Claims::InvoiceVersionUpgradeType.where(
-            invoice_version_id: invoice_version.id
-          ).delete_all
+          scope =
+            ::Claims::InvoiceVersionUpgradeType.where(
+              invoice_version_id: invoice_version.id
+            )
+          scope = scope.where.not(source_engine: "classifier") if @preserve_classifier
+          scope.delete_all
 
           ::Claims::InvoiceVersionLocatedField.where(
             invoice_version_id: invoice_version.id
@@ -30,7 +37,9 @@ module Claims
           invoice_version.update!(
             genai_overall_confidence: 0,
             genai_result: nil,
-            genai_admin_advice: nil
+            genai_admin_advice: nil,
+            ahri_product_id: nil,
+            neea_product_id: nil
           )
         end
       end

@@ -351,12 +351,7 @@ const openJobAdmin = () => {
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Session status</Text>
-                <Text as="div" fontSize="sm" fontFamily="mono">{selectedSession?.status ?? '—'}</Text>
-              </Box>
-
-              <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Submitted at</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>Representative invoice submitted at</Text>
                 <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.submitted_at)}</Text>
               </Box>
 

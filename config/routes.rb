@@ -180,18 +180,40 @@ Rails.application.routes.draw do
       # SECTION 60 — RULESET EDITOR (admin)
       # ============================================================
 
-      get "admin/validationgenai_rulesets/:id",
-          to: "validationgenai_rulesets#show"
-      patch "admin/validationgenai_rulesets/:id",
-            to: "validationgenai_rulesets#update"
-      post "admin/validationgenai_rulesets",
-           to: "validationgenai_rulesets#create"
+      get "admin/ahri_products",
+          to: "ahri_products_admin#index"
+      get "admin/ahri_products/import_status",
+          to: "ahri_products_admin#import_status"
+      post "admin/ahri_products/import_downloaded_pdf",
+           to: "ahri_products_admin#import_downloaded_pdf"
+      get "admin/neea_products",
+          to: "neea_products_admin#index"
+      get "admin/neea_products/import_status",
+          to: "neea_products_admin#import_status"
+      post "admin/neea_products/import_downloaded_pdf",
+           to: "neea_products_admin#import_downloaded_pdf"
+      get "admin/validation_rules",
+          to: "validation_rules_admin#index"
+      get "admin/validation_rules/upgrade_types",
+          to: "validation_rules_admin#upgrade_types"
       get "admin/validationgenai_config",
           to: "validationgenai_rulesets#config_show"
       patch "admin/validationgenai_config",
             to: "validationgenai_rulesets#config_update"
-      get "admin/invoice_upgrade_types",
-          to: "validationgenai_rulesets#upgrade_types"
+      get "admin/supporting_document_types",
+          to: "supporting_document_types_admin#index"
+      get "admin/supporting_document_types/:id",
+          to: "supporting_document_types_admin#show"
+      post "admin/supporting_document_types",
+           to: "supporting_document_types_admin#create"
+      patch "admin/supporting_document_types/:id",
+            to: "supporting_document_types_admin#update"
+      get "admin/validation_rules/:record_type/:id/history",
+          to: "validation_rules_admin#history"
+      post "admin/validation_rules/:record_type",
+           to: "validation_rules_admin#create"
+      patch "admin/validation_rules/:record_type/:id",
+            to: "validation_rules_admin#update"
 
       get "admin/contractors", to: "contractors_admin#index"
       post "admin/hello_ai", to: "hello_ai#create"
@@ -202,7 +224,6 @@ Rails.application.routes.draw do
           to: "sessions_with_contractors_admin#index"
       delete "admin/sessions_with_contractors/:id",
              to: "sessions_with_contractors_admin#destroy"
-      get "admin/validationgenai_rulesets", to: "validationgenai_rulesets#index"
       get "admin/users", to: "users_admin#index"
       get "admin/users/:id", to: "users_admin#show"
       post "admin/users", to: "users_admin#create"

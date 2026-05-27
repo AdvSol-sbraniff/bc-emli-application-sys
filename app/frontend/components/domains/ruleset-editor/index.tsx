@@ -1,4 +1,10 @@
 import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
   Box,
   Button,
   Container,
@@ -19,7 +25,7 @@ import {
   Tooltip,
   useDisclosure,
 } from '@chakra-ui/react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowCounterClockwise, FloppyDiskBack, Question } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
@@ -31,6 +37,7 @@ type RulesetDto = {
   upgrade_type_description?: string | null;
   ruleset_shortname: string;
   user_record1: string | null;
+  is_current?: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -51,16 +58,23 @@ export default function RulesetEditorScreen() {
   const id = useQueryParam('id');
   const mode = useQueryParam('mode');
   const duplicateFromId = useQueryParam('duplicate_from');
-  const isCreateMode = mode === 'create';
+  const isCreateMode = mode === 'create' && Boolean(duplicateFromId);
+  const isUnsupportedCreateMode = mode === 'create' && !duplicateFromId;
+  const requestedReadOnlyMode = mode === 'view' || mode === 'read';
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [ruleset, setRuleset] = useState<RulesetDto | null>(null);
   const [upgradeTypes, setUpgradeTypes] = useState<UpgradeTypeDto[]>([]);
 
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
+  const {
+    isOpen: isSaveWarningOpen,
+    onOpen: onSaveWarningOpen,
+    onClose: onSaveWarningClose,
+  } = useDisclosure();
+  const cancelSaveRef = useRef<HTMLButtonElement | null>(null);
 
   const [shortname, setShortname] = useState<string>('');
   const [invoiceUpgradeTypeId, setInvoiceUpgradeTypeId] = useState<string>('');
@@ -75,6 +89,8 @@ export default function RulesetEditorScreen() {
     shortname !== initialValues.shortname ||
     invoiceUpgradeTypeId !== initialValues.invoiceUpgradeTypeId ||
     userRecord1 !== initialValues.userRecord1;
+  const isHistoricalRuleset = !isCreateMode && ruleset?.is_current === false;
+  const isReadOnly = requestedReadOnlyMode || isHistoricalRuleset;
 
   function buildDuplicateShortname(originalShortname?: string | null): string {
     const base = (originalShortname || '').trim();
@@ -103,51 +119,45 @@ export default function RulesetEditorScreen() {
   async function load() {
     setIsLoading(true);
     setError(null);
-    setInfoMessage(null);
 
     try {
       const loadedUpgradeTypes = await loadUpgradeTypes();
       const defaultUpgradeTypeId = loadedUpgradeTypes[0]?.id || '';
 
-      if (isCreateMode) {
-        if (duplicateFromId) {
-          const resp = await fetch(`/api/claims/admin/validationgenai_rulesets/${duplicateFromId}`, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-            credentials: 'include',
-          });
-
-          if (!resp.ok) {
-            const txt = await resp.text();
-            throw new Error(`GET failed (${resp.status}): ${txt}`);
-          }
-
-          const sourceData: RulesetDto = await resp.json();
-          const duplicatedShortname = buildDuplicateShortname(sourceData.ruleset_shortname);
-
-          setRuleset(null);
-          setShortname(duplicatedShortname);
-          setInvoiceUpgradeTypeId(sourceData.invoice_upgrade_type_id || defaultUpgradeTypeId);
-          setUserRecord1(sourceData.user_record1 ?? '');
-          setInitialValues({
-            shortname: duplicatedShortname,
-            invoiceUpgradeTypeId: sourceData.invoice_upgrade_type_id || defaultUpgradeTypeId,
-            userRecord1: sourceData.user_record1 ?? '',
-          });
-          setInfoMessage(`Create mode from duplicate of ruleset: ${sourceData.id}`);
-          return;
-        }
-
-        setRuleset(null);
-        setShortname('changeme');
-        setInvoiceUpgradeTypeId(defaultUpgradeTypeId);
-        setUserRecord1('');
+      if (isUnsupportedCreateMode) {
         setInitialValues({
-          shortname: 'changeme',
-          invoiceUpgradeTypeId: defaultUpgradeTypeId,
+          shortname: '',
+          invoiceUpgradeTypeId: '',
           userRecord1: '',
         });
-        setInfoMessage('Create mode: no database row is inserted until Save is clicked.');
+        setError('Standalone ruleset creation is disabled. Duplicate an existing ruleset instead.');
+        return;
+      }
+
+      if (isCreateMode) {
+        const resp = await fetch(`/api/claims/admin/validationgenai_rulesets/${duplicateFromId}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        });
+
+        if (!resp.ok) {
+          const txt = await resp.text();
+          throw new Error(`GET failed (${resp.status}): ${txt}`);
+        }
+
+        const sourceData: RulesetDto = await resp.json();
+        const duplicatedShortname = buildDuplicateShortname(sourceData.ruleset_shortname);
+
+        setRuleset(null);
+        setShortname(duplicatedShortname);
+        setInvoiceUpgradeTypeId(sourceData.invoice_upgrade_type_id || defaultUpgradeTypeId);
+        setUserRecord1(sourceData.user_record1 ?? '');
+        setInitialValues({
+          shortname: duplicatedShortname,
+          invoiceUpgradeTypeId: sourceData.invoice_upgrade_type_id || defaultUpgradeTypeId,
+          userRecord1: sourceData.user_record1 ?? '',
+        });
         return;
       }
 
@@ -185,6 +195,7 @@ export default function RulesetEditorScreen() {
   }
 
   async function save() {
+    if (isReadOnly) return;
     if (!isCreateMode && !id) return;
 
     const trimmedShortname = shortname.trim();
@@ -199,7 +210,6 @@ export default function RulesetEditorScreen() {
 
     setIsSaving(true);
     setError(null);
-    setInfoMessage(null);
 
     try {
       const endpoint = isCreateMode
@@ -207,16 +217,17 @@ export default function RulesetEditorScreen() {
         : `/api/claims/admin/validationgenai_rulesets/${id}`;
 
       const method = isCreateMode ? 'POST' : 'PATCH';
+      const body: Record<string, string> = {
+        ruleset_shortname: trimmedShortname,
+        user_record1: userRecord1,
+      };
+      if (isCreateMode) body.invoice_upgrade_type_id = invoiceUpgradeTypeId;
 
       const resp = await fetch(endpoint, {
         method,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          ruleset_shortname: trimmedShortname,
-          invoice_upgrade_type_id: invoiceUpgradeTypeId,
-          user_record1: userRecord1,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!resp.ok) {
@@ -245,6 +256,22 @@ export default function RulesetEditorScreen() {
     }
   }
 
+  function requestSave() {
+    if (isReadOnly) return;
+
+    if (!isCreateMode && isDirty) {
+      onSaveWarningOpen();
+      return;
+    }
+
+    save();
+  }
+
+  async function confirmExistingRulesetSave() {
+    onSaveWarningClose();
+    await save();
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,48 +279,47 @@ export default function RulesetEditorScreen() {
 
   return (
     <Box>
-      <ThinBlueTitleBar title="Ruleset Editor" />
+      <ThinBlueTitleBar title={isReadOnly ? 'Ruleset Viewer' : 'Ruleset Editor'} />
 
       <Container maxW="6xl" py={6}>
         {!id && !isCreateMode && (
           <Box p={4} borderWidth="1px" borderRadius="md">
-            <Text fontWeight="bold">Missing id</Text>
-            <Text>Use: /ruleset-editor?id=&lt;uuid&gt; or /ruleset-editor?mode=create</Text>
+            <Text fontWeight="bold">{isUnsupportedCreateMode ? 'Standalone creation disabled' : 'Missing id'}</Text>
+            <Text>Open an existing ruleset, or use Duplicate from the ruleset admin grid.</Text>
           </Box>
         )}
 
         {(id || isCreateMode) && (
           <Box>
             <Flex align="center" justify="space-between" mb={4}>
-              <Heading size="md">{isCreateMode ? 'Ruleset (Create)' : 'Ruleset'}</Heading>
+              <Heading size="md">
+                {isReadOnly ? 'Ruleset (Read only)' : isCreateMode ? 'Ruleset (Duplicate)' : 'Ruleset'}
+              </Heading>
 
               <Flex gap={2}>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => window.open('/ruleset-config-editor', '_blank', 'noopener,noreferrer')}
-                >
-                  Edit AI system config
-                </Button>
-                <Tooltip label="Undo unsaved changes by reloading the latest saved values from the database.">
-                  <IconButton
-                    aria-label="Undo unsaved changes"
-                    icon={<ArrowCounterClockwise size={18} />}
-                    variant="outline"
-                    onClick={load}
-                    isDisabled={isLoading || isSaving}
-                  />
-                </Tooltip>
-                <Tooltip label="Save ruleset changes">
-                  <IconButton
-                    aria-label="Save ruleset"
-                    icon={<FloppyDiskBack size={18} />}
-                    colorScheme="blue"
-                    onClick={save}
-                    isLoading={isSaving}
-                    isDisabled={(!isDirty && !isCreateMode) || isLoading}
-                  />
-                </Tooltip>
+                {!isReadOnly && (
+                  <>
+                    <Tooltip label="Undo unsaved changes by reloading the latest saved values from the database.">
+                      <IconButton
+                        aria-label="Undo unsaved changes"
+                        icon={<ArrowCounterClockwise size={18} />}
+                        variant="outline"
+                        onClick={load}
+                        isDisabled={isLoading || isSaving}
+                      />
+                    </Tooltip>
+                    <Tooltip label="Save ruleset changes">
+                      <IconButton
+                        aria-label="Save ruleset"
+                        icon={<FloppyDiskBack size={18} />}
+                        colorScheme="blue"
+                        onClick={requestSave}
+                        isLoading={isSaving}
+                        isDisabled={(!isDirty && !isCreateMode) || isLoading}
+                      />
+                    </Tooltip>
+                  </>
+                )}
                 <Tooltip label="Help: ruleset layers and output mapping">
                   <IconButton
                     aria-label="Open ruleset editor help"
@@ -304,12 +330,6 @@ export default function RulesetEditorScreen() {
                 </Tooltip>
               </Flex>
             </Flex>
-
-            {infoMessage && (
-              <Box p={3} borderWidth="1px" borderRadius="md" mb={4} bg="blue.50" borderColor="blue.200">
-                <Text>{infoMessage}</Text>
-              </Box>
-            )}
 
             {isLoading && (
               <Flex align="center" gap={3} p={4}>
@@ -327,24 +347,41 @@ export default function RulesetEditorScreen() {
 
             {!isLoading && !error && (
               <Box>
+                {isReadOnly && (
+                  <Box p={4} borderWidth="1px" borderRadius="md" mb={4} bg="gray.50" borderColor="gray.200">
+                    <Text fontWeight="bold" mb={1}>
+                      {isHistoricalRuleset ? 'Read-only historical ruleset' : 'Read-only ruleset view'}
+                    </Text>
+                    <Text fontSize="sm" opacity={0.8}>
+                      {isHistoricalRuleset
+                        ? 'This ruleset is not the current runtime version for its upgrade type. It is locked so historical evaluations remain understandable and reproducible.'
+                        : 'This ruleset was opened in view mode. Open the current ruleset from GenAI Rulesets Admin if an edit is required.'}
+                    </Text>
+                  </Box>
+                )}
+
                 <Box mb={4}>
                   <Text fontWeight="bold" mb={1}>
                     upgrade type
                   </Text>
-                  <Select value={invoiceUpgradeTypeId} onChange={(e) => setInvoiceUpgradeTypeId(e.target.value)}>
+                  <Select value={invoiceUpgradeTypeId} isDisabled>
                     {upgradeTypes.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.description || t.upgrade_type_key} ({t.upgrade_type_key})
                       </option>
                     ))}
                   </Select>
+                  <Text fontSize="xs" opacity={0.7} mt={1}>
+                    Upgrade type is locked. Duplicate the correct ruleset instead of moving a ruleset between upgrade
+                    types.
+                  </Text>
                 </Box>
 
                 <Box mb={4}>
                   <Text fontWeight="bold" mb={1}>
                     ruleset_shortname
                   </Text>
-                  <Input value={shortname} onChange={(e) => setShortname(e.target.value)} />
+                  <Input value={shortname} onChange={(e) => setShortname(e.target.value)} isReadOnly={isReadOnly} />
                 </Box>
 
                 <Box borderWidth="1px" borderRadius="lg" p={3} mb={4} bg="white">
@@ -355,12 +392,17 @@ export default function RulesetEditorScreen() {
                     Located fields and rulechecks for this ruleset. Common invoice evidence now lives in the common
                     ruleset row.
                   </Text>
-                  <Textarea value={userRecord1} onChange={(e) => setUserRecord1(e.target.value)} minH="520px" />
+                  <Textarea
+                    value={userRecord1}
+                    onChange={(e) => setUserRecord1(e.target.value)}
+                    minH="520px"
+                    isReadOnly={isReadOnly}
+                  />
                 </Box>
 
                 <Flex justify="space-between" mt={2}>
                   <Text fontSize="sm" opacity={0.8}>
-                    {isDirty ? 'Unsaved changes' : 'Saved'}
+                    {isReadOnly ? 'Read only' : isDirty ? 'Unsaved changes' : 'Saved'}
                   </Text>
                   <Text fontSize="sm" opacity={0.8}>
                     {ruleset?.updated_at ? `updated_at: ${ruleset.updated_at}` : ''}
@@ -371,6 +413,43 @@ export default function RulesetEditorScreen() {
           </Box>
         )}
       </Container>
+
+      <AlertDialog
+        isOpen={isSaveWarningOpen}
+        leastDestructiveRef={cancelSaveRef}
+        onClose={onSaveWarningClose}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Confirm existing ruleset edit
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              <Text mb={3}>
+                Editing an existing GenAI ruleset changes the rule text that future invoice evaluations will use.
+                Existing evaluations were produced with the previous wording, so changing this row can make historical
+                results harder to interpret or reproduce.
+              </Text>
+              <Text mb={3}>
+                This should normally only be done in a test environment. For production-like use, the safer pattern is
+                to duplicate the ruleset, test the copy, and move forward with the new version instead.
+              </Text>
+              <Text fontWeight="semibold">Only continue if you intentionally want to update this existing ruleset.</Text>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelSaveRef} onClick={onSaveWarningClose} variant="outline">
+                Cancel
+              </Button>
+              <Button colorScheme="orange" onClick={confirmExistingRulesetSave} ml={3} isLoading={isSaving}>
+                Save existing ruleset
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
 
       <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
         <DrawerOverlay />
@@ -404,7 +483,7 @@ export default function RulesetEditorScreen() {
                   What Happens At Runtime
                 </Heading>
                 <Text fontSize="sm">
-                  The GenAI call receives system_record from AI System Config, then this ruleset's user_record1, then
+                  The GenAI call receives system_record from AI System Config, then this ruleset&apos;s user_record1, then
                   the invoice OCR and case facts. In the multi-type flow, the common ruleset runs as its own call.
                 </Text>
               </Box>

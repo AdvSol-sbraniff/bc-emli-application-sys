@@ -14,6 +14,41 @@
 module Claims
   module GenaiCaseFacts
     class Build
+      CODE_FIELD_DEFINITIONS = {
+        "invoices.submitted_at" => {
+          value_type: "date",
+          path: [:invoices, :submitted_at]
+        },
+        "contractors.business_name" => {
+          value_type: "text",
+          path: [:contractors, :business_name]
+        },
+        "contractors.address" => {
+          value_type: "text",
+          path: [:contractors, :address]
+        },
+        "users_eligibilitycodes.eligibility_code" => {
+          value_type: "text",
+          path: [:users_eligibilitycodes, :eligibility_code]
+        },
+        "users_eligibilitycodes.income_level" => {
+          value_type: "number",
+          path: [:users_eligibilitycodes, :income_level]
+        },
+        "users_eligibilitycodes.approved_at" => {
+          value_type: "date",
+          path: [:users_eligibilitycodes, :approved_at]
+        },
+        "users_eligibilitycodes.expires_at" => {
+          value_type: "date",
+          path: [:users_eligibilitycodes, :expires_at]
+        },
+        "users.participant_name" => {
+          value_type: "text",
+          path: [:users, :participant_name]
+        }
+      }.freeze
+
       # ------------------------------------------------------------
       # PUBLIC: build_case_facts
       # ------------------------------------------------------------
@@ -21,7 +56,7 @@ module Claims
       #
       # Required inputs:
       # - sess: Claims::Session grouping row
-      # - invoice: Claims::Invoice (owns contractor_id, submitted_at)
+      # - invoice: Claims::Invoice (owns contractor_id, submitter_id, submitted_at)
       # - eligibility_code: code located by the classifier call from OCR text
       #
       def self.call(sess:, invoice: nil, eligibility_code: nil)
@@ -56,31 +91,40 @@ module Claims
         end
 
         # 3) Build facts blob (keep it small + deterministic)
-        case_facts = {
-          esp_database_values: {
-            sessions: {
-              submitted_at: invoice.submitted_at
-            },
-            contractors: {
-              business_name: contractor.business_name,
-              address: [
-                contractor.street_address,
-                contractor.city,
-                contractor.postal_code
-              ].compact.reject(&:blank?).join(", ")
-            },
-            users_eligibilitycodes: {
-              eligibility_code: elig&.eligibility_code,
-              income_level:
-                income_level_from_eligibility_code(elig&.eligibility_code),
-              approved_at: elig&.approved_at,
-              expires_at: elig&.expires_at
-            },
-            users: {
-              participant_name: participant_name_from_user(participant),
-              participant_address: nil # TODO: add once column exists on public.users
-            }
+        esp_database_values = {
+          invoices: {
+            submitted_at: invoice.submitted_at
+          },
+          contractors: {
+            business_name: contractor.business_name,
+            address: [
+              contractor.street_address,
+              contractor.city,
+              contractor.postal_code
+            ].compact.reject(&:blank?).join(", ")
+          },
+          users_eligibilitycodes: {
+            eligibility_code: elig&.eligibility_code,
+            income_level:
+              income_level_from_eligibility_code(elig&.eligibility_code),
+            approved_at: elig&.approved_at,
+            expires_at: elig&.expires_at
+          },
+          users: {
+            participant_name: participant_name_from_user(participant),
+            participant_address: nil # TODO: add once column exists on public.users
+          },
+          classifier: {
+            eligibility_code: eligibility_code
           }
+        }
+
+        prune_disabled_code_fields!(esp_database_values)
+
+        case_facts = {
+          esp_database_values: esp_database_values,
+          supporting_document_summary:
+            build_supporting_document_summary(invoice: invoice)
         }
 
         {
@@ -127,68 +171,18 @@ module Claims
             }
           end
 
-        # sessions.submitted_at
-        submitted_at = facts.dig(:sessions, :submitted_at)
-        add_row.call(
-          field_key: "sessions.submitted_at",
-          value_type: "date",
-          value_text: submitted_at&.to_date&.iso8601
-        )
+        enabled_code_field_keys.each do |field_key|
+          definition = CODE_FIELD_DEFINITIONS[field_key]
+          next unless definition
 
-        # contractor facts
-        add_row.call(
-          field_key: "contractors.business_name",
-          value_type: "text",
-          value_text: facts.dig(:contractors, :business_name)&.to_s
-        )
+          raw_value = facts.dig(*definition[:path])
 
-        add_row.call(
-          field_key: "contractors.address",
-          value_type: "text",
-          value_text: facts.dig(:contractors, :address)&.to_s
-        )
-
-        # eligibility facts
-        add_row.call(
-          field_key: "classifier.eligibility_code",
-          value_type: "text",
-          value_text: classifier_eligibility_code&.to_s
-        )
-
-        add_row.call(
-          field_key: "users_eligibilitycodes.eligibility_code",
-          value_type: "text",
-          value_text:
-            facts.dig(:users_eligibilitycodes, :eligibility_code)&.to_s
-        )
-
-        income_level = facts.dig(:users_eligibilitycodes, :income_level)
-        add_row.call(
-          field_key: "users_eligibilitycodes.income_level",
-          value_type: "number",
-          value_text: income_level&.to_s
-        )
-
-        approved_at = facts.dig(:users_eligibilitycodes, :approved_at)
-        add_row.call(
-          field_key: "users_eligibilitycodes.approved_at",
-          value_type: "date",
-          value_text: approved_at&.to_date&.iso8601
-        )
-
-        expires_at = facts.dig(:users_eligibilitycodes, :expires_at)
-        add_row.call(
-          field_key: "users_eligibilitycodes.expires_at",
-          value_type: "date",
-          value_text: expires_at&.to_date&.iso8601
-        )
-
-        # participant facts
-        add_row.call(
-          field_key: "users.participant_name",
-          value_type: "text",
-          value_text: facts.dig(:users, :participant_name)&.to_s
-        )
+          add_row.call(
+            field_key: field_key,
+            value_type: definition[:value_type],
+            value_text: persisted_value_text_for(definition[:value_type], raw_value)
+          )
+        end
 
         # participant_address intentionally omitted (nil) until you have the column.
         # You can still snapshot a nil row if you want, but it adds noise.
@@ -238,6 +232,82 @@ module Claims
         return 3 if token.start_with?("ESP3")
 
         nil
+      end
+
+      def self.enabled_code_field_keys
+        configured_keys =
+          ::Claims::CodeLocatedField.where(enabled: true).pluck(:code_field_key).map(&:to_s)
+        return configured_keys if configured_keys.present?
+
+        CODE_FIELD_DEFINITIONS.keys
+      rescue StandardError
+        CODE_FIELD_DEFINITIONS.keys
+      end
+
+      def self.prune_disabled_code_fields!(esp_database_values)
+        disabled_keys = CODE_FIELD_DEFINITIONS.keys - enabled_code_field_keys
+
+        disabled_keys.each do |field_key|
+          path = CODE_FIELD_DEFINITIONS.dig(field_key, :path)
+          next if path.blank?
+
+          delete_nested_value!(esp_database_values, path.dup)
+        end
+      end
+
+      def self.delete_nested_value!(hash, path)
+        key = path.shift
+        return if key.nil? || hash.blank?
+
+        if path.empty?
+          hash.delete(key)
+          return
+        end
+
+        child = hash[key]
+        return unless child.is_a?(Hash)
+
+        delete_nested_value!(child, path)
+      end
+
+      def self.persisted_value_text_for(value_type, raw_value)
+        case value_type
+        when "date"
+          raw_value&.to_date&.iso8601
+        else
+          raw_value&.to_s
+        end
+      end
+
+      def self.build_supporting_document_summary(invoice:)
+        docs =
+          invoice
+            .supporting_documents
+            .includes(:supporting_document_type)
+            .order(created_at: :asc, id: :asc)
+            .map do |doc|
+              {
+                supporting_document_id: doc.id,
+                type_key: doc.supporting_document_type&.type_key,
+                type_description: doc.supporting_document_type&.description,
+                original_filename: doc.original_filename,
+                classification_status: doc.classification_status,
+                classification_confidence: doc.classification_confidence
+              }
+            end
+
+        {
+          document_count: docs.size,
+          type_keys:
+            docs.map { |row| row[:type_key].to_s.presence }.compact.uniq.sort,
+          documents: docs
+        }
+      rescue StandardError
+        {
+          document_count: 0,
+          type_keys: [],
+          documents: []
+        }
       end
     end
   end

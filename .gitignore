@@ -43,6 +43,9 @@ public/uploads/
 .env
 .env.*
 
+# Azure Bicep build artifacts
+devops/azure/*.json
+
 dump.rdb
 
 # Vite Ruby

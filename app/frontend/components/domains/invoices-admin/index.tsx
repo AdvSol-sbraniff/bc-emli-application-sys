@@ -73,9 +73,7 @@ type InvoiceGridRow = {
   invoice_status_updated_at?: string | null;
   invoice_created_at?: string | null;
   invoice_updated_at?: string | null;
-
-  session_status?: string | null;
-  session_submitted_at?: string | null;
+  invoice_submitted_at?: string | null;
 
   contractor_id?: string | null;
   contractor_business_name?: string | null;
@@ -1018,6 +1016,9 @@ export function InvoicesAdminScreen() {
                       <b>Updated at:</b> {fmtTs(selected.invoice_updated_at) || '—'}
                     </Text>
                     <Text fontSize="sm">
+                      <b>Submitted at:</b> {fmtTs(selected.invoice_submitted_at) || '—'}
+                    </Text>
+                    <Text fontSize="sm">
                       <b>Invoice total (DI):</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
                     </Text>
                     <Box mt={2}>
@@ -1077,12 +1078,6 @@ export function InvoicesAdminScreen() {
                     </Text>
                     <Text fontSize="sm">
                       <b>Session id:</b> {selected.session_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Session status:</b> {selected.session_status ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Session submitted at:</b> {fmtTs(selected.session_submitted_at) || '—'}
                     </Text>
                     <Text fontSize="sm">
                       <b>Session created at:</b> {fmtTs(selected.session_created_at) || '—'}

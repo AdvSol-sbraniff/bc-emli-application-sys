@@ -4,6 +4,7 @@ module Claims
   module InvoiceVersionRulechecks
     class ApplyCodeRulechecks
       SOURCE_VINTAGE_DATE = Date.new(2026, 4, 1)
+      COMMON_RULE_FALLBACK_ENABLED = false
 
       def self.call(invoice_version_id:)
         new(invoice_version_id: invoice_version_id).call
@@ -45,6 +46,8 @@ module Claims
       attr_reader :invoice_version, :invoice, :session, :code_fields
 
       def source_vintage_applies
+        return nil unless enabled_common_rule?("source_vintage_applies")
+
         invoice_date = invoice_version.di_ocr_invoice_date
 
         if invoice_date.blank?
@@ -82,6 +85,8 @@ module Claims
       end
 
       def first_class_invoice_fields_present
+        return nil unless enabled_common_rule?("first_class_invoice_fields_present")
+
         required = {
           "Invoice number" => invoice_version.di_ocr_invoice_id,
           "Invoice date" => invoice_version.di_ocr_invoice_date,
@@ -127,12 +132,14 @@ module Claims
       end
 
       def submission_within_six_months
+        return nil unless enabled_common_rule?("submission_within_six_months")
+
         invoice_date = invoice_version.di_ocr_invoice_date
-        submitted_at = session&.submitted_at
+        submitted_at = invoice.submitted_at
 
         missing = []
         missing << "invoice date" if invoice_date.blank?
-        missing << "submitted_at" if submitted_at.blank?
+        missing << "invoice submitted_at" if submitted_at.blank?
 
         if missing.any?
           return(
@@ -141,7 +148,8 @@ module Claims
               rule_key: "submission_within_six_months",
               source_requirement_id: "ESP-2026-COM-017",
               rule_name: "Submission within six months",
-              expected_text: "submitted_at <= invoice_date + 6 months.",
+              expected_text:
+                "invoices.submitted_at <= invoice_date + 6 months.",
               detail_text: "Missing #{missing.join(" and ")}."
             )
           )
@@ -158,17 +166,19 @@ module Claims
           rule_name: "Submission within six months",
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
-          expected_text: "submitted_at <= invoice_date + 6 months.",
+          expected_text: "invoices.submitted_at <= invoice_date + 6 months.",
           detail_text:
-            "invoice_date=#{invoice_date.iso8601}; submitted_at=#{submitted_date.iso8601}.",
+            "invoice_date=#{invoice_date.iso8601}; invoices.submitted_at=#{submitted_date.iso8601}.",
           calculation:
             "#{invoice_date.iso8601} + 6 months = #{deadline.iso8601}; #{submitted_date.iso8601} <= #{deadline.iso8601} => #{pass}",
           evidence_text:
-            "invoice_versions.di_ocr_invoice_date + claims.sessions.submitted_at"
+            "invoice_versions.di_ocr_invoice_date + claims.invoices.submitted_at"
         )
       end
 
       def eligibility_code_valid_for_invoice_date
+        return nil unless enabled_common_rule?("eligibility_code_valid_for_invoice_date")
+
         invoice_date = invoice_version.di_ocr_invoice_date
         approved_at =
           first_field_value(code_fields, "users_eligibilitycodes.approved_at")
@@ -255,6 +265,32 @@ module Claims
         Date.iso8601(value.to_s)
       end
 
+      def enabled_common_rule?(rule_key)
+        ::Claims::CodeRules::Registry.enabled_for?(
+          code_rule_key: rule_key,
+          invoice_upgrade_type_id: common_upgrade_type_id,
+          fallback: COMMON_RULE_FALLBACK_ENABLED
+        )
+      end
+
+      def common_upgrade_type_id
+        @common_upgrade_type_id ||=
+          ::Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common").id
+      end
+
+      def append_admin_message(rule_key:, rule_result:, reason_text:)
+        message =
+          ::Claims::CodeRules::Registry.admin_message(
+            code_rule_key: rule_key,
+            rule_result: rule_result
+          )
+
+        return reason_text if message.blank?
+        return message if reason_text.blank?
+
+        [reason_text, message].join(" ")
+      end
+
       def warn_row(
         rule_number:,
         rule_key:,
@@ -303,7 +339,12 @@ module Claims
           expected_text: expected_text,
           calculation: calculation,
           evidence_text: evidence_text.presence || detail_text,
-          reason_and_likely_causes: reason_and_likely_causes,
+          reason_and_likely_causes:
+            append_admin_message(
+              rule_key: rule_key,
+              rule_result: rule_result,
+              reason_text: reason_and_likely_causes
+            ),
           created_at: now,
           updated_at: now
         }

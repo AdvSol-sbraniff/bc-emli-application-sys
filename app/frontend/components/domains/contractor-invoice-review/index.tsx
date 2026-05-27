@@ -130,6 +130,24 @@ const StatusDot = ({ result }: { result: unknown }) => (
   </Tooltip>
 );
 
+const ruleDisplayTitle = (rulecheck: any) => {
+  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
+  const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
+  const prefix =
+    sourceEngine === 'code'
+      ? `Code Rule ${num ?? ''}`.trim()
+      : `${num != null ? `Rule ${num}` : 'Rule'}`;
+
+  return `${prefix} - ${String(rulecheck.rule_name ?? '')}`.trim();
+};
+
+const ruleSourceLabel = (rulecheck: any) => {
+  const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
+  if (sourceEngine === 'code') return 'code';
+  if (sourceEngine === 'genai') return 'genai';
+  return sourceEngine || '';
+};
+
 const DI_FIELDS = [
   {
     key: 'invoice_id',
@@ -248,7 +266,7 @@ export default function ContractorInvoiceReviewScreen() {
     pageNumber: number | null;
     polygon: any | null;
   } | null>(null);
-  const [pageWidthPx, setPageWidthPx] = useState<number>(900);
+  const [pageWidthPx, setPageWidthPx] = useState<number>(560);
   const [pdfPaneHeightPx, setPdfPaneHeightPx] = useState<number>(700);
   const [zoom, setZoom] = useState<number>(1.0);
   const [fitMode, setFitMode] = useState<FitMode>('width');
@@ -370,13 +388,13 @@ export default function ContractorInvoiceReviewScreen() {
 
     const ro = new ResizeObserver(() => {
       if (el.clientWidth <= 0 || el.clientHeight <= 0) return;
-      setPageWidthPx(Math.min(Math.max(300, Math.floor(el.clientWidth)), 750));
+      setPageWidthPx(Math.min(Math.max(300, Math.floor(el.clientWidth)), 560));
       setPdfPaneHeightPx(Math.max(300, Math.floor(el.clientHeight)));
     });
     ro.observe(el);
 
     if (el.clientWidth > 0 && el.clientHeight > 0) {
-      setPageWidthPx(Math.min(Math.max(300, Math.floor(el.clientWidth)), 750));
+      setPageWidthPx(Math.min(Math.max(300, Math.floor(el.clientWidth)), 560));
       setPdfPaneHeightPx(Math.max(300, Math.floor(el.clientHeight)));
     }
 
@@ -731,12 +749,12 @@ export default function ContractorInvoiceReviewScreen() {
               borderRadius="md"
               p="12px"
               sx={{ resize: 'horizontal', overflow: 'auto' }}
-              minW="360px"
-              maxW={showPdf ? '820px' : '100%'}
-              w={showPdf ? '520px' : '100%'}
-              flexShrink={0}
+              minW="480px"
+              maxW="100%"
+              w={showPdf ? 'auto' : '100%'}
+              flex="1 1 auto"
             >
-              <Accordion allowMultiple defaultIndex={[0, 1]}>
+              <Accordion allowMultiple defaultIndex={[0]}>
                 <AccordionItem border="none">
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
@@ -915,9 +933,8 @@ export default function ContractorInvoiceReviewScreen() {
                             ) : (
                               <Box display="flex" flexDirection="column" gap="8px">
                                 {group.rulechecks.map((row: any) => {
-                                  const num = row.rule_number != null ? Number(row.rule_number) : null;
-                                  const title =
-                                    `${num != null ? `Rule ${num}` : 'Rule'} - ${String(row.rule_name ?? '')}`.trim();
+                                  const title = ruleDisplayTitle(row);
+                                  const sourceLabel = ruleSourceLabel(row);
                                   const sourceRequirement = row.source_requirement_id ?? '';
                                   const expected = row.expected_text ?? row.expected ?? '';
                                   const calc = row.calculation ?? '';
@@ -939,6 +956,11 @@ export default function ContractorInvoiceReviewScreen() {
                                         <Text fontSize="xs" opacity={0.75}>
                                           {title}
                                         </Text>
+                                        {sourceLabel && (
+                                          <Badge colorScheme="gray" variant="subtle" textTransform="lowercase">
+                                            {sourceLabel}
+                                          </Badge>
+                                        )}
                                       </Flex>
                                       {sourceRequirement && (
                                         <Text fontSize="xs" opacity={0.65} mb="6px">
@@ -1068,8 +1090,10 @@ export default function ContractorInvoiceReviewScreen() {
             {showPdf ? (
               <Box
                 ref={pdfWrapRef}
-                flex="1"
-                minW={0}
+                flex="0 0 640px"
+                w="640px"
+                maxW="640px"
+                minW="640px"
                 minH={0}
                 borderWidth="1px"
                 borderRadius="md"

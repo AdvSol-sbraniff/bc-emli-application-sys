@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Badge,
   Box,
   Button,
   Container,
@@ -15,6 +16,7 @@ import {
   Input,
   Select,
   Spinner,
+  Switch,
   Table,
   Tbody,
   Tooltip,
@@ -25,8 +27,9 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, PencilSimple, Question, XCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretLeft, CaretRight, Eye, PencilSimple, Question, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getInvoiceUpgradeTypeMeta, InvoiceUpgradeTypeTile } from '../../shared/claims/invoice-upgrade-type-visual';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
 type RulesetRow = {
@@ -37,6 +40,7 @@ type RulesetRow = {
   ruleset_shortname: string;
   created_at?: string | null;
   updated_at?: string | null;
+  is_current?: boolean;
 };
 
 type RulesetApiResp = {
@@ -47,6 +51,12 @@ type RulesetApiResp = {
     per?: number;
     sort?: string;
   };
+};
+
+type UpgradeTypeRow = {
+  id: string;
+  upgrade_type_key: string;
+  description?: string | null;
 };
 
 const fmtDate = (s?: string | null) => {
@@ -71,6 +81,8 @@ export default function RulesetsAdminScreen() {
   const navigate = useNavigate();
 
   const [q, setQ] = useState<string>('');
+  const [invoiceUpgradeTypeId, setInvoiceUpgradeTypeId] = useState<string>('');
+  const [currentOnly, setCurrentOnly] = useState<boolean>(true);
   const [sort, setSort] = useState<string>('updated_at:desc');
   const [page, setPage] = useState<number>(1);
   const [per, setPer] = useState<number>(25);
@@ -78,6 +90,7 @@ export default function RulesetsAdminScreen() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [rows, setRows] = useState<RulesetRow[]>([]);
+  const [upgradeTypes, setUpgradeTypes] = useState<UpgradeTypeRow[]>([]);
   const [total, setTotal] = useState<number>(0);
 
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
@@ -89,6 +102,8 @@ export default function RulesetsAdminScreen() {
 
     const next = {
       q: params.get('q') || '',
+      invoiceUpgradeTypeId: params.get('invoice_upgrade_type_id') || '',
+      currentOnly: params.get('current_only') !== 'false',
       sort: params.get('sort') || 'updated_at:desc',
       page: Number(params.get('page') || '1') || 1,
       per: Number(params.get('per') || '25') || 25,
@@ -97,6 +112,8 @@ export default function RulesetsAdminScreen() {
     if (!didInitFromUrl.current) {
       didInitFromUrl.current = true;
       setQ(next.q);
+      setInvoiceUpgradeTypeId(next.invoiceUpgradeTypeId);
+      setCurrentOnly(next.currentOnly);
       setSort(next.sort);
       setPage(next.page);
       setPer(next.per);
@@ -104,14 +121,27 @@ export default function RulesetsAdminScreen() {
     }
 
     setQ(next.q);
+    setInvoiceUpgradeTypeId(next.invoiceUpgradeTypeId);
+    setCurrentOnly(next.currentOnly);
     setSort(next.sort);
     setPage(next.page);
     setPer(next.per);
   }, [location.search]);
 
-  const pushUrl = (next: Partial<{ q: string; sort: string; page: number; per: number }>) => {
+  const pushUrl = (
+    next: Partial<{
+      q: string;
+      invoiceUpgradeTypeId: string;
+      currentOnly: boolean;
+      sort: string;
+      page: number;
+      per: number;
+    }>
+  ) => {
     const merged = {
       q,
+      invoiceUpgradeTypeId,
+      currentOnly,
       sort,
       page,
       per,
@@ -120,6 +150,8 @@ export default function RulesetsAdminScreen() {
 
     const params = buildSearchParams({
       q: merged.q || undefined,
+      invoice_upgrade_type_id: merged.invoiceUpgradeTypeId || undefined,
+      current_only: merged.currentOnly ? undefined : 'false',
       sort: merged.sort || undefined,
       page: String(merged.page || 1),
       per: String(merged.per || 25),
@@ -128,13 +160,15 @@ export default function RulesetsAdminScreen() {
     navigate({ pathname: location.pathname, search: `?${params.toString()}` }, { replace: true });
   };
 
-  const fetchRows = async () => {
+  const fetchRows = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
       const params = buildSearchParams({
         q: q || undefined,
+        invoice_upgrade_type_id: invoiceUpgradeTypeId || undefined,
+        current_only: currentOnly ? undefined : 'false',
         sort: sort || undefined,
         page: String(page || 1),
         per: String(per || 25),
@@ -161,11 +195,30 @@ export default function RulesetsAdminScreen() {
     } finally {
       setLoading(false);
     }
+  }, [q, invoiceUpgradeTypeId, currentOnly, sort, page, per]);
+
+  const fetchUpgradeTypes = async () => {
+    try {
+      const res = await fetch('/api/claims/admin/invoice_upgrade_types', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({ rows: [] }));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setUpgradeTypes(Array.isArray(data?.rows) ? data.rows : []);
+    } catch {
+      setUpgradeTypes([]);
+    }
   };
 
   useEffect(() => {
+    fetchUpgradeTypes();
+  }, []);
+
+  useEffect(() => {
     if (didInitFromUrl.current) fetchRows();
-  }, [q, sort, page, per]);
+  }, [fetchRows]);
 
   const totalPages = useMemo(() => {
     const p = Math.max(1, per || 25);
@@ -174,6 +227,10 @@ export default function RulesetsAdminScreen() {
 
   const openEditor = (id: string) => {
     window.open(`/ruleset-editor?id=${encodeURIComponent(id)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const openViewer = (id: string) => {
+    window.open(`/ruleset-editor?id=${encodeURIComponent(id)}&mode=view`, '_blank', 'noopener,noreferrer');
   };
 
   const duplicateRuleset = (id: string) => {
@@ -187,7 +244,7 @@ export default function RulesetsAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Rulesets Admin" />
+      <ThinBlueTitleBar title="GenAI Rulesets Admin" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -206,6 +263,29 @@ export default function RulesetsAdminScreen() {
                 placeholder="Search rulesets..."
                 bg="white"
               />
+            </Box>
+
+            <Box w="280px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                Upgrade type
+              </Text>
+              <Select
+                value={invoiceUpgradeTypeId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setInvoiceUpgradeTypeId(v);
+                  setPage(1);
+                  pushUrl({ invoiceUpgradeTypeId: v, page: 1 });
+                }}
+                bg="white"
+              >
+                <option value="">All upgrade types</option>
+                {upgradeTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.description || type.upgrade_type_key}
+                  </option>
+                ))}
+              </Select>
             </Box>
 
             <Box w="240px">
@@ -233,6 +313,21 @@ export default function RulesetsAdminScreen() {
               </Select>
             </Box>
 
+            <Box w="150px" pb={2}>
+              <Text fontSize="xs" opacity={0.7} mb={2}>
+                Current only
+              </Text>
+              <Switch
+                isChecked={currentOnly}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setCurrentOnly(v);
+                  setPage(1);
+                  pushUrl({ currentOnly: v, page: 1 });
+                }}
+              />
+            </Box>
+
             <Box w="120px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 Per page
@@ -257,13 +352,6 @@ export default function RulesetsAdminScreen() {
               <Button size="sm" variant="outline" onClick={openConfigEditor}>
                 Edit AI system config
               </Button>
-              <Button
-                size="sm"
-                colorScheme="blue"
-                onClick={() => window.open('/ruleset-editor?mode=create', '_blank', 'noopener,noreferrer')}
-              >
-                Create ruleset
-              </Button>
               <Tooltip label="Help: ruleset strategy and governance">
                 <IconButton
                   aria-label="Open ruleset help"
@@ -280,12 +368,28 @@ export default function RulesetsAdminScreen() {
                   variant="outline"
                   onClick={() => {
                     setQ('');
+                    setInvoiceUpgradeTypeId('');
+                    setCurrentOnly(true);
                     setSort('updated_at:desc');
                     setPage(1);
                     setPer(25);
-                    pushUrl({ q: '', sort: 'updated_at:desc', page: 1, per: 25 });
+                    pushUrl({
+                      q: '',
+                      invoiceUpgradeTypeId: '',
+                      currentOnly: true,
+                      sort: 'updated_at:desc',
+                      page: 1,
+                      per: 25,
+                    });
                   }}
-                  isDisabled={!q.trim() && sort === 'updated_at:desc' && per === 25 && page === 1}
+                  isDisabled={
+                    !q.trim() &&
+                    !invoiceUpgradeTypeId &&
+                    currentOnly &&
+                    sort === 'updated_at:desc' &&
+                    per === 25 &&
+                    page === 1
+                  }
                 />
               </Tooltip>
 
@@ -339,35 +443,88 @@ export default function RulesetsAdminScreen() {
                     </Td>
                   </Tr>
                 ) : (
-                  rows.map((row) => (
-                    <Tr key={row.id}>
-                      <Td>
-                        <Text fontWeight="semibold">{row.upgrade_type_key || ''}</Text>
-                        <Text fontSize="xs" opacity={0.7}>
-                          {row.upgrade_type_description || ''}
-                        </Text>
-                      </Td>
-                      <Td>{row.ruleset_shortname}</Td>
-                      <Td>{fmtDate(row.updated_at)}</Td>
-                      <Td>{fmtDate(row.created_at)}</Td>
-                      <Td>
-                        <Flex gap={2}>
-                          <Tooltip label="view or edit details">
-                            <IconButton
-                              aria-label="view or edit details"
-                              size="xs"
-                              variant="outline"
-                              icon={<PencilSimple size={14} />}
-                              onClick={() => openEditor(row.id)}
+                  rows.map((row) => {
+                    const upgradeTypeMeta = getInvoiceUpgradeTypeMeta(row.upgrade_type_key, row.upgrade_type_description);
+
+                    return (
+                      <Tr key={row.id}>
+                        <Td>
+                          <Flex align="center" gap={3} minW="270px">
+                            <InvoiceUpgradeTypeTile
+                              upgradeTypeKey={row.upgrade_type_key}
+                              description={row.upgrade_type_description}
+                              size={38}
                             />
-                          </Tooltip>
-                          <Button size="xs" variant="outline" onClick={() => duplicateRuleset(row.id)}>
-                            Duplicate
-                          </Button>
-                        </Flex>
-                      </Td>
-                    </Tr>
-                  ))
+                            <Box minW={0}>
+                              <Flex align="center" gap={2} wrap="wrap">
+                                <Text fontWeight="semibold" noOfLines={1}>
+                                  {row.upgrade_type_description || upgradeTypeMeta.label}
+                                </Text>
+                                {row.is_current && (
+                                  <Badge colorScheme="green" variant="subtle">
+                                    current
+                                  </Badge>
+                                )}
+                              </Flex>
+                              <Text
+                                fontSize="xs"
+                                color={upgradeTypeMeta.accent}
+                                fontFamily="mono"
+                                fontWeight="semibold"
+                                noOfLines={1}
+                              >
+                                {row.upgrade_type_key || 'unknown'}
+                              </Text>
+                            </Box>
+                          </Flex>
+                        </Td>
+                        <Td>{row.ruleset_shortname}</Td>
+                        <Td>{fmtDate(row.updated_at)}</Td>
+                        <Td>{fmtDate(row.created_at)}</Td>
+                        <Td>
+                          <Flex gap={2}>
+                            {row.is_current ? (
+                              <>
+                                <Tooltip label="Edit current ruleset">
+                                  <IconButton
+                                    aria-label="Edit current ruleset"
+                                    size="xs"
+                                    variant="outline"
+                                    icon={<PencilSimple size={14} />}
+                                    onClick={() => openEditor(row.id)}
+                                  />
+                                </Tooltip>
+                                <Button size="xs" variant="outline" onClick={() => duplicateRuleset(row.id)}>
+                                  Duplicate
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Tooltip label="Historical rulesets are read-only">
+                                  <IconButton
+                                    aria-label="Edit disabled for historical ruleset"
+                                    size="xs"
+                                    variant="outline"
+                                    icon={<PencilSimple size={14} />}
+                                    isDisabled
+                                  />
+                                </Tooltip>
+                                <Tooltip label="View historical ruleset">
+                                  <IconButton
+                                    aria-label="View historical ruleset"
+                                    size="xs"
+                                    variant="outline"
+                                    icon={<Eye size={14} />}
+                                    onClick={() => openViewer(row.id)}
+                                  />
+                                </Tooltip>
+                              </>
+                            )}
+                          </Flex>
+                        </Td>
+                      </Tr>
+                    );
+                  })
                 )}
               </Tbody>
             </Table>
@@ -421,7 +578,7 @@ export default function RulesetsAdminScreen() {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Rulesets Admin Help</DrawerHeader>
+          <DrawerHeader>GenAI Rulesets Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
               Think of a ruleset as a recipe card for how the system checks invoices. Different upgrade types need

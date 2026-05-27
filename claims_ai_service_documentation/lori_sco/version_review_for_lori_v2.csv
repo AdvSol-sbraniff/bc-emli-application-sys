@@ -1,0 +1,1844 @@
+﻿projectname,project_match_score,project_match_reason,sco,excel_row_number,versionnumber,with_party,started_on,ended_on,total_calendar_days,total_business_days,source_start_event,source_end_event,needs_lori_to_confirm,raw_status_text
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-355 RTMC Professional Services Remediation,2,V1,ADSL,2021-09-28,2021-11-22,56,40,Sept 28/21 - first model sent to Province; internally AS thinks Q4,Nov 22/21 - submitted to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | Version number was inferred as V1 from an unversioned Province submission line.,"Jan 4/22 - Signed
+Dec 17/21 - V3 submitted to Province
+Dec 15/21 - with Sian for approval
+Dec 14/21 - with Cathy to review Province comments.
+Nov 22/21 - submitted to Province
+Nov 18/21 - with Serge for approval
+Nov 9/21 - Province has questions re effort and SW
+Oct 26/21 - pricing submitted to Province
+Oct 12/21 - internal meeting to discuss Province feedback
+Sept 28/21 - first model sent to Province; internally AS thinks Q4"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-355 RTMC Professional Services Remediation,2,V2,CSBC,2021-11-23,2021-12-17,25,19,Nov 22/21 - submitted to Province,Dec 17/21 - V3 submitted to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | V3 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Jan 4/22 - Signed
+Dec 17/21 - V3 submitted to Province
+Dec 15/21 - with Sian for approval
+Dec 14/21 - with Cathy to review Province comments.
+Nov 22/21 - submitted to Province
+Nov 18/21 - with Serge for approval
+Nov 9/21 - Province has questions re effort and SW
+Oct 26/21 - pricing submitted to Province
+Oct 12/21 - internal meeting to discuss Province feedback
+Sept 28/21 - first model sent to Province; internally AS thinks Q4"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-355 RTMC Professional Services Remediation,2,V3,ADSL,2021-12-17,2021-12-17,1,1,Dec 17/21 - V3 submitted to Province,Dec 17/21 - V3 submitted to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | V3 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Jan 4/22 - Signed
+Dec 17/21 - V3 submitted to Province
+Dec 15/21 - with Sian for approval
+Dec 14/21 - with Cathy to review Province comments.
+Nov 22/21 - submitted to Province
+Nov 18/21 - with Serge for approval
+Nov 9/21 - Province has questions re effort and SW
+Oct 26/21 - pricing submitted to Province
+Oct 12/21 - internal meeting to discuss Province feedback
+Sept 28/21 - first model sent to Province; internally AS thinks Q4"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-355 RTMC Professional Services Remediation,2,V4,CSBC,2021-12-18,2022-01-03,17,11,Dec 17/21 - V3 submitted to Province,Jan 4/22 - Signed,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | CSBC interval was closed at the day before signing/final workflow started.,"Jan 4/22 - Signed
+Dec 17/21 - V3 submitted to Province
+Dec 15/21 - with Sian for approval
+Dec 14/21 - with Cathy to review Province comments.
+Nov 22/21 - submitted to Province
+Nov 18/21 - with Serge for approval
+Nov 9/21 - Province has questions re effort and SW
+Oct 26/21 - pricing submitted to Province
+Oct 12/21 - internal meeting to discuss Province feedback
+Sept 28/21 - first model sent to Province; internally AS thinks Q4"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-355 RTMC Professional Services Remediation,2,V3,SIGNINGTIME,2022-01-04,2022-01-04,1,1,Jan 4/22 - Signed,Jan 4/22 - Signed,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time.,"Jan 4/22 - Signed
+Dec 17/21 - V3 submitted to Province
+Dec 15/21 - with Sian for approval
+Dec 14/21 - with Cathy to review Province comments.
+Nov 22/21 - submitted to Province
+Nov 18/21 - with Serge for approval
+Nov 9/21 - Province has questions re effort and SW
+Oct 26/21 - pricing submitted to Province
+Oct 12/21 - internal meeting to discuss Province feedback
+Sept 28/21 - first model sent to Province; internally AS thinks Q4"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-383 Public Cloud MCS OpenShift,3,V1,ADSL,2022-01-10,2022-02-10,32,24,Jan 10/22 - SCO drafted; Jen to provide SOW,Feb 10/22 - submitted to Province,Version number was inferred as V1 from an unversioned Province submission line.,"Mar 25/22 - Signed
+Mar 24/22 - with Province for signing
+Mar 22/22 - with Serge for signing
+Mar 7/22 - submitted to Province
+Mar 3/22 - with Serge for approval
+Mar 2/22 - with Jen for review/updating
+Feb 10/22 - submitted to Province
+Feb 3/22 - with Sian for approval
+Feb 2/22 - with Cathy/Jen for review
+Jan 10/22 - SCO drafted; Jen to provide SOW"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-383 Public Cloud MCS OpenShift,3,V2,CSBC,2022-02-11,2022-03-07,25,17,Feb 10/22 - submitted to Province,Mar 7/22 - submitted to Province,Version number was inferred as V1 from an unversioned Province submission line. | V1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Mar 25/22 - Signed
+Mar 24/22 - with Province for signing
+Mar 22/22 - with Serge for signing
+Mar 7/22 - submitted to Province
+Mar 3/22 - with Serge for approval
+Mar 2/22 - with Jen for review/updating
+Feb 10/22 - submitted to Province
+Feb 3/22 - with Sian for approval
+Feb 2/22 - with Cathy/Jen for review
+Jan 10/22 - SCO drafted; Jen to provide SOW"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-383 Public Cloud MCS OpenShift,3,V1,ADSL,2022-03-07,2022-03-07,1,1,Mar 7/22 - submitted to Province,Mar 7/22 - submitted to Province,Version number was inferred as V1 from an unversioned Province submission line. | V1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Mar 25/22 - Signed
+Mar 24/22 - with Province for signing
+Mar 22/22 - with Serge for signing
+Mar 7/22 - submitted to Province
+Mar 3/22 - with Serge for approval
+Mar 2/22 - with Jen for review/updating
+Feb 10/22 - submitted to Province
+Feb 3/22 - with Sian for approval
+Feb 2/22 - with Cathy/Jen for review
+Jan 10/22 - SCO drafted; Jen to provide SOW"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-383 Public Cloud MCS OpenShift,3,V2,CSBC,2022-03-08,2022-03-21,14,10,Mar 7/22 - submitted to Province,Mar 22/22 - with Serge for signing,CSBC interval was closed at the day before signing/final workflow started.,"Mar 25/22 - Signed
+Mar 24/22 - with Province for signing
+Mar 22/22 - with Serge for signing
+Mar 7/22 - submitted to Province
+Mar 3/22 - with Serge for approval
+Mar 2/22 - with Jen for review/updating
+Feb 10/22 - submitted to Province
+Feb 3/22 - with Sian for approval
+Feb 2/22 - with Cathy/Jen for review
+Jan 10/22 - SCO drafted; Jen to provide SOW"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-383 Public Cloud MCS OpenShift,3,V1,SIGNINGTIME,2022-03-22,2022-03-25,4,4,Mar 22/22 - with Serge for signing,Mar 25/22 - Signed,,"Mar 25/22 - Signed
+Mar 24/22 - with Province for signing
+Mar 22/22 - with Serge for signing
+Mar 7/22 - submitted to Province
+Mar 3/22 - with Serge for approval
+Mar 2/22 - with Jen for review/updating
+Feb 10/22 - submitted to Province
+Feb 3/22 - with Sian for approval
+Feb 2/22 - with Cathy/Jen for review
+Jan 10/22 - SCO drafted; Jen to provide SOW"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V1,ADSL,2022-04-06,2022-04-20,15,11,Apr 6/22 - with Rian for review,Apr 20/22 - submitted to Province,Version number was inferred as V1 from an unversioned Province submission line.,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V2,CSBC,2022-04-21,2022-06-02,43,31,Apr 20/22 - submitted to Province,June 2/22 - V2 submitted to Province,V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V2,ADSL,2022-06-02,2022-06-02,1,1,June 2/22 - V2 submitted to Province,June 2/22 - V2 submitted to Province,V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V3,CSBC,2022-06-03,2022-06-20,18,12,June 2/22 - V2 submitted to Province,June 20/22 - V3 received,,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V4,ADSL,2022-06-21,2022-06-23,3,3,June 20/22 - V3 received,June 23/22 - V4 sent to Province,,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V5,CSBC,2022-06-24,2022-06-28,5,3,June 23/22 - V4 sent to Province,June 29/22 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+MS Defender Proof of Concept,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-416 Antivirus Product Evaluation,4,V4,SIGNINGTIME,2022-06-29,2022-06-29,1,1,June 29/22 - Signed,June 29/22 - Signed,,"June 29/22 - Signed
+June 23/22 - V4 sent to Province
+June 20/22 - V3 received
+June 2/22 - V2 submitted to Province
+June 1/22 - V2 with Rian and Cathy for review
+Apr 20/22 - submitted to Province
+Apr 13/22 - with Serge for approval
+Apr 12/22 - Rian reviewing with Lori Collins
+Apr 6/22 - with Rian for review"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-453 Amd SCO-355 RTMC PS Remed,5,V1,ADSL,2022-10-04,2022-10-04,1,1,Oct 4/22 - V1 sent to Province,Oct 4/22 - V1 sent to Province,,"Oct 14/22 - Signed
+Oct 13/22 - V2 rec'd
+Oct 4/22 - V1 sent to Province"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-453 Amd SCO-355 RTMC PS Remed,5,V2,CSBC,2022-10-05,2022-10-13,9,7,Oct 4/22 - V1 sent to Province,Oct 13/22 - V2 rec'd,,"Oct 14/22 - Signed
+Oct 13/22 - V2 rec'd
+Oct 4/22 - V1 sent to Province"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-453 Amd SCO-355 RTMC PS Remed,5,V2,SIGNINGTIME,2022-10-14,2022-10-14,1,1,Oct 14/22 - Signed,Oct 14/22 - Signed,,"Oct 14/22 - Signed
+Oct 13/22 - V2 rec'd
+Oct 4/22 - V1 sent to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V1,ADSL,2022-11-22,2022-11-22,1,1,Nov 22/22 - submitted to Province,Nov 22/22 - submitted to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | Version number was inferred as V1 from an unversioned Province submission line.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V2,CSBC,2022-11-23,2022-11-24,2,2,Nov 22/22 - submitted to Province,Nov 24/22 - V2 submitted to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V2,ADSL,2022-11-24,2022-11-24,1,1,Nov 24/22 - V2 submitted to Province,Nov 24/22 - V2 submitted to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V3,CSBC,2022-11-25,2023-06-20,208,148,Nov 24/22 - V2 submitted to Province,June 20/23 - V3 sent to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | V3 was sent while prior inferred V3 CSBC interval was still open; confirm missing return sequence.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V3,ADSL,2023-06-20,2023-06-20,1,1,June 20/23 - V3 sent to Province,June 20/23 - V3 sent to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | V3 was sent while prior inferred V3 CSBC interval was still open; confirm missing return sequence.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V4,CSBC,2023-06-21,2023-06-27,7,5,June 20/23 - V3 sent to Province,June 27/23 - V4 back from Province - would like sign off prior to June 30,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V5,ADSL,2023-06-27,2023-06-27,1,1,June 27/23 - V4 back from Province - would like sign off prior to June 30,June 27/23 - V5 sent to Province,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | Computed start 2023-06-28 after end 2023-06-27; collapsed to one-day interval for review.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V6,CSBC,2023-06-28,2023-06-29,2,2,June 27/23 - V5 sent to Province,June 30/23 - Signed,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time. | CSBC interval was closed at the day before signing/final workflow started.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+Next Gen Shared File Phase 5,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-463 Next Gen Shared File Phase 5,6,V5,SIGNINGTIME,2023-06-30,2023-06-30,1,1,June 30/23 - Signed,June 30/23 - Signed,Source includes non-version Province/submission events; confirm whether those should count as SCO pen time.,"June 30/23 - Signed
+June 27/23 - V5 sent to Province
+June 27/23 - V4 back from Province - would like sign off prior to June 30
+June 20/23 - V3 sent to Province
+June 19/23 - SCO out for review internally
+June 19/23 - SOW approved, SCO in draft
+June 6/23 - During BN/BA meeting Brian asked to have the SCO ready to go so that once the BA is approved we can proceed right away
+Apr 27/23 - SOW sent to Province
+Mar 27/23 - Province approved to move forward to SOW/SCO, awaiting internal SOW creation
+Dec 2/22 - Lori C. advised this will be reverting back to BA 
+Nov 24/22 - V2 submitted to Province
+Nov 23/22 - V2 with Sian for approval
+Nov 22/22 - submitted to Province"
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-479 Amend SCO-453 RTMC PS Remed,7,V1,ADSL,2023-01-09,2023-01-10,2,2,Jan 9/23 - With Sian,Jan 10/23 - V1 Sent to Province,,"Feb 9/23 - Signed
+Feb 8/23 - With Province for signature
+Feb 8/23 - With Sian for signature approval
+Feb 7/23 - V4 sent to Province
+Feb 3/23 - Province question with Sharon
+Jan 31/23 - V3 sent to Province
+Jan 31/23 - Followed up with Sharon
+Jan 25/23 - Sent Sharon T to answer question
+Jan 20/23 - Sent to Sian
+Jan 20/23 - Province sent V2 back with a Q
+Jan 10/23 - V1 Sent to Province
+Jan 9/23 - With Sian "
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-479 Amend SCO-453 RTMC PS Remed,7,V2,CSBC,2023-01-11,2023-01-20,10,8,Jan 10/23 - V1 Sent to Province,Jan 20/23 - Province sent V2 back with a Q,,"Feb 9/23 - Signed
+Feb 8/23 - With Province for signature
+Feb 8/23 - With Sian for signature approval
+Feb 7/23 - V4 sent to Province
+Feb 3/23 - Province question with Sharon
+Jan 31/23 - V3 sent to Province
+Jan 31/23 - Followed up with Sharon
+Jan 25/23 - Sent Sharon T to answer question
+Jan 20/23 - Sent to Sian
+Jan 20/23 - Province sent V2 back with a Q
+Jan 10/23 - V1 Sent to Province
+Jan 9/23 - With Sian "
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-479 Amend SCO-453 RTMC PS Remed,7,V3,ADSL,2023-01-21,2023-01-31,11,7,Jan 20/23 - Province sent V2 back with a Q,Jan 31/23 - V3 sent to Province,,"Feb 9/23 - Signed
+Feb 8/23 - With Province for signature
+Feb 8/23 - With Sian for signature approval
+Feb 7/23 - V4 sent to Province
+Feb 3/23 - Province question with Sharon
+Jan 31/23 - V3 sent to Province
+Jan 31/23 - Followed up with Sharon
+Jan 25/23 - Sent Sharon T to answer question
+Jan 20/23 - Sent to Sian
+Jan 20/23 - Province sent V2 back with a Q
+Jan 10/23 - V1 Sent to Province
+Jan 9/23 - With Sian "
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-479 Amend SCO-453 RTMC PS Remed,7,V4,CSBC,2023-02-01,2023-02-07,7,5,Jan 31/23 - V3 sent to Province,Feb 7/23 - V4 sent to Province,V4 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Feb 9/23 - Signed
+Feb 8/23 - With Province for signature
+Feb 8/23 - With Sian for signature approval
+Feb 7/23 - V4 sent to Province
+Feb 3/23 - Province question with Sharon
+Jan 31/23 - V3 sent to Province
+Jan 31/23 - Followed up with Sharon
+Jan 25/23 - Sent Sharon T to answer question
+Jan 20/23 - Sent to Sian
+Jan 20/23 - Province sent V2 back with a Q
+Jan 10/23 - V1 Sent to Province
+Jan 9/23 - With Sian "
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-479 Amend SCO-453 RTMC PS Remed,7,V4,ADSL,2023-02-07,2023-02-07,1,1,Feb 7/23 - V4 sent to Province,Feb 7/23 - V4 sent to Province,V4 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Feb 9/23 - Signed
+Feb 8/23 - With Province for signature
+Feb 8/23 - With Sian for signature approval
+Feb 7/23 - V4 sent to Province
+Feb 3/23 - Province question with Sharon
+Jan 31/23 - V3 sent to Province
+Jan 31/23 - Followed up with Sharon
+Jan 25/23 - Sent Sharon T to answer question
+Jan 20/23 - Sent to Sian
+Jan 20/23 - Province sent V2 back with a Q
+Jan 10/23 - V1 Sent to Province
+Jan 9/23 - With Sian "
+RTMC Remediation Project,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-479 Amend SCO-453 RTMC PS Remed,7,V4,SIGNINGTIME,2023-02-08,2023-02-09,2,2,Feb 8/23 - With Sian for signature approval,Feb 9/23 - Signed,,"Feb 9/23 - Signed
+Feb 8/23 - With Province for signature
+Feb 8/23 - With Sian for signature approval
+Feb 7/23 - V4 sent to Province
+Feb 3/23 - Province question with Sharon
+Jan 31/23 - V3 sent to Province
+Jan 31/23 - Followed up with Sharon
+Jan 25/23 - Sent Sharon T to answer question
+Jan 20/23 - Sent to Sian
+Jan 20/23 - Province sent V2 back with a Q
+Jan 10/23 - V1 Sent to Province
+Jan 9/23 - With Sian "
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V1,ADSL,2023-05-05,2023-07-14,71,51,"May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created",July 14/23 - V1 sent to Province,,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V2,CSBC,2023-07-15,2023-07-27,13,9,July 14/23 - V1 sent to Province,"July 27/23 - V2 back from Province, question with Chris",,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V3,ADSL,2023-07-28,2023-08-01,5,3,"July 27/23 - V2 back from Province, question with Chris",Aug 1/23 - V3 sent to Province,,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V4,CSBC,2023-08-02,2023-08-14,13,9,Aug 1/23 - V3 sent to Province,Aug 14/23 - V4 back from Province,,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V5,ADSL,2023-08-15,2023-08-15,1,1,Aug 14/23 - V4 back from Province,Aug 15/23 - V5 sent to Province,,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V6,CSBC,2023-08-16,2023-08-20,5,3,Aug 15/23 - V5 sent to Province,"Aug 21/23 - Province agreed to move to Final, with Sian",CSBC interval was closed at the day before signing/final workflow started.,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-515 SDN Release 4 Implementation,8,V5,SIGNINGTIME,2023-08-21,2023-08-23,3,3,"Aug 21/23 - Province agreed to move to Final, with Sian",Aug 23/23 - Signed,,"Aug 23/23 - Signed
+Aug 21/23 - Province agreed to move to Final, with Sian
+Aug 15/23 - V5 sent to Province
+Aug 14/23 - V4 back from Province
+Aug 9/23 - Rian talking to Emma
+Aug 8/23 - Province responded with statement regarding SOWs not being ROM picing, internal convo needed, emailed Michelle
+Aug 1/23 - V3 sent to Province
+July 27/23 - V2 back from Province, question with Chris
+July 14/23 - V1 sent to Province
+July 14/23 - With Lori C. and Sian for approval
+July 12/23 - Decision to remove licenses from this SCO and scribe them at a later date, with internal team for review
+July 12/23 - SOW rec'd from vendor, internal review scheduled for today
+July 10/23 - Cathy followed up with Vendor
+July 6/23 - Cathy getting quotes from vendors 
+June 23/23 - Michelle C following up with Vendor quotes
+June 19/23 - Cathy emailed Chris to obtain vendor quotes for the external resources
+June 19/23 - Followed up and scheduled an internal mtg 
+June 15/23 - Draft started, emailed Chris/Cathy for the updated table 
+June 13/23 - SOW Rel 4 approved
+May 5/23 - SOW with Province who have asked for an early project start, so SCO number assigned so a WBS code can be created"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V1,ADSL,2023-06-19,2023-10-04,108,78,June 19/23 - Rian working on SOW,Oct 4/23 - V1 submitted to Province,,"Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V2,CSBC,2023-10-05,2023-10-05,1,1,Oct 4/23 - V1 submitted to Province,Oct 5/23 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V1.1,ADSL,2023-10-05,2023-10-05,1,1,Oct 5/23 - V1.1 sent to Province,Oct 5/23 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V2,CSBC,2023-10-06,2023-10-11,6,4,Oct 5/23 - V1.1 sent to Province,Oct 11/23 - V2 rec'd from Province,,"Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V3,ADSL,2023-10-12,2023-10-30,19,13,Oct 11/23 - V2 rec'd from Province,Oct 30/23 - V3 sent to Province,,"Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V4.1,CSBC,2023-10-31,2023-11-11,12,9,Oct 30/23 - V3 sent to Province,Nov 11/23 - V4.1 rec'd,"Expected Province/CSBC version V4 after prior send, but source says V4.1 returned/back/received.","Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+Mainframe Processor Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-536 MF Processor Refresh,9,V4.1,SIGNINGTIME,2023-11-16,2023-11-16,1,1,Nov 16/23 - Signed,Nov 16/23 - Signed,,"Nov 16/23 - Signed
+Nov 11/23 - V4.1 rec'd
+Oct 30/23 - V3 sent to Province 
+Oct 11/23 - V2 rec'd from Province
+Oct 5/23 - V1.1 sent to Province 
+Oct 4/23 - V1 submitted to Province
+Oct 3/23 - With Lori C.
+Sept 29/23 - with Tyler for approval
+Sept 27/23 - Cathy getting updated quotes
+Sept 26/23 - updates sent to Cathy for review
+Sept 25/23 - V1 with Cathy / Rian for review
+Sept 13/23 - SOW approved
+Aug 12/23 - SOW expected back from Province shortly
+Aug 2/23 - SCO number requested, asked for latest version of SOW which is still v1.3
+ June 19/23 - Rian working on SOW"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V1,CSBC,2023-10-10,2023-10-10,1,1,"Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31","Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31",V1 appears returned/back/received without a prior parsed send event; start date was inferred as the same day.,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V2,CSBC,2023-10-10,2023-10-10,1,1,"Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31","Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31",V2 appears returned/back/received without a prior parsed send event; start date was inferred as the same day.,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V3,ADSL,2023-10-11,2023-10-12,2,2,"Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31",Oct 12/23 - V3 sent to Province,,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V4,CSBC,2023-10-13,2023-10-13,1,1,Oct 12/23 - V3 sent to Province,Oct 13/23 - V4 rec'd from Province,,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V5,ADSL,2023-10-14,2023-10-16,3,1,Oct 13/23 - V4 rec'd from Province,Oct 16/23 - V5 sent to Province,,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V6,CSBC,2023-10-17,2023-10-18,2,2,Oct 16/23 - V5 sent to Province,Oct 19/23 - with Province for signing,CSBC interval was closed at the day before signing/final workflow started.,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-558 NRS VDI Service POC,10,V5,SIGNINGTIME,2023-10-19,2023-10-24,6,4,Oct 19/23 - with Province for signing,Oct 24/23 - Signed,,"Oct 24/23 - Signed
+Oct 19/23 - with Province for signing
+Oct 17/23 - SOW approved
+Oct 16/23 - V5 sent to Province
+Oct 13/23 - V4 rec'd from Province
+Oct 12/23 - V3 sent to Province 
+Oct 10/23 - V1 sent to Province, if/when V2 comes back from Province need to talk to Chris S./Rian, suggested business completion date from Rian is 2 months after requirements sign-off, not Dec 31
+Oct 10/23 - With Lori C., Province requested a name change to reflect the NRS as this is for the whole sector, not an individual Ministry
+Oct 6/23 - With Tyler for approval
+Sept 29/23 - V1 with Rian for review
+Sept 27/23 - V1 with Cathy / Rian for review
+Sept 26/23 - Province requested SOW and SCO together"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-562 Patch Mgmt Ph 3A,11,V1,ADSL,2023-10-12,2023-10-13,2,2,Oct 12/23 - Drafing SCO,Oct 13/23 - V1 sent to Province,,"Nov 2/23 - Signed
+Oct 25/23 - V3 sent to Province
+Oct 20/23 - V2.1 back from Province
+Oct 13/23 - V1 sent to Province
+Oct 12/23 - With Tyler
+Oct 12/23 - With Rian/Cathy for review
+Oct 12/23 - Drafing SCO"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-562 Patch Mgmt Ph 3A,11,V2.1,CSBC,2023-10-14,2023-10-20,7,5,Oct 13/23 - V1 sent to Province,Oct 20/23 - V2.1 back from Province,"Expected Province/CSBC version V2 after prior send, but source says V2.1 returned/back/received.","Nov 2/23 - Signed
+Oct 25/23 - V3 sent to Province
+Oct 20/23 - V2.1 back from Province
+Oct 13/23 - V1 sent to Province
+Oct 12/23 - With Tyler
+Oct 12/23 - With Rian/Cathy for review
+Oct 12/23 - Drafing SCO"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-562 Patch Mgmt Ph 3A,11,V3,ADSL,2023-10-21,2023-10-25,5,3,Oct 20/23 - V2.1 back from Province,Oct 25/23 - V3 sent to Province,,"Nov 2/23 - Signed
+Oct 25/23 - V3 sent to Province
+Oct 20/23 - V2.1 back from Province
+Oct 13/23 - V1 sent to Province
+Oct 12/23 - With Tyler
+Oct 12/23 - With Rian/Cathy for review
+Oct 12/23 - Drafing SCO"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-562 Patch Mgmt Ph 3A,11,V4,CSBC,2023-10-26,2023-11-01,7,5,Oct 25/23 - V3 sent to Province,Nov 2/23 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Nov 2/23 - Signed
+Oct 25/23 - V3 sent to Province
+Oct 20/23 - V2.1 back from Province
+Oct 13/23 - V1 sent to Province
+Oct 12/23 - With Tyler
+Oct 12/23 - With Rian/Cathy for review
+Oct 12/23 - Drafing SCO"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-562 Patch Mgmt Ph 3A,11,V3,SIGNINGTIME,2023-11-02,2023-11-02,1,1,Nov 2/23 - Signed,Nov 2/23 - Signed,,"Nov 2/23 - Signed
+Oct 25/23 - V3 sent to Province
+Oct 20/23 - V2.1 back from Province
+Oct 13/23 - V1 sent to Province
+Oct 12/23 - With Tyler
+Oct 12/23 - With Rian/Cathy for review
+Oct 12/23 - Drafing SCO"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-576 Amd SCO-558 NRS VDI Service POC,12,V1,ADSL,2023-11-28,2023-11-28,1,1,Nov 28/23 - V1 sent to Province,Nov 28/23 - V1 sent to Province,,"Dec 14/23 - Signed
+Dec 12/23 - V2 rec'd
+Nov 28/23 - V1 sent to Province"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-576 Amd SCO-558 NRS VDI Service POC,12,V2,CSBC,2023-11-29,2023-12-12,14,10,Nov 28/23 - V1 sent to Province,Dec 12/23 - V2 rec'd,,"Dec 14/23 - Signed
+Dec 12/23 - V2 rec'd
+Nov 28/23 - V1 sent to Province"
+NRS VDI Service PoC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-576 Amd SCO-558 NRS VDI Service POC,12,V2,SIGNINGTIME,2023-12-14,2023-12-14,1,1,Dec 14/23 - Signed,Dec 14/23 - Signed,,"Dec 14/23 - Signed
+Dec 12/23 - V2 rec'd
+Nov 28/23 - V1 sent to Province"
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-577 Amd SCO-515 SDN Rel4 Impl,13,V1,ADSL,2023-11-07,2023-11-09,3,3,Nov 7/23 - with Michelle C.,Nov 9/23 - V1 sent to Province,,"Nov 27/23 - Signed
+Nov 24/23 - Final with Sian
+Nov 24/23 - V2 back from Province
+Nov 9/23 - V1 sent to Province 
+Nov 8/23 - with Sian
+Nov 7/23 - with Michelle C."
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-577 Amd SCO-515 SDN Rel4 Impl,13,V2,CSBC,2023-11-10,2023-11-24,15,11,Nov 9/23 - V1 sent to Province,Nov 24/23 - V2 back from Province,,"Nov 27/23 - Signed
+Nov 24/23 - Final with Sian
+Nov 24/23 - V2 back from Province
+Nov 9/23 - V1 sent to Province 
+Nov 8/23 - with Sian
+Nov 7/23 - with Michelle C."
+SDN Release 4,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-577 Amd SCO-515 SDN Rel4 Impl,13,V2,SIGNINGTIME,2023-11-24,2023-11-27,4,2,Nov 24/23 - Final with Sian,Nov 27/23 - Signed,,"Nov 27/23 - Signed
+Nov 24/23 - Final with Sian
+Nov 24/23 - V2 back from Province
+Nov 9/23 - V1 sent to Province 
+Nov 8/23 - with Sian
+Nov 7/23 - with Michelle C."
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-578 Zscaler Design: Initiative 1,14,V1,ADSL,2023-10-27,2023-11-30,35,25,Oct 27/23 - with Rian / Cathy,Nov 30/23 - V1 sent to Province,Some status lines had no parseable date: Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2),"Dec 1/23 - Signed
+Dec 1/23 - Final version sent to Province
+Dec 1/23 - Confirmed with Joshua re: Province proposed project end date, with Sian for signature
+Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date
+Nov 30/23 - V1 sent to Province
+Nov 30/23 - SOW still being reviewed, request to send updated SCO over to Province from Sian/Rian
+Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2)
+Oct 27/23 - with Rian / Cathy"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-578 Zscaler Design: Initiative 1,14,V2.1,CSBC,2023-12-01,2023-12-01,1,1,Nov 30/23 - V1 sent to Province,Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date,"Some status lines had no parseable date: Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2) | Expected Province/CSBC version V2 after prior send, but source says V2.1 returned/back/received.","Dec 1/23 - Signed
+Dec 1/23 - Final version sent to Province
+Dec 1/23 - Confirmed with Joshua re: Province proposed project end date, with Sian for signature
+Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date
+Nov 30/23 - V1 sent to Province
+Nov 30/23 - SOW still being reviewed, request to send updated SCO over to Province from Sian/Rian
+Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2)
+Oct 27/23 - with Rian / Cathy"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-578 Zscaler Design: Initiative 1,14,V3,ADSL,2023-12-01,2023-12-01,1,1,Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date,Dec 1/23 - Final version sent to Province,Some status lines had no parseable date: Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2) | Version number was inferred as V3 from an unversioned Province submission line. | Computed start 2023-12-02 after end 2023-12-01; collapsed to one-day interval for review.,"Dec 1/23 - Signed
+Dec 1/23 - Final version sent to Province
+Dec 1/23 - Confirmed with Joshua re: Province proposed project end date, with Sian for signature
+Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date
+Nov 30/23 - V1 sent to Province
+Nov 30/23 - SOW still being reviewed, request to send updated SCO over to Province from Sian/Rian
+Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2)
+Oct 27/23 - with Rian / Cathy"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-578 Zscaler Design: Initiative 1,14,V3,SIGNINGTIME,2023-12-01,2023-12-01,1,1,Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date,Dec 1/23 - Signed,Some status lines had no parseable date: Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2),"Dec 1/23 - Signed
+Dec 1/23 - Final version sent to Province
+Dec 1/23 - Confirmed with Joshua re: Province proposed project end date, with Sian for signature
+Dec 1/23 - V2.1 back from Province ok to move to final if we accept proposed end date
+Nov 30/23 - V1 sent to Province
+Nov 30/23 - SOW still being reviewed, request to send updated SCO over to Province from Sian/Rian
+Waiting for SOW approval (there will need to be a 2nd SCO for Initiave 2)
+Oct 27/23 - with Rian / Cathy"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-592 Zscaler Design - Init 2,15,V1,ADSL,2024-01-23,2024-01-23,1,1,Jan 23/24 - V1 sent to Province,Jan 23/24 - V1 sent to Province,,"Jan 26/24 - Signed
+Jan 26/24 - V2 rec'd
+Jan 23/24 - V1 sent to Province"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-592 Zscaler Design - Init 2,15,V2,CSBC,2024-01-24,2024-01-26,3,3,Jan 23/24 - V1 sent to Province,Jan 26/24 - V2 rec'd,,"Jan 26/24 - Signed
+Jan 26/24 - V2 rec'd
+Jan 23/24 - V1 sent to Province"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-592 Zscaler Design - Init 2,15,V2,SIGNINGTIME,2024-01-26,2024-01-26,1,1,Jan 26/24 - Signed,Jan 26/24 - Signed,,"Jan 26/24 - Signed
+Jan 26/24 - V2 rec'd
+Jan 23/24 - V1 sent to Province"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-602 Amd SCO-562 Patch Mgt Ph 3A,16,V1,ADSL,2024-02-12,2024-02-12,1,1,Feb 12/24 - V1 sent to Province,Feb 12/24 - V1 sent to Province,,"Feb 23/24 - Signed
+Feb 12/24 - V1 sent to Province"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-602 Amd SCO-562 Patch Mgt Ph 3A,16,V2,CSBC,2024-02-13,2024-02-22,10,8,Feb 12/24 - V1 sent to Province,Feb 23/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Feb 23/24 - Signed
+Feb 12/24 - V1 sent to Province"
+Patch Management Phase 3A,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-602 Amd SCO-562 Patch Mgt Ph 3A,16,V1,SIGNINGTIME,2024-02-23,2024-02-23,1,1,Feb 23/24 - Signed,Feb 23/24 - Signed,,"Feb 23/24 - Signed
+Feb 12/24 - V1 sent to Province"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-609 Amd SCO-578 Zscaler Design-Init 1,17,V1,ADSL,2024-02-21,2024-02-22,2,2,Feb 21/24 - with Erwin,Feb 22/24 - V1 sent to Province,,"Mar 8/24 - Signed
+Feb 22/24 - V1 sent to Province
+Feb 21/24 - with Erwin"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-609 Amd SCO-578 Zscaler Design-Init 1,17,V2,CSBC,2024-02-23,2024-03-07,14,10,Feb 22/24 - V1 sent to Province,Mar 8/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Mar 8/24 - Signed
+Feb 22/24 - V1 sent to Province
+Feb 21/24 - with Erwin"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-609 Amd SCO-578 Zscaler Design-Init 1,17,V1,SIGNINGTIME,2024-03-08,2024-03-08,1,1,Mar 8/24 - Signed,Mar 8/24 - Signed,,"Mar 8/24 - Signed
+Feb 22/24 - V1 sent to Province
+Feb 21/24 - with Erwin"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-610 Amd SCO-592 Zscaler Design-Init 2,18,V1,ADSL,2024-02-21,2024-02-22,2,2,Feb 21/24 - with Erwin,Feb 22/24 - V1 sent to Province,,"Mar 8/24 - Signed
+Feb 22/24 - V1 sent to Province
+Feb 21/24 - with Erwin"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-610 Amd SCO-592 Zscaler Design-Init 2,18,V2,CSBC,2024-02-23,2024-03-07,14,10,Feb 22/24 - V1 sent to Province,Mar 8/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Mar 8/24 - Signed
+Feb 22/24 - V1 sent to Province
+Feb 21/24 - with Erwin"
+Zscaler Initiative 1 and 2,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-610 Amd SCO-592 Zscaler Design-Init 2,18,V1,SIGNINGTIME,2024-03-08,2024-03-08,1,1,Mar 8/24 - Signed,Mar 8/24 - Signed,,"Mar 8/24 - Signed
+Feb 22/24 - V1 sent to Province
+Feb 21/24 - with Erwin"
+Microsoft Defender for Endpoint (MDE) Expansion,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-639 MS Defender Ph1,19,V1,ADSL,2024-05-15,2024-05-15,1,1,May 15/24 - V1 sent to Province,May 15/24 - V1 sent to Province,,"May 28/24 - Signed
+May 22/24 - V3 sent to Province
+May 21/24 - V2.1 rec'd
+May 15/24 - V1 sent to Province"
+Microsoft Defender for Endpoint (MDE) Expansion,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-639 MS Defender Ph1,19,V2.1,CSBC,2024-05-16,2024-05-21,6,4,May 15/24 - V1 sent to Province,May 21/24 - V2.1 rec'd,"Expected Province/CSBC version V2 after prior send, but source says V2.1 returned/back/received.","May 28/24 - Signed
+May 22/24 - V3 sent to Province
+May 21/24 - V2.1 rec'd
+May 15/24 - V1 sent to Province"
+Microsoft Defender for Endpoint (MDE) Expansion,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-639 MS Defender Ph1,19,V3,ADSL,2024-05-22,2024-05-22,1,1,May 21/24 - V2.1 rec'd,May 22/24 - V3 sent to Province,,"May 28/24 - Signed
+May 22/24 - V3 sent to Province
+May 21/24 - V2.1 rec'd
+May 15/24 - V1 sent to Province"
+Microsoft Defender for Endpoint (MDE) Expansion,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-639 MS Defender Ph1,19,V4,CSBC,2024-05-23,2024-05-27,5,3,May 22/24 - V3 sent to Province,May 28/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"May 28/24 - Signed
+May 22/24 - V3 sent to Province
+May 21/24 - V2.1 rec'd
+May 15/24 - V1 sent to Province"
+Microsoft Defender for Endpoint (MDE) Expansion,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-639 MS Defender Ph1,19,V3,SIGNINGTIME,2024-05-28,2024-05-28,1,1,May 28/24 - Signed,May 28/24 - Signed,,"May 28/24 - Signed
+May 22/24 - V3 sent to Province
+May 21/24 - V2.1 rec'd
+May 15/24 - V1 sent to Province"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V1,ADSL,2024-08-02,2024-08-13,12,8,Aug 2/24 - with Nicole/Cathy,Aug 13/24 - V1 sent to Province,,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V2.2,CSBC,2024-08-14,2024-08-26,13,9,Aug 13/24 - V1 sent to Province,Aug 26/24 - V2.2 rec'd; V3 sent to Province,"Expected Province/CSBC version V2 after prior send, but source says V2.2 returned/back/received.","Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V3,ADSL,2024-08-26,2024-08-26,1,1,Aug 26/24 - V2.2 rec'd; V3 sent to Province,Aug 26/24 - V2.2 rec'd; V3 sent to Province,Computed start 2024-08-27 after end 2024-08-26; collapsed to one-day interval for review.,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V4,CSBC,2024-08-27,2024-08-29,3,3,Aug 26/24 - V2.2 rec'd; V3 sent to Province,Aug 29/24 - V3.1 sent to Province,V3.1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V3.1,ADSL,2024-08-29,2024-08-29,1,1,Aug 29/24 - V3.1 sent to Province,Aug 29/24 - V3.1 sent to Province,V3.1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V4,CSBC,2024-08-30,2024-09-12,14,10,Aug 29/24 - V3.1 sent to Province,Sept 12/24 - V4 rec'd; V5 sent to Province,,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V5,ADSL,2024-09-12,2024-09-12,1,1,Sept 12/24 - V4 rec'd; V5 sent to Province,Sept 12/24 - V4 rec'd; V5 sent to Province,Computed start 2024-09-13 after end 2024-09-12; collapsed to one-day interval for review.,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V6,CSBC,2024-09-13,2024-09-19,7,5,Sept 12/24 - V4 rec'd; V5 sent to Province,Sept 20/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-662 Patch Mgmt Phase 3B,20,V5,SIGNINGTIME,2024-09-20,2024-09-20,1,1,Sept 20/24 - Signed,Sept 20/24 - Signed,,"Sept 20/24 - Signed
+Sept 12/24 - V4 rec'd; V5 sent to Province
+Aug 29/24 - V3.1 sent to Province
+Aug 28/24 - question from Province with Cathy
+Aug 26/24 - V2.2 rec'd; V3 sent to Province
+Aug 13/24 - V1 sent to Province
+Aug 7/24 - with Tyler
+Aug 2/24 - with Nicole/Cathy"
+Microsoft Azure Arc,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-673 MS Azure Arc,21,V1,ADSL,2024-09-11,2024-09-23,13,9,Sept 11/24 - SOW with Province; SCO drafted,Sept 23/24 - V1 sent to Province,,"Oct 4/24 - Signed
+Sept 23/24 - V1 sent to Province
+Sept 19/24 - with Sian for approval
+Sept 11/24 - SOW with Province; SCO drafted"
+Microsoft Azure Arc,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-673 MS Azure Arc,21,V2,CSBC,2024-09-24,2024-10-03,10,8,Sept 23/24 - V1 sent to Province,Oct 4/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Oct 4/24 - Signed
+Sept 23/24 - V1 sent to Province
+Sept 19/24 - with Sian for approval
+Sept 11/24 - SOW with Province; SCO drafted"
+Microsoft Azure Arc,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-673 MS Azure Arc,21,V1,SIGNINGTIME,2024-10-04,2024-10-04,1,1,Oct 4/24 - Signed,Oct 4/24 - Signed,,"Oct 4/24 - Signed
+Sept 23/24 - V1 sent to Province
+Sept 19/24 - with Sian for approval
+Sept 11/24 - SOW with Province; SCO drafted"
+Tenable Pilot (Addition),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-677 Tenable,22,V1,ADSL,2024-09-20,2024-09-24,5,3,Sept 20/24 - SOW approved,Sept 24/24 - V1 sent to Province,,"Oct 8/24 - Signed
+Sept 24/24 - V1 sent to Province
+Sept 24/24 - With Tyler, with Sian
+Sept 24/24 - With Cathy/Rian
+Sept 20/24 - SOW approved"
+Tenable Pilot (Addition),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-677 Tenable,22,V2,CSBC,2024-09-25,2024-10-07,13,9,Sept 24/24 - V1 sent to Province,Oct 8/24 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Oct 8/24 - Signed
+Sept 24/24 - V1 sent to Province
+Sept 24/24 - With Tyler, with Sian
+Sept 24/24 - With Cathy/Rian
+Sept 20/24 - SOW approved"
+Tenable Pilot (Addition),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-677 Tenable,22,V1,SIGNINGTIME,2024-10-08,2024-10-08,1,1,Oct 8/24 - Signed,Oct 8/24 - Signed,,"Oct 8/24 - Signed
+Sept 24/24 - V1 sent to Province
+Sept 24/24 - With Tyler, with Sian
+Sept 24/24 - With Cathy/Rian
+Sept 20/24 - SOW approved"
+"CCCS Sensors
+PAW Implementation Phase 1",100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-684 Security Enhancement Program,23,V1,ADSL,2024-10-18,2024-10-23,6,4,"Oct 18/24 - SCO drafted, awaiting SOW approval",Oct 23/24 - V1 sent to Province,,"Oct 30/24 - Signed
+Oct 29/24 - Final sent to Province
+Oct 28/24 - Move to final, with Sian
+Oct 28/24 - V3 sent back to Province
+Oct 28/24 V2 back from Province
+Oct 23/24 - V1 sent to Province
+Oct 22/24 - With Tyler, with Sian
+Oct 22/24 - With Rian/Joyce for review
+Oct 21/24 - SOW approved
+Oct 18/24 - SCO drafted, awaiting SOW approval"
+"CCCS Sensors
+PAW Implementation Phase 1",100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-684 Security Enhancement Program,23,V2,CSBC,2024-10-24,2024-10-28,5,3,Oct 23/24 - V1 sent to Province,Oct 28/24 V2 back from Province,,"Oct 30/24 - Signed
+Oct 29/24 - Final sent to Province
+Oct 28/24 - Move to final, with Sian
+Oct 28/24 - V3 sent back to Province
+Oct 28/24 V2 back from Province
+Oct 23/24 - V1 sent to Province
+Oct 22/24 - With Tyler, with Sian
+Oct 22/24 - With Rian/Joyce for review
+Oct 21/24 - SOW approved
+Oct 18/24 - SCO drafted, awaiting SOW approval"
+"CCCS Sensors
+PAW Implementation Phase 1",100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-684 Security Enhancement Program,23,V3,ADSL,2024-10-28,2024-10-28,1,1,Oct 28/24 V2 back from Province,Oct 28/24 - V3 sent back to Province,Computed start 2024-10-29 after end 2024-10-28; collapsed to one-day interval for review.,"Oct 30/24 - Signed
+Oct 29/24 - Final sent to Province
+Oct 28/24 - Move to final, with Sian
+Oct 28/24 - V3 sent back to Province
+Oct 28/24 V2 back from Province
+Oct 23/24 - V1 sent to Province
+Oct 22/24 - With Tyler, with Sian
+Oct 22/24 - With Rian/Joyce for review
+Oct 21/24 - SOW approved
+Oct 18/24 - SCO drafted, awaiting SOW approval"
+"CCCS Sensors
+PAW Implementation Phase 1",100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-684 Security Enhancement Program,23,V4,CSBC,2024-10-29,2024-10-29,1,1,Oct 28/24 - V3 sent back to Province,Oct 29/24 - Final sent to Province,Version number was inferred as V1 from an unversioned Province submission line. | V1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Oct 30/24 - Signed
+Oct 29/24 - Final sent to Province
+Oct 28/24 - Move to final, with Sian
+Oct 28/24 - V3 sent back to Province
+Oct 28/24 V2 back from Province
+Oct 23/24 - V1 sent to Province
+Oct 22/24 - With Tyler, with Sian
+Oct 22/24 - With Rian/Joyce for review
+Oct 21/24 - SOW approved
+Oct 18/24 - SCO drafted, awaiting SOW approval"
+"CCCS Sensors
+PAW Implementation Phase 1",100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-684 Security Enhancement Program,23,V1,ADSL,2024-10-29,2024-10-29,1,1,Oct 29/24 - Final sent to Province,Oct 29/24 - Final sent to Province,Version number was inferred as V1 from an unversioned Province submission line. | V1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Oct 30/24 - Signed
+Oct 29/24 - Final sent to Province
+Oct 28/24 - Move to final, with Sian
+Oct 28/24 - V3 sent back to Province
+Oct 28/24 V2 back from Province
+Oct 23/24 - V1 sent to Province
+Oct 22/24 - With Tyler, with Sian
+Oct 22/24 - With Rian/Joyce for review
+Oct 21/24 - SOW approved
+Oct 18/24 - SCO drafted, awaiting SOW approval"
+"CCCS Sensors
+PAW Implementation Phase 1",100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-684 Security Enhancement Program,23,V1,SIGNINGTIME,2024-10-28,2024-10-30,3,3,"Oct 28/24 - Move to final, with Sian",Oct 30/24 - Signed,,"Oct 30/24 - Signed
+Oct 29/24 - Final sent to Province
+Oct 28/24 - Move to final, with Sian
+Oct 28/24 - V3 sent back to Province
+Oct 28/24 V2 back from Province
+Oct 23/24 - V1 sent to Province
+Oct 22/24 - With Tyler, with Sian
+Oct 22/24 - With Rian/Joyce for review
+Oct 21/24 - SOW approved
+Oct 18/24 - SCO drafted, awaiting SOW approval"
+Tenable Pilot (Addition),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-702 Amd SCO-677 Tenable,24,V1,ADSL,2024-12-16,2024-12-16,1,1,Dec 16/24 - V1 sent to Province,Dec 16/24 - V1 sent to Province,,"Jan 29/25 - Signed
+Dec 16/24 - V1 sent to Province"
+Tenable Pilot (Addition),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-702 Amd SCO-677 Tenable,24,V2,CSBC,2024-12-17,2025-01-28,43,31,Dec 16/24 - V1 sent to Province,Jan 29/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Jan 29/25 - Signed
+Dec 16/24 - V1 sent to Province"
+Tenable Pilot (Addition),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-702 Amd SCO-677 Tenable,24,V1,SIGNINGTIME,2025-01-29,2025-01-29,1,1,Jan 29/25 - Signed,Jan 29/25 - Signed,,"Jan 29/25 - Signed
+Dec 16/24 - V1 sent to Province"
+CCCS Sensors,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-704 Amd684 SEP(CCCS Sens-Ph2),25,V1,ADSL,2025-01-17,2025-01-20,4,2,Jan 17/25 - with Sian,Jan 20/25 - V1 sent to Province,,"Feb 26/25 - Signed
+Jan 20/25 - V1 sent to Province
+Jan 17/25 - with Sian"
+CCCS Sensors,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-704 Amd684 SEP(CCCS Sens-Ph2),25,V2,CSBC,2025-01-21,2025-02-25,36,26,Jan 20/25 - V1 sent to Province,Feb 26/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Feb 26/25 - Signed
+Jan 20/25 - V1 sent to Province
+Jan 17/25 - with Sian"
+CCCS Sensors,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-704 Amd684 SEP(CCCS Sens-Ph2),25,V1,SIGNINGTIME,2025-02-26,2025-02-26,1,1,Feb 26/25 - Signed,Feb 26/25 - Signed,,"Feb 26/25 - Signed
+Jan 20/25 - V1 sent to Province
+Jan 17/25 - with Sian"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V1,ADSL,2025-01-27,2025-01-28,2,2,Jan 27/25 - with Tyler,Jan 28/25 - V1 sent to Province,,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V2,CSBC,2025-01-29,2025-02-06,9,7,Jan 28/25 - V1 sent to Province,Feb 6/25 - V2 rec'd; with Nicole / Erwin,,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V3,ADSL,2025-02-07,2025-02-07,1,1,Feb 6/25 - V2 rec'd; with Nicole / Erwin,Feb 7/25 - V3 sent to Province,,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V4,CSBC,2025-02-08,2025-02-13,6,4,Feb 7/25 - V3 sent to Province,Feb 13/25 - V4 rec'd; V5 sent to Province,,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V5,ADSL,2025-02-13,2025-02-13,1,1,Feb 13/25 - V4 rec'd; V5 sent to Province,Feb 13/25 - V4 rec'd; V5 sent to Province,Computed start 2025-02-14 after end 2025-02-13; collapsed to one-day interval for review.,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V6,CSBC,2025-02-14,2025-02-23,10,6,Feb 13/25 - V4 rec'd; V5 sent to Province,Feb 24/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+PAW Implementation Phase 2a,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-705 SEP PAW Impl Ph2A,26,V5,SIGNINGTIME,2025-02-24,2025-02-24,1,1,Feb 24/25 - Signed,Feb 24/25 - Signed,,"Feb 24/25 - Signed
+Feb 13/25 - V4 rec'd; V5 sent to Province
+Feb 7/25 - V3 sent to Province
+Feb 6/25 - V2 rec'd; with Nicole / Erwin
+Jan 28/25 - V1 sent to Province
+Jan 27/25 - with Tyler"
+Enhanced Logging,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-706 SEP Enhanced Logging,27,V1,ADSL,2025-01-29,2025-01-30,2,2,Jan 29/25 - Emma to approved revised SOW; SCO with Tyler,Jan 30/25 - V1 sent to Province,,"Feb 27/25 - Signed
+Feb 18/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd
+Jan 30/25 - V1 sent to Province
+Jan 29/25 - Emma to approved revised SOW; SCO with Tyler"
+Enhanced Logging,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-706 SEP Enhanced Logging,27,V2,CSBC,2025-01-31,2025-02-13,14,10,Jan 30/25 - V1 sent to Province,Feb 13/25 - V2 rec'd,,"Feb 27/25 - Signed
+Feb 18/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd
+Jan 30/25 - V1 sent to Province
+Jan 29/25 - Emma to approved revised SOW; SCO with Tyler"
+Enhanced Logging,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-706 SEP Enhanced Logging,27,V3,ADSL,2025-02-14,2025-02-18,5,3,Feb 13/25 - V2 rec'd,Feb 18/25 - V3 sent to Province,,"Feb 27/25 - Signed
+Feb 18/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd
+Jan 30/25 - V1 sent to Province
+Jan 29/25 - Emma to approved revised SOW; SCO with Tyler"
+Enhanced Logging,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-706 SEP Enhanced Logging,27,V4,CSBC,2025-02-19,2025-02-26,8,6,Feb 18/25 - V3 sent to Province,Feb 27/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Feb 27/25 - Signed
+Feb 18/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd
+Jan 30/25 - V1 sent to Province
+Jan 29/25 - Emma to approved revised SOW; SCO with Tyler"
+Enhanced Logging,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-706 SEP Enhanced Logging,27,V3,SIGNINGTIME,2025-02-27,2025-02-27,1,1,Feb 27/25 - Signed,Feb 27/25 - Signed,,"Feb 27/25 - Signed
+Feb 18/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd
+Jan 30/25 - V1 sent to Province
+Jan 29/25 - Emma to approved revised SOW; SCO with Tyler"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-709 PS ChkPt Maestro FW Imp,28,V1.1,ADSL,2025-02-03,2025-02-07,5,5,Feb 3/25 - with Rian / Cathy,Feb 7/25 - V1.1 sent to Province,,"Feb 25/25 - Signed
+Feb 25/25 - V3 re-sent
+Feb 13/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd; with Joyce/Sam
+Feb 7/25 - V1.1 sent to Province
+Feb 3/25 - with Rian / Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-709 PS ChkPt Maestro FW Imp,28,V2,CSBC,2025-02-08,2025-02-13,6,4,Feb 7/25 - V1.1 sent to Province,Feb 13/25 - V2 rec'd; with Joyce/Sam,,"Feb 25/25 - Signed
+Feb 25/25 - V3 re-sent
+Feb 13/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd; with Joyce/Sam
+Feb 7/25 - V1.1 sent to Province
+Feb 3/25 - with Rian / Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-709 PS ChkPt Maestro FW Imp,28,V3,ADSL,2025-02-13,2025-02-13,1,1,Feb 13/25 - V2 rec'd; with Joyce/Sam,Feb 13/25 - V3 sent to Province,Computed start 2025-02-14 after end 2025-02-13; collapsed to one-day interval for review.,"Feb 25/25 - Signed
+Feb 25/25 - V3 re-sent
+Feb 13/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd; with Joyce/Sam
+Feb 7/25 - V1.1 sent to Province
+Feb 3/25 - with Rian / Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-709 PS ChkPt Maestro FW Imp,28,V4,CSBC,2025-02-14,2025-02-24,11,7,Feb 13/25 - V3 sent to Province,Feb 25/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Feb 25/25 - Signed
+Feb 25/25 - V3 re-sent
+Feb 13/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd; with Joyce/Sam
+Feb 7/25 - V1.1 sent to Province
+Feb 3/25 - with Rian / Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-709 PS ChkPt Maestro FW Imp,28,V3,SIGNINGTIME,2025-02-25,2025-02-25,1,1,Feb 25/25 - Signed,Feb 25/25 - Signed,,"Feb 25/25 - Signed
+Feb 25/25 - V3 re-sent
+Feb 13/25 - V3 sent to Province
+Feb 13/25 - V2 rec'd; with Joyce/Sam
+Feb 7/25 - V1.1 sent to Province
+Feb 3/25 - with Rian / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,"SCO-PROV-712 3PG Refresh 
+(Professional Services)",29,V1,ADSL,2025-01-27,2025-02-25,30,22,"Jan 27/25 - with Rian, Sam and Cathy",Feb 25/25 - V1 sent to Province,,"Mar 5/25 - Signed
+Feb 26/25 - V1.1 sent to Province 
+Feb 25/25 - V1 sent to Province 
+Feb 11/25 - approved to submit; holding until CAP for 3PG Refresh submitted
+Jan 30/25 - with Sam
+Jan 27/25 - with Rian, Sam and Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,"SCO-PROV-712 3PG Refresh 
+(Professional Services)",29,V2,CSBC,2025-02-26,2025-02-26,1,1,Feb 25/25 - V1 sent to Province,Feb 26/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Mar 5/25 - Signed
+Feb 26/25 - V1.1 sent to Province 
+Feb 25/25 - V1 sent to Province 
+Feb 11/25 - approved to submit; holding until CAP for 3PG Refresh submitted
+Jan 30/25 - with Sam
+Jan 27/25 - with Rian, Sam and Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,"SCO-PROV-712 3PG Refresh 
+(Professional Services)",29,V1.1,ADSL,2025-02-26,2025-02-26,1,1,Feb 26/25 - V1.1 sent to Province,Feb 26/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Mar 5/25 - Signed
+Feb 26/25 - V1.1 sent to Province 
+Feb 25/25 - V1 sent to Province 
+Feb 11/25 - approved to submit; holding until CAP for 3PG Refresh submitted
+Jan 30/25 - with Sam
+Jan 27/25 - with Rian, Sam and Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,"SCO-PROV-712 3PG Refresh 
+(Professional Services)",29,V2,CSBC,2025-02-27,2025-03-04,6,4,Feb 26/25 - V1.1 sent to Province,Mar 5/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Mar 5/25 - Signed
+Feb 26/25 - V1.1 sent to Province 
+Feb 25/25 - V1 sent to Province 
+Feb 11/25 - approved to submit; holding until CAP for 3PG Refresh submitted
+Jan 30/25 - with Sam
+Jan 27/25 - with Rian, Sam and Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,"SCO-PROV-712 3PG Refresh 
+(Professional Services)",29,V1.1,SIGNINGTIME,2025-03-05,2025-03-05,1,1,Mar 5/25 - Signed,Mar 5/25 - Signed,,"Mar 5/25 - Signed
+Feb 26/25 - V1.1 sent to Province 
+Feb 25/25 - V1 sent to Province 
+Feb 11/25 - approved to submit; holding until CAP for 3PG Refresh submitted
+Jan 30/25 - with Sam
+Jan 27/25 - with Rian, Sam and Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-720 Maestro Firewall Implementation,30,V1,ADSL,2025-03-14,2025-03-14,1,1,Mar 14/25 - V1 sent to Province,Mar 14/25 - V1 sent to Province,,"Mar 27/25 - Signed
+Mar 14/25 - V1 sent to Province
+"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-720 Maestro Firewall Implementation,30,V2,CSBC,2025-03-15,2025-03-26,12,8,Mar 14/25 - V1 sent to Province,Mar 27/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Mar 27/25 - Signed
+Mar 14/25 - V1 sent to Province
+"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-720 Maestro Firewall Implementation,30,V1,SIGNINGTIME,2025-03-27,2025-03-27,1,1,Mar 27/25 - Signed,Mar 27/25 - Signed,,"Mar 27/25 - Signed
+Mar 14/25 - V1 sent to Province
+"
+Defender for Servers,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-728 Defender Anti-Virus,31,V1,ADSL,2025-04-14,2025-04-17,4,4,Apr 14/25 - SOW approved,Apr 17/25 - V1 sent to Province,,"Apr 28/25 - Signed
+Apr 28/25 - Move to final, sent via AdobeSign
+Apr 25/25 - V2 back from Province
+Apr 17/25 - V1 sent to Province
+Apr 17/25 - With Tyler, with Sian
+Apr 17/25 - With Nicole/Cathy for review
+Apr 14/25 - SOW approved"
+Defender for Servers,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-728 Defender Anti-Virus,31,V2,CSBC,2025-04-18,2025-04-25,8,6,Apr 17/25 - V1 sent to Province,Apr 25/25 - V2 back from Province,,"Apr 28/25 - Signed
+Apr 28/25 - Move to final, sent via AdobeSign
+Apr 25/25 - V2 back from Province
+Apr 17/25 - V1 sent to Province
+Apr 17/25 - With Tyler, with Sian
+Apr 17/25 - With Nicole/Cathy for review
+Apr 14/25 - SOW approved"
+Defender for Servers,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-728 Defender Anti-Virus,31,V2,SIGNINGTIME,2025-04-28,2025-04-28,1,1,"Apr 28/25 - Move to final, sent via AdobeSign",Apr 28/25 - Signed,,"Apr 28/25 - Signed
+Apr 28/25 - Move to final, sent via AdobeSign
+Apr 25/25 - V2 back from Province
+Apr 17/25 - V1 sent to Province
+Apr 17/25 - With Tyler, with Sian
+Apr 17/25 - With Nicole/Cathy for review
+Apr 14/25 - SOW approved"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-733 Amd SCO-662 Patch Mgmt Proj Date,32,V1,ADSL,2025-04-08,2025-04-14,7,5,"Apr 8/25 - Approved PCR to extend date, drafting SCO",Apr 14/25 - V1 sent to Province,,"Apr 30/25 - Signed
+Apr 30/25 - In AdobeSign for signautres
+Apr 29/25 - Approval to move to final
+Apr 14/25 - V1 sent to Province
+Apr 11/25 - With Sian
+Apr 10/25 - With Tyler
+Apr 10/25 - With Killian
+Apr 8/25 - Approved PCR to extend date, drafting SCO"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-733 Amd SCO-662 Patch Mgmt Proj Date,32,V2,CSBC,2025-04-15,2025-04-28,14,10,Apr 14/25 - V1 sent to Province,Apr 29/25 - Approval to move to final,CSBC interval was closed at the day before signing/final workflow started.,"Apr 30/25 - Signed
+Apr 30/25 - In AdobeSign for signautres
+Apr 29/25 - Approval to move to final
+Apr 14/25 - V1 sent to Province
+Apr 11/25 - With Sian
+Apr 10/25 - With Tyler
+Apr 10/25 - With Killian
+Apr 8/25 - Approved PCR to extend date, drafting SCO"
+Patch Management Phase 3B,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-733 Amd SCO-662 Patch Mgmt Proj Date,32,V1,SIGNINGTIME,2025-04-29,2025-04-30,2,2,Apr 29/25 - Approval to move to final,Apr 30/25 - Signed,,"Apr 30/25 - Signed
+Apr 30/25 - In AdobeSign for signautres
+Apr 29/25 - Approval to move to final
+Apr 14/25 - V1 sent to Province
+Apr 11/25 - With Sian
+Apr 10/25 - With Tyler
+Apr 10/25 - With Killian
+Apr 8/25 - Approved PCR to extend date, drafting SCO"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V1,ADSL,2025-05-21,2025-05-22,2,2,May 21/25 - with Sian,May 22/25 - V1 sent to Province,,"July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V2.1,CSBC,2025-05-23,2025-05-29,7,5,May 22/25 - V1 sent to Province,May 29/25 - V2.1 rec'd; with Rian,"Expected Province/CSBC version V2 after prior send, but source says V2.1 returned/back/received.","July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V3,ADSL,2025-05-30,2025-06-04,6,4,May 29/25 - V2.1 rec'd; with Rian,June 4/25 - V3 sent to Province,,"July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V4,CSBC,2025-06-05,2025-06-27,23,17,June 4/25 - V3 sent to Province,June 27/25 - V4 rec'd; with Rian,,"July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V5,ADSL,2025-06-28,2025-07-07,10,6,June 27/25 - V4 rec'd; with Rian,July 7/25 - V5 sent to Province,,"July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V6,CSBC,2025-07-08,2025-07-08,1,1,July 7/25 - V5 sent to Province,July 9/25 - Province agreed to move to final,CSBC interval was closed at the day before signing/final workflow started.,"July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-743 iStore Replacement,33,V5,SIGNINGTIME,2025-07-09,2025-07-15,7,5,July 9/25 - Province agreed to move to final,July 15/25 - Signed,,"July 15/25 - Signed
+July 10/25 - Sent via Adobe Sign
+July 9/25 - Province agreed to move to final
+July 7/25 - V5 sent to Province
+June 27/25 - V4 rec'd; with Rian
+June 4/25 - V3 sent to Province
+May 29/25 - V2.1 rec'd; with Rian
+May 22/25 - V1 sent to Province
+May 21/25 - with Sian"
+CMDB Optimization (Discovery),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-747 CMDB Optimization,34,V1,ADSL,2025-07-14,2025-07-15,2,2,July 14/25 - with Rian / Cathy,July 15/25 - V1 sent to Province,Some status lines had no parseable date: Reserved for early start,"Oct 3/25 - Signed
+Sept 24/25 - Michelle C confirmed 4 servers needed instead of 5; Province still reviewing
+Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province 
+Sept 16/25 - updated SCO; with Rian/Michelle
+Aug 18/25 - V2.1 rec'd; with Rian and Michelle C
+July 15/25 - V1 sent to Province
+July 14/25 - with Rian / Cathy
+Reserved for early start"
+CMDB Optimization (Discovery),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-747 CMDB Optimization,34,V2.1,CSBC,2025-07-16,2025-08-18,34,24,July 15/25 - V1 sent to Province,Aug 18/25 - V2.1 rec'd; with Rian and Michelle C,"Some status lines had no parseable date: Reserved for early start | Expected Province/CSBC version V2 after prior send, but source says V2.1 returned/back/received.","Oct 3/25 - Signed
+Sept 24/25 - Michelle C confirmed 4 servers needed instead of 5; Province still reviewing
+Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province 
+Sept 16/25 - updated SCO; with Rian/Michelle
+Aug 18/25 - V2.1 rec'd; with Rian and Michelle C
+July 15/25 - V1 sent to Province
+July 14/25 - with Rian / Cathy
+Reserved for early start"
+CMDB Optimization (Discovery),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-747 CMDB Optimization,34,V3,ADSL,2025-08-19,2025-09-19,32,24,Aug 18/25 - V2.1 rec'd; with Rian and Michelle C,"Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province",Some status lines had no parseable date: Reserved for early start,"Oct 3/25 - Signed
+Sept 24/25 - Michelle C confirmed 4 servers needed instead of 5; Province still reviewing
+Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province 
+Sept 16/25 - updated SCO; with Rian/Michelle
+Aug 18/25 - V2.1 rec'd; with Rian and Michelle C
+July 15/25 - V1 sent to Province
+July 14/25 - with Rian / Cathy
+Reserved for early start"
+CMDB Optimization (Discovery),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-747 CMDB Optimization,34,V4,CSBC,2025-09-20,2025-10-02,13,9,"Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province",Oct 3/25 - Signed,Some status lines had no parseable date: Reserved for early start | CSBC interval was closed at the day before signing/final workflow started.,"Oct 3/25 - Signed
+Sept 24/25 - Michelle C confirmed 4 servers needed instead of 5; Province still reviewing
+Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province 
+Sept 16/25 - updated SCO; with Rian/Michelle
+Aug 18/25 - V2.1 rec'd; with Rian and Michelle C
+July 15/25 - V1 sent to Province
+July 14/25 - with Rian / Cathy
+Reserved for early start"
+CMDB Optimization (Discovery),100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-747 CMDB Optimization,34,V3,SIGNINGTIME,2025-10-03,2025-10-03,1,1,Oct 3/25 - Signed,Oct 3/25 - Signed,Some status lines had no parseable date: Reserved for early start,"Oct 3/25 - Signed
+Sept 24/25 - Michelle C confirmed 4 servers needed instead of 5; Province still reviewing
+Sept 19/25 - Erwin, Rian and Michelle reviewed/OK'd updated SCO: V3 and 3.1 sent to Province 
+Sept 16/25 - updated SCO; with Rian/Michelle
+Aug 18/25 - V2.1 rec'd; with Rian and Michelle C
+July 15/25 - V1 sent to Province
+July 14/25 - with Rian / Cathy
+Reserved for early start"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-756 Amd SCO-743 iStore Replacement,35,V1,ADSL,2025-07-18,2025-08-01,15,11,July 18/25 - with Michelle / Cathy,Aug 1/25 - V1 sent to Province,,"Oct 31/25 - Signed
+Aug 6/25 - V1.1 sent to Province
+Aug 1/25 - V1 sent to Province
+July 18/25 - with Michelle / Cathy"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-756 Amd SCO-743 iStore Replacement,35,V2,CSBC,2025-08-02,2025-08-06,5,3,Aug 1/25 - V1 sent to Province,Aug 6/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Oct 31/25 - Signed
+Aug 6/25 - V1.1 sent to Province
+Aug 1/25 - V1 sent to Province
+July 18/25 - with Michelle / Cathy"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-756 Amd SCO-743 iStore Replacement,35,V1.1,ADSL,2025-08-06,2025-08-06,1,1,Aug 6/25 - V1.1 sent to Province,Aug 6/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Oct 31/25 - Signed
+Aug 6/25 - V1.1 sent to Province
+Aug 1/25 - V1 sent to Province
+July 18/25 - with Michelle / Cathy"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-756 Amd SCO-743 iStore Replacement,35,V2,CSBC,2025-08-07,2025-10-30,85,61,Aug 6/25 - V1.1 sent to Province,Oct 31/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Oct 31/25 - Signed
+Aug 6/25 - V1.1 sent to Province
+Aug 1/25 - V1 sent to Province
+July 18/25 - with Michelle / Cathy"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-756 Amd SCO-743 iStore Replacement,35,V1.1,SIGNINGTIME,2025-10-31,2025-10-31,1,1,Oct 31/25 - Signed,Oct 31/25 - Signed,,"Oct 31/25 - Signed
+Aug 6/25 - V1.1 sent to Province
+Aug 1/25 - V1 sent to Province
+July 18/25 - with Michelle / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-757 Amd SCO-712 3PG Refresh,36,V1,ADSL,2025-08-05,2025-08-06,2,2,Aug 5/25 - with Cathy,Aug 6/25 - V1 sent to Province,,"Aug 20/25 - Signed
+Aug 6/25 - V1 sent to Province
+Aug 5/25 - with Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-757 Amd SCO-712 3PG Refresh,36,V2,CSBC,2025-08-07,2025-08-19,13,9,Aug 6/25 - V1 sent to Province,Aug 20/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Aug 20/25 - Signed
+Aug 6/25 - V1 sent to Province
+Aug 5/25 - with Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-757 Amd SCO-712 3PG Refresh,36,V1,SIGNINGTIME,2025-08-20,2025-08-20,1,1,Aug 20/25 - Signed,Aug 20/25 - Signed,,"Aug 20/25 - Signed
+Aug 6/25 - V1 sent to Province
+Aug 5/25 - with Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-768 Amd SCO-712 3PG Refresh,37,V1,ADSL,2025-11-24,2025-11-25,2,2,Nov 24/25 - with Erwin / Cathy,Nov 25/25 - V1 sent to Province,,"Dec 11/25 - Signed
+Nov 25/25 - V1 sent to Province
+Nov 24/25 - with Erwin / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-768 Amd SCO-712 3PG Refresh,37,V2,CSBC,2025-11-26,2025-12-10,15,11,Nov 25/25 - V1 sent to Province,Dec 11/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Dec 11/25 - Signed
+Nov 25/25 - V1 sent to Province
+Nov 24/25 - with Erwin / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-768 Amd SCO-712 3PG Refresh,37,V1,SIGNINGTIME,2025-12-11,2025-12-11,1,1,Dec 11/25 - Signed,Dec 11/25 - Signed,,"Dec 11/25 - Signed
+Nov 25/25 - V1 sent to Province
+Nov 24/25 - with Erwin / Cathy"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-771 Amd SCO-743 iStore Replacement,38,V1,ADSL,2025-12-17,2025-12-18,2,2,Dec 17/25 - with Sian,Dec 18/25 - V1 sent to Province,,"Jan 16/26 - Signed
+Jan 13/26 - V2 rec'd; Adobe Sign
+Dec 18/25 - V1 sent to Province
+Dec 17/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-771 Amd SCO-743 iStore Replacement,38,V2,CSBC,2025-12-19,2026-01-13,26,18,Dec 18/25 - V1 sent to Province,Jan 13/26 - V2 rec'd; Adobe Sign,,"Jan 16/26 - Signed
+Jan 13/26 - V2 rec'd; Adobe Sign
+Dec 18/25 - V1 sent to Province
+Dec 17/25 - with Sian"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-771 Amd SCO-743 iStore Replacement,38,V2,SIGNINGTIME,2026-01-13,2026-01-16,4,4,Jan 13/26 - V2 rec'd; Adobe Sign,Jan 16/26 - Signed,,"Jan 16/26 - Signed
+Jan 13/26 - V2 rec'd; Adobe Sign
+Dec 18/25 - V1 sent to Province
+Dec 17/25 - with Sian"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-772 Amd SCO-720 Maestro FW Impl,39,V1,ADSL,2026-01-14,2026-01-15,2,2,Jan 14/26 - with Sian,Jan 15/26 - V1 sent to Province,,"Feb 9/26 - Signed
+Feb 3/26 - Adobe Sign
+Jan 15/26 - V1 sent to Province
+Jan 14/26 - with Sian"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-772 Amd SCO-720 Maestro FW Impl,39,V2,CSBC,2026-01-16,2026-02-02,18,12,Jan 15/26 - V1 sent to Province,Feb 3/26 - Adobe Sign,CSBC interval was closed at the day before signing/final workflow started.,"Feb 9/26 - Signed
+Feb 3/26 - Adobe Sign
+Jan 15/26 - V1 sent to Province
+Jan 14/26 - with Sian"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-772 Amd SCO-720 Maestro FW Impl,39,V1,SIGNINGTIME,2026-02-03,2026-02-09,7,5,Feb 3/26 - Adobe Sign,Feb 9/26 - Signed,,"Feb 9/26 - Signed
+Feb 3/26 - Adobe Sign
+Jan 15/26 - V1 sent to Province
+Jan 14/26 - with Sian"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-775 Amend 712 3PG Refresh,40,V1,ADSL,2026-01-16,2026-01-21,6,4,Jan 16/26 - with Dor / Cathy,Jan 21/26 - V1 sent to the Province,,"Feb 3/26 - Signed
+Feb 2/26 - Adobe Sign
+Jan 30/26 - V2 sent to ESIT-AS
+Jan 21/26 - V1 sent to the Province
+Jan 21/26 - with Sian
+Jan 16/26 - with Dor / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-775 Amend 712 3PG Refresh,40,V2,CSBC,2026-01-22,2026-01-30,9,7,Jan 21/26 - V1 sent to the Province,Jan 30/26 - V2 sent to ESIT-AS,V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Feb 3/26 - Signed
+Feb 2/26 - Adobe Sign
+Jan 30/26 - V2 sent to ESIT-AS
+Jan 21/26 - V1 sent to the Province
+Jan 21/26 - with Sian
+Jan 16/26 - with Dor / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-775 Amend 712 3PG Refresh,40,V2,ADSL,2026-01-30,2026-01-30,1,1,Jan 30/26 - V2 sent to ESIT-AS,Jan 30/26 - V2 sent to ESIT-AS,V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Feb 3/26 - Signed
+Feb 2/26 - Adobe Sign
+Jan 30/26 - V2 sent to ESIT-AS
+Jan 21/26 - V1 sent to the Province
+Jan 21/26 - with Sian
+Jan 16/26 - with Dor / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-775 Amend 712 3PG Refresh,40,V3,CSBC,2026-01-31,2026-02-01,2,0,Jan 30/26 - V2 sent to ESIT-AS,Feb 2/26 - Adobe Sign,CSBC interval was closed at the day before signing/final workflow started.,"Feb 3/26 - Signed
+Feb 2/26 - Adobe Sign
+Jan 30/26 - V2 sent to ESIT-AS
+Jan 21/26 - V1 sent to the Province
+Jan 21/26 - with Sian
+Jan 16/26 - with Dor / Cathy"
+3PG Refresh,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-775 Amend 712 3PG Refresh,40,V2,SIGNINGTIME,2026-02-02,2026-02-03,2,2,Feb 2/26 - Adobe Sign,Feb 3/26 - Signed,,"Feb 3/26 - Signed
+Feb 2/26 - Adobe Sign
+Jan 30/26 - V2 sent to ESIT-AS
+Jan 21/26 - V1 sent to the Province
+Jan 21/26 - with Sian
+Jan 16/26 - with Dor / Cathy"
+Next Gen Shared File Phase 6,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-777 Amd SCO-PROV-710 PS for Next Gen SF Phase 6,41,V1,ADSL,2026-01-22,2026-01-28,7,5,Jan 22/26 - with Yale Ashraff,Jan 28/26 - V1 sent to Province,,"Feb 4/26 - Signed
+Feb 4/26 - Adobe Sign
+Feb 4/26 - V2 sent to ESIT- AS
+Jan 28/26 - V1 sent to Province
+Jan 26/26 -  with Tyler
+Jan 22/26 - with Yale Ashraff"
+Next Gen Shared File Phase 6,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-777 Amd SCO-PROV-710 PS for Next Gen SF Phase 6,41,V2,CSBC,2026-01-29,2026-02-04,7,5,Jan 28/26 - V1 sent to Province,Feb 4/26 - V2 sent to ESIT- AS,V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Feb 4/26 - Signed
+Feb 4/26 - Adobe Sign
+Feb 4/26 - V2 sent to ESIT- AS
+Jan 28/26 - V1 sent to Province
+Jan 26/26 -  with Tyler
+Jan 22/26 - with Yale Ashraff"
+Next Gen Shared File Phase 6,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-777 Amd SCO-PROV-710 PS for Next Gen SF Phase 6,41,V2,ADSL,2026-02-04,2026-02-04,1,1,Feb 4/26 - V2 sent to ESIT- AS,Feb 4/26 - V2 sent to ESIT- AS,V2 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Feb 4/26 - Signed
+Feb 4/26 - Adobe Sign
+Feb 4/26 - V2 sent to ESIT- AS
+Jan 28/26 - V1 sent to Province
+Jan 26/26 -  with Tyler
+Jan 22/26 - with Yale Ashraff"
+Next Gen Shared File Phase 6,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-777 Amd SCO-PROV-710 PS for Next Gen SF Phase 6,41,V2,SIGNINGTIME,2026-02-04,2026-02-04,1,1,Feb 4/26 - Adobe Sign,Feb 4/26 - Signed,,"Feb 4/26 - Signed
+Feb 4/26 - Adobe Sign
+Feb 4/26 - V2 sent to ESIT- AS
+Jan 28/26 - V1 sent to Province
+Jan 26/26 -  with Tyler
+Jan 22/26 - with Yale Ashraff"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-782 Amd SCO-743 iStore Repl,42,V1,ADSL,2026-02-13,2026-02-13,1,1,Feb 13/26 - V1 sent to Province,Feb 13/26 - V1 sent to Province,,"Mar 16/26 - Signed
+Feb 13/26 - V1 sent to Province"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-782 Amd SCO-743 iStore Repl,42,V2,CSBC,2026-02-14,2026-03-15,30,20,Feb 13/26 - V1 sent to Province,Mar 16/26 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Mar 16/26 - Signed
+Feb 13/26 - V1 sent to Province"
+iStore to MySC,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-782 Amd SCO-743 iStore Repl,42,V1,SIGNINGTIME,2026-03-16,2026-03-16,1,1,Mar 16/26 - Signed,Mar 16/26 - Signed,,"Mar 16/26 - Signed
+Feb 13/26 - V1 sent to Province"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-788 Amd SCO-709 PS ChkPt Maestro FW Imp,43,V1,ADSL,2026-03-02,2026-03-03,2,2,Mar 2/26 - with Michelle C/ Cathy,Mar 3/26 - V1 sent to Province,,"Mar 20/26 - Signed
+Mar 19/26 - Adobe Sign
+Mar 18/26 - V2 rec'd; V3 sent to Province
+Mar 3/26 - V1 sent to Province
+Mar 2/26 - with Michelle C/ Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-788 Amd SCO-709 PS ChkPt Maestro FW Imp,43,V2,CSBC,2026-03-04,2026-03-18,15,11,Mar 3/26 - V1 sent to Province,Mar 18/26 - V2 rec'd; V3 sent to Province,,"Mar 20/26 - Signed
+Mar 19/26 - Adobe Sign
+Mar 18/26 - V2 rec'd; V3 sent to Province
+Mar 3/26 - V1 sent to Province
+Mar 2/26 - with Michelle C/ Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-788 Amd SCO-709 PS ChkPt Maestro FW Imp,43,V3,ADSL,2026-03-18,2026-03-18,1,1,Mar 18/26 - V2 rec'd; V3 sent to Province,Mar 18/26 - V2 rec'd; V3 sent to Province,Computed start 2026-03-19 after end 2026-03-18; collapsed to one-day interval for review.,"Mar 20/26 - Signed
+Mar 19/26 - Adobe Sign
+Mar 18/26 - V2 rec'd; V3 sent to Province
+Mar 3/26 - V1 sent to Province
+Mar 2/26 - with Michelle C/ Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,SCO-PROV-788 Amd SCO-709 PS ChkPt Maestro FW Imp,43,V3,SIGNINGTIME,2026-03-19,2026-03-20,2,2,Mar 19/26 - Adobe Sign,Mar 20/26 - Signed,,"Mar 20/26 - Signed
+Mar 19/26 - Adobe Sign
+Mar 18/26 - V2 rec'd; V3 sent to Province
+Mar 3/26 - V1 sent to Province
+Mar 2/26 - with Michelle C/ Cathy"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,CR-CAP-038 Maestro GEN_SEC Refresh,44,V1,ADSL,2025-03-31,2025-04-01,2,2,Mar 31/25 - with Sam,"Apr 1/25 - V1 sent to Province, pending tech stew",,"Aug 27/25 - Signed
+Aug 26/25 - approved for signing; Province to confirm signatory
+Aug 7/25 - V3 sent to Province
+Aug 6/25 - V2.3 rec'd
+July 8/25 - V1.1 sent to Province
+July 7/25 - V1.1 with Cathy/Joyce
+July 4/25 - Joyce updating table
+June 27/25 - internal meeting scheduled for July 4
+June 24/25 - with Sam / Joyce
+June 12/25 - Still waiting on quotes for a few replacement items
+May 27/25 - Pending client design approval and final quotes from vendors.
+May 15/25 - Brian and Sam discussing
+Apr 22/25 - No Tech Stew approval needed, Province has V1
+Apr 1/25 - V1 sent to Province, pending tech stew
+Mar 31/25 - with Sam"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,CR-CAP-038 Maestro GEN_SEC Refresh,44,V2,CSBC,2025-04-02,2025-07-08,98,70,"Apr 1/25 - V1 sent to Province, pending tech stew",July 8/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Aug 27/25 - Signed
+Aug 26/25 - approved for signing; Province to confirm signatory
+Aug 7/25 - V3 sent to Province
+Aug 6/25 - V2.3 rec'd
+July 8/25 - V1.1 sent to Province
+July 7/25 - V1.1 with Cathy/Joyce
+July 4/25 - Joyce updating table
+June 27/25 - internal meeting scheduled for July 4
+June 24/25 - with Sam / Joyce
+June 12/25 - Still waiting on quotes for a few replacement items
+May 27/25 - Pending client design approval and final quotes from vendors.
+May 15/25 - Brian and Sam discussing
+Apr 22/25 - No Tech Stew approval needed, Province has V1
+Apr 1/25 - V1 sent to Province, pending tech stew
+Mar 31/25 - with Sam"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,CR-CAP-038 Maestro GEN_SEC Refresh,44,V1.1,ADSL,2025-07-08,2025-07-08,1,1,July 8/25 - V1.1 sent to Province,July 8/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Aug 27/25 - Signed
+Aug 26/25 - approved for signing; Province to confirm signatory
+Aug 7/25 - V3 sent to Province
+Aug 6/25 - V2.3 rec'd
+July 8/25 - V1.1 sent to Province
+July 7/25 - V1.1 with Cathy/Joyce
+July 4/25 - Joyce updating table
+June 27/25 - internal meeting scheduled for July 4
+June 24/25 - with Sam / Joyce
+June 12/25 - Still waiting on quotes for a few replacement items
+May 27/25 - Pending client design approval and final quotes from vendors.
+May 15/25 - Brian and Sam discussing
+Apr 22/25 - No Tech Stew approval needed, Province has V1
+Apr 1/25 - V1 sent to Province, pending tech stew
+Mar 31/25 - with Sam"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,CR-CAP-038 Maestro GEN_SEC Refresh,44,V2.3,CSBC,2025-07-09,2025-08-06,29,21,July 8/25 - V1.1 sent to Province,Aug 6/25 - V2.3 rec'd,"Expected Province/CSBC version V2 after prior send, but source says V2.3 returned/back/received.","Aug 27/25 - Signed
+Aug 26/25 - approved for signing; Province to confirm signatory
+Aug 7/25 - V3 sent to Province
+Aug 6/25 - V2.3 rec'd
+July 8/25 - V1.1 sent to Province
+July 7/25 - V1.1 with Cathy/Joyce
+July 4/25 - Joyce updating table
+June 27/25 - internal meeting scheduled for July 4
+June 24/25 - with Sam / Joyce
+June 12/25 - Still waiting on quotes for a few replacement items
+May 27/25 - Pending client design approval and final quotes from vendors.
+May 15/25 - Brian and Sam discussing
+Apr 22/25 - No Tech Stew approval needed, Province has V1
+Apr 1/25 - V1 sent to Province, pending tech stew
+Mar 31/25 - with Sam"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,CR-CAP-038 Maestro GEN_SEC Refresh,44,V3,ADSL,2025-08-07,2025-08-07,1,1,Aug 6/25 - V2.3 rec'd,Aug 7/25 - V3 sent to Province,,"Aug 27/25 - Signed
+Aug 26/25 - approved for signing; Province to confirm signatory
+Aug 7/25 - V3 sent to Province
+Aug 6/25 - V2.3 rec'd
+July 8/25 - V1.1 sent to Province
+July 7/25 - V1.1 with Cathy/Joyce
+July 4/25 - Joyce updating table
+June 27/25 - internal meeting scheduled for July 4
+June 24/25 - with Sam / Joyce
+June 12/25 - Still waiting on quotes for a few replacement items
+May 27/25 - Pending client design approval and final quotes from vendors.
+May 15/25 - Brian and Sam discussing
+Apr 22/25 - No Tech Stew approval needed, Province has V1
+Apr 1/25 - V1 sent to Province, pending tech stew
+Mar 31/25 - with Sam"
+Maestro Firewall Upgrade,100,project supplied directly by Completed SCOs.xlsx,CR-CAP-038 Maestro GEN_SEC Refresh,44,V3,SIGNINGTIME,2025-05-27,2025-08-27,93,67,May 27/25 - Pending client design approval and final quotes from vendors.,Aug 27/25 - Signed,,"Aug 27/25 - Signed
+Aug 26/25 - approved for signing; Province to confirm signatory
+Aug 7/25 - V3 sent to Province
+Aug 6/25 - V2.3 rec'd
+July 8/25 - V1.1 sent to Province
+July 7/25 - V1.1 with Cathy/Joyce
+July 4/25 - Joyce updating table
+June 27/25 - internal meeting scheduled for July 4
+June 24/25 - with Sam / Joyce
+June 12/25 - Still waiting on quotes for a few replacement items
+May 27/25 - Pending client design approval and final quotes from vendors.
+May 15/25 - Brian and Sam discussing
+Apr 22/25 - No Tech Stew approval needed, Province has V1
+Apr 1/25 - V1 sent to Province, pending tech stew
+Mar 31/25 - with Sam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V1,ADSL,2025-06-25,2025-07-04,10,8,June 25/25 - with Cathy / Adam,July 4/25 - V1 sent to Province,,"Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V2,CSBC,2025-07-05,2025-07-22,18,12,July 4/25 - V1 sent to Province,July 22/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V1.1,ADSL,2025-07-22,2025-07-22,1,1,July 22/25 - V1.1 sent to Province,July 22/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V2.1,CSBC,2025-07-23,2025-07-28,6,4,July 22/25 - V1.1 sent to Province,July 28/25 - V2.1 rec'd,"Expected Province/CSBC version V2 after prior send, but source says V2.1 returned/back/received.","Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V3,ADSL,2025-07-29,2025-07-30,2,2,July 28/25 - V2.1 rec'd,July 30/25 - V3 sent to Province,,"Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V4,CSBC,2025-07-31,2025-08-13,14,10,July 30/25 - V3 sent to Province,Aug 14/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-053 CITZ MCS OpenShift Server,45,V3,SIGNINGTIME,2025-08-14,2025-08-14,1,1,Aug 14/25 - Signed,Aug 14/25 - Signed,,"Aug 14/25 - Signed
+July 30/25 - V3 sent to Province
+July 28/25 - V2.1 rec'd
+July 22/25 - V1.1 sent to Province
+July 4/25 - V1 sent to Province
+June 25/25 - with Cathy / Adam"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V1,ADSL,2025-07-07,2025-07-08,2,2,July 7/25 - with Cathy,July 8/25 - V1 sent to Province,,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V2,CSBC,2025-07-09,2025-07-21,13,9,July 8/25 - V1 sent to Province,July 21/25 - V2 rec'd,,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V3,ADSL,2025-07-22,2025-07-23,2,2,July 21/25 - V2 rec'd,July 23/25 - V3 sent to Province,,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V4,CSBC,2025-07-24,2025-07-29,6,4,July 23/25 - V3 sent to Province,July 29/25 - response sent to Province,Version number was inferred as V1 from an unversioned Province submission line. | V1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V1,ADSL,2025-07-29,2025-07-29,1,1,July 29/25 - response sent to Province,July 29/25 - response sent to Province,Version number was inferred as V1 from an unversioned Province submission line. | V1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V2,CSBC,2025-07-30,2025-08-17,19,13,July 29/25 - response sent to Province,Aug 18/25 - moved to final; waiting for PR,CSBC interval was closed at the day before signing/final workflow started.,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-056 MCS OpenShift Gold Cl Ext Mtc,46,V1,SIGNINGTIME,2025-08-18,2025-08-21,4,4,Aug 18/25 - moved to final; waiting for PR,Aug 21/25 - Signed,,"Aug 21/25 - Signed
+Aug 18/25 - moved to final; waiting for PR
+July 29/25 - response sent to Province
+July 28/25 - Province question with Sam
+July 23/25 - V3 sent to Province
+July 21/25 - V2 rec'd
+July 8/25 - V1 sent to Province
+July 7/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-067 MCS OpenShift Gold Cluster,47,V1,ADSL,2025-08-19,2025-08-20,2,2,Aug 19/25 - with Cathy,Aug 20/25 - V1 sent to Province,,"Oct 29/25 - Signed
+Oct 23/25 - quote rec'd; V3 sent to Province 
+Oct 14/25 - waiting for timeline of new switches; getting new quote
+Oct 8/25 - question to Tyler
+Sept 25/25 - follow up with Chris
+Sept 17/25 - with Chris to confirm refresh dates
+Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement
+Aug 20/25 - V1 sent to Province
+Aug 19/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-067 MCS OpenShift Gold Cluster,47,V2,CSBC,2025-08-21,2025-09-10,21,15,Aug 20/25 - V1 sent to Province,Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement,,"Oct 29/25 - Signed
+Oct 23/25 - quote rec'd; V3 sent to Province 
+Oct 14/25 - waiting for timeline of new switches; getting new quote
+Oct 8/25 - question to Tyler
+Sept 25/25 - follow up with Chris
+Sept 17/25 - with Chris to confirm refresh dates
+Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement
+Aug 20/25 - V1 sent to Province
+Aug 19/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-067 MCS OpenShift Gold Cluster,47,V3,ADSL,2025-09-11,2025-10-23,43,31,Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement,Oct 23/25 - quote rec'd; V3 sent to Province,,"Oct 29/25 - Signed
+Oct 23/25 - quote rec'd; V3 sent to Province 
+Oct 14/25 - waiting for timeline of new switches; getting new quote
+Oct 8/25 - question to Tyler
+Sept 25/25 - follow up with Chris
+Sept 17/25 - with Chris to confirm refresh dates
+Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement
+Aug 20/25 - V1 sent to Province
+Aug 19/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-067 MCS OpenShift Gold Cluster,47,V4,CSBC,2025-10-24,2025-10-28,5,3,Oct 23/25 - quote rec'd; V3 sent to Province,Oct 29/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Oct 29/25 - Signed
+Oct 23/25 - quote rec'd; V3 sent to Province 
+Oct 14/25 - waiting for timeline of new switches; getting new quote
+Oct 8/25 - question to Tyler
+Sept 25/25 - follow up with Chris
+Sept 17/25 - with Chris to confirm refresh dates
+Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement
+Aug 20/25 - V1 sent to Province
+Aug 19/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-067 MCS OpenShift Gold Cluster,47,V3,SIGNINGTIME,2025-10-29,2025-10-29,1,1,Oct 29/25 - Signed,Oct 29/25 - Signed,,"Oct 29/25 - Signed
+Oct 23/25 - quote rec'd; V3 sent to Province 
+Oct 14/25 - waiting for timeline of new switches; getting new quote
+Oct 8/25 - question to Tyler
+Sept 25/25 - follow up with Chris
+Sept 17/25 - with Chris to confirm refresh dates
+Sept 10/25 - V2 rec'd; Province requested less than 1 year; with Procurement
+Aug 20/25 - V1 sent to Province
+Aug 19/25 - with Cathy"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-068 MCS OpenShift Custom HW,48,V1,ADSL,2025-08-25,2025-08-26,2,2,Aug 25/25 - with Sian,Aug 26/25 - V1 sent to Province,,"Sept 11/25 - Signed
+Aug 26/25 - V1 sent to Province
+Aug 25/25 - with Sian"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-068 MCS OpenShift Custom HW,48,V2,CSBC,2025-08-27,2025-09-10,15,11,Aug 26/25 - V1 sent to Province,Sept 11/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Sept 11/25 - Signed
+Aug 26/25 - V1 sent to Province
+Aug 25/25 - with Sian"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-068 MCS OpenShift Custom HW,48,V1,SIGNINGTIME,2025-09-11,2025-09-11,1,1,Sept 11/25 - Signed,Sept 11/25 - Signed,,"Sept 11/25 - Signed
+Aug 26/25 - V1 sent to Province
+Aug 25/25 - with Sian"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V1,ADSL,2025-08-28,2025-08-28,1,1,Aug 28/25 - V1 sent to Province,Aug 28/25 - V1 sent to Province,,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V2,CSBC,2025-08-29,2025-09-09,12,8,Aug 28/25 - V1 sent to Province,Sept 9/25 - V2 rec'd; with Joyce,,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V3,ADSL,2025-09-10,2025-09-10,1,1,Sept 9/25 - V2 rec'd; with Joyce,Sept 10/25 - V3 sent to Province,,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V4,CSBC,2025-09-11,2025-09-16,6,4,Sept 10/25 - V3 sent to Province,Sept 16/25 - V4 rec'd,,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V5,ADSL,2025-09-17,2025-09-17,1,1,Sept 16/25 - V4 rec'd,Sept 17/25 - V5 sent to Province,,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V6,CSBC,2025-09-18,2025-09-18,1,1,Sept 17/25 - V5 sent to Province,Sept 19/25 - Signed,CSBC interval was closed at the day before signing/final workflow started.,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-069 Redhat OpenShift MCS Servers,49,V5,SIGNINGTIME,2025-09-19,2025-09-19,1,1,Sept 19/25 - Signed,Sept 19/25 - Signed,,"Sept 19/25 - Signed
+Sept 17/25 - V5 sent to Province
+Sept 16/25 - V4 rec'd
+Sept 10/25 - V3 sent to Province
+Sept 9/25 - V2 rec'd; with Joyce
+Aug 28/25 - V1 sent to Province"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V1,ADSL,2025-08-28,2025-09-03,7,5,Aug 28/25 - with Cathy / Bruce,Sept 3/25 - V1 sent to Province,,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V2,CSBC,2025-09-04,2025-10-20,47,33,Sept 3/25 - V1 sent to Province,Oct 20/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V1.1,ADSL,2025-10-20,2025-10-20,1,1,Oct 20/25 - V1.1 sent to Province,Oct 20/25 - V1.1 sent to Province,V1.1 was sent while prior inferred V2 CSBC interval was still open; confirm missing return sequence.,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V2,CSBC,2025-10-21,2025-10-23,3,3,Oct 20/25 - V1.1 sent to Province,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V3,ADSL,2025-10-23,2025-10-23,1,1,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,Computed start 2025-10-24 after end 2025-10-23; collapsed to one-day interval for review.,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V4,CSBC,2025-10-23,2025-10-23,1,1,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,V3.1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence. | Computed start 2025-10-24 after end 2025-10-23; collapsed to one-day interval for review.,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V3.1,ADSL,2025-10-23,2025-10-23,1,1,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,V3.1 was sent while prior inferred V4 CSBC interval was still open; confirm missing return sequence.,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-073 MCS OpenShift Custom HW,50,V3.1,SIGNINGTIME,2025-10-23,2025-10-24,2,2,Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign,Oct 24/25 - Signed,,"Oct 24/25 - Signed
+Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+Oct 20/25 - V1.1 sent to Province
+Oct 15/25 - Sam to confirm if new quotes correct
+Sept 23/25 - Province asked some clarifying questions around the ordering of this proposed hardware
+Sept 9/25 - on hold; Sam reviewing port counts which may change
+Sept 3/25 - V1 sent to Province
+Aug 28/25 - with Cathy / Bruce"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-074 Redhat OpenShift MCS Srvrs,51,V1,ADSL,2025-09-17,2025-09-18,2,2,Sept 17/25 - with Tyler,Sept 18/25 - V1 sent to Province,,"Oct 1/25 - Signed
+Sept 26/25 - Adobe Sign
+Sept 18/25 - V1 sent to Province
+Sept 17/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-074 Redhat OpenShift MCS Srvrs,51,V2,CSBC,2025-09-19,2025-09-25,7,5,Sept 18/25 - V1 sent to Province,Sept 26/25 - Adobe Sign,CSBC interval was closed at the day before signing/final workflow started.,"Oct 1/25 - Signed
+Sept 26/25 - Adobe Sign
+Sept 18/25 - V1 sent to Province
+Sept 17/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-074 Redhat OpenShift MCS Srvrs,51,V1,SIGNINGTIME,2025-09-26,2025-10-01,6,4,Sept 26/25 - Adobe Sign,Oct 1/25 - Signed,,"Oct 1/25 - Signed
+Sept 26/25 - Adobe Sign
+Sept 18/25 - V1 sent to Province
+Sept 17/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-078 Redhat OpenShift MCS Srvrs,52,V1,ADSL,2025-09-29,2025-10-01,3,3,Sept 29/25 - with Tyler,Oct 1/25 - V1 sent to Province,,"Oct 27/25 - Signed
+Oct 23/25 - quote rec'd; with Chris for PR
+Oct 22/25 - approved for signing; quote requested
+Oct 15/25 - V3 sent to Province (upgrade removed)
+Oct 14/25 - V2 rec'd
+Oct 1/25 - V1 sent to Province
+Sept 29/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-078 Redhat OpenShift MCS Srvrs,52,V2,CSBC,2025-10-02,2025-10-14,13,9,Oct 1/25 - V1 sent to Province,Oct 14/25 - V2 rec'd,,"Oct 27/25 - Signed
+Oct 23/25 - quote rec'd; with Chris for PR
+Oct 22/25 - approved for signing; quote requested
+Oct 15/25 - V3 sent to Province (upgrade removed)
+Oct 14/25 - V2 rec'd
+Oct 1/25 - V1 sent to Province
+Sept 29/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-078 Redhat OpenShift MCS Srvrs,52,V3,ADSL,2025-10-15,2025-10-15,1,1,Oct 14/25 - V2 rec'd,Oct 15/25 - V3 sent to Province (upgrade removed),,"Oct 27/25 - Signed
+Oct 23/25 - quote rec'd; with Chris for PR
+Oct 22/25 - approved for signing; quote requested
+Oct 15/25 - V3 sent to Province (upgrade removed)
+Oct 14/25 - V2 rec'd
+Oct 1/25 - V1 sent to Province
+Sept 29/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-078 Redhat OpenShift MCS Srvrs,52,V4,CSBC,2025-10-16,2025-10-21,6,4,Oct 15/25 - V3 sent to Province (upgrade removed),Oct 22/25 - approved for signing; quote requested,CSBC interval was closed at the day before signing/final workflow started.,"Oct 27/25 - Signed
+Oct 23/25 - quote rec'd; with Chris for PR
+Oct 22/25 - approved for signing; quote requested
+Oct 15/25 - V3 sent to Province (upgrade removed)
+Oct 14/25 - V2 rec'd
+Oct 1/25 - V1 sent to Province
+Sept 29/25 - with Tyler"
+Public Cloud MCS OpenShift Project (ROSA),100,project supplied directly by Completed SCOs.xlsx,CR-CAP-078 Redhat OpenShift MCS Srvrs,52,V3,SIGNINGTIME,2025-10-22,2025-10-27,6,4,Oct 22/25 - approved for signing; quote requested,Oct 27/25 - Signed,,"Oct 27/25 - Signed
+Oct 23/25 - quote rec'd; with Chris for PR
+Oct 22/25 - approved for signing; quote requested
+Oct 15/25 - V3 sent to Province (upgrade removed)
+Oct 14/25 - V2 rec'd
+Oct 1/25 - V1 sent to Province
+Sept 29/25 - with Tyler"

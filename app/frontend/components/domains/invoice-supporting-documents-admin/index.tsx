@@ -33,10 +33,14 @@ type ContextPayload = {
 type SupportingDocumentRow = {
   id: string;
   invoice_id: string;
+  supporting_document_type_id?: string | null;
+  supporting_document_type_key?: string | null;
+  supporting_document_type_description?: string | null;
   storage_provider?: string | null;
   storage_key?: string | null;
   original_filename?: string | null;
   content_type?: string | null;
+  mime_content_type?: string | null;
   byte_size?: number | null;
   sha256?: string | null;
   created_at?: string | null;

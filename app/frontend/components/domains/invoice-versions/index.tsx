@@ -97,6 +97,24 @@ const FieldRow = ({ label, value, active, disabled, onClick }: FieldRowProps) =>
   );
 };
 
+const ruleDisplayTitle = (rulecheck: any) => {
+  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
+  const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
+  const prefix =
+    sourceEngine === 'code'
+      ? `Code Rule ${num ?? ''}`.trim()
+      : `${num != null ? `Rule ${num}` : 'Rule'}`;
+
+  return `${prefix} - ${String(rulecheck.rule_name ?? '')}`.trim();
+};
+
+const ruleSourceLabel = (rulecheck: any) => {
+  const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
+  if (sourceEngine === 'code') return 'code';
+  if (sourceEngine === 'genai') return 'genai';
+  return sourceEngine || '';
+};
+
 const displayLocatedFieldValue = (row: any): string => {
   if (row?.value_text != null && row.value_text !== '') return String(row.value_text);
   if (row?.value_json != null) return JSON.stringify(row.value_json);
@@ -397,7 +415,7 @@ export const InvoiceVersionShowScreen = () => {
 
   // We'll render Page at an explicit width (in px) so we can map coords accurately
   const pdfWrapRef = useRef<HTMLDivElement | null>(null);
-  const [pageWidthPx, setPageWidthPx] = useState<number>(900); // default fallback
+  const [pageWidthPx, setPageWidthPx] = useState<number>(560); // default fallback
   const [pdfPaneHeightPx, setPdfPaneHeightPx] = useState<number>(700);
 
   type FitMode = 'width' | 'page';
@@ -665,7 +683,7 @@ export const InvoiceVersionShowScreen = () => {
     const el = pdfWrapRef.current;
     if (!el) return;
 
-    const MAX_PDF_WIDTH = 750;
+    const MAX_PDF_WIDTH = 560;
 
     const ro = new ResizeObserver(() => {
       // Ignore "collapse to 0" measurements during hide/unmount transitions
@@ -949,7 +967,6 @@ export const InvoiceVersionShowScreen = () => {
       {
         description: string;
         fields: any[];
-        lineitems: any[];
         results: any[];
         rulechecks: any[];
         upgradeTypeKey: string;
@@ -964,7 +981,6 @@ export const InvoiceVersionShowScreen = () => {
       const group = {
         description: upgradeTypeDescriptionFor(row),
         fields: [],
-        lineitems: [],
         results: [],
         rulechecks: [],
         upgradeTypeKey,
@@ -974,7 +990,6 @@ export const InvoiceVersionShowScreen = () => {
     };
 
     genAiFields.forEach((row) => ensureGroup(row).fields.push(row));
-    lineitems.forEach((row) => ensureGroup(row).lineitems.push(row));
     upgradeTypeResults.forEach((row) => ensureGroup(row).results.push(row));
     genAiRulechecks.forEach((row) => ensureGroup(row).rulechecks.push(row));
 
@@ -984,7 +999,17 @@ export const InvoiceVersionShowScreen = () => {
       if (sortA !== sortB) return sortA - sortB;
       return a.description.localeCompare(b.description);
     });
-  }, [genAiFields, genAiRulechecks, lineitems, upgradeTypeResults]);
+  }, [genAiFields, genAiRulechecks, upgradeTypeResults]);
+
+  const sortedLineitems = useMemo(
+    () =>
+      [...lineitems].sort((a: any, b: any) => {
+        const seqA = Number(a.lineitem_seqno ?? a.seqno ?? 0);
+        const seqB = Number(b.lineitem_seqno ?? b.seqno ?? 0);
+        return seqA - seqB;
+      }),
+    [lineitems],
+  );
 
   const currentInvoiceStatus = String(readData?.invoice_status || '').trim();
   const invoiceVersionNo = Number(readData?.invoice_versionno);
@@ -993,6 +1018,12 @@ export const InvoiceVersionShowScreen = () => {
       ? `Version ${invoiceVersionNo} of ${invoiceVersionCount}`
       : `Version ${invoiceVersionNo}`
     : null;
+  const ahriProductMatch = readData?.ahri_product_match;
+  const ahriProduct = ahriProductMatch?.product;
+  const ahriSource = ahriProductMatch?.source;
+  const neeaProductMatch = readData?.neea_product_match;
+  const neeaProduct = neeaProductMatch?.product;
+  const neeaSource = neeaProductMatch?.source;
   const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
 
   // ============================================================
@@ -1110,10 +1141,10 @@ export const InvoiceVersionShowScreen = () => {
                   resize: 'horizontal',
                   overflow: 'auto',
                 }}
-                minW="360px"
-                maxW={showPdf ? '820px' : '100%'}
-                w={showPdf ? '520px' : '100%'}
-                flexShrink={0}
+                minW="480px"
+                maxW="100%"
+                w={showPdf ? 'auto' : '100%'}
+                flex="1 1 auto"
               >
                 {/* ============================================================
       SECTION 07.05.01 - FIELDS ACCORDION
@@ -1123,7 +1154,7 @@ export const InvoiceVersionShowScreen = () => {
       ? defaultIndex={[0]} keeps it open by default
       ============================================================ */}
 
-                <Accordion allowMultiple defaultIndex={[0, 1, 2]}>
+                <Accordion allowMultiple defaultIndex={[0]}>
                   {/* ============================================================
       SECTION 07.05.10 - ACCORDION ITEM: INVOICE HEADER FIELDS
       PURPOSE: Existing DI header FieldRows (clickable for polygon)
@@ -1161,6 +1192,365 @@ export const InvoiceVersionShowScreen = () => {
                       </Box>
                     </AccordionPanel>
                   </AccordionItem>
+
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Line items
+                          </Text>
+                          <Text fontSize="xs" opacity={0.65}>
+                            OCR line rows from the invoice, with classifier-assigned likely upgrade type.
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+
+                    <AccordionPanel px="0" pt="8px">
+                      {lineitemsError && (
+                        <Text fontSize="xs" color="red.500" mb="8px">
+                          {lineitemsError}
+                        </Text>
+                      )}
+
+                      {!lineitemsError && sortedLineitems.length === 0 ? (
+                        <Text fontSize="sm" opacity={0.7}>
+                          No line items found.
+                        </Text>
+                      ) : (
+                        <Box display="flex" flexDirection="column" gap="10px">
+                          {sortedLineitems.map((li: any) => {
+                            const seq = li.lineitem_seqno ?? li.seqno ?? '-';
+                            const lineitemKey = li.id ?? seq;
+                            const upgradeTypeKey = li.upgrade_type_key || 'common';
+                            const meta = getInvoiceUpgradeTypeMeta(upgradeTypeKey, li.upgrade_type_description);
+                            const rows = [
+                              {
+                                subKey: 'desc',
+                                label: 'Description',
+                                value: li.ocr_description ?? '-',
+                                page: li.ocr_description_page,
+                                polygon: li.ocr_description_polygon,
+                              },
+                              {
+                                subKey: 'qty',
+                                label: 'Quantity',
+                                value: li.ocr_quantity != null ? String(li.ocr_quantity) : '-',
+                                page: li.ocr_quantity_page,
+                                polygon: li.ocr_quantity_polygon,
+                              },
+                              {
+                                subKey: 'unit',
+                                label: 'Unit price',
+                                value: li.ocr_unit_price != null ? fmtMoney(li.ocr_unit_price) : '-',
+                                page: li.ocr_unit_price_page,
+                                polygon: li.ocr_unit_price_polygon,
+                              },
+                              {
+                                subKey: 'amt',
+                                label: 'Amount',
+                                value: li.ocr_amount != null ? fmtMoney(li.ocr_amount) : '-',
+                                page: li.ocr_amount_page,
+                                polygon: li.ocr_amount_polygon,
+                              },
+                            ];
+
+                            return (
+                              <Box
+                                key={String(lineitemKey)}
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                bg="white"
+                                p="10px"
+                              >
+                                <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                                  <InvoiceUpgradeTypeTile
+                                    upgradeTypeKey={upgradeTypeKey}
+                                    description={li.upgrade_type_description}
+                                    size={28}
+                                  />
+                                  <Text fontSize="sm" fontWeight="bold">
+                                    Line {seq}
+                                  </Text>
+                                  <Badge colorScheme="orange" variant="subtle" textTransform="none">
+                                    Likely upgrade type: {meta.label}
+                                  </Badge>
+                                  <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                    classifier guess
+                                  </Badge>
+                                </Flex>
+                                <Text fontSize="xs" opacity={0.65} mb="8px">
+                                  This grouping is a classifier hint only. Verify it if the upgrade type affects the
+                                  rule outcome.
+                                </Text>
+                                <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                                  {rows.map((row) => {
+                                    const clickable = row.page != null && row.polygon != null;
+                                    const highlightKey = `lineitem_${lineitemKey}_${row.subKey}`;
+
+                                    return (
+                                      <FieldRow
+                                        key={`${lineitemKey}-${row.subKey}`}
+                                        label={row.label}
+                                        value={row.value}
+                                        active={activeHighlightKey === highlightKey}
+                                        disabled={!clickable}
+                                        onClick={
+                                          clickable
+                                            ? () => {
+                                                setActiveHighlight({
+                                                  source: 'di',
+                                                  key: highlightKey,
+                                                  pageNumber: Number(row.page),
+                                                  polygon: row.polygon,
+                                                });
+                                                setActiveHighlightKey(highlightKey);
+                                              }
+                                            : undefined
+                                        }
+                                      />
+                                    );
+                                  })}
+                                </Box>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      )}
+                    </AccordionPanel>
+                  </AccordionItem>
+
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Overall advice
+                          </Text>
+                          <Text fontSize="xs" opacity={0.65}>
+                            Combined GenAI admin advice for this invoice version.
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+
+                    <AccordionPanel px="0" pt="8px">
+                      <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p="10px" bg="gray.50">
+                        <Flex align="center" gap="8px" mb="6px" wrap="wrap">
+                          <StatusDot result={readData?.genai_result} />
+                          <Badge colorScheme={resultColorScheme(readData?.genai_result)}>
+                            {resultLabel(readData?.genai_result)}
+                          </Badge>
+                          <Text fontSize="xs" opacity={0.75}>
+                            confidence: {readData?.genai_overall_confidence ?? '-'}
+                          </Text>
+                        </Flex>
+                        <Text fontSize="sm" whiteSpace="pre-wrap">
+                          {readData?.genai_admin_advice || 'No overall advice found for this invoice version.'}
+                        </Text>
+                      </Box>
+                    </AccordionPanel>
+                  </AccordionItem>
+
+                  {ahriProduct && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              AHRI product-list match
+                            </Text>
+                            <Text fontSize="xs" opacity={0.65}>
+                              Code-owned match to the imported BC Hydro heat-pump product list.
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Box borderWidth="1px" borderColor="blue.100" borderRadius="md" p="10px" bg="blue.50">
+                          <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                            <StatusDot result="pass" />
+                            <Badge colorScheme="blue">Information on record</Badge>
+                            {ahriSource?.source_description && (
+                              <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                {String(ahriSource.source_description)}
+                              </Badge>
+                            )}
+                            <Text fontSize="xs" opacity={0.75}>
+                              AHRI {fmtText(ahriProduct.ahri_reference_number)}
+                            </Text>
+                          </Flex>
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {[
+                              ['Make', ahriProduct.make],
+                              ['Outdoor model', ahriProduct.outdoor_model],
+                              ['Indoor / air handler', ahriProduct.indoor_model_or_air_handler],
+                              ['Furnace model', ahriProduct.furnace_model],
+                              ['Heat pump type', ahriProduct.heat_pump_type],
+                              ['Rated capacity at -5 C', ahriProduct.rated_capacity_btu_at_minus_5c],
+                              ['SEER2', ahriProduct.seer2],
+                              ['HSPF2', ahriProduct.hspf2],
+                              ['COP', ahriProduct.cop],
+                              ['Capacity maintenance %', ahriProduct.capacity_maintenance_percent],
+                              ['Cold climate rated', ahriProduct.cold_climate_rated == null ? null : ahriProduct.cold_climate_rated ? 'Yes' : 'No'],
+                              ['Eligibility notes', ahriProduct.eligibility_notes],
+                            ].map(([label, value]) => (
+                              <Box key={String(label)} px="10px" py="8px" borderRadius="md" borderWidth="1px" borderColor="blue.100" bg="white">
+                                <Text fontSize="xs" opacity={0.7}>
+                                  {String(label)}
+                                </Text>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {fmtText(value)}
+                                </Text>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          <Box mt="10px" pt="8px" borderTopWidth="1px" borderColor="blue.100">
+                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="4px">
+                              Source
+                            </Text>
+                            <Text fontSize="sm">
+                              {fmtText(ahriSource?.source_description)}{' '}
+                              {ahriSource?.publishing_date ? `(published ${fmtDate(ahriSource.publishing_date)})` : ''}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75} wordBreak="break-all">
+                              AHRI source id: {fmtText(ahriSource?.ahri_source_id)}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75}>
+                              Imported {fmtDate(ahriSource?.completed_at)} with {fmtText(ahriSource?.records_imported)} rows.
+                            </Text>
+                            {ahriSource?.source_url && (
+                              <Text
+                                as="a"
+                                href={String(ahriSource.source_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                fontSize="xs"
+                                color="blue.700"
+                                textDecoration="underline"
+                              >
+                                Open source list
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  )}
+
+                  {neeaProduct && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              NEEA HPWH product-list match
+                            </Text>
+                            <Text fontSize="xs" opacity={0.65}>
+                              Code-owned match to the imported Residential HPWH Qualified Products List.
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Box borderWidth="1px" borderColor="green.100" borderRadius="md" p="10px" bg="green.50">
+                          <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                            <StatusDot result="pass" />
+                            <Badge colorScheme="green">Information on record</Badge>
+                            {neeaSource?.source_description && (
+                              <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                {String(neeaSource.source_description)}
+                              </Badge>
+                            )}
+                            <Text fontSize="xs" opacity={0.75}>
+                              {fmtText(neeaProduct.brand)} {fmtText(neeaProduct.model_number)}
+                            </Text>
+                          </Flex>
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {[
+                              ['Brand', neeaProduct.brand],
+                              ['Model number', neeaProduct.model_number],
+                              ['Storage volume gallons', neeaProduct.storage_volume_gallons],
+                              ['Configuration', neeaProduct.configuration],
+                              ['Indoor tier', neeaProduct.indoor_tier],
+                              ['Indoor CCE', neeaProduct.indoor_cce],
+                              ['Outdoor tier', neeaProduct.outdoor_tier],
+                              ['Outdoor SCOP', neeaProduct.outdoor_scop],
+                              ['Flex-load connectivity', neeaProduct.flex_load_connectivity],
+                              [
+                                'Plug-in endorsement',
+                                neeaProduct.plug_in_endorsement == null
+                                  ? null
+                                  : neeaProduct.plug_in_endorsement
+                                    ? 'Yes'
+                                    : 'No',
+                              ],
+                              ['Qualified date', neeaProduct.qualified_date ? fmtDate(neeaProduct.qualified_date) : null],
+                              ['Specification version', neeaProduct.specification_version],
+                              ['Eligibility notes', neeaProduct.eligibility_notes],
+                            ].map(([label, value]) => (
+                              <Box
+                                key={String(label)}
+                                px="10px"
+                                py="8px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="green.100"
+                                bg="white"
+                              >
+                                <Text fontSize="xs" opacity={0.7}>
+                                  {String(label)}
+                                </Text>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {fmtText(value)}
+                                </Text>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          <Box mt="10px" pt="8px" borderTopWidth="1px" borderColor="green.100">
+                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="4px">
+                              Source
+                            </Text>
+                            <Text fontSize="sm">
+                              {fmtText(neeaSource?.source_description)}{' '}
+                              {neeaSource?.publishing_date ? `(published ${fmtDate(neeaSource.publishing_date)})` : ''}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75} wordBreak="break-all">
+                              NEEA source id: {fmtText(neeaSource?.neea_source_id)}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75}>
+                              Imported {fmtDate(neeaSource?.completed_at)} with {fmtText(neeaSource?.records_imported)} rows.
+                            </Text>
+                            {neeaSource?.source_url && (
+                              <Text
+                                as="a"
+                                href={String(neeaSource.source_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                fontSize="xs"
+                                color="green.700"
+                                textDecoration="underline"
+                              >
+                                Open source list
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  )}
 
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                     <h2>
@@ -1221,39 +1611,6 @@ export const InvoiceVersionShowScreen = () => {
                     </AccordionPanel>
                   </AccordionItem>
 
-                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                    <h2>
-                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                        <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
-                            Overall advice
-                          </Text>
-                          <Text fontSize="xs" opacity={0.65}>
-                            Combined GenAI admin advice for this invoice version.
-                          </Text>
-                        </Box>
-                        <AccordionIcon />
-                      </AccordionButton>
-                    </h2>
-
-                    <AccordionPanel px="0" pt="8px">
-                      <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p="10px" bg="gray.50">
-                        <Flex align="center" gap="8px" mb="6px" wrap="wrap">
-                          <StatusDot result={readData?.genai_result} />
-                          <Badge colorScheme={resultColorScheme(readData?.genai_result)}>
-                            {resultLabel(readData?.genai_result)}
-                          </Badge>
-                          <Text fontSize="xs" opacity={0.75}>
-                            confidence: {readData?.genai_overall_confidence ?? '-'}
-                          </Text>
-                        </Flex>
-                        <Text fontSize="sm" whiteSpace="pre-wrap">
-                          {readData?.genai_admin_advice || 'No overall advice found for this invoice version.'}
-                        </Text>
-                      </Box>
-                    </AccordionPanel>
-                  </AccordionItem>
-
                   {upgradeTypeGroups.length === 0 ? (
                     <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                       <h2>
@@ -1275,7 +1632,6 @@ export const InvoiceVersionShowScreen = () => {
                       const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
                       const foundFieldCount = group.fields.length;
                       const rulecheckCount = group.rulechecks.length;
-                      const lineitemCount = group.lineitems.length;
                       const classifierResults = group.results.filter((r: any) => r.source_engine === 'classifier');
 
                       return (
@@ -1293,7 +1649,7 @@ export const InvoiceVersionShowScreen = () => {
                                     {meta.label}
                                   </Text>
                                   <Text fontSize="xs" opacity={0.65}>
-                                    {foundFieldCount} fields - {rulecheckCount} rules - {lineitemCount} line items
+                                    {foundFieldCount} fields - {rulecheckCount} rules
                                   </Text>
                                 </Box>
                               </Flex>
@@ -1420,9 +1776,8 @@ export const InvoiceVersionShowScreen = () => {
                               ) : (
                                 <Box display="flex" flexDirection="column" gap="8px">
                                   {group.rulechecks.map((r: any) => {
-                                    const num = r.rule_number != null ? Number(r.rule_number) : null;
-                                    const title =
-                                      `${num != null ? `Rule ${num}` : 'Rule'} - ${String(r.rule_name ?? '')}`.trim();
+                                    const title = ruleDisplayTitle(r);
+                                    const sourceLabel = ruleSourceLabel(r);
                                     const expected = r.expected_text ?? r.expected ?? '';
                                     const calc = r.calculation ?? '';
                                     const reason = r.reason_and_likely_causes ?? '';
@@ -1431,7 +1786,7 @@ export const InvoiceVersionShowScreen = () => {
 
                                     return (
                                       <Box
-                                        key={r.id ?? `${r.rule_number}-${r.rule_name}`}
+                                        key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_name}`}
                                         px="10px"
                                         py="8px"
                                         borderRadius="md"
@@ -1444,6 +1799,11 @@ export const InvoiceVersionShowScreen = () => {
                                           <Text fontSize="xs" opacity={0.75}>
                                             {title}
                                           </Text>
+                                          {sourceLabel && (
+                                            <Badge colorScheme="gray" variant="subtle" textTransform="lowercase">
+                                              {sourceLabel}
+                                            </Badge>
+                                          )}
                                         </Flex>
                                         {sourceRequirement && (
                                           <Text fontSize="xs" opacity={0.65} mb="6px">
@@ -1489,85 +1849,6 @@ export const InvoiceVersionShowScreen = () => {
                               )}
                             </Box>
 
-                            <Box>
-                              <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
-                                Line items
-                              </Text>
-                              {lineitemsError && (
-                                <Text fontSize="xs" color="red.500" mb="8px">
-                                  {lineitemsError}
-                                </Text>
-                              )}
-                              {group.lineitems.length === 0 ? (
-                                <Text fontSize="sm" opacity={0.7}>
-                                  No line items for this upgrade type.
-                                </Text>
-                              ) : (
-                                <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
-                                  {group.lineitems.map((li: any) => {
-                                    const seq = li.lineitem_seqno ?? li.seqno ?? '-';
-                                    const rows = [
-                                      {
-                                        subKey: 'desc',
-                                        label: 'Description',
-                                        value: li.ocr_description ?? '-',
-                                        page: li.ocr_description_page,
-                                        polygon: li.ocr_description_polygon,
-                                      },
-                                      {
-                                        subKey: 'qty',
-                                        label: 'Quantity',
-                                        value: li.ocr_quantity != null ? String(li.ocr_quantity) : '-',
-                                        page: li.ocr_quantity_page,
-                                        polygon: li.ocr_quantity_polygon,
-                                      },
-                                      {
-                                        subKey: 'unit',
-                                        label: 'Unit price',
-                                        value: li.ocr_unit_price != null ? fmtMoney(li.ocr_unit_price) : '-',
-                                        page: li.ocr_unit_price_page,
-                                        polygon: li.ocr_unit_price_polygon,
-                                      },
-                                      {
-                                        subKey: 'amt',
-                                        label: 'Amount',
-                                        value: li.ocr_amount != null ? fmtMoney(li.ocr_amount) : '-',
-                                        page: li.ocr_amount_page,
-                                        polygon: li.ocr_amount_polygon,
-                                      },
-                                    ];
-
-                                    return rows.map((row) => {
-                                      const clickable = row.page != null && row.polygon != null;
-                                      const highlightKey = `lineitem_${seq}_${row.subKey}`;
-
-                                      return (
-                                        <FieldRow
-                                          key={`${li.id ?? `li-${seq}`}-${row.subKey}`}
-                                          label={`Line ${seq} - ${row.label}`}
-                                          value={row.value}
-                                          active={activeHighlightKey === highlightKey}
-                                          disabled={!clickable}
-                                          onClick={
-                                            clickable
-                                              ? () => {
-                                                  setActiveHighlight({
-                                                    source: 'di',
-                                                    key: highlightKey,
-                                                    pageNumber: Number(row.page),
-                                                    polygon: row.polygon,
-                                                  });
-                                                  setActiveHighlightKey(highlightKey);
-                                                }
-                                              : undefined
-                                          }
-                                        />
-                                      );
-                                    });
-                                  })}
-                                </Box>
-                              )}
-                            </Box>
                           </AccordionPanel>
                         </AccordionItem>
                       );
@@ -1948,9 +2229,8 @@ export const InvoiceVersionShowScreen = () => {
 
                           {/* list */}
                           {genAiRulechecks.map((r: any) => {
-                            const num = r.rule_number != null ? Number(r.rule_number) : null;
-                            const title =
-                              `${num != null ? `Rule ${num}` : 'Rule'} - ${String(r.rule_name ?? '')}`.trim();
+                            const title = ruleDisplayTitle(r);
+                            const sourceLabel = ruleSourceLabel(r);
 
                             const conf =
                               r.confidence != null && r.confidence !== ''
@@ -1968,7 +2248,7 @@ export const InvoiceVersionShowScreen = () => {
 
                             return (
                               <Box
-                                key={r.id ?? `${r.rule_number}-${r.rule_name}`}
+                                key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_name}`}
                                 px="10px"
                                 py="8px"
                                 mb="8px"
@@ -1982,6 +2262,11 @@ export const InvoiceVersionShowScreen = () => {
                                   <Text fontSize="xs" opacity={0.7}>
                                     {title}
                                   </Text>
+                                  {sourceLabel && (
+                                    <Badge colorScheme="gray" variant="subtle" textTransform="lowercase">
+                                      {sourceLabel}
+                                    </Badge>
+                                  )}
                                 </Flex>
 
                                 {meta && (
@@ -2057,8 +2342,10 @@ export const InvoiceVersionShowScreen = () => {
               {showPdf ? (
                 <Box
                   ref={pdfWrapRef}
-                  flex="1"
-                  minW={0}
+                  flex="0 0 640px"
+                  w="640px"
+                  maxW="640px"
+                  minW="640px"
                   minH={0}
                   borderWidth="1px"
                   borderRadius="md"
@@ -2074,16 +2361,16 @@ export const InvoiceVersionShowScreen = () => {
 
                     <Box
                       display="flex"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      gap="10px"
+                      flexDirection="column"
+                      alignItems="stretch"
+                      gap="8px"
                       mb="8px"
                       p="8px"
                       borderWidth="1px"
                       borderRadius="md"
                     >
                       {/* Left: page navigation */}
-                      <Box display="flex" alignItems="center" gap="8px">
+                      <Box display="flex" alignItems="center" gap="6px" flexWrap="wrap">
                         <Button
                           size="sm"
                           onClick={() => setActivePageNumber((p) => Math.max(1, p - 1))}
@@ -2134,7 +2421,7 @@ export const InvoiceVersionShowScreen = () => {
                       </Box>
 
                       {/* Right: zoom/fit/rotate/actions */}
-                      <Box display="flex" alignItems="center" gap="8px" flexWrap="wrap" justifyContent="flex-end">
+                      <Box display="flex" alignItems="center" gap="6px" flexWrap="wrap">
                         <Button size="sm" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}>
                           -
                         </Button>
@@ -2194,15 +2481,6 @@ export const InvoiceVersionShowScreen = () => {
     ? We render Document only when pdfUrl is present
     ============================================================ */}
 
-                    {/* 1) pdf_url error */}
-                    {/* ============================================================
-    SECTION 07.08.10 - DEBUG PDF URL
-    PURPOSE: show whether pdfUrl is actually being set
-   ============================================================ */}
-                    <Text fontSize="xs" opacity={0.6} mb="6px">
-                      pdfUrl: {pdfUrl ? pdfUrl.slice(0, 140) + '...' : '(null)'}
-                    </Text>
-
                     {pdfUrlError && (
                       <Text fontSize="sm" color="red.500" mb="8px">
                         PDF URL error: {pdfUrlError}
@@ -2225,7 +2503,12 @@ export const InvoiceVersionShowScreen = () => {
                         onLoadError={(err) => console.error('PDF load error:', err)}
                       >
                         {/* Wrapper so SVG and Page share identical geometry */}
-                        <Box position="relative" width={`${overlayWidthPx}px`} height={`${overlayHeightPx}px`}>
+                        <Box
+                          position="relative"
+                          width={`${overlayWidthPx}px`}
+                          height={`${overlayHeightPx}px`}
+                          mx="auto"
+                        >
                           {/* SVG overlay */}
                           <svg
                             width={overlayWidthPx}
@@ -2325,7 +2608,8 @@ export const InvoiceVersionShowScreen = () => {
                   Invoice: OCR header fields like invoice number, date, vendor, customer, and totals.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  Line Items: OCR line rows like description, quantity, unit price, and amount.
+                  Line Items: OCR line rows like description, quantity, unit price, and amount. The likely upgrade type
+                  shown beside each line is a classifier guess and may need human review.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
                   GenAI Located Fields: values found by AI with evidence and document location details.

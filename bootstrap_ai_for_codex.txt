@@ -55,6 +55,17 @@ Known-good local validation commands
   - `Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T app bash -c "cd /app && bundle exec ruby -c app/controllers/api/claims/ingest_controller.rb"`
 - Frontend lint check:
   - `Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T app bash -c "cd /app && ./node_modules/.bin/eslint app/frontend/components/domains/ai-admin/index.tsx"`
+- Better frontend lint check for this machine:
+  - direct container invocation avoids the UNC + shell quoting confusion that previously produced a false `npx missing` conclusion
+  - `docker exec bc-emli-application-sys-app-1 npx eslint app/frontend/components/domains/submission-simulator-admin/index.tsx`
+- Toolchain sanity check inside app container:
+  - `docker exec bc-emli-application-sys-app-1 npm -v`
+  - `docker exec bc-emli-application-sys-app-1 npx -v`
+  - known-good result on 2026-05-27: npm/npx `10.7.0`
+- Important clarification:
+  - the app image already contains Node 20 + npm/npx under `/usr/local/node/bin`
+  - an earlier debugging pass incorrectly concluded npm/npx were absent because of a bad invocation path
+  - do **not** apt-install npm into the running container as a fix; use the existing bundled toolchain
 - If `eslint` is missing after container recreate:
   - repopulate app node_modules volume with:
     - `Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T app bash -c "cd /app && npm install --legacy-peer-deps --maxsockets=50"`
@@ -174,6 +185,68 @@ SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
 5) Confirm app route responds (curl -I app URL).
 6) If login fails, check app logs first, then hesp secret keys.
 7) Before deploying frontend changes, verify deployed image tag and build freshness.
+
+============================================================
+SECTION H - CLAIMS INGEST STAGING / SIMULATOR SHAPE
+============================================================
+
+Current local design (2026-05-27)
+- Mixed PDF bundle intake now creates:
+  - exactly `1` shell `claims.invoice` immediately at batch start
+  - `0..n` `claims.ingest_documents` rows, one per uploaded file
+  - `0` real `claims.invoice_versions` until triage resolves exactly one staged file as the invoice
+- This replaced the bad temporary design that created one fake invoice per uploaded file.
+
+Why this matters
+- The shell invoice exists from second zero, so:
+  - `invoice.status` is visible immediately
+  - contractor simulator / admin simulator can show a stable overall row during staging
+  - early `ocr_read` and `triage_classifier` step history can be shown before invoice-model OCR begins
+
+Expected coarse invoice status mapping during bundle intake
+- `upload_in_progress`
+  - shell invoice created; files are being staged
+- `ocr_in_progress`
+  - DI `read` across staged files
+  - per-file triage classifier
+  - exactly-one-invoice enforcement
+  - invoice-model OCR loopback for the resolved invoice
+- `genai_in_progress`
+  - code-fact build
+  - common GenAI
+  - per-upgrade-type GenAI
+- terminal:
+  - `genai_complete`
+  - `ocr_failed`
+  - `genai_failed`
+
+Simulator / tracker read-side expectation
+- The simulator step-history view is now supposed to show a merged timeline:
+  - staged-file steps from `claims.ingest_step_runs.ingest_document_id`
+  - later invoice steps from `claims.ingest_step_runs.invoice_version_id`
+- If the first visible step is `classifier` and the overall invoice row is blank for ~30 seconds, the read side is wrong-shaped again.
+
+Known-good local behavior verified on 2026-05-27
+- Success bundle:
+  - invoice PDF + fake supplement PDF
+  - immediate state:
+    - shell invoice exists
+    - shell invoice status = `ocr_in_progress`
+    - zero invoice_versions yet
+    - `ocr_read` step rows already exist
+  - final state:
+    - run `succeeded`
+    - shell invoice status = `genai_complete`
+    - one real invoice_version
+    - supplement promoted into `claims.supporting_documents`
+- Failure bundle:
+  - two invoice PDFs
+  - final state:
+    - run `failed`
+    - shell invoice remains
+    - shell invoice status = `ocr_failed`
+    - zero invoice_versions
+    - run message says exactly one invoice is required
 
 ============================================================
 SECTION D - MEMORY INTENT
@@ -384,7 +457,8 @@ Gov subscription findings
     - `GENAI_BASE_URL=https://sbran-mkremrzw-eastus2.openai.azure.com/openai/v1/`
     - `GENAI_DEPLOYMENT=gpt-5.2-chat`
   - That older/personal Azure setup is already complete enough to be callable from OpenShift and has been used by the app for months.
-  - The new gov subscription is not at that maturity level yet; it currently lacks the network plumbing needed for private Azure OpenAI creation.
+  - Policy direction from user on 2026-05-11: moving forward local dev should also use gov Azure, not the personal Azure endpoint.
+  - This creates a local networking problem because the compliant gov Azure OpenAI endpoint is expected to be private-only.
 - When attempting to create Azure OpenAI in gov subscription:
   - RG creation succeeded.
   - Resource create failed at validation because policy denied public network access on `Microsoft.CognitiveServices/accounts`.
@@ -394,7 +468,42 @@ Gov subscription findings
     - `Cognitive Services accounts should disable public network access`
     - `Azure AI Services resources should restrict network access`
 - Once `Network = Disabled` was selected in portal, Azure exposed private endpoint setup as expected.
-- The blocker is not user error in portal. The blocker is missing private networking prerequisites.
+- The blocker is not user error in portal. Public Azure OpenAI endpoints are policy-denied; private endpoint is the compliant path.
+
+Gov Azure IaC/Bicep status as of 2026-05-11
+- Added rerunnable Bicep package under:
+  - `devops/azure/main.bicep`
+  - `devops/azure/modules/azure-openai.bicep`
+  - `devops/azure/modules/subnet-nsg.bicep`
+  - `devops/azure/modules/private-endpoint.bicep`
+  - `devops/azure/modules/private-dns.bicep`
+  - `devops/azure/modules/model-deployment.bicep`
+  - `devops/azure/params/dev.bicepparam`
+  - `devops/azure/scripts/update-local-env-from-aoai.ps1`
+  - `devops/azure/README.md`
+- `.gitignore` now ignores generated Bicep JSON artifacts:
+  - `devops/azure/*.json`
+- Bicep compile command that passed:
+  - `az bicep build --file "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\main.bicep"`
+- Read-only what-if command that passed:
+  - `az deployment sub what-if --location canadaeast --template-file "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\main.bicep" --parameters "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\params\dev.bicepparam" --result-format ResourceIdOnly`
+- Current what-if creates:
+  - Azure OpenAI account: `aoai-esp-dev`
+  - NSG: `nsg-aoai-private-endpoints`
+  - subnet: `aoai-private-endpoints`
+  - private endpoint: `pe-aoai-esp-dev`
+- The template intentionally sets Azure OpenAI:
+  - `publicNetworkAccess = Disabled`
+  - `networkAcls.defaultAction = Deny`
+- Model deployment is parameterized but disabled by default:
+  - `createModelDeployment = false`
+  - reason: exact GPT model/version/SKU/region availability still needs confirmation before deployment.
+- Private DNS is also disabled by default:
+  - `createPrivateDnsZone = false`
+  - reason: BC Gov policy rejected private DNS zone creation with message:
+    - `Private DNS must be created centrally in the connectivity subscription.`
+  - If platform provides the central zone resource id, set:
+    - `existingPrivateDnsZoneId = '/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com'`
 
 Gov networking facts verified via Azure CLI
 - Only one VNet visible in the subscription:
@@ -404,32 +513,40 @@ Gov networking facts verified via Azure CLI
   - Address space: `10.46.78.0/24`
   - DNS server: `10.53.244.4`
   - It is peered to a central hub VNet in another subscription / managed landing-zone area.
-- Critical fact:
-  - `cbdb71-dev-vwan-spoke` currently has **zero subnets**.
-  - Because there are no subnets, the portal private endpoint subnet dropdown is empty.
-  - Therefore Azure OpenAI private endpoint creation cannot be completed yet.
-- Also verified in subscription:
-  - no private endpoints
-  - no private DNS zones
-  - no NSGs
-  - no route tables
-  - no Azure Firewall / virtual hub / vWAN objects in this app subscription beyond the spoke shell
+- As of 2026-05-11, before deploying Bicep:
+  - VNet still showed no subnets.
+  - no Cognitive Services/Azure OpenAI accounts were visible.
+  - no private DNS zones were visible in the app subscription.
+- Policy discoveries:
+  - Creating a subnet without an NSG fails policy:
+    - `Subnets must have a Network Security Group.`
+  - Creating subnet + NSG passes what-if.
+  - Creating Azure OpenAI with public access disabled passes what-if.
+  - Creating private DNS zone in the app/networking RG fails policy because private DNS must be central.
 - Interpretation:
-  - subscription has landing-zone network shell only
-  - heavier shared network infra appears to live in the managed hub elsewhere
-  - app subscription is incomplete for private Azure OpenAI until a subnet / approved pattern is provided
+  - subscription has landing-zone network shell plus inherited permissions sufficient to deploy subnet/NSG/private endpoint.
+  - heavier shared network infra and private DNS still appear to live in the managed hub/connectivity area.
+  - the remaining unknown is DNS/routing from OpenShift and from the developer laptop to the private endpoint after it exists.
 
 Gov RBAC facts verified
-- Visible role assignments for `SBRANIFF@gov.bc.ca`:
+- Visible direct role assignments for `SBRANIFF@gov.bc.ca`:
   - `Azure AI User` at subscription scope
   - `Azure AI User` on `rg-energy-savings-program-dev`
   - `Azure AI User` on `rg-energy-savings-program`
-- No direct role assignments were found for:
-  - `cbdb71-dev-networking`
-  - `cbdb71-dev-vwan-spoke`
-- Working assumption:
-  - user can work with AI resources
-  - user does not currently have network-admin rights to build subnet/private-endpoint plumbing solo
+- Direct Azure AI User assignments were created on 2026-04-29 UTC.
+- On 2026-05-11, an inherited `Owner` role was found:
+  - role: `Owner`
+  - principal type: `Group`
+  - group id: `7aa83f2c-1f4b-4194-923e-e165aae7b570`
+  - scope: `/providers/Microsoft.Management/managementGroups/cbdb71`
+  - role assignment created: `2025-07-03T17:34:28Z`
+- Meaning:
+  - the Owner role assignment itself is old.
+  - if access changed recently, likely the user was added to that group, not that the role assignment was newly created.
+  - exact group-membership date could not be checked because Microsoft Graph required a fresh Graph-scoped login.
+- Current working assumption:
+  - user likely has enough permission to deploy the gov Azure OpenAI private-endpoint path.
+  - policy, not RBAC, is now the main constraint.
 
 OpenShift + Azure reachability facts
 - Important distinction:
@@ -443,10 +560,47 @@ OpenShift + Azure reachability facts
     - `braniff-di.cognitiveservices.azure.com`
   - TCP 443 OK to those hosts
   - actual HTTPS GET to Azure OpenAI models endpoint returned HTTP 200
+- Verified again on 2026-05-11 from Gold `hesp-app` pod:
+  - public Azure OpenAI DNS resolved:
+    - `sbran-mkremrzw-eastus2.openai.azure.com -> 20.62.58.5`
+  - HTTPS to current public Azure endpoint returned `401`, which is good for reachability because it means Azure was reached without a valid test key.
+  - planned gov endpoint did not resolve yet:
+    - `aoai-esp-dev.openai.azure.com`
+    - expected because the gov Azure OpenAI account/private endpoint has not been created yet.
+  - random private VNet IP probe `10.46.78.4:443` timed out; this is not conclusive.
 - Therefore:
   - current/personal public Azure endpoint is reachable from cluster
   - future gov Azure OpenAI endpoint will only be known reachable after it exists
-  - if gov endpoint is private-only (likely), reachability from OpenShift cannot be assumed and must be tested after creation / DNS setup
+  - if gov endpoint is private-only, reachability from OpenShift cannot be assumed and must be tested after creation / DNS setup
+
+Local laptop + gov Azure private endpoint mental model
+- User is non-technical; explain simply:
+  - Azure OpenAI private endpoint = private door inside gov/Azure network.
+  - laptop on Shaw cable = outside the building.
+  - VPN/private network access = hallway from laptop into the private network.
+  - private DNS = directory telling laptop that `aoai-esp-dev.openai.azure.com` should resolve to a private IP.
+- Laptop does not "become a private endpoint."
+- Laptop needs:
+  - network route to the private endpoint IP
+  - DNS that resolves the Azure OpenAI hostname to the private endpoint IP
+- User turned on company VPN just before reboot on 2026-05-11.
+  - Not yet tested after VPN was enabled.
+  - After reboot, if asked, test from laptop:
+    1) `nslookup aoai-esp-dev.openai.azure.com`
+    2) only after endpoint exists, verify it resolves to a private IP.
+    3) `curl -I https://aoai-esp-dev.openai.azure.com/`
+  - But endpoint does not exist yet, so pre-deploy tests are limited.
+
+Local `.env` / secrets note
+- `claims_ai_service/.env` currently contains real secrets and must never be committed.
+- It is ignored by Git.
+- After gov Azure deployment, `devops/azure/scripts/update-local-env-from-aoai.ps1` can write:
+  - `GENAI_BASE_URL`
+  - `GENAI_KEY`
+  - `GENAI_DEPLOYMENT`
+  - `GENAI_API_STYLE`
+- That helper intentionally does not print the key.
+- Do not store Azure API keys in committed Bicep, bicepparam, README, or SQL files.
 
 ============================================================
 SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
@@ -537,10 +691,29 @@ Model/region caution
 Practical memory for next time
 - If asked to revisit gov Azure setup:
   1) use Azure CLI on Windows with device-code login
-  2) inspect `rg-energy-savings-program` and activity log/policy again
-  3) remember that the current hard blocker is: no subnet in `cbdb71-dev-vwan-spoke`
-  4) do not waste time trying to force public Azure OpenAI creation; policy will deny it
-  5) likely next dependency is network/landing-zone guidance or a provided subnet/private endpoint pattern
+  2) if Microsoft Graph calls fail, run:
+     - `az logout`
+     - `az login --tenant "6fdb5200-3d0d-4a8a-b036-d3685e359adc" --scope "https://graph.microsoft.com//.default"`
+  3) do not waste time trying to force public Azure OpenAI creation; policy will deny it
+  4) use `devops/azure` Bicep and run what-if before any deploy
+  5) remember private DNS zone creation is centrally managed and currently omitted from Bicep by default
+  6) after private endpoint exists, test DNS/reachability from both:
+     - Gold/OpenShift pod
+     - laptop with company VPN enabled
+  7) current dev Azure OpenAI deployment:
+     - account: `aoai-esp-dev`
+     - endpoint: `https://aoai-esp-dev.openai.azure.com/`
+     - app base URL: `https://aoai-esp-dev.openai.azure.com/openai/v1/`
+     - private endpoint IP: `10.46.78.4`
+     - deployment: `gpt-5-4-chat`
+     - model: `gpt-5.4` version `2026-03-05`
+     - SKU/capacity: `GlobalStandard` / `1`
+     - GPT-5.5 was attempted first but failed with Azure `InsufficientCapacity`
+  8) current private-network status:
+     - local laptop resolves the endpoint to public IP `52.242.46.17`
+     - Gold/OpenShift resolves the endpoint to public IP `52.242.46.17`
+     - Gold data-plane test fails with `403 Public access is disabled. Please configure private endpoint.`
+     - remaining platform task is central private DNS/routing so callers resolve the endpoint through `privatelink.openai.azure.com` to `10.46.78.4`
 
 ============================================================
 SECTION I - LOCAL LEGACY CONTRACTOR ONBOARDING LESSONS
@@ -608,4 +781,3 @@ Local staff role helpers
   - `system_admin = 3`
 
 - Legacy invoice blank-screen fix: seed old-style PermitType(code=0 low_residential) and Activity(code=4 addition_alteration_renovation), wire them onto minimal requirement_templates, and expose permit_type/activity from PermitApplicationBlueprint with fallback to template_version.requirement_template. This made draft invoice payloads include top-level activity + permit_type again.
-

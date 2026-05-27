@@ -47,8 +47,6 @@ type InvoiceGridRow = {
   session_id: string;
   invoice_status?: string | null;
   invoice_status_updated_at?: string | null;
-  session_status?: string | null;
-  session_submitted_at?: string | null;
   contractor_id?: string | null;
   contractor_business_name?: string | null;
   contractor_number?: string | null;

@@ -19,6 +19,7 @@ import {
   getGenAiApiStyleFromEnv,
   stripThinkBlocks,
   toChatMessages,
+  toResponsesPrompt,
 } from './genai-api';
 
 import {
@@ -415,9 +416,11 @@ export class InvService {
     let raw = '';
 
     if (this.genaiApiStyle === 'responses') {
+      const responsesPrompt = toResponsesPrompt(contextwindowjson);
       const resp = await this.genaiClient.responses.create({
         model: this.genaiDeployment,
-        input: contextwindowjson,
+        instructions: responsesPrompt.instructions,
+        input: responsesPrompt.input,
       });
       raw = resp.output_text ?? '';
     } else {
@@ -433,7 +436,7 @@ export class InvService {
     // Return the model JSON verbatim
     try {
       return JSON.parse(candidate);
-    } catch (e: any) {
+    } catch {
       // Thin, but not silent: tell Rails exactly what happened
       throw new HttpException(
         {

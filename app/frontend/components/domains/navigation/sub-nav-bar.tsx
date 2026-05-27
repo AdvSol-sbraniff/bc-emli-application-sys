@@ -57,6 +57,8 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const invoiceIdForRevisionRequests = searchParams.get('invoice_id') || '';
+    const validationRulesUpgradeTypeId = searchParams.get('invoice_upgrade_type_id') || '';
+    const validationRulesMode = searchParams.get('mode') || '';
     const revisionRequestsHref = invoiceIdForRevisionRequests
       ? `/revision-requests-admin?invoice_id=${encodeURIComponent(invoiceIdForRevisionRequests)}`
       : '/revision-requests-admin';
@@ -76,7 +78,24 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/reports-volume-value', title: 'Reports - Volume and Value' },
       ],
-      '/rulesets-admin': [{ href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') }],
+      '/validation-rules-admin': [{ href: '/validation-rules-admin', title: 'Validation Rules Portal' }],
+      '/validation-rules-config': [
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-config', title: 'Validation Prompt Config' },
+      ],
+      '/supporting-document-types-admin': [
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
+      ],
+      '/downloads-admin': [{ href: '/downloads-admin', title: 'Downloads' }],
+      '/heat-pump-product-list-admin': [
+        { href: '/downloads-admin', title: 'Downloads' },
+        { href: '/heat-pump-product-list-admin', title: 'AHRI heat pump product list config' },
+      ],
+      '/hpwh-product-list-admin': [
+        { href: '/downloads-admin', title: 'Downloads' },
+        { href: '/hpwh-product-list-admin', title: 'NEEA HPWH product list config' },
+      ],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
       '/users-admin': [{ href: '/users-admin', title: t('home.usersAdminTitle') }],
       '/revision-requests-admin': [
@@ -115,14 +134,6 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/ai-contractor-dashboard', title: 'AI contractor portal' },
         { href: '/contractor/upload-invoices', title: 'Upload Invoice(s)' },
       ],
-      '/ruleset-editor': [
-        { href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') },
-        { href: '/ruleset-editor', title: 'Ruleset editor' },
-      ],
-      '/ruleset-config-editor': [
-        { href: '/rulesets-admin', title: t('home.rulesetsAdminTitle') },
-        { href: '/ruleset-config-editor', title: 'AI system config' },
-      ],
       '/eligibilitycode-editor': [
         { href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') },
         { href: '/eligibilitycode-editor', title: 'Eligibility code editor' },
@@ -137,6 +148,56 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/revision-request-editor', title: 'Revision Request Editor' },
       ],
     };
+
+    if (path === '/validation-rules-admin' && validationRulesUpgradeTypeId && validationRulesMode) {
+      const recordType = searchParams.get('record_type') || '';
+      const recordId = searchParams.get('record_id') || '';
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        {
+          href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}`,
+          title: 'Validation Rules Editor',
+        },
+        {
+          href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}&mode=${encodeURIComponent(validationRulesMode)}${recordType ? `&record_type=${encodeURIComponent(recordType)}` : ''}${recordId ? `&record_id=${encodeURIComponent(recordId)}` : ''}`,
+          title: validationRulesMode === 'create' ? 'Add Validation Record' : 'Edit Validation Record',
+        },
+      ]);
+      return;
+    }
+
+    if (path === '/supporting-document-types-admin' && validationRulesMode) {
+      const recordId = searchParams.get('id') || '';
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        {
+          href: '/supporting-document-types-admin',
+          title: 'Supporting Document Types',
+        },
+        {
+          href: `/supporting-document-types-admin?mode=${encodeURIComponent(validationRulesMode)}${recordId ? `&id=${encodeURIComponent(recordId)}` : ''}`,
+          title:
+            validationRulesMode === 'create'
+              ? 'Add Supporting Document Type'
+              : 'Edit Supporting Document Type',
+        },
+      ]);
+      return;
+    }
+
+    if (path === '/validation-rules-admin' && validationRulesUpgradeTypeId) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        {
+          href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}`,
+          title: 'Validation Rules Editor',
+        },
+      ]);
+      return;
+    }
 
     if (claimsBreadcrumbs[path]) {
       setIncludeHome(false);

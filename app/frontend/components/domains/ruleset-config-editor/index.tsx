@@ -140,12 +140,12 @@ export default function RulesetConfigEditorScreen() {
 
   return (
     <Box>
-      <ThinBlueTitleBar title="AI System Config" />
+      <ThinBlueTitleBar title="Validation Prompt Config" />
 
       <Container maxW="6xl" py={6}>
         <Flex align="center" justify="space-between" mb={4}>
           <Box>
-            <Heading size="md">AI System Config</Heading>
+            <Heading size="md">Validation Prompt Config</Heading>
             <Text fontSize="sm" opacity={0.75} mt={1}>
               Shared system prompt, OCR guidance, plus the intro and closing used when combining per-ruleset advice.
             </Text>

@@ -1,0 +1,432 @@
+SCO AI background / handoff notes
+=================================
+
+Folder
+------
+All SCO work is intentionally isolated in:
+
+  claims_ai_service_documentation/lori_sco/
+
+Do not touch the rest of the repo for this SCO task unless explicitly asked.
+
+
+Current useful output
+---------------------
+The prior v1 output was renamed to:
+
+  version_review_for_lori_v1.csv
+
+The current output candidate for Lori is:
+
+  version_review_for_lori_v6.csv
+
+The review CSV is denormalized. It combines:
+
+  projectname
+  sco
+  versionnumber
+  with_party
+  started_on
+  ended_on
+  total_calendar_days
+  total_business_days
+  source_start_event
+  source_end_event
+  needs_lori_to_confirm
+  raw_status_text
+
+For the current pass, `version_review_for_lori_v6.csv` is the file intended to review before sending to Lori.
+
+
+Source files
+------------
+Source historical SCO workbook:
+
+  Completed SCOs.xlsx
+  Lori's Completed SCOs consolidated lists v1.0.xlsx
+
+Important v2 source-data fact:
+
+  The workbook now has a populated Project column.
+  Treat that Project column as the source of truth.
+  Do not use `listofprojects.txt`; it was removed and is no longer part of this workflow.
+  Do not fuzzy-match project names for v2 unless there is an emergency reason.
+  Preserve workbook project names exactly, including unusual spacing or line breaks, unless Sam explicitly asks for cleanup.
+
+
+Current intended meaning
+------------------------
+The exec/business question is:
+
+  Who had the pen longest: ADSL, CSBC, or signing/final workflow?
+
+For v2/v8, every data row in the current Completed SCO workbook should be processed.
+The current rule is:
+
+  The workbook defines the projects and SCOs we care about.
+  Every nonblank workbook row should appear in the v2 review output.
+  The old v1 CSV exists only as a format/reference example, not as meaningful source data.
+
+V1 generated coverage, kept only for history:
+
+  Projects in old listofprojects.txt: 38
+  Projects in version_review_for_lori_v1.csv: 38
+  Missing projects: 0
+  Rows in version_review_for_lori_v1.csv at last generation: 473
+  Rows with Lori questions at last generation: 312
+
+V2 source scan observed on 2026-05-14:
+
+  Source workbook: Completed SCOs.xlsx
+  Sheet: Completed
+  Header columns: Project, Change Order/Service Order/Service Change Order, Status
+  Data rows: 51
+  Unique project names: 23
+  Blank project rows: 0
+  Blank SCO rows: 0
+
+
+Business assumptions already supplied by Sam/user
+-------------------------------------------------
+People/party rules:
+
+  ADSL people confirmed:
+    Sam
+    Craig
+    Cathy
+    Lori
+    Tyler
+    Rian
+    Sian
+    Serge
+
+  CSBC people confirmed:
+    Leanne
+    Gina
+
+  Unknown:
+    Kendall
+
+Party naming:
+
+  Province = CSBC
+  CSBC = CSBC
+  Connected Service BC = CSBC
+  ADSL = ADSL
+  ESIT-AS = ADSL / Advanced Solutions
+
+  Lori shorthand:
+
+    "Province" means CSBC / Connected Service BC, the ministry-side party within the provincial government.
+    "ESIT-AS" means Advanced Solutions, which Sam has been calling ADSL in this analysis.
+
+Version ownership model:
+
+  ADSL generally owns odd versions:
+    V1, V3, V5, etc.
+
+  CSBC generally owns even versions:
+    V2, V4, V6, etc.
+
+  A version cannot be with both ADSL and CSBC.
+
+  The initial draft is usually V1 with ADSL.
+  When ADSL sends V1 to CSBC, CSBC immediately starts V2.
+  When CSBC sends V2 back, ADSL immediately starts V3.
+
+  Important refinement discovered during v2 review:
+
+    "Vn sent/submitted to Province" does NOT always mean CSBC starts a new Vn+1 editing cycle.
+    It only creates a CSBC editing interval if the later source text explicitly shows a next-version return/back/received event, such as:
+
+      V2 back from Province
+      V2 rec'd
+      V4 returned
+
+    If the next meaningful event after "Vn sent/submitted to Province" is signing/final/completed, do not invent Vn+1.
+    In that case, the time after the send belongs to SIGNINGTIME attached to Vn.
+
+    Example:
+
+      Dec 17/21 - V3 submitted to Province
+      Jan 4/22 - Signed
+
+    Correct interpretation:
+
+      V3 ADSL        ends Dec 17/21
+      V3 SIGNINGTIME Dec 18/21 to Jan 4/22
+
+    Incorrect interpretation:
+
+      V4 CSBC        Dec 18/21 to Jan 3/22
+      V3 SIGNINGTIME Jan 4/22
+
+    The incorrect interpretation appeared in the first v2 generated CSV and must be fixed before sending to Lori.
+
+  Additional v2 parser failure modes discovered:
+
+    1. Same version cannot be owned by both ADSL and CSBC.
+
+       If the output contains the same SCO + same versionnumber with both ADSL and CSBC rows, that is almost certainly a logic bug.
+       A version can move into SIGNINGTIME, but it should not be split between ADSL and CSBC editing ownership.
+
+    2. Do not parse hypothetical/future language as an actual event.
+
+       Text like this is not a real return event:
+
+         if/when V2 comes back from Province
+         when V2 comes back
+         if V2 comes back
+
+       This is planning/context only. It should not create a V2 CSBC row or a returned/back/received event.
+
+    3. "Final sent to Province" is signing/final workflow, not a new editing version.
+
+       Text like this belongs to SIGNINGTIME:
+
+         Final sent to Province
+         Final version sent to Province
+         Move to final
+         Province agreed to move to Final
+         with Province for signing
+         with Sian for signature
+         Adobe Sign
+         Signed
+         Completed
+
+       Do not treat these as regular "Vn sent to Province" events and do not start a new CSBC editing interval from them.
+
+    4. Same-day receive/send is common and should be handled deliberately.
+
+       Lines like this can be legitimate:
+
+         V2 rec'd; V3 sent to Province
+         V4 rec'd; V5 sent to Province
+
+       Interpretation:
+
+         CSBC owns the returned version through that date.
+         ADSL owns the new sent version on that same date.
+         The same date can appear in both rows because the send date belongs to the sender.
+
+       Do not flag this merely because the next start date would otherwise be after the end date.
+       The correct output is a same-day ADSL turnaround row, not a "collapsed date" warning.
+
+    5. Do not create editing rows after SIGNINGTIME has begun.
+
+       Once a signing/final workflow event has started, later final/signing/completed lines remain part of SIGNINGTIME.
+       A later explicit version edit can only create an ADSL/CSBC row if it clearly happened before signing/final workflow started or clearly re-opened the SCO.
+       If a source row appears to show editing after signing began, flag it for Lori rather than inventing normal version ownership.
+
+    6. "sent to ESIT-AS" is ADSL-side, not CSBC-side.
+
+       ESIT-AS means Advanced Solutions / ADSL.
+       Do not treat "sent to ESIT-AS" as Province/CSBC.
+       Time involving ESIT-AS remains ADSL unless the text clearly moves into signing/final workflow.
+
+    7. Repeated unversioned "submitted/sent to Province" events must advance the inferred version sequence.
+
+       Do not infer every unversioned Province submission as V1.
+       Version numbers should move forward through the lifecycle unless the source explicitly says otherwise.
+
+       Example:
+
+         Feb 10/22 - submitted to Province
+         Mar 2/22 - with Jen for review/updating
+         Mar 7/22 - submitted to Province
+         Mar 22/22 - with Serge for signing
+         Mar 25/22 - Signed
+
+       Better interpretation:
+
+         V1 ADSL        Jan 10 to Feb 10
+         V2 CSBC        Feb 11 to Mar 1-ish, inferred because Province had it after V1
+         V3 ADSL        Mar 2 to Mar 7, inferred from internal review/updating before second submission
+         V3 SIGNINGTIME Mar 8 to Mar 25
+
+       Bad interpretation:
+
+         V1 ADSL
+         V2 CSBC
+         V1 ADSL
+         V1 SIGNINGTIME
+
+       If the source has repeated unversioned submissions, infer the next logical ADSL-owned version and flag the inference for Lori.
+
+    8. Later explicit receive/send/signing lines override earlier weird decimal-version breadcrumbs.
+
+       Some source rows include awkward decimal sends such as:
+
+         Oct 20/25 - V1.1 sent to Province
+         Oct 23/25 - V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+         Oct 24/25 - Signed
+
+       Do not stop the lifecycle at V1.1 just because V1.1 was the earlier explicit send.
+       The later line proves the real workflow reached V2 received and V3/V3.1 sent.
+       Prefer the later explicit receive/send/signing sequence as the authoritative version progression.
+
+       Better interpretation:
+
+         V1 ADSL
+         V2 CSBC, until Province questions or V2 is received
+         V1.1 or V3 ADSL as an interim correction/revision if the source supports it
+         V3.1 SIGNINGTIME once Adobe Sign/signing starts
+
+       If the exact ownership split around the decimal version is unclear, flag the row for Lori rather than truncating the final version to the earlier decimal label.
+
+    9. Lines that contain both version actions and signing/final words must be processed in order.
+
+       Example:
+
+         V2 rec'd; V3 and V3.1 sent to Province; Adobe Sign
+
+       This line has three meanings in order:
+
+         CSBC returned V2.
+         ADSL sent V3/V3.1.
+         Signing/final workflow began.
+
+       Do not treat the whole line as only SIGNINGTIME and ignore the receive/send actions.
+       The signing version should be the last sent real version on the line, usually V3.1 in this example.
+
+Date ownership:
+
+  The date a file is sent is counted as belonging to the sender.
+  Reason: the file is typically sent around 4:30 pm.
+  Receiver ownership starts the next day.
+
+Day counts:
+
+  total_calendar_days is inclusive.
+  total_business_days is Monday-Friday only.
+  Stat holidays are NOT removed.
+
+Signing/final model:
+
+  There can be only one final/signoff sequence per SCO.
+  Multiple "final", "signed", "AdobeSign", "completed", etc. lines are usually one finalization/signature workflow, not multiple finals.
+  Signing/final workflow should not be forced into ADSL or CSBC editing time.
+  Use a third with_party value:
+
+    SIGNINGTIME
+
+  Example:
+
+    SCO-PROV-466 OpenVMS Custom Servers
+    V1  ADSL
+    V2  CSBC
+    V3  ADSL
+    V3  SIGNINGTIME
+
+  SIGNINGTIME is attached to the last real version. It represents agreed/final/signature/completion time, not a new edited version.
+  If the source says a version was sent to Province and then signed/finalized without an explicit next-version return, SIGNINGTIME starts the day after the sent date because the sent date belongs to the sender.
+  If the signing/final event occurs on the same day as the last sent/returned event, same-day SIGNINGTIME is acceptable, but flag it if the source text is ambiguous.
+
+
+Known caveats / things Lori should validate
+-------------------------------------------
+For v2, project-to-SCO matching should not be fuzzy because the workbook provides the Project column.
+
+Version/timeline interpretation can still be fuzzy.
+Unclear ownership, ambiguous version numbering, unclear signing boundaries, or odd source text should be flagged directly in:
+
+  needs_lori_to_confirm
+
+The v2 file is useful for Lori review, not final exec reporting.
+
+Before sending a regenerated v2 file to Lori, run sanity checks for:
+
+  No same SCO + versionnumber owned by both ADSL and CSBC.
+  No invented Vn+1 CSBC row when Vn sent/submitted is followed only by signing/final/completed.
+  No hypothetical "if/when Vn comes back" text parsed as an actual return event.
+  No ordinary ADSL/CSBC editing rows after SIGNINGTIME has started, unless flagged as a possible reopen.
+  No "Final sent to Province" row treated as a normal version send.
+  No "Computed start after end; collapsed" warnings for ordinary same-day receive/send turnaround.
+  No "sent to ESIT-AS" events treated as CSBC.
+  No backwards version movement such as V1 -> V2 -> V1 unless explicitly supported by source text.
+  No repeated V1 inferred from multiple unversioned Province submissions within the same SCO.
+  No final SIGNINGTIME version stuck on an earlier decimal send when a later line explicitly sent a higher version.
+
+
+Current open business questions
+-------------------------------
+1. Is the odd/even version model reliable enough for this analysis?
+
+   ADSL owns odd versions.
+   CSBC owns even versions.
+   SIGNINGTIME closes the last real version.
+
+2. Is Kendall ADSL, CSBC, or someone else?
+
+   Evidence found:
+   - "with Kendall for review" appears near Cathy/Sian in one row.
+   - "with Kendall to review with Darin" appears after Province comments in another row.
+   The data is not enough to classify confidently.
+
+3. For v2, are the workbook project names already exactly how Lori wants them shown?
+
+4. Should SIGNINGTIME begin at "moved to final", "final sent", "AdobeSign", or another exact event?
+
+   Current behavior is approximate and intended for review.
+
+5. When a version is sent to Province and the next event is only "Signed", is it correct to count the period after the send as SIGNINGTIME rather than CSBC?
+
+   Current intended v2 behavior: yes, count it as SIGNINGTIME unless a next-version return/back/received event is explicitly present.
+
+6. What does "ESIT-AS" mean for ownership?
+
+   Answer supplied by Sam: ESIT-AS is Advanced Solutions / ADSL.
+   Current intended behavior: treat ESIT-AS as ADSL-side unless the line is clearly part of signing/final workflow.
+
+
+Important warning
+-----------------
+Previous Python/SQL scripts were deleted because the user decided this is a fuzzy LLM/business-review task, not a deterministic loader task.
+
+If more work is needed, do not recreate persistent scripts unless explicitly asked.
+Inline one-off analysis is okay if the user requests it.
+
+
+Most recent user intent
+-----------------------
+The user wanted:
+
+  A new denormalized CSV for Lori based on Completed SCOs.xlsx.
+
+The current output file is:
+
+  version_review_for_lori_v8.csv
+
+Latest generation note, 2026-05-15:
+
+  Source workbook:
+
+    Lori's Completed SCOs consolidated lists v1.0.xlsx
+
+  Output candidate:
+
+    version_review_for_lori_v8.csv
+
+  Coverage:
+
+    Source data rows: 73
+    Source projects after trimming whitespace: 33
+    Source unique SCO names after trimming whitespace: 70
+    Output rows: 290
+    Missing projects: 0
+    Missing SCOs: 0
+    Rows with Lori questions: 257
+    Same-version ADSL/CSBC conflicts after normalization: 0
+    Source row + SCO groups with multiple SIGNINGTIME rows: 0
+
+  Warning:
+
+    version_review_for_lori_v7.csv was an intermediate generated pass and should not be sent to Lori.
+    It preserved too many literal source version labels and produced same-version ADSL/CSBC conflicts.
+    version_review_for_lori_v8.csv normalized version labels by ownership turn to avoid that known failure mode.
+
+Do not overwrite:
+
+  version_review_for_lori_v1.csv
+
+The user may power off/reboot and return later.

@@ -49,21 +49,9 @@ module Api
         rows =
           invoice
             .supporting_documents
+            .includes(:supporting_document_type)
             .order(created_at: :desc, id: :desc)
-            .as_json(
-              only: %i[
-                id
-                invoice_id
-                storage_provider
-                storage_key
-                original_filename
-                content_type
-                byte_size
-                sha256
-                created_at
-                updated_at
-              ]
-            )
+            .map { |row| serialize_supporting_document(row) }
 
         render json: { rows: rows }, status: :ok
       rescue ActiveRecord::RecordNotFound
@@ -160,6 +148,34 @@ module Api
       end
 
       private
+
+      def serialize_supporting_document(row)
+        display_type =
+          row.supporting_document_type&.description ||
+            row.supporting_document_type&.type_key || row.content_type
+
+        {
+          id: row.id,
+          invoice_id: row.invoice_id,
+          supporting_document_type_id: row.supporting_document_type_id,
+          supporting_document_type_key: row.supporting_document_type&.type_key,
+          supporting_document_type_description:
+            row.supporting_document_type&.description,
+          classification_status: row.classification_status,
+          classification_confidence: row.classification_confidence,
+          classification_reason: row.classification_reason,
+          classified_at: row.classified_at,
+          storage_provider: row.storage_provider,
+          storage_key: row.storage_key,
+          original_filename: row.original_filename,
+          content_type: display_type,
+          mime_content_type: row.content_type,
+          byte_size: row.byte_size,
+          sha256: row.sha256,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        }
+      end
 
       def node_mint_sas!(storage_key:, container: nil)
         base = ENV["INV_NODE_BASE_URL"].to_s.strip

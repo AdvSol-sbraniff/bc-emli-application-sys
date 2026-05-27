@@ -60,11 +60,20 @@ module Api
 
         lineitems = serialize_lineitems(civ_id)
 
+        read_hash =
+          ::Claims::CurrentInvoiceVersionBlueprint.render_as_hash(
+            row,
+            view: :read_screen
+          )
+        invoice_version = ::Claims::InvoiceVersion.find_by(id: civ_id)
+
         render json: {
                  read:
-                   ::Claims::CurrentInvoiceVersionBlueprint.render_as_hash(
-                     row,
-                     view: :read_screen
+                   read_hash.merge(
+                     ahri_product_match:
+                       serialize_ahri_product_match(invoice_version),
+                     neea_product_match:
+                       serialize_neea_product_match(invoice_version)
                    ),
                  lineitems: lineitems
                }
@@ -353,6 +362,7 @@ module Api
               call_status
               confidence
               result
+              admin_advice
               validationgenai_ruleset_id
               raw_json
               created_at
@@ -364,6 +374,89 @@ module Api
               row.read_attribute("upgrade_type_description")
           )
         end
+      end
+
+      def serialize_ahri_product_match(invoice_version)
+        return nil unless invoice_version
+
+        product = invoice_version.ahri_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.ahri_source
+
+        {
+          product: {
+            id: product.id,
+            ahri_reference_number: product.ahri_reference_number,
+            heat_pump_type: product.heat_pump_type,
+            make: product.make,
+            outdoor_model: product.outdoor_model,
+            indoor_model_or_air_handler:
+              product.indoor_model_or_air_handler,
+            furnace_model: product.furnace_model,
+            rated_capacity_btu_at_minus_5c:
+              product.rated_capacity_btu_at_minus_5c,
+            seer: product.seer,
+            seer2: product.seer2,
+            hspf: product.hspf,
+            hspf2: product.hspf2,
+            cop: product.cop,
+            capacity_maintenance_percent:
+              product.capacity_maintenance_percent,
+            cold_climate_rated: product.cold_climate_rated,
+            eligibility_notes: product.eligibility_notes
+          },
+          source: {
+            ahri_import_run_id: import_run&.id,
+            ahri_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
+      end
+
+      def serialize_neea_product_match(invoice_version)
+        return nil unless invoice_version
+
+        product = invoice_version.neea_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.neea_source
+
+        {
+          product: {
+            id: product.id,
+            brand: product.brand,
+            model_number: product.model_number,
+            storage_volume_gallons: product.storage_volume_gallons,
+            indoor_tier: product.indoor_tier,
+            indoor_cce: product.indoor_cce,
+            outdoor_tier: product.outdoor_tier,
+            outdoor_scop: product.outdoor_scop,
+            configuration: product.configuration,
+            flex_load_connectivity: product.flex_load_connectivity,
+            plug_in_endorsement: product.plug_in_endorsement,
+            qualified_date: product.qualified_date,
+            specification_version: product.specification_version,
+            eligibility_notes: product.eligibility_notes
+          },
+          source: {
+            neea_import_run_id: import_run&.id,
+            neea_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
       end
     end
   end

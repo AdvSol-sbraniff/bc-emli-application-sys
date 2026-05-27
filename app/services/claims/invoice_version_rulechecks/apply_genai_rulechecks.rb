@@ -61,7 +61,9 @@ module Claims
         rule_number = coerce_int_or_nil(r["rule_number"] || r[:rule_number])
         return nil if rule_number.nil?
 
+        rule_key = (r["rule_key"] || r[:rule_key]).to_s.strip
         rule_name = (r["rule_name"] || r[:rule_name]).to_s.strip
+        rule_name = rule_key.tr("_", " ").split.map(&:capitalize).join(" ") if rule_name.empty? && rule_key.present?
         rule_name = "rule_#{rule_number}" if rule_name.empty?
 
         rule_result = coerce_rule_result(r)
@@ -91,7 +93,7 @@ module Claims
         }
 
         optional_metadata = {
-          rule_key: r["rule_key"] || r[:rule_key],
+          rule_key: rule_key.presence,
           source_requirement_id:
             r["source_requirement_id"] || r[:source_requirement_id],
           evidence_source: r["evidence_source"] || r[:evidence_source]

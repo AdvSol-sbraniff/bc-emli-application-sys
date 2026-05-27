@@ -97,6 +97,291 @@ CREATE INDEX IF NOT EXISTS index_claims_invoices_on_upgrade_type_id
 
 
 
+-- ============================================================
+-- ahri_sources
+-- PURPOSE: Stable catalogue of BC Hydro / qualified heat-pump
+-- product-list source definitions. Import runs are child/history
+-- records under these source rows.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.ahri_sources (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  description text NOT NULL,
+  source_url text NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT ahri_sources_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ahri_sources_description
+  ON claims.ahri_sources (description);
+
+
+
+-- ============================================================
+-- ahri_import_runs
+-- PURPOSE: Track refresh attempts for external reference data used by
+-- code-owned rules, such as BC Hydro heat pump product-list validation.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.ahri_import_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  ahri_source_id uuid NOT NULL,
+  storage_provider character varying NULL,
+  storage_key text NULL,
+  content_type character varying NULL,
+  byte_size bigint NULL,
+  status text NOT NULL DEFAULT 'queued',
+
+  started_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  completed_at timestamp(6) without time zone NULL,
+
+  records_imported integer NOT NULL DEFAULT 0,
+  publishing_notes text NULL,
+  publishing_date date NULL,
+  file_sha256 text NULL,
+  error_text text NULL,
+  metadata_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT ahri_import_runs_pkey PRIMARY KEY (id),
+
+  CONSTRAINT ahri_import_runs_status_chk
+    CHECK (status IN ('queued','running','succeeded','failed')),
+
+  CONSTRAINT ahri_import_runs_records_imported_chk
+    CHECK (records_imported >= 0),
+
+  CONSTRAINT fk_ahri_import_runs_source
+    FOREIGN KEY (ahri_source_id)
+    REFERENCES claims.ahri_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ahri_import_runs_source_started
+  ON claims.ahri_import_runs (ahri_source_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ahri_import_runs_status
+  ON claims.ahri_import_runs (status);
+
+CREATE INDEX IF NOT EXISTS idx_ahri_import_runs_storage_key
+  ON claims.ahri_import_runs (storage_key);
+
+
+
+-- ============================================================
+-- ahri_products
+-- PURPOSE: Cached BC Hydro / qualified heat pump product-list rows
+-- used by code-owned AHRI and heat-pump performance rule checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.ahri_products (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  import_run_id uuid NOT NULL,
+
+  ahri_reference_number text NOT NULL,
+  heat_pump_type text NULL,
+  make text NULL,
+  outdoor_model text NULL,
+  indoor_model_or_air_handler text NULL,
+  furnace_model text NULL,
+
+  rated_capacity_btu_at_minus_5c numeric NULL,
+  seer numeric NULL,
+  seer2 numeric NULL,
+  hspf numeric NULL,
+  hspf2 numeric NULL,
+  cop numeric NULL,
+  capacity_maintenance_percent numeric NULL,
+  cold_climate_rated boolean NULL,
+
+  eligibility_notes text NULL,
+  raw_row_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT ahri_products_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_ahri_products_import_run
+    FOREIGN KEY (import_run_id)
+    REFERENCES claims.ahri_import_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ahri_products_ahri
+  ON claims.ahri_products (ahri_reference_number);
+
+CREATE INDEX IF NOT EXISTS idx_ahri_products_import_run
+  ON claims.ahri_products (import_run_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ahri_products_source_row_unique
+  ON claims.ahri_products (
+    import_run_id,
+    ahri_reference_number,
+    heat_pump_type,
+    make,
+    outdoor_model,
+    indoor_model_or_air_handler,
+    COALESCE(furnace_model, '')
+  );
+
+
+
+-- ============================================================
+-- neea_sources
+-- PURPOSE: Stable catalogue of NEEA product-list source definitions.
+-- Import runs are child/history records under these source rows.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.neea_sources (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  description text NOT NULL,
+  source_url text NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT neea_sources_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_neea_sources_description
+  ON claims.neea_sources (description);
+
+
+
+-- ============================================================
+-- neea_import_runs
+-- PURPOSE: Track refresh attempts for NEEA product-list PDFs used
+-- by code-owned heat pump water heater checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.neea_import_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  neea_source_id uuid NOT NULL,
+  storage_provider character varying NULL,
+  storage_key text NULL,
+  content_type character varying NULL,
+  byte_size bigint NULL,
+  status text NOT NULL DEFAULT 'queued',
+
+  started_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  completed_at timestamp(6) without time zone NULL,
+
+  records_imported integer NOT NULL DEFAULT 0,
+  publishing_notes text NULL,
+  publishing_date date NULL,
+  file_sha256 text NULL,
+  error_text text NULL,
+  metadata_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT neea_import_runs_pkey PRIMARY KEY (id),
+
+  CONSTRAINT neea_import_runs_status_chk
+    CHECK (status IN ('queued','running','succeeded','failed')),
+
+  CONSTRAINT neea_import_runs_records_imported_chk
+    CHECK (records_imported >= 0),
+
+  CONSTRAINT fk_neea_import_runs_source
+    FOREIGN KEY (neea_source_id)
+    REFERENCES claims.neea_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_neea_import_runs_source_started
+  ON claims.neea_import_runs (neea_source_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_neea_import_runs_status
+  ON claims.neea_import_runs (status);
+
+CREATE INDEX IF NOT EXISTS idx_neea_import_runs_storage_key
+  ON claims.neea_import_runs (storage_key);
+
+
+
+-- ============================================================
+-- neea_products
+-- PURPOSE: Cached NEEA HPWH qualified product-list rows used by
+-- code-owned heat pump water heater product-list and tier checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.neea_products (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  import_run_id uuid NOT NULL,
+
+  brand text NULL,
+  brand_normalized text NULL,
+
+  model_number text NOT NULL,
+  model_number_normalized text NULL,
+  model_number_regex text NULL,
+  model_components jsonb NULL,
+
+  storage_volume_gallons numeric NULL,
+
+  indoor_tier integer NULL,
+  indoor_cce numeric NULL,
+
+  outdoor_tier integer NULL,
+  outdoor_scop numeric NULL,
+
+  configuration text NULL,
+
+  flex_load_connectivity text NULL,
+  plug_in_endorsement boolean NULL,
+
+  qualified_date date NULL,
+  specification_version text NULL,
+
+  eligibility_notes text NULL,
+  raw_row_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT neea_products_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_neea_products_import_run
+    FOREIGN KEY (import_run_id)
+    REFERENCES claims.neea_import_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_neea_products_import_run
+  ON claims.neea_products (import_run_id);
+
+CREATE INDEX IF NOT EXISTS idx_neea_products_brand_normalized
+  ON claims.neea_products (brand_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_neea_products_model_number_normalized
+  ON claims.neea_products (model_number_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_neea_products_tiers
+  ON claims.neea_products (indoor_tier, outdoor_tier);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_neea_products_source_row_unique
+  ON claims.neea_products (
+    import_run_id,
+    COALESCE(brand_normalized, ''),
+    model_number_normalized,
+    COALESCE(configuration, ''),
+    COALESCE(storage_volume_gallons, -1),
+    COALESCE(qualified_date, DATE '1900-01-01'),
+    COALESCE(specification_version, '')
+  );
+
+
+
   -- 
   -- invoice_versions
   --
@@ -160,6 +445,11 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   di_ocr_amount_due_page integer NULL,
   di_ocr_amount_due_polygon jsonb NULL,
 
+  -- code-owned point-in-time AHRI / BC Hydro heat-pump product-list match
+  ahri_product_id uuid NULL,
+  -- code-owned point-in-time NEEA HPWH qualified product-list match
+  neea_product_id uuid NULL,
+
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
@@ -167,6 +457,14 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
 
   CONSTRAINT fk_claims_versions_invoice
     FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
+
+  CONSTRAINT fk_invoice_versions_ahri_product
+    FOREIGN KEY (ahri_product_id)
+    REFERENCES claims.ahri_products(id),
+
+  CONSTRAINT fk_invoice_versions_neea_product
+    FOREIGN KEY (neea_product_id)
+    REFERENCES claims.neea_products(id),
 
   CONSTRAINT invoice_versions_invoice_id_versionno_uniq
     UNIQUE (invoice_id, invoice_versionno),
@@ -198,6 +496,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoice_versions_invoice_storage_key
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoice_versions_id_invoice_id
   ON claims.invoice_versions (id, invoice_id);
 
+CREATE INDEX IF NOT EXISTS idx_invoice_versions_ahri_product
+  ON claims.invoice_versions (ahri_product_id);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_versions_neea_product
+  ON claims.invoice_versions (neea_product_id);
+
 
 --
 -- invoice_upgrade_types
@@ -217,6 +521,249 @@ CREATE TABLE IF NOT EXISTS claims.invoice_upgrade_types (
   CONSTRAINT invoice_upgrade_types_key_uniq
     UNIQUE (upgrade_type_key)
 );
+
+
+
+-- ============================================================
+-- code_rules
+-- PURPOSE: Admin-visible registry for code-owned validation rules.
+-- The actual rule logic remains in source code; this table stores the
+-- current admin overlay such as enabled/disabled state and optional
+-- human-facing guidance messages.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.code_rules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  code_rule_key text NOT NULL,
+  description text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  pass_admin_message text NULL,
+  warn_admin_message text NULL,
+  fail_admin_message text NULL,
+  info_admin_message text NULL,
+  admin_notes text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT code_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT code_rules_key_uniq UNIQUE (code_rule_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_rules_enabled
+  ON claims.code_rules (enabled);
+
+
+
+-- ============================================================
+-- code_rule_upgrade_types
+-- PURPOSE: Declares which invoice upgrade types each code-owned rule
+-- applies to. This lets the admin registry show multiple upgrade-type
+-- icons per code rule and lets runtime check applicability without
+-- scattering upgrade-type lists across the app.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.code_rule_upgrade_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  code_rule_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT code_rule_upgrade_types_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_code_rule_upgrade_types_code_rule
+    FOREIGN KEY (code_rule_id)
+    REFERENCES claims.code_rules(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_code_rule_upgrade_types_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
+  CONSTRAINT code_rule_upgrade_types_uniq
+    UNIQUE (code_rule_id, invoice_upgrade_type_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_upgrade_types_rule
+  ON claims.code_rule_upgrade_types (code_rule_id);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_upgrade_types_upgrade_type
+  ON claims.code_rule_upgrade_types (invoice_upgrade_type_id);
+
+
+
+-- ============================================================
+-- code_located_fields
+-- PURPOSE: Admin-visible registry for code/DB located-field
+-- definitions that may be carried into the GenAI context window
+-- and/or persisted into runtime located-field output.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.code_located_fields (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  code_field_key text NOT NULL,
+  description text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT code_located_fields_pkey PRIMARY KEY (id),
+  CONSTRAINT code_located_fields_key_uniq UNIQUE (code_field_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_located_fields_enabled
+  ON claims.code_located_fields (enabled);
+
+CREATE INDEX IF NOT EXISTS idx_code_located_fields_updated_at
+  ON claims.code_located_fields (updated_at DESC);
+
+
+-- ============================================================
+-- genai_rules
+-- PURPOSE: Canonical admin/config registry for GenAI rule
+-- definitions, separate from the published runtime blob snapshots.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_rules (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  genai_rule_key text NOT NULL,
+  prompt_text text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_rules_pkey PRIMARY KEY (id),
+  CONSTRAINT genai_rules_key_uniq UNIQUE (genai_rule_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rules_enabled
+  ON claims.genai_rules (enabled);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rules_updated_at
+  ON claims.genai_rules (updated_at DESC);
+
+
+-- ============================================================
+-- genai_rule_upgrade_types
+-- PURPOSE: Declares which invoice upgrade types each GenAI rule
+-- applies to, and its order within that upgrade type.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  genai_rule_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+  rule_number integer NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_rule_upgrade_types_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_genai_rule_upgrade_types_rule
+    FOREIGN KEY (genai_rule_id)
+    REFERENCES claims.genai_rules(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_genai_rule_upgrade_types_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
+  CONSTRAINT genai_rule_upgrade_types_rule_number_chk
+    CHECK (rule_number >= 1),
+
+  CONSTRAINT genai_rule_upgrade_types_uniq
+    UNIQUE (genai_rule_id, invoice_upgrade_type_id),
+
+  CONSTRAINT genai_rule_upgrade_types_order_uniq
+    UNIQUE (invoice_upgrade_type_id, rule_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_types_rule
+  ON claims.genai_rule_upgrade_types (genai_rule_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_types_upgrade_type
+  ON claims.genai_rule_upgrade_types (invoice_upgrade_type_id);
+
+
+-- ============================================================
+-- genai_located_fields
+-- PURPOSE: Canonical admin/config registry for GenAI located-field
+-- definitions, separate from runtime located-field values.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_located_fields (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  genai_field_key text NOT NULL,
+  prompt_text text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_located_fields_pkey PRIMARY KEY (id),
+  CONSTRAINT genai_located_fields_key_uniq UNIQUE (genai_field_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_fields_enabled
+  ON claims.genai_located_fields (enabled);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_fields_updated_at
+  ON claims.genai_located_fields (updated_at DESC);
+
+
+-- ============================================================
+-- genai_located_field_upgrade_types
+-- PURPOSE: Declares which invoice upgrade types each GenAI
+-- located field applies to, and its order within that type.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_located_field_upgrade_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  genai_field_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+  field_number integer NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_located_field_upgrade_types_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_genai_located_field_upgrade_types_field
+    FOREIGN KEY (genai_field_id)
+    REFERENCES claims.genai_located_fields(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_genai_located_field_upgrade_types_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
+  CONSTRAINT genai_located_field_upgrade_types_field_number_chk
+    CHECK (field_number >= 1),
+
+  CONSTRAINT genai_located_field_upgrade_types_uniq
+    UNIQUE (genai_field_id, invoice_upgrade_type_id),
+
+  CONSTRAINT genai_located_field_upgrade_types_order_uniq
+    UNIQUE (invoice_upgrade_type_id, field_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_upgrade_types_field
+  ON claims.genai_located_field_upgrade_types (genai_field_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_upgrade_types_upgrade_type
+  ON claims.genai_located_field_upgrade_types (invoice_upgrade_type_id);
 
 
 -- 
@@ -420,12 +967,34 @@ CREATE INDEX IF NOT EXISTS index_claims_lineitems_on_upgrade_type_id
 
 
 -- 
+-- supporting document types
+--
+CREATE TABLE IF NOT EXISTS claims.supporting_document_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  type_key text NOT NULL,
+  description text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_types_pkey PRIMARY KEY (id),
+  CONSTRAINT supporting_document_types_type_key_uniq UNIQUE (type_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supporting_document_types_enabled
+  ON claims.supporting_document_types (enabled);
+
+
+-- 
 -- supporting documents
 --
 CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_id uuid NOT NULL,
+  supporting_document_type_id uuid NULL,
 
   -- storage pointer(s)
   storage_provider character varying NULL,   -- e.g., 'azure_blob', 'aws_s3' (optional)
@@ -436,17 +1005,36 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   byte_size         bigint NULL,
   sha256            character varying NULL,  -- optional but handy for dedupe/integrity
 
+  -- supplement OCR / triage retention
+  di_read_raw_json jsonb NULL,
+  classifier_raw_json jsonb NULL,
+
+  classification_status text NOT NULL DEFAULT 'pending',
+  classification_confidence smallint NOT NULL DEFAULT 0,
+  classification_reason text NULL,
+  classified_at timestamp(6) without time zone NULL,
+
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
   CONSTRAINT supporting_documents_pkey PRIMARY KEY (id),
 
   CONSTRAINT fk_claims_supporting_documents_invoice
-    FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id)
+    FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
+
+  CONSTRAINT fk_claims_supporting_documents_type
+    FOREIGN KEY (supporting_document_type_id)
+    REFERENCES claims.supporting_document_types(id),
+
+  CONSTRAINT supporting_documents_classification_status_chk
+    CHECK (classification_status IN ('pending','classified','needs_review','failed'))
 );
 
 CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_invoice_id
   ON claims.supporting_documents (invoice_id);
+
+CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_type_id
+  ON claims.supporting_documents (supporting_document_type_id);
 
 -- Optional: prevent duplicate uploads of same blob/key under the same invoice
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_supporting_documents_invoice_storage_key
@@ -555,6 +1143,251 @@ CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_created_at
   ON claims.validationgenai_rulesets (created_at);
 
 
+-- ============================================================
+-- code_rule_history
+-- PURPOSE: Pre-change audit snapshots for claims.code_rules.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.code_rule_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+
+  code_rule_key text NOT NULL,
+  description text NOT NULL,
+  enabled boolean NOT NULL,
+
+  pass_admin_message text NULL,
+  warn_admin_message text NULL,
+  fail_admin_message text NULL,
+  info_admin_message text NULL,
+  admin_notes text NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT code_rule_history_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_history_source_id
+  ON claims.code_rule_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_history_key
+  ON claims.code_rule_history (code_rule_key);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_history_created_at
+  ON claims.code_rule_history (history_created_at DESC);
+
+
+-- ============================================================
+-- code_rule_upgrade_type_history
+-- PURPOSE: Pre-change audit snapshots for claims.code_rule_upgrade_types.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.code_rule_upgrade_type_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+  code_rule_id uuid NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT code_rule_upgrade_type_history_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_code_rule_upgrade_type_history_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_upgrade_type_history_source_id
+  ON claims.code_rule_upgrade_type_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_upgrade_type_history_rule_id
+  ON claims.code_rule_upgrade_type_history (code_rule_id);
+
+CREATE INDEX IF NOT EXISTS idx_code_rule_upgrade_type_history_upgrade_type
+  ON claims.code_rule_upgrade_type_history (invoice_upgrade_type_id);
+
+
+-- ============================================================
+-- code_located_field_history
+-- PURPOSE: Pre-change audit snapshots for claims.code_located_fields.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.code_located_field_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+
+  code_field_key text NOT NULL,
+  description text NOT NULL,
+  enabled boolean NOT NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT code_located_field_history_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_located_field_history_source_id
+  ON claims.code_located_field_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_code_located_field_history_key
+  ON claims.code_located_field_history (code_field_key);
+
+CREATE INDEX IF NOT EXISTS idx_code_located_field_history_created_at
+  ON claims.code_located_field_history (history_created_at DESC);
+
+
+-- ============================================================
+-- genai_rule_history
+-- PURPOSE: Pre-change audit snapshots for claims.genai_rules.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_rule_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+
+  genai_rule_key text NOT NULL,
+  prompt_text text NOT NULL,
+  enabled boolean NOT NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_rule_history_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_history_source_id
+  ON claims.genai_rule_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_history_key
+  ON claims.genai_rule_history (genai_rule_key);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_history_created_at
+  ON claims.genai_rule_history (history_created_at DESC);
+
+
+-- ============================================================
+-- genai_rule_upgrade_type_history
+-- PURPOSE: Pre-change audit snapshots for claims.genai_rule_upgrade_types.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_type_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+  genai_rule_id uuid NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+  rule_number integer NOT NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_rule_upgrade_type_history_pkey PRIMARY KEY (id),
+
+  CONSTRAINT genai_rule_upgrade_type_history_rule_number_chk
+    CHECK (rule_number >= 1),
+
+  CONSTRAINT fk_genai_rule_upgrade_type_history_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_type_history_source_id
+  ON claims.genai_rule_upgrade_type_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_type_history_rule_id
+  ON claims.genai_rule_upgrade_type_history (genai_rule_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_type_history_upgrade_type
+  ON claims.genai_rule_upgrade_type_history (invoice_upgrade_type_id);
+
+
+-- ============================================================
+-- genai_located_field_history
+-- PURPOSE: Pre-change audit snapshots for claims.genai_located_fields.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_located_field_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+
+  genai_field_key text NOT NULL,
+  prompt_text text NOT NULL,
+  enabled boolean NOT NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_located_field_history_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_history_source_id
+  ON claims.genai_located_field_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_history_key
+  ON claims.genai_located_field_history (genai_field_key);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_history_created_at
+  ON claims.genai_located_field_history (history_created_at DESC);
+
+
+-- ============================================================
+-- genai_located_field_upgrade_type_history
+-- PURPOSE: Pre-change audit snapshots for
+-- claims.genai_located_field_upgrade_types.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.genai_located_field_upgrade_type_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  source_id uuid NULL,
+  genai_field_id uuid NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+  field_number integer NOT NULL,
+
+  source_created_at timestamp(6) without time zone NULL,
+  source_updated_at timestamp(6) without time zone NULL,
+
+  history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT genai_located_field_upgrade_type_history_pkey PRIMARY KEY (id),
+
+  CONSTRAINT genai_located_field_upgrade_type_history_field_number_chk
+    CHECK (field_number >= 1),
+
+  CONSTRAINT fk_genai_located_field_upgrade_type_history_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_upgrade_type_history_source_id
+  ON claims.genai_located_field_upgrade_type_history (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_upgrade_type_history_field_id
+  ON claims.genai_located_field_upgrade_type_history (genai_field_id);
+
+CREATE INDEX IF NOT EXISTS idx_genai_located_field_upgrade_type_history_upgrade_type
+  ON claims.genai_located_field_upgrade_type_history (invoice_upgrade_type_id);
+
+
 --
 -- invoice_version_upgrade_types
 -- Manifest/result table for the upgrade types found on a specific invoice version.
@@ -572,6 +1405,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
 
   confidence smallint NOT NULL DEFAULT 0,
   result text NULL,
+  admin_advice text NULL,
   validationgenai_ruleset_id uuid NULL,
   raw_json jsonb NULL,
 
@@ -674,6 +1508,105 @@ CREATE INDEX IF NOT EXISTS idx_ingest_runs_status
 
 
 -- ============================================================
+-- ingest_documents
+-- PURPOSE: Staging records for mixed bundle intake prior to
+-- resolving which uploaded file is the real invoice versus
+-- supporting documents.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.ingest_documents (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  ingest_run_id uuid NOT NULL,
+  session_id uuid NOT NULL,
+  contractor_id uuid NOT NULL,
+
+  resolved_invoice_id uuid NULL,
+  resolved_invoice_version_id uuid NULL,
+
+  storage_provider character varying NOT NULL DEFAULT 'azure_blob',
+  storage_key character varying NOT NULL,
+  original_filename character varying NOT NULL,
+  content_type character varying NULL,
+  byte_size bigint NULL,
+  sha256 character varying NULL,
+
+  di_read_raw_json jsonb NULL,
+  classifier_raw_json jsonb NULL,
+
+  document_kind text NULL,
+  document_kind_confidence smallint NOT NULL DEFAULT 0,
+  document_kind_reason text NULL,
+
+  supporting_document_type_id uuid NULL,
+  classification_status text NOT NULL DEFAULT 'pending',
+  classification_confidence smallint NOT NULL DEFAULT 0,
+  classification_reason text NULL,
+  classified_at timestamp(6) without time zone NULL,
+
+  created_at timestamp(6) without time zone NOT NULL,
+  updated_at timestamp(6) without time zone NOT NULL,
+
+  CONSTRAINT ingest_documents_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_ingest_documents_ingest_run
+    FOREIGN KEY (ingest_run_id)
+    REFERENCES claims.ingest_runs(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_ingest_documents_session
+    FOREIGN KEY (session_id)
+    REFERENCES claims.sessions(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_ingest_documents_contractor
+    FOREIGN KEY (contractor_id)
+    REFERENCES public.contractors(id),
+
+  CONSTRAINT fk_ingest_documents_resolved_invoice
+    FOREIGN KEY (resolved_invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT fk_ingest_documents_resolved_invoice_version
+    FOREIGN KEY (resolved_invoice_version_id)
+    REFERENCES claims.invoice_versions(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT fk_ingest_documents_supporting_document_type
+    FOREIGN KEY (supporting_document_type_id)
+    REFERENCES claims.supporting_document_types(id),
+
+  CONSTRAINT ingest_documents_document_kind_chk
+    CHECK (document_kind IS NULL OR document_kind IN ('invoice','supplement','unknown')),
+
+  CONSTRAINT ingest_documents_document_kind_confidence_chk
+    CHECK (document_kind_confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT ingest_documents_classification_status_chk
+    CHECK (classification_status IN ('pending','classified','needs_review','failed')),
+
+  CONSTRAINT ingest_documents_classification_confidence_chk
+    CHECK (classification_confidence BETWEEN 0 AND 100)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_ingest_run_id
+  ON claims.ingest_documents (ingest_run_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_session_id
+  ON claims.ingest_documents (session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_contractor_id
+  ON claims.ingest_documents (contractor_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_document_kind
+  ON claims.ingest_documents (document_kind, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_resolved_invoice_id
+  ON claims.ingest_documents (resolved_invoice_id);
+
+
+-- ============================================================
 -- ingest_step_runs
 -- PURPOSE: Single table combining upload_runs + ocr_runs + genai_runs
 -- DESIGN: Keep ALL former validation_runs fields (nullable as needed)
@@ -691,14 +1624,17 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   -- Session is ALWAYS known (even for orphans)
   session_id uuid NOT NULL,
 
-  -- Target invoice version (always required)
-  invoice_version_id uuid NOT NULL,
+  -- Target invoice version (required for resolved-invoice work)
+  invoice_version_id uuid NULL,
+
+  -- Target ingest staging document (required for pre-resolution bundle work)
+  ingest_document_id uuid NULL,
 
   -- GenAI subcall target. Null for upload/ocr/classifier/legacy genai summary rows.
   invoice_upgrade_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | ocr | classifier | genai | genai_common | genai_upgrade
+  step_type text NOT NULL,  -- upload | ocr | classifier | genai | genai_common | genai_upgrade | ocr_read | triage_classifier | ocr_invoice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -735,12 +1671,17 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     REFERENCES claims.invoice_versions(id)
     ON DELETE CASCADE,
 
+  CONSTRAINT fk_ingest_step_runs_ingest_document
+    FOREIGN KEY (ingest_document_id)
+    REFERENCES claims.ingest_documents(id)
+    ON DELETE CASCADE,
+
   CONSTRAINT fk_ingest_step_runs_upgrade_type
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id),
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','ocr','classifier','genai','genai_common','genai_upgrade')),
+    CHECK (step_type IN ('upload','ocr','classifier','genai','genai_common','genai_upgrade','ocr_read','triage_classifier','ocr_invoice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -771,6 +1712,28 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       (invoice_upgrade_type_id IS NOT NULL)
     ),
 
+  CONSTRAINT ingest_step_runs_target_required_chk
+    CHECK (
+      (invoice_version_id IS NOT NULL AND ingest_document_id IS NULL)
+      OR
+      (invoice_version_id IS NULL AND ingest_document_id IS NOT NULL)
+    ),
+
+  CONSTRAINT ingest_step_runs_target_compatibility_chk
+    CHECK (
+      (
+        step_type IN ('ocr_read','triage_classifier')
+        AND ingest_document_id IS NOT NULL
+        AND invoice_version_id IS NULL
+      )
+      OR
+      (
+        step_type NOT IN ('ocr_read','triage_classifier')
+        AND invoice_version_id IS NOT NULL
+        AND ingest_document_id IS NULL
+      )
+    ),
+
   CONSTRAINT fk_ingest_step_runs_ruleset
     FOREIGN KEY (validationgenai_ruleset_id)
     REFERENCES claims.validationgenai_rulesets(id)
@@ -791,6 +1754,12 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_invoice_version_id
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_invoice_version_step
   ON claims.ingest_step_runs (invoice_version_id, step_type, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_document_id
+  ON claims.ingest_step_runs (ingest_document_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_document_step
+  ON claims.ingest_step_runs (ingest_document_id, step_type, created_at DESC);
+
 -- GenAI filtering
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ruleset_id
   ON claims.ingest_step_runs (validationgenai_ruleset_id);
@@ -800,7 +1769,6 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_upgrade_type_id
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
   ON claims.ingest_step_runs (invoice_version_id, invoice_upgrade_type_id, step_type, created_at DESC);
-
 
 
   --

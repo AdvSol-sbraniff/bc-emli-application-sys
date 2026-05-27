@@ -42,6 +42,30 @@ export function toChatMessages(
     .filter((entry) => entry.content);
 }
 
+export function toResponsesPrompt(conversation: any[]): {
+  instructions?: string;
+  input: string;
+} {
+  const messages = toChatMessages(conversation);
+
+  const instructions = messages
+    .filter((entry) => entry.role === 'system')
+    .map((entry) => entry.content)
+    .join('\n\n')
+    .trim();
+
+  const input = messages
+    .filter((entry) => entry.role !== 'system')
+    .map((entry) => `${entry.role.toUpperCase()}:\n${entry.content}`)
+    .join('\n\n')
+    .trim();
+
+  return {
+    instructions: instructions || undefined,
+    input,
+  };
+}
+
 export function extractChatCompletionText(resp: any): string {
   const messageContent = resp?.choices?.[0]?.message?.content;
   return flattenGenAiContent(messageContent);

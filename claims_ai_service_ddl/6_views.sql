@@ -2,8 +2,56 @@ CREATE OR REPLACE VIEW claims.v_current_invoice_versions AS
 SELECT DISTINCT ON (iv.invoice_id)
   i.session_id,
   i.status AS invoice_status,
-  iv.*,
-  i.upgrade_type_id
+  iv.id,
+  iv.invoice_id,
+  iv.invoice_versionno,
+  iv.storage_provider,
+  iv.storage_key,
+  iv.original_filename,
+  iv.content_type,
+  iv.byte_size,
+  iv.sha256,
+  iv.genai_raw_json,
+  iv.genai_overall_confidence,
+  iv.genai_result,
+  iv.genai_admin_advice,
+  iv.di_raw_json,
+  iv.di_page_map,
+  iv.di_ocr_invoice_id,
+  iv.di_ocr_invoice_id_page,
+  iv.di_ocr_invoice_id_polygon,
+  iv.di_ocr_invoice_date,
+  iv.di_ocr_invoice_date_page,
+  iv.di_ocr_invoice_date_polygon,
+  iv.di_ocr_vendor_name,
+  iv.di_ocr_vendor_name_page,
+  iv.di_ocr_vendor_name_polygon,
+  iv.di_ocr_vendor_address,
+  iv.di_ocr_vendor_address_page,
+  iv.di_ocr_vendor_address_polygon,
+  iv.di_ocr_customer_name,
+  iv.di_ocr_customer_name_page,
+  iv.di_ocr_customer_name_polygon,
+  iv.di_ocr_billing_address,
+  iv.di_ocr_billing_address_page,
+  iv.di_ocr_billing_address_polygon,
+  iv.di_ocr_sub_total,
+  iv.di_ocr_sub_total_page,
+  iv.di_ocr_sub_total_polygon,
+  iv.di_ocr_total_tax,
+  iv.di_ocr_total_tax_page,
+  iv.di_ocr_total_tax_polygon,
+  iv.di_ocr_invoice_total,
+  iv.di_ocr_invoice_total_page,
+  iv.di_ocr_invoice_total_polygon,
+  iv.di_ocr_amount_due,
+  iv.di_ocr_amount_due_page,
+  iv.di_ocr_amount_due_polygon,
+  iv.ahri_product_id,
+  iv.created_at,
+  iv.updated_at,
+  i.upgrade_type_id,
+  iv.neea_product_id
 FROM claims.invoices i
 JOIN claims.invoice_versions iv
   ON iv.invoice_id = i.id
@@ -12,6 +60,68 @@ ORDER BY
   iv.invoice_versionno DESC,
   iv.updated_at DESC,
   iv.id DESC;
+
+
+CREATE OR REPLACE VIEW claims.v_current_ahri_products AS
+SELECT
+  hp.*,
+  src.id AS ahri_source_id,
+  src.source_url,
+  src.description AS source_description,
+  run.publishing_notes,
+  run.publishing_date,
+  run.storage_provider AS source_storage_provider,
+  run.storage_key AS source_storage_key,
+  run.content_type AS source_content_type,
+  run.byte_size AS source_byte_size,
+  run.file_sha256 AS source_file_sha256,
+  run.completed_at AS source_import_completed_at,
+  run.records_imported AS source_records_imported
+FROM claims.ahri_products hp
+JOIN claims.ahri_import_runs run
+  ON run.id = hp.import_run_id
+JOIN claims.ahri_sources src
+  ON src.id = run.ahri_source_id
+JOIN (
+  SELECT DISTINCT ON (ahri_source_id)
+    id,
+    ahri_source_id
+  FROM claims.ahri_import_runs
+  WHERE status = 'succeeded'
+  ORDER BY ahri_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
+) latest
+  ON latest.id = run.id;
+
+
+CREATE OR REPLACE VIEW claims.v_current_neea_products AS
+SELECT
+  p.*,
+  src.id AS neea_source_id,
+  src.source_url,
+  src.description AS source_description,
+  run.publishing_notes,
+  run.publishing_date,
+  run.storage_provider AS source_storage_provider,
+  run.storage_key AS source_storage_key,
+  run.content_type AS source_content_type,
+  run.byte_size AS source_byte_size,
+  run.file_sha256 AS source_file_sha256,
+  run.completed_at AS source_import_completed_at,
+  run.records_imported AS source_records_imported
+FROM claims.neea_products p
+JOIN claims.neea_import_runs run
+  ON run.id = p.import_run_id
+JOIN claims.neea_sources src
+  ON src.id = run.neea_source_id
+JOIN (
+  SELECT DISTINCT ON (neea_source_id)
+    id,
+    neea_source_id
+  FROM claims.neea_import_runs
+  WHERE status = 'succeeded'
+  ORDER BY neea_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
+) latest
+  ON latest.id = run.id;
 
 
 
@@ -76,7 +186,7 @@ SELECT
   -- -------------------------
   i.contractor_id     AS contractor_id,
   i.submitter_id      AS submitter_id,
-  i.submitted_at      AS session_submitted_at,
+  i.submitted_at      AS session_submitted_at, -- deprecated compatibility alias; use invoice_submitted_at
   s.created_at        AS session_created_at,
   s.updated_at        AS session_updated_at,
 
@@ -174,88 +284,6 @@ LEFT JOIN LATERAL (
 ) civut
   ON TRUE;
 
-/***********
-
-old view def will keep for reference while testing, but will be deleted before merging to main
-
-CREATE OR REPLACE VIEW claims.v_invoice_grid AS
-SELECT
-  -- -------------------------
-  -- invoice (base)
-  -- -------------------------
-  i.id                AS invoice_id,
-  i.session_id        AS session_id,
-  i.status            AS invoice_status,
-  i.status_updated_at AS invoice_status_updated_at,
-  i.system_help_notes AS system_help_notes,
-  i.created_at        AS invoice_created_at,
-  i.updated_at        AS invoice_updated_at,
-
-  -- -------------------------
-  -- session (base)
-  -- -------------------------
-  s.contractor_id     AS contractor_id,
-  s.submitter_id      AS submitter_id,
-  s.status            AS session_status,
-  s.submitted_at      AS session_submitted_at,
-  s.created_at        AS session_created_at,
-  s.updated_at        AS session_updated_at,
-
-  -- -------------------------
-  -- contractor (grid/search)
-  -- -------------------------
-  c.business_name     AS contractor_business_name,
-  c.number            AS contractor_number,
-  c.email             AS contractor_email,
-  c.phone_number      AS contractor_phone_number,
-  c.cellphone_number  AS contractor_cellphone_number,
-  c.website           AS contractor_website,
-  c.street_address    AS contractor_street_address,
-  c.city              AS contractor_city,
-  c.postal_code       AS contractor_postal_code,
-
-  -- Optional: contractor primary contact (users.id = contractors.contact_id)
-  cu.email            AS contractor_contact_email,
-  NULLIF(TRIM(CONCAT_WS(' ', cu.first_name, cu.last_name)), '') AS contractor_contact_name,
-
-  -- -------------------------
-  -- submitter (grid/search)
-  -- -------------------------
-  u.email             AS submitter_email,
-  NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), '') AS submitter_name,
-
-  -- -------------------------
-  -- latest invoice_version triage fields
-  -- -------------------------
-  civ.id                              AS latest_invoice_version_id,
-  civ.invoice_versionno               AS latest_invoice_versionno,
-  civ.updated_at                      AS latest_invoice_version_updated_at,
-
-  civ.original_filename               AS latest_original_filename,
-
-  civ.di_ocr_invoice_total            AS latest_di_ocr_invoice_total,
-  civ.di_ocr_invoice_date             AS latest_di_ocr_invoice_date,
-  civ.di_ocr_vendor_name              AS latest_di_ocr_vendor_name,
-  civ.di_ocr_invoice_id               AS latest_di_ocr_invoice_id,
-
-  civ.genai_result  AS latest_genai_result,
-  civ.genai_overall_confidence        AS latest_genai_overall_confidence
-
-FROM claims.invoices i
-JOIN claims.sessions s
-  ON s.id = i.session_id
-JOIN public.contractors c
-  ON c.id = s.contractor_id
-LEFT JOIN public.users cu
-  ON cu.id = c.contact_id
-LEFT JOIN public.users u
-  ON u.id = s.submitter_id
-LEFT JOIN claims.v_current_invoice_versions civ
-  ON civ.invoice_id = i.id;
-
-*************************/
-
-
 CREATE OR REPLACE VIEW claims.v_user_eligibilitycodes AS
 SELECT
   -- ============================================================
@@ -322,10 +350,10 @@ SELECT
   s.id            AS session_id,
   i.contractor_id AS session_contractor_id,
   i.submitter_id  AS session_submitter_id,
-  NULL::text      AS session_status,
+  NULL::text      AS session_status,       -- deprecated compatibility alias; sessions are grouping-only
   s.created_at    AS session_created_at,
   s.updated_at    AS session_updated_at,
-  i.submitted_at  AS session_submitted_at,
+  i.submitted_at  AS session_submitted_at, -- deprecated compatibility alias; use invoice_submitted_at
 
   -- =========================================================
   -- invoice

@@ -23,7 +23,7 @@ module Claims
       )
 
       mode = mode.to_s.presence || "normal"
-      unless %w[normal classifier_only].include?(mode)
+      unless %w[normal classifier_only triage_only use_existing_classifier].include?(mode)
         raise "Invalid RunGenaiJob mode=#{mode}"
       end
 
@@ -37,52 +37,86 @@ module Claims
         raise "Missing invoice_versions.di_raw_json. Run OCR first for invoice_version_id=#{iv.id}."
       end
 
-      # GenAI reruns must not leave stale classifier/common/upgrade results
-      # from a prior run. OCR/DI fields and lineitems remain intact.
-      ::Claims::InvoiceVersions::ResetAiOutputs.call(invoice_version_id: iv.id)
-
-      step =
-        find_or_create_step!(
-          ingest_run_id: ingest_run_id,
-          session_id: sess.id,
-          invoice_version_id: iv.id,
-          step_type: "classifier"
-        )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
+      # GenAI reruns must not leave stale common/upgrade outputs from a prior run.
+      # For the bundle loopback path we preserve classifier rows from the triage pass.
+      ::Claims::InvoiceVersions::ResetAiOutputs.call(
+        invoice_version_id: iv.id,
+        preserve_classifier: (mode == "use_existing_classifier")
       )
 
-      classifier_contextwindowjson =
-        build_classifier_contextwindowjson(di_raw_json: iv.di_raw_json)
-      classifier_payload =
-        call_node_genai!(contextwindowjson: classifier_contextwindowjson)
+      classifier_payload = nil
 
-      classifier_result =
-        ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
-          invoice_version_id: iv.id,
-          classifier_payload: classifier_payload
+      if mode == "use_existing_classifier"
+        classifier_payload = existing_classifier_payload_for(invoice_version_id: iv.id)
+        raise "Missing stored classifier payload for invoice_version_id=#{iv.id}" if classifier_payload.blank?
+      else
+        classifier_step_type = (mode == "triage_only" ? "triage_classifier" : "classifier")
+
+        step =
+          find_or_create_step!(
+            ingest_run_id: ingest_run_id,
+            session_id: sess.id,
+            invoice_version_id: iv.id,
+            step_type: classifier_step_type
+          )
+        step.update!(
+          status: "in_progress",
+          error_text: nil,
+          updated_at: Time.current
         )
-      unless classifier_result[:ok]
-        raise "ApplyClassifierResult failed: #{classifier_result.inspect}"
-      end
 
-      step.update!(
-        status: "succeeded",
-        genai_results_json: classifier_payload,
-        context_window_json: classifier_contextwindowjson,
-        error_text: nil,
-        updated_at: Time.current
-      )
+        classifier_contextwindowjson =
+          build_classifier_contextwindowjson(di_raw_json: iv.di_raw_json)
+        classifier_payload =
+          call_node_genai!(contextwindowjson: classifier_contextwindowjson)
 
-      if mode == "classifier_only"
-        if ingest_run_id.present?
-          Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+        classifier_result =
+          (
+            if mode == "triage_only"
+              ::Claims::Ingest::ApplyDocumentTriageResult.call(
+                invoice_version_id: iv.id,
+                triage_payload: classifier_payload
+              )
+            else
+              ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
+                invoice_version_id: iv.id,
+                classifier_payload: classifier_payload
+              )
+            end
+          )
+        unless classifier_result[:ok]
+          raise(
+            (
+              if mode == "triage_only"
+                "ApplyDocumentTriageResult failed: #{classifier_result.inspect}"
+              else
+                "ApplyClassifierResult failed: #{classifier_result.inspect}"
+              end
+            )
+          )
         end
-        return
+
+        step.update!(
+          status: "succeeded",
+          genai_results_json: classifier_payload,
+          context_window_json: classifier_contextwindowjson,
+          error_text: nil,
+          updated_at: Time.current
+        )
+
+        if %w[classifier_only triage_only].include?(mode)
+          if ingest_run_id.present?
+            advance_run!(
+              ingest_run_id: ingest_run_id,
+              validationgenai_ruleset_id: validationgenai_ruleset_id,
+              mode: mode
+            )
+          end
+          return
+        end
+
+        step = nil
       end
-      step = nil
 
       inv.update!(status: "genai_in_progress", status_updated_at: Time.current)
 
@@ -140,7 +174,11 @@ module Claims
       inv.update!(status: "genai_complete", status_updated_at: Time.current)
 
       if ingest_run_id.present?
-        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+        advance_run!(
+          ingest_run_id: ingest_run_id,
+          validationgenai_ruleset_id: validationgenai_ruleset_id,
+          mode: mode
+        )
       end
     rescue => e
       # mark failed (best-effort)
@@ -162,7 +200,11 @@ module Claims
 
       begin
         if ingest_run_id.present?
-          Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+          advance_run!(
+            ingest_run_id: ingest_run_id,
+            validationgenai_ruleset_id: validationgenai_ruleset_id,
+            mode: mode
+          )
         end
       rescue StandardError
         # ignore
@@ -172,6 +214,32 @@ module Claims
     end
 
     private
+
+    def advance_run!(ingest_run_id:, validationgenai_ruleset_id:, mode:)
+      if %w[triage_only use_existing_classifier].include?(mode)
+        Claims::Ingest::AdvanceBundleRun.call(
+          ingest_run_id: ingest_run_id,
+          validationgenai_ruleset_id: validationgenai_ruleset_id
+        )
+      else
+        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+      end
+    end
+
+    def existing_classifier_payload_for(invoice_version_id:)
+      step =
+        Claims::IngestStepRun
+          .where(
+            invoice_version_id: invoice_version_id,
+            step_type: %w[triage_classifier classifier],
+            status: "succeeded"
+          )
+          .order(created_at: :desc)
+          .first
+
+      payload = step&.genai_results_json
+      payload.is_a?(Hash) ? payload : nil
+    end
 
     def find_or_create_step!(
       ingest_run_id:,
@@ -338,6 +406,30 @@ module Claims
         raise "ApplyGenaiLocatedFields failed: #{located_field_result.inspect}"
       end
 
+      ahri_result =
+        ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch.call(
+          invoice_version_id: invoice_version_id,
+          invoice_upgrade_type_id: upgrade_type.id
+        )
+      Rails.logger.info(
+        "[CLAIMS][RUN_GENAI_JOB] ApplyProductListMatch=#{ahri_result.inspect}"
+      )
+      unless ahri_result[:ok]
+        raise "ApplyProductListMatch failed: #{ahri_result.inspect}"
+      end
+
+      neea_result =
+        ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch.call(
+          invoice_version_id: invoice_version_id,
+          invoice_upgrade_type_id: upgrade_type.id
+        )
+      Rails.logger.info(
+        "[CLAIMS][RUN_GENAI_JOB] ApplyNeeaProductListMatch=#{neea_result.inspect}"
+      )
+      unless neea_result[:ok]
+        raise "ApplyNeeaProductListMatch failed: #{neea_result.inspect}"
+      end
+
       upsert_genai_manifest!(
         invoice_version_id: invoice_version_id,
         upgrade_type: upgrade_type,
@@ -407,6 +499,7 @@ module Claims
           ),
         validationgenai_ruleset_id: ruleset.id,
         raw_json: payload,
+        admin_advice: payload ? advice_from_rulechecks(payload) : row.admin_advice,
         result:
           (
             if payload
@@ -478,8 +571,13 @@ module Claims
         end
       result_values =
         overall_rows.map { |overall| coerce_overall_result(overall) }.compact
-      advice =
-        combined_admin_advice(config: config, ruleset_results: ruleset_results)
+      code_advice_sections =
+        code_advice_sections_for(invoice_version_id: invoice_version.id)
+      advice = combined_admin_advice(
+        config: config,
+        invoice_version_id: invoice_version.id,
+        extra_sections: code_advice_sections
+      )
 
       invoice_version.update!(
         genai_raw_json: {
@@ -504,14 +602,34 @@ module Claims
       )
     end
 
-    def combined_admin_advice(config:, ruleset_results:)
+    def combined_admin_advice(config:, invoice_version_id:, extra_sections: [])
       sections =
-        ruleset_results.filter_map do |result|
-          advice = advice_from_rulechecks(result[:payload])
-          next if advice.blank?
+        Claims::InvoiceVersionUpgradeType
+          .joins(
+            "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
+          )
+          .where(invoice_version_id: invoice_version_id, source_engine: "genai")
+          .select(
+            "claims.invoice_version_upgrade_types.*",
+            "iut.description AS upgrade_type_description",
+            "iut.upgrade_type_key AS upgrade_type_key"
+          )
+          .order(
+            Arel.sql(
+              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key"
+            )
+          )
+          .filter_map do |row|
+            advice = row.admin_advice.to_s.strip
+            next if advice.blank?
 
-          "#{result[:upgrade_type].description}\n#{advice}"
-        end
+            title =
+              row.read_attribute("upgrade_type_description").presence ||
+              "Upgrade type"
+            "#{title}\n#{advice}"
+          end
+
+      sections.concat(Array(extra_sections).compact_blank)
 
       return nil if sections.empty?
 
@@ -520,6 +638,35 @@ module Claims
         sections.join("\n\n"),
         config&.admin_advice_closing.to_s.strip.presence
       ].compact.join("\n\n")
+    end
+
+    def code_advice_sections_for(invoice_version_id:)
+      rows =
+        Claims::InvoiceVersionRulecheck
+          .joins(
+            "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_rulechecks.invoice_upgrade_type_id"
+          )
+          .where(invoice_version_id: invoice_version_id, source_engine: "code")
+          .where(rule_result: %w[warn fail])
+          .select(
+            "claims.invoice_version_rulechecks.*",
+            "iut.description AS upgrade_type_description",
+            "iut.upgrade_type_key AS upgrade_type_key"
+          )
+          .order(
+            Arel.sql(
+              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key, claims.invoice_version_rulechecks.rule_number"
+            )
+          )
+
+      rows
+        .group_by { |row| row.read_attribute("upgrade_type_description").presence || "Code-owned checks" }
+        .filter_map do |description, grouped_rows|
+          advice = advice_from_rulecheck_rows(grouped_rows)
+          next if advice.blank?
+
+          "#{description} code checks\n#{advice}"
+        end
     end
 
     def advice_from_rulechecks(payload)
@@ -561,11 +708,47 @@ module Claims
       bullets.empty? ? nil : bullets.join("\n")
     end
 
+    def advice_from_rulecheck_rows(rows)
+      bullets =
+        Array(rows).filter_map do |row|
+          result = coerce_rule_result(row.rule_result)
+          next unless %w[warn fail].include?(result)
+
+          message = advice_message_for_rule(row)
+          next if message.blank?
+
+          rule_number = row.rule_number
+          rule_key = row.rule_key.to_s.strip
+          label_parts = []
+          label_parts << "Code Rule #{rule_number}" if rule_number.present?
+          label_parts << "(#{rule_key})" if rule_key.present?
+
+          result_label =
+            case result
+            when "warn"
+              "Please verify"
+            when "fail"
+              "Correction needed"
+            end
+
+          "- #{[label_parts.join(" ").presence, result_label].compact.join(": ")}: #{message}"
+        end
+
+      bullets.empty? ? nil : bullets.join("\n")
+    end
+
     def advice_message_for_rule(row)
-      [
-        row["reason_and_likely_causes"] || row[:reason_and_likely_causes],
-        row["evidence_text"] || row[:evidence_text]
-      ].map { |value| value.to_s.strip }.find(&:present?)
+      if row.respond_to?(:reason_and_likely_causes)
+        [
+          row.reason_and_likely_causes,
+          row.evidence_text
+        ].map { |value| value.to_s.strip }.find(&:present?)
+      else
+        [
+          row["reason_and_likely_causes"] || row[:reason_and_likely_causes],
+          row["evidence_text"] || row[:evidence_text]
+        ].map { |value| value.to_s.strip }.find(&:present?)
+      end
     end
 
     def maybe_upsert_revision_request!(invoice_version:, advice:)
@@ -603,10 +786,14 @@ module Claims
     def coerce_confidence(value)
       n =
         begin
-          Integer(value || 0)
+          raw = value || 0
+          numeric = Float(raw)
+          numeric = numeric * 100 if numeric.positive? && numeric <= 1
+          numeric.round
         rescue StandardError
           0
         end
+
       [[n, 0].max, 100].min
     end
 

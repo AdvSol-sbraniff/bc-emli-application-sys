@@ -18,12 +18,8 @@ WITH config_row (
 purpose-statement:
 You assist admins with a pre-review of a contractor invoice for the Better Homes BC Energy Savings Program (ESP).
 
-You are not making a final eligibility decision. For v1, you locate evidence and perform the rulechecks using only the OCR/DI JSON and database values provided in the prompt.
-
-Required execution order:
-1. Build located_fields[] first.
-2. Build rulechecks[] second using located_fields plus the supplied OCR/database facts.
-3. Set overall.* last.
+Use only the OCR text, DI JSON, located evidence, and database values provided in the prompt.
+Do not query external systems, infer unavailable database facts, or invent missing values.
 
 Output-json-schema:
 {
@@ -46,15 +42,13 @@ Output-json-schema:
     {
       "rule_number": 0,
       "rule_key": "string",
-      "source_requirement_id": "string",
       "evidence_source": "invoice_pdf|supporting_document|database|external_list|admin_review",
-      "rule_name": "string",
       "rule_result": "pass|info|warn|fail",
       "confidence": 0,
       "expected_text": null,
       "calculation": null,
       "evidence_text": null,
-      "reason_and_likely_causes": null
+      "reason_and_likely_causes": "string"
     }
   ]
 }
@@ -62,7 +56,7 @@ Output-json-schema:
 Rules:
 - Return strict JSON only.
 - Do not include markdown outside JSON.
-- Copy rule_number, rule_key, source_requirement_id, and rule_name exactly from each rule task definition. Do not invent or rewrite rule_name.
+- Copy rule_number and rule_key exactly from each rule task definition.
 - Use rule_result instead of a boolean pass/fail. Allowed values are exactly "pass", "info", "warn", and "fail".
 - Use rule_result="pass" when the invoice/database evidence supports the rule, there is no meaningful note to call out, the rule must not appear in advice, and an admin can skim or ignore it.
 - Use rule_result="info" when the rule passes, but there is helpful context worth surfacing to the admin/contractor. Info is blue: not a requested fix, not a verification task, and not a risk flag.
@@ -71,21 +65,19 @@ Rules:
 - Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn.
 - For identity and record-matching rules, visible invoice values that clearly identify a different contractor, homeowner/customer, eligibility-code owner, property, claimant, or other matched party than the supplied database record should be fail, not warn.
 - Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice as useful context, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
-- For every info, reason_and_likely_causes must explain why this is helpful context only, why no correction or verification is requested, and what the admin/contractor should understand.
-- For every warn, reason_and_likely_causes must explain exactly what level of admin review is needed, why this is a warning rather than a failure, and what evidence would turn it into pass or fail.
-- For every fail, reason_and_likely_causes must explain why this appears material and what correction, override, or contractor follow-up is likely needed.
-- Do not be overly terse. reason_and_likely_causes should normally be 2-5 complete sentences, and can be up to 5 sentences when the rule involves arithmetic, missing supporting documents, ambiguous eligibility, or an admin action. Avoid vague phrases like "admin should verify" unless you also say exactly what to verify, where to look, and why the model could not resolve it from the supplied evidence.
 - Set overall.overall_result to "fail" if any material rule fails, "warn" if there are warnings but no failures, "info" if there are info notes but no warnings/failures, and "pass" only when all rulechecks are pass.
-- For v1, perform rulechecks using only the OCR text/DI JSON and database values provided in the prompt.
-- Show simple calculations when they are needed for a rulecheck.
-- Make rulecheck explanations useful to an admin, not terse. For each rulecheck, write evidence_text as the exact supporting invoice/DB text or values when available, calculation as the explicit formula and values when arithmetic/date logic is involved, and reason_and_likely_causes as a clear admin-facing explanation of why the rule is pass/info/warn/fail and what may need admin/contractor follow-up.
-- For pass and info rules, explicitly say why no extra admin verification is needed unless the rule's facts are outside the supplied evidence. For warn rules, state the missing or ambiguous fact, the concrete review step, and why it is not a failure. For fail rules, state the visible contradiction or missing material requirement and the likely correction, override, or follow-up.
-- Do not use one-word or overly generic reasons such as "missing", "unclear", or "not provided" unless you also explain what specific evidence was missing and why it matters.
-- Do not query external systems, invent database values, or make final eligibility decisions.
+- reason_and_likely_causes is mandatory for every rulecheck. Never leave it blank. Write at least 5 complete sentences for every rulecheck, including pass rules.
+- For pass rules, explain why the supplied evidence satisfies the rule and why no extra admin verification is needed unless the rule depends on facts outside the supplied evidence.
+- For info rules, explain why the rule passes, why the note is helpful context only, why no correction or verification is requested, and what the admin/contractor should understand.
+- For warn rules, explain the missing or ambiguous fact, the concrete admin review step, why this is a warning rather than a failure, and what evidence would turn it into pass or fail.
+- For fail rules, explain the visible contradiction or missing material requirement, why it matters, and the likely correction, override, or contractor follow-up.
+- evidence_text must contain short source facts or exact invoice/DB text/values when available. Do not use evidence_text for the full explanation.
+- calculation must contain the explicit formula and values when arithmetic/date logic is involved. For arithmetic/date rules, show the full chain: inputs, formula, intermediate values, cap or threshold comparison, final comparison, and conclusion.
+- reason_and_likely_causes must summarize the result in plain admin-facing language. Do not put the explanation only in calculation or evidence_text.
+- Do not use vague phrases such as "admin should verify", "missing", "unclear", or "not provided" unless you also explain exactly what to verify, where to look, what evidence is missing, and why it matters.
 - Return exact invoice evidence where possible.
 - For every located_fields[] item based on visible invoice evidence, set page and polygon when Document Intelligence provides a reliable location. Use polygon=null only for inferred/database-derived values or when no reliable DI location exists.
 - For every non-common upgrade-specific ruleset call, include a located_fields[] item with field_key="upgrade_specific_rebate_line_amount" for the CleanBC / Better Homes / Energy Savings Program rebate amount attributable to that specific upgrade type. Use value=null when the invoice does not clearly allocate a rebate to this upgrade type.
-- Do not make final eligibility decisions.
 
 Rule result examples:
 - PASS: Standard warranty terms are visible but no warranty-paid/credited costs appear. Admin can skim.
@@ -100,9 +92,14 @@ Rule result examples:
 $system$,
     $classifier_system$
 purpose-statement:
-You classify which Better Homes BC Energy Savings Program rebate upgrade claims appear to be made in the supplied invoice OCR/Document Intelligence JSON and locate the customer eligibility code if visible.
+You classify whether the supplied Document Intelligence JSON appears to be an invoice, a supporting document, or unknown. If it is an invoice, also classify which Better Homes BC Energy Savings Program rebate upgrade claims appear to be made and locate the customer eligibility code if visible. If it is a supporting document, classify the supporting document type.
 
-You are not making a final eligibility decision. You are identifying likely rebate-claimed upgrade domains and the visible eligibility code so the application can decide which rulesets and database lookups to run next.
+You are not making a final eligibility decision. You are triaging the document so the application can decide whether to treat it as the main invoice or as a supporting document and which downstream checks to run next.
+
+Allowed document_kind values:
+- invoice
+- supplement
+- unknown
 
 Allowed upgrade_type_key values:
 - windows_doors
@@ -119,8 +116,41 @@ Allowed upgrade_type_key values:
 - insulation
 - ventilation
 
+Allowed supplement_type_key values:
+- approved_heat_load_calculation
+- before_after_photo_set
+- certification_sheet
+- commissioning_or_control_document
+- energy_performance_label
+- energy_star_label
+- f280_heat_load_calculation
+- floor_plan_document
+- fossil_fuel_removal_proof
+- fossil_modification_or_removal_proof
+- fossil_removal_proof
+- income_verification_document
+- landlord_consent_form
+- manufacturer_label_photo
+- non_integrated_area_preapproval_notice
+- oil_removal_proof
+- permit_document
+- preapproval_notice
+- preapproval_quote
+- product_spec_sheet
+- utility_bill_or_account_document
+- utility_bill_or_invoice
+- utility_invoice
+- utility_upgrade_document
+- wett_report
+
 Output-json-schema:
 {
+  "document_kind": "invoice|supplement|unknown",
+  "document_kind_confidence": 0,
+  "document_kind_reason": "2-4 sentences explaining why the document is an invoice, a supporting document, or unknown.",
+  "supplement_type_key": null,
+  "supplement_type_confidence": 0,
+  "supplement_type_reason": null,
   "eligibility_code": null,
   "detected_upgrade_types": [
     {
@@ -149,7 +179,17 @@ Output-json-schema:
 Rules:
 - Return strict JSON only.
 - Do not include markdown outside JSON.
+- Classify document_kind first.
+- Use document_kind="invoice" only when the document appears to be the primary contractor invoice, estimate, sales invoice, or invoice-like claim document containing billed work, pricing, totals, or rebate-claimed work scope.
+- Use document_kind="supplement" for supporting documents such as utility bills, landlord consent, product labels, spec sheets, permits, preapproval notices, WETT reports, photos, and other non-invoice attachments.
+- Use document_kind="unknown" when the OCR does not provide enough evidence to decide between invoice and supplement.
+- document_kind_reason is mandatory.
+- Set supplement_type_key only when document_kind="supplement". Otherwise return null.
+- Set supplement_type_confidence only when document_kind="supplement". Otherwise return 0.
+- Set supplement_type_reason only when document_kind="supplement". Otherwise return null.
+- If document_kind is supplement or unknown, return eligibility_code=null, detected_upgrade_types=[], lineitem_mappings=[], and not_detected_upgrade_types=[].
 - Return only allowed upgrade_type_key values.
+- Return only allowed supplement_type_key values.
 - Set eligibility_code to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
 - Include an upgrade type only when direct invoice evidence supports that a Better Homes BC / CleanBC / ESP rebate claim is being made for that exact upgrade type.
 - Do not include every work component on the invoice. Classify rebate-claimed upgrade domains, not incidental construction scope, supporting materials, or labour categories.
@@ -253,17 +293,17 @@ Common located fields:
 
 Common GenAI rulecheck tasks:
 For v1, create these rulechecks from the OCR/DI JSON and supplied database values.
-For shared database facts such as sessions.submitted_at and users_eligibilitycodes.*, use the supplied database values exactly as provided.
+For shared database facts such as invoices.submitted_at and users_eligibilitycodes.*, use the supplied database values exactly as provided.
 For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
 Show the date math in calculation when a date rule is evaluated.
 
-rule 1 [rule_key: upgrade_type_evidence_present, rule_name: "Upgrade Type Evidence Present", source_requirement_id: ESP-2026-COM-000]
+rule 1 [rule_key: upgrade_type_evidence_present]
 Check whether the invoice text provides evidence of the claimed upgrade type.
 Set rule_result="pass" if the invoice clearly describes the claimed upgrade domain.
 Set rule_result="warn" if the invoice uses broad wording such as HVAC, service upgrade, insulation work, or remediation without enough detail to confirm the precise subtype but does not contradict the claimed domain. Admin should verify the exact upgrade subtype only.
 Set rule_result="fail" if the claimed upgrade domain is clearly absent or contradicted by the invoice.
 
-rule 2 [rule_key: rebate_line_evidence_present, rule_name: "Rebate Line Evidence Present", source_requirement_id: ESP-2026-COM-015]
+rule 2 [rule_key: rebate_line_evidence_present]
 Check whether the invoice visibly identifies CleanBC / Better Homes / ESP rebate amounts and makes the rebate amount understandable.
 Set rule_result="pass" when one overall program rebate amount is clearly labelled and no useful extra context is needed.
 Set rule_result="info" when multiple upgrade-specific CleanBC / Better Homes / ESP rebate amounts are clearly labelled, summable, and useful to call out as context. A split rebate presentation is acceptable when the amounts are clear; do not warn merely because rebates are split by upgrade type.
@@ -272,7 +312,7 @@ Set rule_result="fail" only when no CleanBC / Better Homes / ESP rebate evidence
 Do not re-check invoice arithmetic in this rule. Rule 8 owns whether rebate/payment/amount-due math reconciles.
 When split rebate lines are visible, show the summed rebate calculation in calculation, such as HVAC rebate + service upgrade rebate = total CleanBC / Better Homes portion.
 
-rule 3 [rule_key: warranty_costs_flag, rule_name: "Warranty Costs Flag", source_requirement_id: ESP-2026-COM-012]
+rule 3 [rule_key: warranty_costs_flag]
 Check whether the invoice appears to include warranty-covered costs or warranty language that should be reviewed by an admin.
 Set rule_result="fail" only if the invoice clearly indicates claimed upgrade costs are covered by warranty, paid by warranty, credited under warranty, supplied as a no-charge warranty replacement, reduced by a warranty discount, or otherwise not actually paid by the participant/contractor claim.
 Set rule_result="warn" if warranty wording might imply a warranty credit/payment but the invoice is not clear. Admin should verify whether any claimed cost was actually warranty-paid.
@@ -280,35 +320,7 @@ Set rule_result="pass" when the invoice merely lists ordinary warranty terms, su
 Do not fail solely because warranty coverage language is visible.
 In reason_and_likely_causes, distinguish standard post-installation warranty terms from warranty-paid or warranty-credited invoice costs.
 
-rule 4 [rule_key: source_vintage_applies, rule_name: "Source Vintage Applies", source_requirement_id: ESP-2026-COM-001]
-Check whether this 2026-04-01 current-ruleset vintage appears to apply to the invoice date.
-Use the best-supported invoice date visible in the OCR/DI JSON.
-Set rule_result="pass" only when the invoice date is clear and is on or after 2026-04-01.
-Set rule_result="warn" when the invoice date is missing, ambiguous, or earlier than 2026-04-01. For pre-2026-04-01 invoices, explain that prior program requirements may apply and admin should verify the correct RER vintage; do not call the invoice ineligible solely because this current ruleset may not be the right version.
-Set rule_result="fail" only if the supplied workflow explicitly requires the current 2026-04-01 rules and the invoice date is clearly before that date.
-In calculation, show the date comparison you used and whether this is a ruleset-version warning.
-
-rule 5 [rule_key: submission_within_six_months, rule_name: "Submission Within Six Months", source_requirement_id: ESP-2026-COM-017]
-Check whether the contractor submission date is within 6 months of the invoice date.
-Use sessions.submitted_at from the supplied database values.
-Use the best-supported invoice date visible in the OCR/DI JSON.
-Set rule_result="pass" only when both dates are clear and sessions.submitted_at is on or before invoice_date + 6 months.
-Set rule_result="warn" when either date is missing/ambiguous and admin should verify the missing invoice or submission date.
-Set rule_result="fail" when both dates are visible and the submission date is after invoice_date + 6 months.
-In calculation, show invoice_date + 6 months and compare it to sessions.submitted_at.
-
-rule 6 [rule_key: eligibility_code_valid_for_invoice_date, rule_name: "Eligibility Code Valid For Invoice Date", source_requirement_id: ESP-2026-COM-008]
-Check whether the invoice date falls within the eligibility-code validity window.
-Use users_eligibilitycodes.approved_at and users_eligibilitycodes.expires_at from the supplied database values.
-Use the best-supported invoice date visible in the OCR/DI JSON as the v1 upgrade-completion proxy unless the invoice clearly shows a more explicit installation/completion date.
-If users_eligibilitycodes.expires_at is missing but users_eligibilitycodes.approved_at is present, treat the validity window end as approved_at + 6 months.
-Set rule_result="pass" only when the dates are clear and the invoice/completion date is on or after approved_at and on or before the validity-window end.
-Set rule_result="warn" when required eligibility-code dates are missing/ambiguous or when the visible invoice code conflicts with supplied database code and admin should confirm the eligibility record.
-Set rule_result="fail" when supplied dates are clear and the invoice/completion date is outside the eligibility-code validity window.
-If the visible invoice eligibility code conflicts with the supplied database eligibility code, mention that conflict in reason_and_likely_causes.
-In calculation, show the approval date, expiry/window end, and invoice/completion date you used.
-
-rule 7 [rule_key: overall_rebate_not_over_invoice_total, rule_name: "Overall Rebate not Over Invoice Total", source_requirement_id: ESP-2026-COM-011]
+rule 4 [rule_key: overall_rebate_not_over_invoice_total]
 Check whether the overall CleanBC / Better Homes / ESP rebate shown on the invoice is not greater than the visible invoice total.
 Use the best-supported visible invoice total from OCR/DI JSON and the overall rebate line amount from the invoice.
 Set rule_result="pass" only when both values are clear and overall_rebate_line_amount is less than or equal to the visible invoice total.
@@ -316,7 +328,7 @@ Set rule_result="warn" when the rebate amount or invoice total is missing/ambigu
 Set rule_result="fail" when the visible rebate clearly exceeds the visible invoice total.
 In calculation, show the visible invoice total and overall rebate comparison.
 
-rule 8 [rule_key: overall_invoice_arithmetic_consistent, rule_name: "Overall Invoice Arithmetic Consistent", source_requirement_id: ESP-2026-COM-016]
+rule 5 [rule_key: overall_invoice_arithmetic_consistent]
 Check whether the visible invoice arithmetic is internally consistent when invoice total, overall rebate, deposit, and amount due after rebate are shown.
 Invoices may use either of these acceptable arithmetic patterns:
 1. Customer amount owing model: expected_customer_due = invoice_total - overall_rebate_line_amount - customer_payment_or_deposit. Pass when expected_customer_due matches the visible customer amount due within normal invoice rounding.
@@ -329,7 +341,7 @@ Set rule_result="fail" when the visible values clearly do not reconcile under ei
 In reason_and_likely_causes, name which model appears to fit the invoice.
 In calculation, show both the formula and visible values used, for example: invoice_total - customer_payment_or_deposit = amount_due, and amount_due equals visible rebate total.
 
-rule 9 [rule_key: contractor_identity_matches_record, rule_name: "Contractor Identity Matches Record", source_requirement_id: ESP-2026-COM-018]
+rule 6 [rule_key: contractor_identity_matches_record]
 Check whether the contractor/vendor identity visible on the invoice appears to match the contractor record that uploaded or owns the invoice.
 Use contractors.business_name and contractors.address from the supplied database values.
 Use invoice_contractor_name and invoice_contractor_address from the OCR/DI JSON.
@@ -340,7 +352,7 @@ Set rule_result="fail" when the invoice visibly appears to belong to a different
 In evidence_text, include the visible invoice contractor name/address and the supplied database contractor name/address.
 In reason_and_likely_causes, explain exactly what matches, what differs, and whether the admin should ignore, verify, or treat it as a likely wrong-contractor upload.
 
-rule 10 [rule_key: homeowner_identity_matches_eligibility_record, rule_name: "Homeowner Identity Matches Eligibility Record", source_requirement_id: ESP-2026-COM-019]
+rule 7 [rule_key: homeowner_identity_matches_eligibility_record]
 Check whether the homeowner/customer name visible on the invoice appears to match the participant/homeowner associated with the eligibility code on record.
 Use users.participant_name, users_eligibilitycodes.eligibility_code, and classifier.eligibility_code from the supplied database values.
 Use invoice_homeowner_name and eligibility_code from the OCR/DI JSON.
@@ -449,19 +461,19 @@ Return the exact text found, not a paraphrase.
 
 Windows/doors GenAI/manual-review rulecheck tasks:
 
-rule 1 [rule_key: wd_no_skylights, rule_name: "no Skylights", source_requirement_id: ESP-2026-WD-004]
+rule 1 [rule_key: wd_no_skylights]
 Check whether the invoice appears to include skylights as part of the Windows and doors claim.
 Set rule_result="fail" only if the invoice clearly claims skylights.
 Set rule_result="pass" if there is no clear skylight evidence.
 
-rule 2 [rule_key: wd_certification_reference_present, rule_name: "Certification Reference Present", source_requirement_id: ESP-2026-WD-005]
+rule 2 [rule_key: wd_certification_reference_present]
 Check whether the invoice contains any product/certification reference that would help an admin verify the accepted certification body requirement.
 Look specifically for CSA, Intertek, Labtest/LC, QAI, Keystone/KC, NAMI, NFRC, CPD, NRCan/ENERGY STAR fenestration numbers, or similar product-rating identifiers.
 Set rule_result="pass" if at least one useful certification/rating reference is clearly visible.
 Set rule_result="fail" if there is no visible certification/rating reference.
 This is not a final product-list validation.
 
-rule 3 [rule_key: wd_rough_opening_evidence_present, rule_name: "Rough Opening Evidence Present", source_requirement_id: ESP-2026-WD-006]
+rule 3 [rule_key: wd_rough_opening_evidence_present]
 Check whether the invoice appears to provide enough quantity/count evidence for an admin to reason about Rough Openings (RO).
 Program meaning:
 - The eligible count is based on Rough Openings (RO), not panes or individual glass sections.
@@ -472,19 +484,19 @@ Set rule_result="fail" if the count basis is unclear.
 Set rule_result="fail" only if the invoice clearly appears to count panes/sections as separate rebate units without RO evidence.
 In reason_and_likely_causes, say whether the invoice appears RO-based, unit-count based, pane-count based, or unclear.
 
-rule 4 [rule_key: wd_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-WD-003]
+rule 4 [rule_key: wd_description_sufficient_for_review]
 Check whether the invoice description is sufficiently detailed for admin pre-review of Windows and doors work.
 Look for line items that identify windows/doors, quantities, models, U-factor, labour/materials, and rebate lines.
 
-rule 5 [rule_key: wd_label_photo_reference_present, rule_name: "Label Photo Reference Present", source_requirement_id: ESP-2026-WD-013]
+rule 5 [rule_key: wd_label_photo_reference_present]
 Check whether the invoice or OCR text references manufacturer label photos.
 Set rule_result="warn" if the invoice/OCR does not reference manufacturer label photos or if supporting-document evidence is unavailable to the model. Admin should verify the supporting-document package only; do not treat absence from invoice OCR as a material failure by itself.
 
-rule 6 [rule_key: wd_quote_preapproval_reference_present, rule_name: "Quote Preapproval Reference Present", source_requirement_id: ESP-2026-WD-002]
+rule 6 [rule_key: wd_quote_preapproval_reference_present]
 Check whether the invoice text references quote pre-approval.
 This is not a final pre-approval validation; the DB/program record must verify it.
 
-rule 7 [rule_key: wd_per_unit_rebate_math_within_cap, rule_name: "Per Unit Rebate Math Within Cap", source_requirement_id: ESP-2026-WD-010]
+rule 7 [rule_key: wd_per_unit_rebate_math_within_cap]
 Check whether the per-unit rebate calculations are visibly shown and appear to be within the per-window/per-door cap.
 Use the original v1 calculation reference:
 1. full_unit_subtotal = hardware price per unit + labour price per unit.
@@ -493,13 +505,14 @@ Use the original v1 calculation reference:
 4. rebate_percentage is 95% for ESP1 and 60% for ESP2. If the eligibility code/income level is missing or unclear, set rule_result="warn" and explain that admin should verify the eligibility record before accepting the math.
 5. rebate_per_unit = full_unit_after_tax_subtotal * rebate_percentage.
 6. Each rebate_per_unit is capped at $950 per window or door.
+For this rule, calculation must explicitly show the lower-of comparison: eligible cost after tax multiplied by the rebate percentage, eligible unit count multiplied by the $950 per-unit cap, the lower of those two values, and the comparison to the claimed windows/doors rebate.
 Set rule_result="pass" only when the invoice provides enough visible values and the claimed per-unit rebate appears within the cap.
 Set rule_result="fail" only when the visible values clearly show the claimed per-unit rebate exceeds the cap or calculation.
 Set rule_result="warn" when hardware, labour, quantity, eligibility code, tax basis, or claimed per-unit rebate is missing/ambiguous but no visible value clearly exceeds the cap.
 Set rule_result="fail" when visible values clearly show the claimed per-unit rebate exceeds the eligible cost calculation or $950 per-unit cap.
 In calculation, show the visible formula and values used. Do not invent missing line-item values.
 
-rule 8 [rule_key: wd_per_home_rebate_math_within_cap, rule_name: "Per Home Rebate Math Within Cap", source_requirement_id: ESP-2026-WD-011]
+rule 8 [rule_key: wd_per_home_rebate_math_within_cap]
 Check whether the total invoice/home rebate appears within the per-home cap.
 Use the original v1 calculation reference:
 1. Add the rebate_per_unit values for all eligible windows/doors across the invoice.
@@ -510,7 +523,7 @@ Set rule_result="warn" when eligible unit count, per-unit rebate values, or tota
 Set rule_result="fail" when the visible claimed total clearly exceeds $9,500 or the visible eligible cost.
 In calculation, show the visible total rebate and cap comparison. Do not invent missing line-item values.
 
-rule 9 [rule_key: wd_customer_portion_math_matches, rule_name: "Customer Portion Math Matches", source_requirement_id: ESP-2026-WD-012]
+rule 9 [rule_key: wd_customer_portion_math_matches]
 Check whether the customer-portion calculation on the invoice appears to match the official customer-portion calculation.
 Use the original v1 calculation reference:
 1. afterrebate_invoicecost = total_invoice_cost - capped_invoice_total_rebate.
@@ -523,12 +536,12 @@ Set rule_result="warn" when total invoice cost, capped rebate, customer deposit,
 Set rule_result="fail" when visible values clearly contradict the calculated customer portion or amount due.
 In calculation, show the visible formula and values used. Do not invent missing line-item values.
 
-rule 10 [rule_key: wd_income_level_and_vancouver_review, rule_name: "Income Level and Vancouver Review", source_requirement_id: ESP-2026-WD-001/009]
+rule 10 [rule_key: wd_income_level_and_vancouver_review]
 Check whether visible evidence suggests the participant is ESP1/ESP2 and not ESP3, and whether any visible address evidence suggests City of Vancouver.
 Set rule_result="fail" if the visible eligibility code is ESP3 or if the invoice clearly shows City of Vancouver.
 Set rule_result="warn" if eligibility level or municipality cannot be determined from invoice/DB context; explain that admin/application data is needed and this is not a material invoice failure by itself.
 
-rule 11 [rule_key: wd_envelope_replacement_evidence_present, rule_name: "Envelope Replacement Evidence Present", source_requirement_id: ESP-2026-WD-003]
+rule 11 [rule_key: wd_envelope_replacement_evidence_present]
 Check whether visible text supports replacement of existing exterior/building-envelope windows or doors rather than new construction, additions, skylights, interior doors, or unrelated glazing.
 Set rule_result="warn" if the scope is missing or ambiguous and admin should verify scope against application/quote context.
 Set rule_result="fail" if the visible scope appears ineligible, such as new construction, additions, skylights, interior doors, or unrelated glazing.
@@ -565,7 +578,7 @@ Located fields:
 1 [field_key: hp_new_equipment_type] Locate ductless mini-split, ductless multi-split, central ducted, low-static ducted mini, indoor heads/zones, or similar.
 2 [field_key: hp_existing_electric_heat_evidence] Locate hard-wired electric baseboard, radiant ceiling/floor, electric furnace, electric boiler, or other electric primary heat evidence.
 3 [field_key: hp_make_model] Locate make/model numbers.
-4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers.
+4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.
 5 [field_key: hp_product_list_reference] Locate qualified heat pump product list, NRCan, ENERGY STAR, NEEP, or similar references.
 6 [field_key: hp_efficiency_and_capacity] Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.
 7 [field_key: hp_heat_load_calc_reference] Locate heat load calculation, sizing report, CSA-F280, Manual J, or similar.
@@ -577,16 +590,16 @@ Located fields:
 13 [field_key: hp_registered_contractor_or_permit_evidence] Locate registered contractor, AHJ, permit, inspection, Technical Safety BC, or by-law compliance references.
 
 Rulecheck tasks:
-rule 1 [rule_key: ashp_electric_existing_heat_context_present, rule_name: "Electric Existing Heat Context Present", source_requirement_id: ESP-2026-ASHP-ELEC-001]
+rule 1 [rule_key: ashp_electric_existing_heat_context_present]
 Check whether invoice text supports electric primary heating conversion context.
-rule 2 [rule_key: ashp_electric_product_reference_present, rule_name: "Electric Product Reference Present", source_requirement_id: ESP-2026-ASHP-ELEC-004]
+rule 2 [rule_key: ashp_electric_product_reference_present]
 Check whether invoice text includes useful product evidence such as AHRI, make/model, qualified product list, capacity, or efficiency ratings.
-rule 3 [rule_key: ashp_electric_primary_system_scope_present, rule_name: "Electric Primary System Scope Present", source_requirement_id: ESP-2026-ASHP-ELEC-002/003]
+rule 3 [rule_key: ashp_electric_primary_system_scope_present]
 Check whether the invoice describes a primary heat-pump system rather than a secondary/add-on system.
-rule 4 [rule_key: ashp_electric_description_sufficient_for_review, rule_name: "Electric Description Sufficient For Review", source_requirement_id: ESP-2026-ASHP-ELEC-009]
+rule 4 [rule_key: ashp_electric_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: ashp_electric_rebate_math_within_cap, rule_name: "Electric Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: ashp_electric_rebate_math_within_cap]
 Check whether the claimed rebate for this electric-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -600,11 +613,11 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.
 
-rule 6 [rule_key: ashp_electric_no_existing_heat_pump_flag, rule_name: "Electric no Existing Heat Pump Flag", source_requirement_id: ESP-2026-ASHP-ELEC-005]
+rule 6 [rule_key: ashp_electric_no_existing_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible; otherwise set rule_result="pass" only when replacement of hard-wired electric heat is clear. Use rule_result="warn" when the replacement context needs admin/application confirmation.
 
-rule 7 [rule_key: ashp_electric_main_living_area_or_primary_capacity_present, rule_name: "Electric Main Living Area or Primary Capacity Present", source_requirement_id: ESP-2026-ASHP-ELEC-003]
+rule 7 [rule_key: ashp_electric_main_living_area_or_primary_capacity_present]
 Check whether the invoice provides evidence that the new heat pump serves a main living area or is sized/described as the primary heating system.
 Set rule_result="warn" when this evidence is missing or ambiguous and admin should verify whether the system serves the main living area or primary heating load.
 $ashp_electric$,
@@ -639,7 +652,7 @@ Located fields:
 1 [field_key: hp_new_equipment_type] Locate ductless mini-split, ductless multi-split, central ducted, indoor heads/zones, or similar.
 2 [field_key: hp_existing_wood_heat_evidence] Locate wood stove, pellet stove, insert, wood furnace, solid fuel, or similar existing primary heat evidence.
 3 [field_key: hp_make_model] Locate make/model numbers.
-4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers.
+4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.
 5 [field_key: hp_product_list_reference] Locate qualified heat pump product list, NRCan, ENERGY STAR, NEEP, or similar references.
 6 [field_key: hp_efficiency_and_capacity] Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.
 7 [field_key: hp_wood_system_removal_or_wett_evidence] Locate wood/solid-fuel removal evidence, retained-appliance evidence, or WETT report reference.
@@ -652,16 +665,16 @@ Located fields:
 14 [field_key: hp_registered_contractor_or_permit_evidence] Locate registered contractor, AHJ, permit, inspection, Technical Safety BC, or by-law compliance references.
 
 Rulecheck tasks:
-rule 1 [rule_key: ashp_wood_existing_heat_context_present, rule_name: "Wood Existing Heat Context Present", source_requirement_id: ESP-2026-ASHP-WOOD-001]
+rule 1 [rule_key: ashp_wood_existing_heat_context_present]
 Check whether invoice text supports wood/solid-fuel primary heating conversion context.
-rule 2 [rule_key: ashp_wood_product_reference_present, rule_name: "Wood Product Reference Present", source_requirement_id: ESP-2026-ASHP-WOOD-004]
+rule 2 [rule_key: ashp_wood_product_reference_present]
 Check whether invoice text includes useful product evidence such as AHRI, make/model, qualified product list, capacity, or efficiency ratings.
-rule 3 [rule_key: ashp_wood_removal_or_wett_reference_present, rule_name: "Wood Removal or WETT Reference Present", source_requirement_id: ESP-2026-ASHP-WOOD-SUPP]
+rule 3 [rule_key: ashp_wood_removal_or_wett_reference_present]
 Check whether invoice/supporting-document text references wood-system removal or WETT documentation when relevant.
-rule 4 [rule_key: ashp_wood_description_sufficient_for_review, rule_name: "Wood Description Sufficient For Review", source_requirement_id: ESP-2026-ASHP-WOOD-011]
+rule 4 [rule_key: ashp_wood_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: ashp_wood_rebate_math_within_cap, rule_name: "Wood Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: ashp_wood_rebate_math_within_cap]
 Check whether the claimed rebate for this wood-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -675,11 +688,11 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.
 
-rule 6 [rule_key: ashp_wood_no_existing_heat_pump_flag, rule_name: "Wood no Existing Heat Pump Flag", source_requirement_id: ESP-2026-ASHP-WOOD-005]
+rule 6 [rule_key: ashp_wood_no_existing_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible; otherwise set rule_result="pass" only when wood/solid-fuel conversion context is clear. Use rule_result="warn" when the conversion context needs admin/application confirmation.
 
-rule 7 [rule_key: ashp_wood_backup_and_primary_capacity_review, rule_name: "Wood Backup and Primary Capacity Review", source_requirement_id: ESP-2026-ASHP-WOOD-003]
+rule 7 [rule_key: ashp_wood_backup_and_primary_capacity_review]
 Check whether the invoice supports primary heating capacity/main living area context and whether any visible backup heat evidence is electric/wood rather than fossil fuel.
 Set rule_result="warn" when primary-capacity evidence is missing or visible backup context is ambiguous. Admin should verify primary sizing and backup fuel.
 Set rule_result="fail" when visible backup context clearly shows fossil-fuel backup remaining as a primary system.
@@ -722,7 +735,7 @@ Located fields:
 1 [field_key: hp_new_equipment_type] Locate single-head mini-split, 2-head/multi-split, central ducted, indoor heads/zones, or similar.
 2 [field_key: hp_existing_gas_propane_heat_evidence] Locate natural gas, propane, furnace, boiler, tank propane, PNG, FortisBC gas, or similar existing heat evidence.
 3 [field_key: hp_make_model] Locate make/model numbers.
-4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers.
+4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.
 5 [field_key: hp_product_list_reference] Locate qualified heat pump product list, NRCan, ENERGY STAR, NEEP, or similar references.
 6 [field_key: hp_efficiency_and_capacity] Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.
 7 [field_key: hp_fossil_fuel_removal_evidence] Locate removal, decommissioning, capping, disconnection, appliance/piping/vent/fuel-container removal, permit, or inspection evidence.
@@ -736,16 +749,16 @@ Located fields:
 15 [field_key: hp_fossil_combination_boiler_evidence] Locate fossil combination boiler or domestic-hot-water hydronic space-heating references.
 
 Rulecheck tasks:
-rule 1 [rule_key: ashp_gas_propane_existing_heat_context_present, rule_name: "Gas Propane Existing Heat Context Present", source_requirement_id: ESP-2026-ASHP-GAS-001]
+rule 1 [rule_key: ashp_gas_propane_existing_heat_context_present]
 Check whether invoice text supports natural gas or propane primary heating conversion context.
-rule 2 [rule_key: ashp_gas_propane_product_reference_present, rule_name: "Gas Propane Product Reference Present", source_requirement_id: ESP-2026-ASHP-GAS-003]
+rule 2 [rule_key: ashp_gas_propane_product_reference_present]
 Check whether invoice text includes useful product evidence such as AHRI, make/model, qualified product list, capacity, or efficiency ratings.
-rule 3 [rule_key: ashp_gas_propane_removal_reference_present, rule_name: "Gas Propane Removal Reference Present", source_requirement_id: ESP-2026-ASHP-GAS-SUPP]
+rule 3 [rule_key: ashp_gas_propane_removal_reference_present]
 Check whether invoice/supporting-document text references fossil-fuel system removal or decommissioning.
-rule 4 [rule_key: ashp_gas_propane_description_sufficient_for_review, rule_name: "Gas Propane Description Sufficient For Review", source_requirement_id: ESP-2026-ASHP-GAS-011]
+rule 4 [rule_key: ashp_gas_propane_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: ashp_gas_propane_rebate_math_within_cap, rule_name: "Gas Propane Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: ashp_gas_propane_rebate_math_within_cap]
 Check whether the claimed rebate for this natural-gas-or-propane-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
 Evaluate this rule in this order:
@@ -760,16 +773,16 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit, whether a northern top-up is separately visible, and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, base cap comparison, and any separate northern-top-up check.
 
-rule 6 [rule_key: ashp_gas_propane_backup_not_fossil_primary, rule_name: "Gas Propane Backup not Fossil Primary", source_requirement_id: ESP-2026-ASHP-GAS-008]
+rule 6 [rule_key: ashp_gas_propane_backup_not_fossil_primary]
 Check whether visible backup heat evidence appears electric or wood, and whether any natural-gas/propane fireplace is clearly secondary.
 Set rule_result="warn" if backup context is missing/ambiguous and admin should verify backup fuel.
 Set rule_result="fail" if the invoice suggests fossil-fuel backup remains as a primary system.
 
-rule 7 [rule_key: ashp_gas_propane_no_existing_heat_pump_flag, rule_name: "Gas Propane no Existing Heat Pump Flag", source_requirement_id: ESP-2026-ASHP-GAS-009]
+rule 7 [rule_key: ashp_gas_propane_no_existing_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
 
-rule 8 [rule_key: ashp_gas_propane_non_integrated_area_review, rule_name: "Gas Propane Non Integrated Area Review", source_requirement_id: ESP-2026-ASHP-GAS-006]
+rule 8 [rule_key: ashp_gas_propane_non_integrated_area_review]
 If Non-Integrated Area evidence is visible, check whether pre-approval is also visible.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.
@@ -812,7 +825,7 @@ Located fields:
 1 [field_key: hp_new_equipment_type] Locate single-head mini-split, 2-head/multi-split, central ducted, indoor heads/zones, or similar.
 2 [field_key: hp_existing_oil_heat_evidence] Locate oil furnace, oil boiler, oil tank, fuel oil, 500 L oil baseline, or similar existing heat evidence.
 3 [field_key: hp_make_model] Locate make/model numbers.
-4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers.
+4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.
 5 [field_key: hp_product_list_reference] Locate NRCan Oil to Heat Pump Affordability qualified product list or similar references.
 6 [field_key: hp_efficiency_and_capacity] Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.
 7 [field_key: hp_oil_system_removal_evidence] Locate oil system and oil tank removal, decommissioning, capping, disconnection, permit, or inspection evidence.
@@ -827,16 +840,16 @@ Located fields:
 16 [field_key: hp_fossil_combination_boiler_evidence] Locate fossil combination boiler or domestic-hot-water hydronic space-heating references.
 
 Rulecheck tasks:
-rule 1 [rule_key: ashp_oil_existing_heat_context_present, rule_name: "Oil Existing Heat Context Present", source_requirement_id: ESP-2026-ASHP-OIL-001/002]
+rule 1 [rule_key: ashp_oil_existing_heat_context_present]
 Check whether invoice text supports oil primary heating conversion context.
-rule 2 [rule_key: ashp_oil_product_reference_present, rule_name: "Oil Product Reference Present", source_requirement_id: ESP-2026-ASHP-OIL-004]
+rule 2 [rule_key: ashp_oil_product_reference_present]
 Check whether invoice text includes useful product evidence such as AHRI, make/model, qualified product list, capacity, or efficiency ratings.
-rule 3 [rule_key: ashp_oil_removal_reference_present, rule_name: "Oil Removal Reference Present", source_requirement_id: ESP-2026-ASHP-OIL-SUPP]
+rule 3 [rule_key: ashp_oil_removal_reference_present]
 Check whether invoice/supporting-document text references oil system and oil tank removal.
-rule 4 [rule_key: ashp_oil_description_sufficient_for_review, rule_name: "Oil Description Sufficient For Review", source_requirement_id: ESP-2026-ASHP-OIL-012]
+rule 4 [rule_key: ashp_oil_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: ashp_oil_rebate_math_within_cap, rule_name: "Oil Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: ashp_oil_rebate_math_within_cap]
 Check whether the claimed rebate for this oil-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
 Evaluate this rule in this order:
@@ -851,16 +864,16 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit, whether a northern top-up is separately visible, and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, base cap comparison, and any separate northern-top-up check.
 
-rule 6 [rule_key: ashp_oil_consumption_baseline_reference_present, rule_name: "Oil Consumption Baseline Reference Present", source_requirement_id: ESP-2026-ASHP-OIL-002]
+rule 6 [rule_key: ashp_oil_consumption_baseline_reference_present]
 Check whether visible text references the 500 L annual oil-consumption baseline, fuel bills, receipts, or similar evidence.
 Set rule_result="warn" if not visible; note that this commonly requires application/supporting-document evidence and admin should verify the oil-consumption proof only.
 
-rule 7 [rule_key: ashp_oil_backup_not_fossil_primary, rule_name: "Oil Backup not Fossil Primary", source_requirement_id: ESP-2026-ASHP-OIL-008]
+rule 7 [rule_key: ashp_oil_backup_not_fossil_primary]
 Check whether visible backup heat evidence appears electric or wood, and whether any natural-gas/propane fireplace is clearly secondary.
 Set rule_result="warn" if backup context is missing/ambiguous and admin should verify backup fuel.
 Set rule_result="fail" if the invoice suggests fossil-fuel backup remains as a primary system.
 
-rule 8 [rule_key: ashp_oil_no_existing_heat_pump_flag, rule_name: "Oil no Existing Heat Pump Flag", source_requirement_id: ESP-2026-ASHP-OIL-009]
+rule 8 [rule_key: ashp_oil_no_existing_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
 $ashp_oil$,
@@ -890,7 +903,7 @@ Located fields:
 1 [field_key: dfhp_equipment_type] Locate dual fuel ducted heat pump evidence.
 2 [field_key: dfhp_existing_png_or_tank_propane_evidence] Locate Pacific Northern Gas, PNG, tank propane, natural gas, propane, or similar primary heating evidence.
 3 [field_key: dfhp_make_model] Locate heat pump and furnace make/model numbers.
-4 [field_key: dfhp_ahri_reference] Locate AHRI reference/certificate numbers for outdoor unit, indoor unit(s), and furnace where visible.
+4 [field_key: hp_ahri_reference] Locate AHRI reference/certificate numbers for outdoor unit, indoor unit(s), and furnace where visible. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.
 5 [field_key: dfhp_switchover_setpoint_evidence] Locate thermostat, outdoor temperature switchover, equipment control board, <=5 C, <=2 C, or similar controls evidence.
 6 [field_key: dfhp_heat_load_calc_reference] Locate program-approved heat load calculation, CSA-F280, Manual J, or sizing evidence.
 7 [field_key: dfhp_fossil_modification_evidence] Locate fossil fuel removal/modification evidence, permit, inspection, capping, piping, vent, or appliance changes.
@@ -901,16 +914,16 @@ Located fields:
 12 [field_key: dfhp_registered_contractor_or_permit_evidence] Locate registered contractor, AHJ, permit, inspection, Technical Safety BC, or by-law compliance references.
 
 Rulecheck tasks:
-rule 1 [rule_key: dfhp_dual_fuel_scope_present, rule_name: "Dual Fuel Scope Present", source_requirement_id: ESP-2026-DFHP-001/002]
+rule 1 [rule_key: dfhp_dual_fuel_scope_present]
 Check whether invoice text supports dual-fuel ducted heat-pump scope with fossil backup.
-rule 2 [rule_key: dfhp_controls_reference_present, rule_name: "Controls Reference Present", source_requirement_id: ESP-2026-DFHP-002]
+rule 2 [rule_key: dfhp_controls_reference_present]
 Check whether invoice text references switchover controls or dual-fuel control setup.
-rule 3 [rule_key: dfhp_heat_load_calc_reference_present, rule_name: "Heat Load Calc Reference Present", source_requirement_id: ESP-2026-DFHP-003]
+rule 3 [rule_key: dfhp_heat_load_calc_reference_present]
 Check whether invoice/supporting-document text references required heat load calculation.
-rule 4 [rule_key: dfhp_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-DFHP-008]
+rule 4 [rule_key: dfhp_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, fossil-backup integration, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: dfhp_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: dfhp_rebate_math_within_cap]
 Check whether the claimed rebate for this dual-fuel ducted heat pump upgrade appears to stay within the visible upgrade cost and the program maximum for the participant's eligibility level.
 Use the visible dfhp_source_fuel_path, dfhp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
 Evaluate this rule in this order:
@@ -923,11 +936,11 @@ Set rule_result="warn" when the source-fuel path, eligibility code, rebate amoun
 Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost or applicable cap.
 In calculation, show the source-fuel path, eligibility code, visible upgrade cost, claimed rebate, cap comparison, and any separate northern-top-up check.
 
-rule 6 [rule_key: dfhp_png_or_tank_propane_path_present, rule_name: "PNG or Tank Propane Path Present", source_requirement_id: ESP-2026-DFHP-001]
+rule 6 [rule_key: dfhp_png_or_tank_propane_path_present]
 Check whether visible evidence supports PNG natural gas/propane or tank propane as the primary heating fuel.
 Set rule_result="fail" when the invoice only says generic natural gas or generic propane without PNG/tank-propane evidence.
 
-rule 7 [rule_key: dfhp_switchover_setpoint_specific, rule_name: "Switchover Setpoint Specific", source_requirement_id: ESP-2026-DFHP-002]
+rule 7 [rule_key: dfhp_switchover_setpoint_specific]
 Check whether visible control evidence includes a switchover setpoint and whether it appears at or below the correct regional threshold if the region is visible.
 Set rule_result="fail" when controls are referenced without a setpoint or when the visible setpoint appears too high.
 $dual_fuel$,
@@ -974,16 +987,16 @@ Located fields:
 13 [field_key: atw_space_heating_only_evidence] Locate evidence that the air-to-water system is for space heating only rather than combined domestic hot water.
 
 Rulecheck tasks:
-rule 1 [rule_key: atw_scope_present, rule_name: "Scope Present", source_requirement_id: ESP-2026-ATW-001/002]
+rule 1 [rule_key: atw_scope_present]
 Check whether invoice text supports air-to-water space-heating scope.
-rule 2 [rule_key: atw_product_reference_present, rule_name: "Product Reference Present", source_requirement_id: ESP-2026-ATW-002]
+rule 2 [rule_key: atw_product_reference_present]
 Check whether invoice text includes useful qualifying product-list or make/model evidence.
-rule 3 [rule_key: atw_conversion_context_present, rule_name: "Conversion Context Present", source_requirement_id: ESP-2026-ATW-001/003/004]
+rule 3 [rule_key: atw_conversion_context_present]
 Check whether invoice text identifies source-fuel conversion context and any removal/supporting-document references.
-rule 4 [rule_key: atw_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-ATW-010]
+rule 4 [rule_key: atw_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: atw_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: atw_rebate_math_within_cap]
 Check whether the claimed rebate for this air-to-water heat pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible source-fuel conversion context.
 Use the visible atw_conversion_source_fuel_evidence, atw_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -997,12 +1010,12 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which source-fuel rebate path the invoice appears to fit and whether a northern top-up is separately visible.
 In calculation, show the visible source-fuel context, eligibility code, visible upgrade cost, claimed rebate, cap comparison, and any separate northern-top-up check.
 
-rule 6 [rule_key: atw_not_combined_or_hpwh_scope, rule_name: "not Combined or HPWH Scope", source_requirement_id: ESP-2026-ATW-001]
+rule 6 [rule_key: atw_not_combined_or_hpwh_scope]
 Check whether the invoice supports air-to-water space-heating-only scope and does not appear to be a combined space/water system or standalone heat pump water heater.
 Set rule_result="warn" if the air-to-water versus combined/HPWH distinction is ambiguous and admin should verify equipment scope.
 Set rule_result="fail" if domestic-hot-water/combined scope is clearly visible in a space-heating-only air-to-water ruleset.
 
-rule 7 [rule_key: atw_no_existing_heat_pump_flag, rule_name: "no Existing Heat Pump Flag", source_requirement_id: ESP-2026-ATW-005]
+rule 7 [rule_key: atw_no_existing_heat_pump_flag]
 Check whether invoice text suggests replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
 $air_to_water$,
@@ -1049,16 +1062,16 @@ Located fields:
 13 [field_key: cshp_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
 
 Rulecheck tasks:
-rule 1 [rule_key: cshp_scope_present, rule_name: "Scope Present", source_requirement_id: ESP-2026-CSHP-001/002]
+rule 1 [rule_key: cshp_scope_present]
 Check whether invoice text supports combined space and water heat-pump scope.
-rule 2 [rule_key: cshp_product_reference_present, rule_name: "Product Reference Present", source_requirement_id: ESP-2026-CSHP-002]
+rule 2 [rule_key: cshp_product_reference_present]
 Check whether invoice text includes useful qualifying product-list or make/model evidence.
-rule 3 [rule_key: cshp_conversion_context_present, rule_name: "Conversion Context Present", source_requirement_id: ESP-2026-CSHP-001/003/004]
+rule 3 [rule_key: cshp_conversion_context_present]
 Check whether invoice text identifies source-fuel conversion context and any removal/supporting-document references.
-rule 4 [rule_key: cshp_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-CSHP-010]
+rule 4 [rule_key: cshp_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
-rule 5 [rule_key: cshp_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-COM-011/016]
+rule 5 [rule_key: cshp_rebate_math_within_cap]
 Check whether the claimed rebate for this combined space-and-water heat pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible source-fuel conversion context.
 Use the visible cshp_conversion_source_fuel_evidence, cshp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -1072,12 +1085,12 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which source-fuel rebate path the invoice appears to fit and whether a northern top-up is separately visible.
 In calculation, show the visible source-fuel context, eligibility code, visible upgrade cost, claimed rebate, cap comparison, and any separate northern-top-up check.
 
-rule 6 [rule_key: cshp_combined_space_and_water_scope_present, rule_name: "Combined Space and Water Scope Present", source_requirement_id: ESP-2026-CSHP-001]
+rule 6 [rule_key: cshp_combined_space_and_water_scope_present]
 Check whether the invoice clearly shows both space-heating and domestic-hot-water scope in one combined heat-pump upgrade.
 Set rule_result="warn" if the combined nature is ambiguous and admin should verify whether this is one combined space/water system.
 Set rule_result="fail" if only space heating is clearly visible or only water heating is clearly visible.
 
-rule 7 [rule_key: cshp_no_existing_heat_pump_flag, rule_name: "no Existing Heat Pump Flag", source_requirement_id: ESP-2026-CSHP-005]
+rule 7 [rule_key: cshp_no_existing_heat_pump_flag]
 Check whether invoice text suggests replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
 $combined_space_water$,
@@ -1120,20 +1133,20 @@ Electrical service upgrade located fields:
 
 Electrical service upgrade GenAI/manual-review rulecheck tasks:
 
-rule 1 [rule_key: esu_service_size_present, rule_name: "Service Size Present", source_requirement_id: ESP-2026-ESU-003]
+rule 1 [rule_key: esu_service_size_present]
 Check whether the invoice clearly references a 100, 200, or 400 amp electrical service upgrade.
 Set rule_result="warn" if electrical work is visible but service size is missing and admin should verify electrical/service documentation.
 
-rule 2 [rule_key: esu_utility_upgrade_evidence_present, rule_name: "Utility Upgrade Evidence Present", source_requirement_id: ESP-2026-ESU-002/005]
+rule 2 [rule_key: esu_utility_upgrade_evidence_present]
 Check whether the invoice contains evidence of a utility service upgrade by BC Hydro/FortisBC or another electrical utility.
 Set rule_result="warn" if utility service evidence is missing but the invoice does not clearly show panel-only work. Admin should verify the utility/service-upgrade documentation.
 Set rule_result="fail" only if the invoice clearly appears to be panel/sub-panel work or heat-pump panel connection only without utility service upgrade.
 
-rule 3 [rule_key: esu_heat_pump_conversion_context_present, rule_name: "Heat Pump Conversion Context Present", source_requirement_id: ESP-2026-ESU-001]
+rule 3 [rule_key: esu_heat_pump_conversion_context_present]
 Check whether invoice text ties the service upgrade to a fossil-fuel-to-heat-pump conversion.
 Set rule_result="warn" if this likely requires application/DB context and the invoice does not contradict the association.
 
-rule 4 [rule_key: esu_timing_within_six_months_evidence, rule_name: "Timing Within Six Months Evidence", source_requirement_id: ESP-2026-ESU-003]
+rule 4 [rule_key: esu_timing_within_six_months_evidence]
 Check whether visible invoice dates provide enough evidence to compare service upgrade timing against heat pump installation timing.
 Pass this rule when either:
 1. Both the electrical service upgrade date and associated heat pump / heat pump water heater installation date are visible and appear within the allowed timing window.
@@ -1142,11 +1155,11 @@ Set rule_result="fail" when visible dates clearly place the service upgrade outs
 Set rule_result="fail" when the service upgrade appears on a separate invoice and no associated heat pump / heat pump water heater install date or associated invoice date is visible.
 If same-invoice evidence is used, explain in reason_and_likely_causes that the invoice-level date is being used as the shared timing proxy.
 
-rule 5 [rule_key: esu_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-ESU-004/006]
+rule 5 [rule_key: esu_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of eligible electrical service upgrade costs.
 Look for utility connection fees, panel/sub-panel upgrade, mast, conduit, meter base, weather head, labour, and CleanBC rebate line.
 
-rule 6 [rule_key: esu_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-ESU-006]
+rule 6 [rule_key: esu_rebate_math_within_cap]
 Check whether the claimed rebate for this electrical service upgrade appears to stay within the visible eligible cost and the program maximum for the participant's eligibility level.
 Use the visible esu_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Use these maximum rebate amounts: ESP1 up to $5,000; ESP2 up to $3,500; ESP3 up to $1,500.
@@ -1155,12 +1168,12 @@ Set rule_result="warn" when the eligibility code, rebate amount, or visible elig
 Set rule_result="fail" when the rebate clearly exceeds the visible eligible cost or applicable cap.
 In calculation, show the eligibility code, visible eligible cost, claimed rebate, and cap comparison.
 
-rule 7 [rule_key: esu_not_panel_only_or_connection_only, rule_name: "not Panel Only or Connection Only", source_requirement_id: ESP-2026-ESU-005]
+rule 7 [rule_key: esu_not_panel_only_or_connection_only]
 Check whether the invoice appears to include utility service/new-wire upgrade evidence rather than only a panel, sub-panel, breaker, or heat-pump connection.
 Set rule_result="warn" if utility service evidence is missing but the visible work is not clearly panel-only/connection-only.
 Set rule_result="fail" if the visible work clearly appears panel-only/connection-only.
 
-rule 8 [rule_key: esu_one_per_home_manual_review, rule_name: "One Per Home Manual Review", source_requirement_id: ESP-2026-ESU-007]
+rule 8 [rule_key: esu_one_per_home_manual_review]
 Flag the maximum-one-per-home rule for admin/application-history review.
 Set rule_result="pass" when the supplied invoice/DB/application context does not show another electrical service upgrade rebate already claimed for this home.
 Set rule_result="fail" only when supplied database/application history clearly indicates another electrical service upgrade rebate was already claimed for this home.
@@ -1204,25 +1217,25 @@ Health and safety located fields:
 
 Health and safety GenAI/manual-review rulecheck tasks:
 
-rule 1 [rule_key: hs_issue_type_present, rule_name: "Issue Type Present", source_requirement_id: ESP-2026-HS-001]
+rule 1 [rule_key: hs_issue_type_present]
 Check whether the invoice clearly identifies an existing health and safety issue being remediated.
 
-rule 2 [rule_key: hs_associated_upgrade_present, rule_name: "Associated Upgrade Present", source_requirement_id: ESP-2026-HS-001]
+rule 2 [rule_key: hs_associated_upgrade_present]
 Check whether the invoice connects remediation to an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade.
 Set rule_result="warn" if association likely requires DB/application context and the invoice does not contradict an associated eligible upgrade.
 
-rule 3 [rule_key: hs_not_standalone_flag, rule_name: "not Standalone Flag", source_requirement_id: ESP-2026-HS-001]
+rule 3 [rule_key: hs_not_standalone_flag]
 Flag whether the invoice appears to claim health and safety remediation on its own.
 Set rule_result="fail" only if it clearly appears standalone without an associated eligible upgrade.
 
-rule 4 [rule_key: hs_pre_confirmation_evidence_present, rule_name: "Pre Confirmation Evidence Present", source_requirement_id: ESP-2026-HS-001]
+rule 4 [rule_key: hs_pre_confirmation_evidence_present]
 Check whether invoice text references prior confirmation that the remediation was rebate-eligible.
 Set rule_result="warn" if not visible. Admin should verify pre-confirmation in application/supporting records; absence from invoice OCR is not a material failure by itself.
 
-rule 5 [rule_key: hs_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-HS-002]
+rule 5 [rule_key: hs_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of remediation work, issue type, associated upgrade, rebate line, and amount.
 
-rule 6 [rule_key: hs_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-HS-005]
+rule 6 [rule_key: hs_rebate_math_within_cap]
 Check whether the claimed rebate for this health and safety remediation upgrade appears to stay within the visible remediation cost and the program maximum for the participant's eligibility level.
 Use the visible hs_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Use these maximum rebate amounts: ESP1 up to 95% of eligible upgrade costs, capped at $800 per home; ESP2 up to 60% of eligible upgrade costs, capped at $800 per home.
@@ -1231,11 +1244,11 @@ Set rule_result="warn" when the eligibility code, rebate amount, or visible reme
 Set rule_result="fail" when the rebate clearly exceeds the visible remediation cost or applicable cap.
 In calculation, show the eligibility code, visible remediation cost, claimed rebate, and cap comparison.
 
-rule 7 [rule_key: hs_before_after_photos_present, rule_name: "Before After Photos Present", source_requirement_id: ESP-2026-HS-SUPP]
+rule 7 [rule_key: hs_before_after_photos_present]
 Check whether invoice/supporting text references before and after photos of the remediated issue.
 Set rule_result="warn" if photo evidence is not visible to the model. Admin should verify the supporting-document package only.
 
-rule 8 [rule_key: hs_income_level_allows_rebate, rule_name: "Income Level Allows Rebate", source_requirement_id: ESP-2026-HS-005]
+rule 8 [rule_key: hs_income_level_allows_rebate]
 Check whether visible eligibility code indicates ESP1 or ESP2.
 Set rule_result="warn" when eligibility level is missing/ambiguous and admin should verify the eligibility record.
 Set rule_result="fail" for ESP3.
@@ -1269,41 +1282,44 @@ Heat pump water heater located fields:
 1 [field_key: hpwh_existing_water_heater_evidence] Locate text about the existing primary water heater being replaced.
 2 [field_key: hpwh_existing_fuel_type] Locate fossil fuel, electric, wood, or unclear existing water-heating fuel evidence.
 3 [field_key: hpwh_new_equipment_type] Locate heat pump water heater equipment type.
-4 [field_key: hpwh_make_model] Locate heat pump water heater make/model numbers.
-5 [field_key: hpwh_neea_reference] Locate NEEA Advanced Water Heater Specification or qualified product list references.
-6 [field_key: hpwh_tier_reference] Locate Tier 2 or higher evidence if visible.
-7 [field_key: hpwh_secondary_system_flag] Locate evidence the invoice is for a secondary/additional water heater rather than replacing the primary system.
-8 [field_key: hpwh_fossil_fuel_removal_evidence] Locate removal, decommissioning, capping, disconnection, piping/appliance/container/vent removal, or permit/inspection references.
-9 [field_key: hpwh_non_integrated_area_preapproval_reference] Locate Non-Integrated Area or pre-approval references if fossil fuel is involved.
-10 [field_key: hpwh_line_amount] Locate heat pump water heater line-item totals.
-11 [field_key: upgrade_specific_rebate_line_amount] Locate the CleanBC/Better Homes/ESP rebate amount for the heat pump water heater upgrade only.
-12 [field_key: hpwh_fossil_removal_date_or_permit] Locate removal/decommissioning date, permit, inspection, or removal-company invoice details if visible.
-13 [field_key: hpwh_registered_contractor_or_permit_evidence] Locate registered contractor, AHJ, permit, inspection, Technical Safety BC, or by-law compliance references.
-14 [field_key: hpwh_existing_hpwh_flag] Locate evidence of an existing heat pump water heater or secondary/additional heat pump water heater.
+4 [field_key: hpwh_manufacturer] Locate the heat pump water heater manufacturer, brand, or vendor product brand as a standalone value. Do not include the model number unless the invoice only shows a combined phrase.
+5 [field_key: hpwh_model_number] Locate the heat pump water heater model number exactly as shown on the invoice, label, quote, or product line. Do not include the manufacturer/brand unless the invoice only shows a combined phrase.
+6 [field_key: hpwh_model_components] Locate multiple model numbers/components if the invoice shows a split-system water heater, heat pump unit plus storage tank, or multiple component model numbers. Preserve the component relationship and separators such as "&" when visible.
+7 [field_key: hpwh_make_model] Locate combined heat pump water heater make/model text for admin readability when present. This is a fallback/display field; prefer hpwh_manufacturer, hpwh_model_number, and hpwh_model_components for exact product-list matching.
+8 [field_key: hpwh_neea_reference] Locate NEEA Advanced Water Heater Specification or qualified product list references.
+9 [field_key: hpwh_tier_reference] Locate Tier 2 or higher evidence if visible.
+10 [field_key: hpwh_secondary_system_flag] Locate evidence the invoice is for a secondary/additional water heater rather than replacing the primary system.
+11 [field_key: hpwh_fossil_fuel_removal_evidence] Locate removal, decommissioning, capping, disconnection, piping/appliance/container/vent removal, or permit/inspection references.
+12 [field_key: hpwh_non_integrated_area_preapproval_reference] Locate Non-Integrated Area or pre-approval references if fossil fuel is involved.
+13 [field_key: hpwh_line_amount] Locate heat pump water heater line-item totals.
+14 [field_key: upgrade_specific_rebate_line_amount] Locate the CleanBC/Better Homes/ESP rebate amount for the heat pump water heater upgrade only.
+15 [field_key: hpwh_fossil_removal_date_or_permit] Locate removal/decommissioning date, permit, inspection, or removal-company invoice details if visible.
+16 [field_key: hpwh_registered_contractor_or_permit_evidence] Locate registered contractor, AHJ, permit, inspection, Technical Safety BC, or by-law compliance references.
+17 [field_key: hpwh_existing_hpwh_flag] Locate evidence of an existing heat pump water heater or secondary/additional heat pump water heater.
 
 Heat pump water heater GenAI/manual-review rulecheck tasks:
 
-rule 1 [rule_key: hpwh_primary_replacement_context_present, rule_name: "Primary Replacement Context Present", source_requirement_id: ESP-2026-HPWH-001]
+rule 1 [rule_key: hpwh_primary_replacement_context_present]
 Check whether the invoice provides evidence that the heat pump water heater replaces the home's primary water heater.
 Set rule_result="warn" if this likely requires application/DB context and the invoice does not show a secondary/additional system.
 
-rule 2 [rule_key: hpwh_product_reference_present, rule_name: "Product Reference Present", source_requirement_id: ESP-2026-HPWH-002]
+rule 2 [rule_key: hpwh_product_reference_present]
 Check whether the invoice includes useful product references for later validation, such as make/model, NEEA, qualified product list, or Tier 2+ evidence.
 This is not final product-list validation.
 
-rule 3 [rule_key: hpwh_fossil_removal_evidence_present, rule_name: "Fossil Removal Evidence Present", source_requirement_id: ESP-2026-HPWH-003]
+rule 3 [rule_key: hpwh_fossil_removal_evidence_present]
 If fossil fuel water heating evidence is present, check whether invoice text references removal/decommissioning of fossil-fuel equipment.
 Set rule_result="pass" if fossil fuel evidence is not present.
 Set rule_result="warn" if fossil-fuel replacement is visible but supporting removal/decommissioning documents are required and not visible. Admin should verify supporting documents.
 
-rule 4 [rule_key: hpwh_secondary_system_flag, rule_name: "Secondary System Flag", source_requirement_id: ESP-2026-HPWH-005]
+rule 4 [rule_key: hpwh_secondary_system_flag]
 Check whether the invoice suggests a secondary or additional heat pump water heater rather than replacement of the primary water heater.
 Set rule_result="fail" only if secondary/additional wording is clearly present.
 
-rule 5 [rule_key: hpwh_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-HPWH-007/008]
+rule 5 [rule_key: hpwh_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of heat pump water heater work, product reference, labour/materials, rebate line, and amount.
 
-rule 6 [rule_key: hpwh_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-HPWH-005]
+rule 6 [rule_key: hpwh_rebate_math_within_cap]
 Check whether the claimed rebate for this heat pump water heater upgrade appears to stay within the visible upgrade cost and the program maximum.
 Use the visible hpwh_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -1316,12 +1332,12 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which visible fuel path the invoice appears to show and whether that path is clear or uncertain.
 In calculation, show the visible source-fuel path, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.
 
-rule 7 [rule_key: hpwh_non_integrated_area_review, rule_name: "Non Integrated Area Review", source_requirement_id: ESP-2026-HPWH-004]
+rule 7 [rule_key: hpwh_non_integrated_area_review]
 If fossil-fuel water-heater replacement and Non-Integrated Area evidence are visible, check whether pre-approval is also visible.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.
 
-rule 8 [rule_key: hpwh_no_existing_or_secondary_hpwh_flag, rule_name: "no Existing or Secondary HPWH Flag", source_requirement_id: ESP-2026-HPWH-005]
+rule 8 [rule_key: hpwh_no_existing_or_secondary_hpwh_flag]
 Check whether invoice text suggests an existing heat pump water heater, replacement of an existing heat pump water heater, or a secondary/additional heat pump water heater.
 Set rule_result="fail" if existing/secondary/additional HPWH wording is visible.
 $hpwh$,
@@ -1369,25 +1385,25 @@ Insulation located fields:
 
 Insulation GenAI/manual-review rulecheck tasks:
 
-rule 1 [rule_key: ins_material_and_location_present, rule_name: "Material and Location Present", source_requirement_id: ESP-2026-INS-002]
+rule 1 [rule_key: ins_material_and_location_present]
 Check whether the invoice identifies insulation material and eligible installation location clearly enough for admin pre-review.
 
-rule 2 [rule_key: ins_r_value_and_area_present, rule_name: "R Value and Area Present", source_requirement_id: ESP-2026-INS-003]
+rule 2 [rule_key: ins_r_value_and_area_present]
 Check whether the invoice provides R-value and area/square-foot evidence needed for rebate calculation review.
 Set rule_result="warn" if one or both values are missing or ambiguous and admin should verify the insulation calculation inputs.
 
-rule 3 [rule_key: ins_health_safety_issue_flag, rule_name: "Health Safety Issue Flag", source_requirement_id: ESP-2026-INS-004/006]
+rule 3 [rule_key: ins_health_safety_issue_flag]
 Check whether the invoice references pest, rodent, vermiculite, asbestos, mould, or removed insulation issues.
 Set rule_result="fail" only if unresolved issues appear to block processing or if evidence is unclear.
 
-rule 4 [rule_key: ins_supporting_document_reference_present, rule_name: "Supporting Document Reference Present", source_requirement_id: ESP-2026-INS-SUPP]
+rule 4 [rule_key: ins_supporting_document_reference_present]
 Check whether invoice text references before/after photos or floor plan drawings.
 Set rule_result="warn" if supporting documents are not visible to the model. Admin should verify the supporting-document package only.
 
-rule 5 [rule_key: ins_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-INS-002/003]
+rule 5 [rule_key: ins_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of insulation scope, material, location, R-value, area, rebate line, and amount.
 
-rule 6 [rule_key: ins_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-INS-006]
+rule 6 [rule_key: ins_rebate_math_within_cap]
 Check whether the claimed rebate for this insulation upgrade appears to stay within the visible insulation cost and the program maximum.
 Use the visible ins_line_amount, upgrade_specific_rebate_line_amount, ins_upgrade_location, and eligibility code.
 Use these maximum rebate rules: ESP1/ESP2 only; the total insulation rebate is capped at $5,500 per home; a clearly isolated single upgrade location should not visibly exceed the $2,000 location-specific maximum; and when R-value added and area are visible, apply the location-specific formula/rate from the background section.
@@ -1396,11 +1412,11 @@ Set rule_result="warn" when the rebate amount or visible insulation cost is miss
 Set rule_result="fail" when the rebate clearly exceeds the visible insulation cost, clearly exceeds $5,500 overall, clearly exceeds the visible single-location cap/formula, or is claimed for ESP3.
 In calculation, show the visible location context, R-value added, area, formula/rate if available, visible insulation cost, claimed rebate, and cap comparison.
 
-rule 7 [rule_key: ins_minimum_r_value_and_boundary_present, rule_name: "Minimum R Value and Boundary Present", source_requirement_id: ESP-2026-INS-002/003]
+rule 7 [rule_key: ins_minimum_r_value_and_boundary_present]
 Check whether the invoice provides enough evidence that the insulation location is eligible, is between conditioned and unconditioned space, and meets the minimum R-value added for that location.
 Set rule_result="warn" when location, boundary, or R-value evidence is missing/ambiguous and admin should verify the calculation inputs.
 
-rule 8 [rule_key: ins_income_level_allows_rebate, rule_name: "Income Level Allows Rebate", source_requirement_id: ESP-2026-INS-001]
+rule 8 [rule_key: ins_income_level_allows_rebate]
 Check whether visible eligibility code indicates ESP1 or ESP2.
 Set rule_result="warn" when eligibility level is missing/ambiguous and admin should verify the eligibility record.
 Set rule_result="fail" for ESP3.
@@ -1447,27 +1463,27 @@ Ventilation located fields:
 
 Ventilation GenAI/manual-review rulecheck tasks:
 
-rule 1 [rule_key: vent_associated_upgrade_present, rule_name: "Associated Upgrade Present", source_requirement_id: ESP-2026-VENT-001]
+rule 1 [rule_key: vent_associated_upgrade_present]
 Check whether invoice text connects ventilation work to an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade.
 Set rule_result="warn" if this likely requires application/DB context and the invoice does not clearly show standalone ventilation.
 
-rule 2 [rule_key: vent_system_type_present, rule_name: "System Type Present", source_requirement_id: ESP-2026-VENT-002/003]
+rule 2 [rule_key: vent_system_type_present]
 Check whether the invoice identifies the ventilation system as HRV/ERV or bathroom fan system.
 
-rule 3 [rule_key: vent_product_or_capacity_evidence_present, rule_name: "Product or Capacity Evidence Present", source_requirement_id: ESP-2026-VENT-002/003]
+rule 3 [rule_key: vent_product_or_capacity_evidence_present]
 For HRV/ERV, look for ENERGY STAR/NRCan/product-list evidence.
 For bathroom fans, look for ENERGY STAR, 85 cfm or 40 L/s, static pressure, continuous duty motor, backdraft damper, and ducting evidence.
 Set rule_result="fail" when subtype or product/capacity evidence is missing.
 Use rule_result="warn" instead of "fail" when the invoice clearly identifies an eligible ventilation subtype but product/capacity details may be in supporting documents.
 
-rule 4 [rule_key: vent_standalone_flag, rule_name: "Standalone Flag", source_requirement_id: ESP-2026-VENT-001]
+rule 4 [rule_key: vent_standalone_flag]
 Flag whether the invoice appears to claim ventilation on its own without another eligible upgrade.
 Set rule_result="fail" only if clearly standalone.
 
-rule 5 [rule_key: vent_description_sufficient_for_review, rule_name: "Description Sufficient For Review", source_requirement_id: ESP-2026-VENT-004/005]
+rule 5 [rule_key: vent_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of ventilation scope, equipment, contractor, rebate line, and amount.
 
-rule 6 [rule_key: vent_rebate_math_within_cap, rule_name: "Rebate Math Within Cap", source_requirement_id: ESP-2026-VENT-005]
+rule 6 [rule_key: vent_rebate_math_within_cap]
 Check whether the claimed rebate for this ventilation upgrade appears to stay within the visible ventilation cost and the program maximum for the participant's eligibility level.
 Use the visible vent_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Use these maximum rebate amounts: ESP1 up to 95% of eligible upgrade costs, capped at $1,600 per home; ESP2 up to 60% of eligible upgrade costs, capped at $1,600 per home.
@@ -1476,11 +1492,11 @@ Set rule_result="warn" when the eligibility code, rebate amount, or visible vent
 Set rule_result="fail" when the rebate clearly exceeds the visible ventilation cost or applicable cap.
 In calculation, show the eligibility code, visible ventilation cost, claimed rebate, and cap comparison.
 
-rule 7 [rule_key: vent_not_generic_ductwork_only, rule_name: "not Generic Ductwork Only", source_requirement_id: ESP-2026-VENT-002/003]
+rule 7 [rule_key: vent_not_generic_ductwork_only]
 Check whether the invoice clearly identifies an eligible HRV/ERV or bathroom fan system rather than only generic ductwork, airflow balancing, or HVAC ventilation language.
 Set rule_result="fail" if eligible ventilation equipment is not clearly visible.
 
-rule 8 [rule_key: vent_income_level_allows_rebate, rule_name: "Income Level Allows Rebate", source_requirement_id: ESP-2026-VENT-005]
+rule 8 [rule_key: vent_income_level_allows_rebate]
 Check whether visible eligibility code indicates ESP1 or ESP2.
 Set rule_result="warn" when eligibility level is missing/ambiguous and admin should verify the eligibility record.
 Set rule_result="fail" for ESP3.

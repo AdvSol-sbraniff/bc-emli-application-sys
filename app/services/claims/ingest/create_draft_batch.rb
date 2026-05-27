@@ -35,9 +35,7 @@ module Claims
 
       def call
         raise "Missing contractor_id" if contractor_id.empty?
-        if files.empty?
-          raise "No files received. Expected multipart field pdfs[] (or pdfs)."
-        end
+        raise "No files received. Expected multipart field pdfs[] (or pdfs)." if files.empty?
 
         ruleset_id =
           validationgenai_ruleset_id.presence || resolve_default_ruleset_id!
@@ -57,12 +55,40 @@ module Claims
             updated_at: Time.current
           )
 
+        shell_invoice =
+          ::Claims::Invoice.create!(
+            session_id: session_id,
+            contractor_id: contractor_id,
+            submitter_id: nil,
+            status: "upload_in_progress",
+            status_updated_at: Time.current,
+            submitted_at: nil,
+            created_at: Time.current,
+            updated_at: Time.current
+          )
+
         results =
           files.each_with_index.map do |file, index|
-            process_file(file, index, session_id, ingest_run, ruleset_id)
+            process_file(
+              file,
+              index,
+              session_id,
+              ingest_run,
+              ruleset_id,
+              shell_invoice.id
+            )
           end
 
-        ::Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run.id)
+        shell_invoice.update!(
+          status: "ocr_in_progress",
+          status_updated_at: Time.current,
+          updated_at: Time.current
+        )
+
+        ::Claims::Ingest::AdvanceBundleRun.call(
+          ingest_run_id: ingest_run.id,
+          validationgenai_ruleset_id: ruleset_id
+        )
         ingest_run.reload
         mark_orphaned_ingest_failures!(ingest_run: ingest_run, results: results)
         ingest_run.reload
@@ -71,6 +97,7 @@ module Claims
           ok: true,
           ingest_run_id: ingest_run.id,
           session_id: session_id,
+          invoice_id: shell_invoice.id,
           created_session: true,
           status: ingest_run.status,
           total_files: ingest_run.total_files,
@@ -87,89 +114,70 @@ module Claims
                   :validationgenai_ruleset_id,
                   :log_prefix
 
-      def process_file(file, index, session_id, ingest_run, ruleset_id)
+      def process_file(
+        file,
+        index,
+        session_id,
+        ingest_run,
+        ruleset_id,
+        shell_invoice_id
+      )
         name = file_safe_call(file, :original_filename) || "unknown.pdf"
         content_type = file_safe_call(file, :content_type) || "application/pdf"
         size = file_safe_call(file, :size)
-        invoice = nil
-        invoice_version = nil
+        ingest_document = nil
 
         begin
-          ActiveRecord::Base.transaction do
-            invoice =
-              ::Claims::Invoice.create!(
-                session_id: session_id,
-                contractor_id: contractor_id,
-                submitter_id: nil,
-                status: "upload_in_progress",
-                status_updated_at: Time.current,
-                submitted_at: nil,
-                created_at: Time.current,
-                updated_at: Time.current
-              )
-
-            invoice_version =
-              ::Claims::InvoiceVersion.create!(
-                invoice_id: invoice.id,
-                invoice_versionno: 1,
-                storage_provider: "azure_blob",
-                storage_key:
-                  "PENDING/session=#{session_id}/invoice=#{invoice.id}/v=1/#{SecureRandom.uuid}.pdf",
-                original_filename: name,
-                content_type: content_type,
-                byte_size: size,
-                created_at: Time.current,
-                updated_at: Time.current
-              )
-          end
+          ingest_document =
+            ::Claims::IngestDocument.create!(
+              ingest_run_id: ingest_run.id,
+              session_id: session_id,
+              contractor_id: contractor_id,
+              resolved_invoice_id: shell_invoice_id,
+              storage_provider: "azure_blob",
+              storage_key:
+                "PENDING/session=#{session_id}/ingest_document=#{SecureRandom.uuid}/#{SecureRandom.uuid}.pdf",
+              original_filename: name,
+              content_type: content_type,
+              byte_size: size,
+              classification_status: "pending",
+              classification_confidence: 0,
+              document_kind_confidence: 0,
+              created_at: Time.current,
+              updated_at: Time.current
+            )
 
           node_resp =
             ingest_node_upload_pdf!(
               session_id: session_id,
-              invoice_version_id: invoice_version.id,
+              ingest_document_id: ingest_document.id,
               file: file
             )
 
           final_storage_key = node_resp.fetch("storage_key").to_s.strip
-          if final_storage_key.empty?
-            raise "Node upload returned no storage_key"
-          end
+          raise "Node upload returned no storage_key" if final_storage_key.empty?
 
-          ActiveRecord::Base.transaction do
-            invoice.lock!
-            invoice_version.lock!
+          ingest_document.update!(
+            storage_key: final_storage_key,
+            byte_size: node_resp.key?("byte_size") ? node_resp["byte_size"] : ingest_document.byte_size,
+            sha256: node_resp["sha256"],
+            updated_at: Time.current
+          )
 
-            iv_update = {
-              storage_key: final_storage_key,
-              updated_at: Time.current
-            }
-            iv_update[:byte_size] = node_resp["byte_size"] if node_resp.key?(
-              "byte_size"
-            )
-            iv_update[:sha256] = node_resp["sha256"] if node_resp.key?("sha256")
-
-            invoice_version.update_columns(iv_update)
-            invoice.update_columns(
-              status: "ocr_queued",
-              status_updated_at: Time.current,
-              updated_at: Time.current
-            )
-
-            ::Claims::IngestStepRun.create!(
-              ingest_run_id: ingest_run.id,
-              session_id: session_id,
-              invoice_version_id: invoice_version.id,
-              step_type: "ocr",
-              status: "queued",
-              error_text: nil,
-              created_at: Time.current,
-              updated_at: Time.current
-            )
-          end
+          ::Claims::IngestStepRun.create!(
+            ingest_run_id: ingest_run.id,
+            session_id: session_id,
+            ingest_document_id: ingest_document.id,
+            step_type: "ocr_read",
+            status: "queued",
+            error_text: nil,
+            created_at: Time.current,
+            updated_at: Time.current
+          )
 
           jid =
-            ::Claims::RunOcrJob.perform_async(
-              invoice_version.id,
+            ::Claims::RunIngestReadOcrJob.perform_async(
+              ingest_document.id,
               ingest_run.id,
               ruleset_id
             )
@@ -181,18 +189,15 @@ module Claims
             byte_size: size,
             status: "queued_ocr",
             job_id: jid,
-            invoice_id: invoice.id,
-            invoice_version_id: invoice_version.id,
-            invoice_versionno: invoice_version.invoice_versionno
+            ingest_document_id: ingest_document.id
           }
         rescue => e
           Rails.logger.error(
             "[claims][ingest][#{log_prefix}] file failed index=#{index + 1} filename=#{name.inspect} " \
-              "invoice_id=#{invoice&.id} invoice_version_id=#{invoice_version&.id}: #{e.class}: #{e.message}"
+              "ingest_document_id=#{ingest_document&.id}: #{e.class}: #{e.message}"
           )
 
-          mark_failed_invoice(invoice)
-          create_failed_step(ingest_run, session_id, invoice_version, e)
+          create_failed_step(ingest_run, session_id, ingest_document, e)
 
           {
             index: index + 1,
@@ -201,36 +206,19 @@ module Claims
             byte_size: size,
             status: "failed",
             error: e.message,
-            invoice_id: invoice&.id,
-            invoice_version_id: invoice_version&.id
+            ingest_document_id: ingest_document&.id
           }
         end
       end
 
-      def mark_failed_invoice(invoice)
-        return unless invoice
-
-        failed_status =
-          (
-            if invoice.status.to_s.start_with?("upload_")
-              "upload_failed"
-            else
-              "ocr_failed"
-            end
-          )
-        invoice.update!(status: failed_status, status_updated_at: Time.current)
-      rescue StandardError
-        nil
-      end
-
-      def create_failed_step(ingest_run, session_id, invoice_version, error)
-        return unless invoice_version&.id
+      def create_failed_step(ingest_run, session_id, ingest_document, error)
+        return unless ingest_document&.id
 
         ::Claims::IngestStepRun.create!(
           ingest_run_id: ingest_run.id,
           session_id: session_id,
-          invoice_version_id: invoice_version.id,
-          step_type: "ocr",
+          ingest_document_id: ingest_document.id,
+          step_type: "ocr_read",
           status: "failed",
           error_text: "ocr_enqueue_or_upload_failed: #{error.message}",
           created_at: Time.current,
@@ -258,9 +246,7 @@ module Claims
             )
             .first
 
-        if row.nil?
-          raise "No default/common validationgenai_ruleset found for full GenAI run."
-        end
+        raise "No default/common validationgenai_ruleset found for full GenAI run." if row.nil?
 
         row.id
       end
@@ -273,7 +259,7 @@ module Claims
         nil
       end
 
-      def ingest_node_upload_pdf!(session_id:, invoice_version_id:, file:)
+      def ingest_node_upload_pdf!(session_id:, ingest_document_id:, file:)
         base = ENV["INV_NODE_BASE_URL"].to_s.strip
         raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
 
@@ -288,7 +274,7 @@ module Claims
         req.set_form(
           [
             ["sessionId", session_id.to_s],
-            ["invoiceVersionId", invoice_version_id.to_s],
+            ["invoiceVersionId", ingest_document_id.to_s],
             ["file", io, { filename: filename, content_type: content_type }]
           ],
           "multipart/form-data"
@@ -303,9 +289,7 @@ module Claims
           ) { |http| http.request(req) }
 
         body = res.body.to_s
-        unless res.is_a?(Net::HTTPSuccess)
-          raise "Node upload failed HTTP=#{res.code} body=#{body}"
-        end
+        raise "Node upload failed HTTP=#{res.code} body=#{body}" unless res.is_a?(Net::HTTPSuccess)
 
         JSON.parse(body)
       ensure
@@ -316,7 +300,7 @@ module Claims
         orphaned_failures =
           results.count do |result|
             result[:status] == "failed" &&
-              result[:invoice_version_id].to_s.strip.empty?
+              result[:ingest_document_id].to_s.strip.empty?
           end
 
         return if orphaned_failures.zero?
@@ -326,7 +310,7 @@ module Claims
           results
             .select do |result|
               result[:status] == "failed" &&
-                result[:invoice_version_id].to_s.strip.empty?
+                result[:ingest_document_id].to_s.strip.empty?
             end
             .map do |result|
               {

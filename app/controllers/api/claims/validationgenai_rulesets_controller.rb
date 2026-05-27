@@ -55,7 +55,7 @@ module Api
       end
 
       # PATCH /api/claims/admin/validationgenai_rulesets/:id
-      # Body: { ruleset_shortname, invoice_upgrade_type_id, user_record1 }
+      # Body: { ruleset_shortname, user_record1 }
       def update
         ruleset = ::Claims::ValidationgenaiRuleset.find(params[:id])
 
@@ -73,7 +73,7 @@ module Api
       # POST /api/claims/admin/validationgenai_rulesets
       # Body: { ruleset_shortname, invoice_upgrade_type_id, user_record1 }
       def create
-        ruleset = ::Claims::ValidationgenaiRuleset.new(update_params)
+        ruleset = ::Claims::ValidationgenaiRuleset.new(create_params)
         ruleset.save!
 
         render json: serialize_ruleset(ruleset_scope.find(ruleset.id)),
@@ -91,8 +91,25 @@ module Api
         page = clamp_int(params[:page], 1, 1, 10_000)
         q = params[:q].to_s.strip
         sort = params[:sort].to_s.strip.presence || "created_at:desc"
+        invoice_upgrade_type_id =
+          params[:invoice_upgrade_type_id].to_s.strip.presence
+        current_only =
+          ActiveModel::Type::Boolean.new.cast(
+            params.fetch(:current_only, true)
+          )
 
         scope = ruleset_scope
+
+        if invoice_upgrade_type_id.present?
+          scope =
+            scope.where(
+              "claims.validationgenai_rulesets.invoice_upgrade_type_id = ?",
+              invoice_upgrade_type_id
+            )
+        end
+
+        current_ids = current_ruleset_ids
+        scope = scope.where(id: current_ids) if current_only
 
         if q.present?
           like = "%#{sanitize_sql_like(q)}%"
@@ -111,14 +128,19 @@ module Api
         rulesets = scope.offset((page - 1) * per).limit(per)
 
         render json: {
-                 rows: rulesets.map { |r| serialize_ruleset(r) },
+                 rows:
+                   rulesets.map do |r|
+                     serialize_ruleset(r, current_ids: current_ids)
+                   end,
                  meta: {
                    total: total,
                    page: page,
                    per: per,
                    sort: sort,
                    filters: {
-                     q: q.presence
+                     q: q.presence,
+                     invoice_upgrade_type_id: invoice_upgrade_type_id,
+                     current_only: current_only
                    }
                  }
                }
@@ -172,6 +194,19 @@ module Api
           "claims.invoice_upgrade_types.upgrade_type_key AS upgrade_type_key",
           "claims.invoice_upgrade_types.description AS upgrade_type_description"
         )
+      end
+
+      def current_ruleset_ids
+        ::Claims::ValidationgenaiRuleset
+          .select(
+            "DISTINCT ON (invoice_upgrade_type_id) claims.validationgenai_rulesets.id"
+          )
+          .order(
+            Arel.sql(
+              "invoice_upgrade_type_id, updated_at DESC, created_at DESC, id DESC"
+            )
+          )
+          .map(&:id)
       end
 
       def current_config
@@ -228,6 +263,13 @@ module Api
       def update_params
         params.permit(
           :ruleset_shortname,
+          :user_record1
+        )
+      end
+
+      def create_params
+        params.permit(
+          :ruleset_shortname,
           :invoice_upgrade_type_id,
           :user_record1
         )
@@ -245,7 +287,9 @@ module Api
         attrs
       end
 
-      def serialize_ruleset(r)
+      def serialize_ruleset(r, current_ids: nil)
+        current_ids ||= current_ruleset_ids
+
         {
           id: r.id,
           invoice_upgrade_type_id: r.invoice_upgrade_type_id,
@@ -261,6 +305,7 @@ module Api
             ),
           ruleset_shortname: r.ruleset_shortname,
           user_record1: r.user_record1,
+          is_current: current_ids.map(&:to_s).include?(r.id.to_s),
           created_at: r.created_at,
           updated_at: r.updated_at
         }
