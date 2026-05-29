@@ -164,6 +164,10 @@ module Api
           classification_status: row.classification_status,
           classification_confidence: row.classification_confidence,
           classification_reason: row.classification_reason,
+          supplement_routing_quality: row.supplement_routing_quality,
+          supplement_routing_quality_reason:
+            row.supplement_routing_quality_reason,
+          located_fields: serialize_located_fields(row),
           classified_at: row.classified_at,
           storage_provider: row.storage_provider,
           storage_key: row.storage_key,
@@ -175,6 +179,37 @@ module Api
           created_at: row.created_at,
           updated_at: row.updated_at
         }
+      end
+
+      def serialize_located_fields(row)
+        row
+          .supporting_document_located_fields
+          .includes(:supporting_document_type_located_field)
+          .order(:field_key, :created_at)
+          .map do |field|
+            definition = field.supporting_document_type_located_field
+            field.as_json(
+              only: %i[
+                id
+                supporting_document_id
+                supporting_document_type_located_field_id
+                source_engine
+                field_key
+                value_type
+                value_text
+                value_json
+                confidence
+                page
+                polygon
+                evidence_text
+                created_at
+                updated_at
+              ]
+            ).merge(
+              "field_number" => definition&.field_number,
+              "prompt_text" => definition&.prompt_text
+            )
+          end
       end
 
       def node_mint_sas!(storage_key:, container: nil)

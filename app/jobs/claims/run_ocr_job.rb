@@ -235,6 +235,24 @@ module Claims
           .first
 
       payload = step&.genai_results_json
+      return payload if payload.is_a?(Hash)
+
+      document =
+        Claims::IngestDocument.find_by(
+          resolved_invoice_version_id: invoice_version_id,
+          document_kind: "invoice"
+        )
+      payload = document&.classifier_raw_json
+      return payload if payload.is_a?(Hash)
+
+      invoice_id =
+        Claims::InvoiceVersion.where(id: invoice_version_id).pick(:invoice_id)
+      document =
+        Claims::IngestDocument
+          .where(resolved_invoice_id: invoice_id, document_kind: "invoice")
+          .order(created_at: :asc)
+          .first
+      payload = document&.classifier_raw_json
       payload.is_a?(Hash) ? payload : nil
     end
   end

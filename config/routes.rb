@@ -180,20 +180,17 @@ Rails.application.routes.draw do
       # SECTION 60 — RULESET EDITOR (admin)
       # ============================================================
 
-      get "admin/ahri_products",
-          to: "ahri_products_admin#index"
+      get "admin/ahri_products", to: "ahri_products_admin#index"
       get "admin/ahri_products/import_status",
           to: "ahri_products_admin#import_status"
       post "admin/ahri_products/import_downloaded_pdf",
            to: "ahri_products_admin#import_downloaded_pdf"
-      get "admin/neea_products",
-          to: "neea_products_admin#index"
+      get "admin/neea_products", to: "neea_products_admin#index"
       get "admin/neea_products/import_status",
           to: "neea_products_admin#import_status"
       post "admin/neea_products/import_downloaded_pdf",
            to: "neea_products_admin#import_downloaded_pdf"
-      get "admin/validation_rules",
-          to: "validation_rules_admin#index"
+      get "admin/validation_rules", to: "validation_rules_admin#index"
       get "admin/validation_rules/upgrade_types",
           to: "validation_rules_admin#upgrade_types"
       get "admin/validationgenai_config",
@@ -208,6 +205,14 @@ Rails.application.routes.draw do
            to: "supporting_document_types_admin#create"
       patch "admin/supporting_document_types/:id",
             to: "supporting_document_types_admin#update"
+      get "admin/supporting_document_types/:supporting_document_type_id/located_fields",
+          to: "supporting_document_type_located_fields_admin#index"
+      post "admin/supporting_document_types/:supporting_document_type_id/located_fields",
+           to: "supporting_document_type_located_fields_admin#create"
+      get "admin/supporting_document_type_located_fields/:id",
+          to: "supporting_document_type_located_fields_admin#show"
+      patch "admin/supporting_document_type_located_fields/:id",
+            to: "supporting_document_type_located_fields_admin#update"
       get "admin/validation_rules/:record_type/:id/history",
           to: "validation_rules_admin#history"
       post "admin/validation_rules/:record_type",

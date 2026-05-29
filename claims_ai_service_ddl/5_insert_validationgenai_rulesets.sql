@@ -4,7 +4,10 @@ BEGIN;
 WITH config_row (
   id,
   system_record,
-  classifier_system_record,
+  classifier_combined_with_extraction_system_record,
+  classifier_without_extraction_system_record,
+  supporting_document_extraction_system_record,
+  supporting_document_extraction_mode,
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
@@ -90,7 +93,7 @@ Rule result examples:
 - FAIL: The invoice clearly shows standalone/ineligible scope for a rule that requires association with another upgrade.
 - FAIL: The invoice clearly shows warranty-paid/credited/no-charge costs being claimed.
 $system$,
-    $classifier_system$
+    $classifier_combined_with_extraction$
 purpose-statement:
 You classify whether the supplied Document Intelligence JSON appears to be an invoice, a supporting document, or unknown. If it is an invoice, also classify which Better Homes BC Energy Savings Program rebate upgrade claims appear to be made and locate the customer eligibility code if visible. If it is a supporting document, classify the supporting document type.
 
@@ -151,6 +154,18 @@ Output-json-schema:
   "supplement_type_key": null,
   "supplement_type_confidence": 0,
   "supplement_type_reason": null,
+  "supplement_routing_quality": null,
+  "supplement_routing_quality_reason": null,
+  "supporting_document_located_fields": [
+    {
+      "field_key": "string",
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    }
+  ],
   "eligibility_code": null,
   "detected_upgrade_types": [
     {
@@ -187,6 +202,17 @@ Rules:
 - Set supplement_type_key only when document_kind="supplement". Otherwise return null.
 - Set supplement_type_confidence only when document_kind="supplement". Otherwise return 0.
 - Set supplement_type_reason only when document_kind="supplement". Otherwise return null.
+- Set supplement_routing_quality only when document_kind="supplement". Otherwise return null.
+- Allowed supplement_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
+- Use supplement_routing_quality="usable" when the document appears to be the selected supplement type and the text/DI evidence is readable enough for downstream validation.
+- Use supplement_routing_quality="needs_review" when it is probably the selected supplement type but has legibility, completeness, mismatch, redaction, or ambiguity concerns.
+- Use supplement_routing_quality="requires_visual_review" when text/DI is not enough because the evidence depends on image content, such as photos, labels, or visual before/after proof.
+- Use supplement_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
+- supplement_routing_quality_reason is mandatory when supplement_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
+- Set supporting_document_located_fields only when document_kind="supplement". Otherwise return [].
+- For supplement documents, use the supporting-document located-field task registry supplied in the user records. First classify the supplement_type_key, then return one supporting_document_located_fields[] row for each configured field task listed under that exact supplement_type_key.
+- Copy each configured field_key exactly. If a configured field value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
+- Do not return supporting_document_located_fields rows for supplement types other than the selected supplement_type_key.
 - If document_kind is supplement or unknown, return eligibility_code=null, detected_upgrade_types=[], lineitem_mappings=[], and not_detected_upgrade_types=[].
 - Return only allowed upgrade_type_key values.
 - Return only allowed supplement_type_key values.
@@ -212,7 +238,172 @@ Rules:
 - Prefer exact invoice phrases in evidence_text.
 - Prefer under-classification over over-classification. If the invoice clearly has two upgrade domains, return two, not every related program possibility.
 - If no upgrade type is visible, return an empty detected_upgrade_types array.
-$classifier_system$,
+$classifier_combined_with_extraction$,
+    $classifier_without_extraction$
+purpose-statement:
+You classify whether the supplied Document Intelligence JSON appears to be an invoice, a supporting document, or unknown. If it is an invoice, also classify which Better Homes BC Energy Savings Program rebate upgrade claims appear to be made and locate the customer eligibility code if visible. If it is a supporting document, classify the supporting document type and routing quality only.
+
+You are not making a final eligibility decision. You are triaging the document so the application can decide whether to treat it as the main invoice or as a supporting document and which downstream checks to run next. In this mode, supporting-document field extraction happens in a separate call after routing.
+
+Allowed document_kind values:
+- invoice
+- supplement
+- unknown
+
+Allowed upgrade_type_key values:
+- windows_doors
+- air_source_heat_pump_electric
+- air_source_heat_pump_wood
+- air_source_heat_pump_gas_propane
+- air_source_heat_pump_oil
+- dual_fuel_ducted_heat_pump
+- air_to_water_heat_pump
+- combined_space_water_heat_pump
+- electrical_service_upgrade
+- health_and_safety_remediation
+- heat_pump_water_heater
+- insulation
+- ventilation
+
+Allowed supplement_type_key values:
+- approved_heat_load_calculation
+- before_after_photo_set
+- certification_sheet
+- commissioning_or_control_document
+- energy_performance_label
+- energy_star_label
+- f280_heat_load_calculation
+- floor_plan_document
+- fossil_fuel_removal_proof
+- fossil_modification_or_removal_proof
+- fossil_removal_proof
+- income_verification_document
+- landlord_consent_form
+- manufacturer_label_photo
+- non_integrated_area_preapproval_notice
+- oil_removal_proof
+- permit_document
+- preapproval_notice
+- preapproval_quote
+- product_spec_sheet
+- utility_bill_or_account_document
+- utility_bill_or_invoice
+- utility_invoice
+- utility_upgrade_document
+- wett_report
+
+Output-json-schema:
+{
+  "document_kind": "invoice|supplement|unknown",
+  "document_kind_confidence": 0,
+  "document_kind_reason": "2-4 sentences explaining why the document is an invoice, a supporting document, or unknown.",
+  "supplement_type_key": null,
+  "supplement_type_confidence": 0,
+  "supplement_type_reason": null,
+  "supplement_routing_quality": null,
+  "supplement_routing_quality_reason": null,
+  "eligibility_code": null,
+  "detected_upgrade_types": [
+    {
+      "upgrade_type_key": "windows_doors",
+      "confidence": 0,
+      "evidence_text": "exact short invoice evidence",
+      "classification_explanation": "2-4 sentences explaining why this appears to be a rebate-claimed upgrade type, including the exact rebate or claim evidence when available."
+    }
+  ],
+  "lineitem_mappings": [
+    {
+      "lineitem_seqno": 0,
+      "upgrade_type_key": "windows_doors",
+      "confidence": 0,
+      "evidence_text": "exact short invoice evidence"
+    }
+  ],
+  "not_detected_upgrade_types": [
+    {
+      "upgrade_type_key": "air_source_heat_pump_oil",
+      "reason": "not enough direct invoice evidence"
+    }
+  ]
+}
+
+Rules:
+- Return strict JSON only.
+- Do not include markdown outside JSON.
+- Classify document_kind first.
+- Use document_kind="invoice" only when the document appears to be the primary contractor invoice, estimate, sales invoice, or invoice-like claim document containing billed work, pricing, totals, or rebate-claimed work scope.
+- Use document_kind="supplement" for supporting documents such as utility bills, landlord consent, product labels, spec sheets, permits, preapproval notices, WETT reports, photos, and other non-invoice attachments.
+- Use document_kind="unknown" when the OCR does not provide enough evidence to decide between invoice and supplement.
+- document_kind_reason is mandatory.
+- Set supplement_type_key only when document_kind="supplement". Otherwise return null.
+- Set supplement_type_confidence only when document_kind="supplement". Otherwise return 0.
+- Set supplement_type_reason only when document_kind="supplement". Otherwise return null.
+- Set supplement_routing_quality only when document_kind="supplement". Otherwise return null.
+- Allowed supplement_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
+- Use supplement_routing_quality="usable" when the document appears to be the selected supplement type and the text/DI evidence is readable enough for downstream validation.
+- Use supplement_routing_quality="needs_review" when it is probably the selected supplement type but has legibility, completeness, mismatch, redaction, or ambiguity concerns.
+- Use supplement_routing_quality="requires_visual_review" when text/DI is not enough because the evidence depends on image content, such as photos, labels, or visual before/after proof.
+- Use supplement_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
+- supplement_routing_quality_reason is mandatory when supplement_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
+- Do not return supporting_document_located_fields in this mode. Supporting-document extraction is handled by a separate extraction call.
+- If document_kind is supplement or unknown, return eligibility_code=null, detected_upgrade_types=[], lineitem_mappings=[], and not_detected_upgrade_types=[].
+- Return only allowed upgrade_type_key values.
+- Return only allowed supplement_type_key values.
+- Set eligibility_code to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
+- Include an upgrade type only when direct invoice evidence supports that a Better Homes BC / CleanBC / ESP rebate claim is being made for that exact upgrade type.
+- Do not include every work component on the invoice. Classify rebate-claimed upgrade domains, not incidental construction scope, supporting materials, or labour categories.
+- Strong classification evidence includes an explicit upgrade-specific rebate line, an explicit CleanBC/Better Homes/ESP amount tied to that upgrade, or invoice wording that clearly presents the item as a claimed program upgrade.
+- Work-scope evidence without rebate/claim evidence may support lineitem_mappings, but it should not create a detected_upgrade_types row unless the work is itself clearly a rebate-claimed upgrade.
+- For each detected_upgrade_types[] row, classification_explanation must be a few concise sentences. Explain why the upgrade is classified, quote the key invoice evidence, and say whether the evidence is a direct rebate line or a direct work-scope claim.
+- Put the single best exact invoice phrase in evidence_text. Do not repeat the same phrase in extra evidence fields.
+- Do not classify from generic program boilerplate, rebate table summaries, sample-invoice instructions, supporting-document checklists, or text that merely lists possible Better Homes BC upgrades.
+- Do not classify broad "heat pump" when a more exact heat-pump key is required. Choose the exact key only when the invoice shows both heat-pump work and enough context for the source fuel/system path or equipment class.
+- For air-source heat pump conversion keys, require evidence of the new air-source heat pump plus evidence or strong invoice context for the prior source fuel: electric, wood/solid fuel, natural gas/propane, or oil.
+- For dual_fuel_ducted_heat_pump, require dual-fuel/fossil-backup/ducted heat-pump evidence. Do not use this key for a normal full fuel-switch heat pump.
+- For air_to_water_heat_pump and combined_space_water_heat_pump, require explicit air-to-water or combined space/water heat-pump evidence. Do not infer these from water-heater or generic heat-pump wording.
+- For electrical_service_upgrade, require utility/service-upgrade evidence such as 100/200/400 amp service, service mast, meter base, utility connection, BC Hydro/FortisBC service upgrade, or similar.
+- For heat_pump_water_heater, require water-heater evidence. Do not infer it from space-heating heat pump wording.
+- For insulation, windows_doors, and health_and_safety_remediation, require direct invoice evidence that this work is being claimed as an ESP/CleanBC/Better Homes rebate upgrade.
+- For ventilation, require an explicit ventilation rebate claim or direct evidence of an eligible ventilation measure such as HRV, ERV, heat recovery ventilator, energy recovery ventilator, or eligible bathroom fan system. Generic ductwork, airflow, circulation, attic duct insulation, "Duct Work & Ventilation", or ventilation wording bundled inside a heat-pump/HVAC install is not enough by itself.
+- If the invoice shows exact rebate descriptions like "$10,500 for HVAC system" and "$1,500 for Service Upgrade", classify those rebate-claimed upgrade domains and do not infer unrelated upgrade claims from other scope text.
+- Use lineitem_mappings to map visible invoice line items to an allowed upgrade_type_key when the line item evidence is clear. Use an empty array if line-item mapping is unclear.
+- Use confidence from 0 to 100.
+- Prefer exact invoice phrases in evidence_text.
+- Prefer under-classification over over-classification. If the invoice clearly has two upgrade domains, return two, not every related program possibility.
+- If no upgrade type is visible, return an empty detected_upgrade_types array.
+$classifier_without_extraction$,
+    $supporting_document_extraction$
+purpose-statement:
+You extract configured located fields from one supporting document for the Better Homes BC Energy Savings Program. The application has already classified the document type. You are not deciding final eligibility.
+
+Output-json-schema:
+{
+  "supporting_document_type_key": "utility_bill_or_account_document",
+  "supporting_document_located_fields": [
+    {
+      "field_key": "string",
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    }
+  ]
+}
+
+Rules:
+- Return strict JSON only.
+- Do not include markdown outside JSON.
+- Use only the selected supporting_document_type_key and the field tasks supplied in the user records.
+- Return one supporting_document_located_fields[] row for each configured field task.
+- Copy each configured field_key exactly.
+- If a configured field value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
+- Use confidence from 0 to 100.
+- Prefer exact short evidence text copied from the OCR/DI content.
+- Do not make final eligibility decisions. Extract document evidence only.
+- If the DI text is too poor to locate a field, return null for that field rather than guessing.
+$supporting_document_extraction$,
+    'combined_with_classifier',
     $user0$
 User record 0 (Document Intelligence / OCR context):
 The user message includes Azure Document Intelligence raw JSON from the invoice OCR result.
@@ -370,7 +561,10 @@ seeded_config AS (
 INSERT INTO claims.validationgenai_config (
   id,
   system_record,
-  classifier_system_record,
+  classifier_combined_with_extraction_system_record,
+  classifier_without_extraction_system_record,
+  supporting_document_extraction_system_record,
+  supporting_document_extraction_mode,
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
@@ -380,7 +574,10 @@ INSERT INTO claims.validationgenai_config (
   SELECT
     id,
     system_record,
-    classifier_system_record,
+    classifier_combined_with_extraction_system_record,
+    classifier_without_extraction_system_record,
+    supporting_document_extraction_system_record,
+    supporting_document_extraction_mode,
     user_record0,
     admin_advice_intro,
     admin_advice_closing,
@@ -389,7 +586,10 @@ INSERT INTO claims.validationgenai_config (
   FROM config_row
   ON CONFLICT (id) DO UPDATE SET
     system_record = EXCLUDED.system_record,
-    classifier_system_record = EXCLUDED.classifier_system_record,
+    classifier_combined_with_extraction_system_record = EXCLUDED.classifier_combined_with_extraction_system_record,
+    classifier_without_extraction_system_record = EXCLUDED.classifier_without_extraction_system_record,
+    supporting_document_extraction_system_record = EXCLUDED.supporting_document_extraction_system_record,
+    supporting_document_extraction_mode = EXCLUDED.supporting_document_extraction_mode,
     user_record0 = EXCLUDED.user_record0,
     admin_advice_intro = EXCLUDED.admin_advice_intro,
     admin_advice_closing = EXCLUDED.admin_advice_closing,

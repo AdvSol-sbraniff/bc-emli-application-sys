@@ -17,6 +17,11 @@ SECTION A - DB CONNECTIONS (LOCAL LAPTOP)
 Known environment quirk
 - Running docker compose from a WSL cwd in this shell may fail.
 - Reliable method: run from Windows cwd and pass explicit compose file path.
+- Important WSL quirk on this machine:
+  - do **not** assume bare `wsl` lands in the repo distro
+  - this machine can default to `docker-desktop`, which will make commands appear broken (`git not found`, wrong filesystem, missing repo files)
+  - when repo or SSH work matters, prefer explicit distro targeting:
+    - `wsl.exe -d Ubuntu -e sh -lc '<command>'`
 
 Known-good command wrapper
 1) Set-Location C:\
@@ -58,6 +63,10 @@ Known-good local validation commands
 - Better frontend lint check for this machine:
   - direct container invocation avoids the UNC + shell quoting confusion that previously produced a false `npx missing` conclusion
   - `docker exec bc-emli-application-sys-app-1 npx eslint app/frontend/components/domains/submission-simulator-admin/index.tsx`
+- Important local runtime note after editing Sidekiq job/service code:
+  - local app and worker containers can keep stale Ruby classes loaded
+  - before trusting a retest of ingest / OCR / GenAI pipeline changes, restart at least:
+    - `docker restart bc-emli-application-sys-sidekiq-claims-1 bc-emli-application-sys-app-1`
 - Toolchain sanity check inside app container:
   - `docker exec bc-emli-application-sys-app-1 npm -v`
   - `docker exec bc-emli-application-sys-app-1 npx -v`
@@ -169,17 +178,49 @@ SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
      - `origin` = `git@github.com:AdvSol-sbraniff/bc-emli-application-sys.git`
      - `upstream` = `git@github.com:bcgov/bc-emli-application-sys.git`
      - `upstream` push remains `DISABLED`
-   - After reboot, SSH pushes will fail until the key is unlocked in WSL:
-     1) `eval "$(ssh-agent -s)"`
-     2) `ssh-add ~/.ssh/id_advsol_sbraniff`
-     3) Enter passphrase when prompted
-     4) `ssh -T git@github.com`
+   - Critical Git/SSH rule:
+     - do all GitHub SSH troubleshooting in `Ubuntu`, not in the Windows shell and not in `docker-desktop`
+     - preferred command shape:
+       - `wsl.exe -d Ubuntu -e bash -lc '<command>'`
+   - After reboot, SSH pushes will fail until the key is unlocked in the **same WSL session** that will use git:
+     1) `wsl.exe -d Ubuntu`
+     2) `cd /home/sbraniff/bc-emli-application-sys`
+     3) `eval "$(ssh-agent -s)"`
+     4) `ssh-add ~/.ssh/id_advsol_sbraniff`
+     5) Enter passphrase when prompted
+     6) `ssh -T git@github.com`
+   - Important SSH agent clarification:
+     - the private key file existing on disk is **not** enough
+     - a successful push requires a live `ssh-agent` in that session plus the key loaded into it
+     - one terminal proving auth does **not** mean a different shell or tool session inherits that auth
+   - Known failure pattern that caused confusion on 2026-05-27:
+     - Codex initially ran `wsl` without `-d Ubuntu`
+     - this landed in `docker-desktop`
+     - symptoms included:
+       - repo path translation failures
+       - `/home/sbraniff/.ssh/...` appearing missing
+       - `git` appearing missing
+       - `ssh -T git@github.com` failing with `Permission denied (publickey)`
+     - fix was:
+       1) explicitly use `wsl.exe -d Ubuntu`
+       2) start `ssh-agent`
+       3) load `~/.ssh/id_advsol_sbraniff`
+       4) verify with `ssh -T git@github.com`
    - Known-good SSH key identity:
      - file: `~/.ssh/id_advsol_sbraniff`
      - fingerprint: `SHA256:GXLPDu/nI/0qi4VvSMTBeaqffPAL4lsHQTkUpJJJWjo`
+   - Known-good GitHub visibility checks from Ubuntu:
+     - `ssh -T git@github.com`
+     - `git -C /home/sbraniff/bc-emli-application-sys remote -v`
+     - `git -C /home/sbraniff/bc-emli-application-sys ls-remote --heads origin test-update-mainline-2026-04-22`
    - Sanity check branch state:
      - `git status -sb`
      - `git branch -vv`
+   - Confirmed good state on 2026-05-27:
+     - `ssh -T git@github.com` returned:
+       - `Hi AdvSol-sbraniff! You've successfully authenticated, but GitHub does not provide shell access.`
+     - both local and remote branch heads matched:
+       - `e8d2aa9cf93566760e9d38e9cc512d1da87d4929`
 3) Confirm local DB command path works with compose -f UNC pattern.
 4) Confirm oc access with explicit shim path and namespace selection.
 5) Confirm app route responds (curl -I app URL).
@@ -225,6 +266,10 @@ Simulator / tracker read-side expectation
   - staged-file steps from `claims.ingest_step_runs.ingest_document_id`
   - later invoice steps from `claims.ingest_step_runs.invoice_version_id`
 - If the first visible step is `classifier` and the overall invoice row is blank for ~30 seconds, the read side is wrong-shaped again.
+- The correct early staging experience is:
+  - invoice row exists immediately
+  - invoice status is non-blank immediately
+  - earliest visible step should usually be `ocr_read`, not `classifier`
 
 Known-good local behavior verified on 2026-05-27
 - Success bundle:

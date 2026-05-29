@@ -48,6 +48,10 @@ module Claims
           ).call
         end
 
+        def self.implemented_rule_keys
+          RULES.values.map { |rule| rule.fetch(:key) }
+        end
+
         def initialize(invoice_version_id:, invoice_upgrade_type_id:)
           @invoice_version_id = invoice_version_id
           @invoice_upgrade_type_id = invoice_upgrade_type_id
@@ -71,9 +75,7 @@ module Claims
             )
 
           ::Claims::InvoiceVersion.transaction do
-            @invoice_version.update!(
-              ahri_product_id: product&.id
-            )
+            @invoice_version.update!(ahri_product_id: product&.id)
 
             replace_rulechecks!(rule_rows)
           end
@@ -156,16 +158,28 @@ module Claims
         def rulecheck_rows(located_field:, product:, enabled_rules:)
           [
             (
-              product_list_match_row(located_field: located_field, product: product) if
-                enabled_rules.key?(:product_list_match)
+              if enabled_rules.key?(:product_list_match)
+                product_list_match_row(
+                  located_field: located_field,
+                  product: product
+                )
+              end
             ),
             (
-              minimum_capacity_row(located_field: located_field, product: product) if
-                enabled_rules.key?(:minimum_capacity)
+              if enabled_rules.key?(:minimum_capacity)
+                minimum_capacity_row(
+                  located_field: located_field,
+                  product: product
+                )
+              end
             ),
             (
-              efficiency_threshold_row(located_field: located_field, product: product) if
-                enabled_rules.key?(:efficiency_threshold)
+              if enabled_rules.key?(:efficiency_threshold)
+                efficiency_threshold_row(
+                  located_field: located_field,
+                  product: product
+                )
+              end
             )
           ].compact
         end
@@ -180,7 +194,11 @@ module Claims
             confidence: matched ? 100 : 0,
             expected_text:
               "The AHRI reference found on the invoice should match a row in the imported BC Hydro heat-pump product list.",
-            calculation: product_list_calculation_text(ahri_text: ahri_text, product: product),
+            calculation:
+              product_list_calculation_text(
+                ahri_text: ahri_text,
+                product: product
+              ),
             evidence_text:
               located_field&.evidence_text.presence ||
                 located_field&.value_text.presence,
@@ -193,33 +211,37 @@ module Claims
           ahri_text = normalized_ahri(located_field&.value_text)
 
           if product.nil?
-            return dependent_info_row(
-              rule: RULES.fetch(:minimum_capacity),
-              ahri_text: ahri_text,
-              expected_text:
-                "The matched heat-pump product-list row should show rated capacity at -5C of at least 12,000 BTU.",
-              metric_name: "rated capacity at -5C"
+            return(
+              dependent_info_row(
+                rule: RULES.fetch(:minimum_capacity),
+                ahri_text: ahri_text,
+                expected_text:
+                  "The matched heat-pump product-list row should show rated capacity at -5C of at least 12,000 BTU.",
+                metric_name: "rated capacity at -5C"
+              )
             )
           end
 
           capacity = product.rated_capacity_btu_at_minus_5c
 
           if capacity.nil?
-            return base_rulecheck_row(
-              rule: RULES.fetch(:minimum_capacity),
-              rule_result: "warn",
-              confidence: 0,
-              expected_text:
-                "The matched heat-pump product-list row should show rated capacity at -5C of at least 12,000 BTU.",
-              calculation:
-                "AHRI #{ahri_text} matched a product-list row, but rated capacity at -5C was blank in the imported data.",
-              evidence_text: product_evidence(product),
-              reason_and_likely_causes:
-                "The AHRI product-list match succeeded, but the imported row did not provide a rated capacity at -5C value. " \
-                  "The Energy Savings Program air-source heat-pump requirements include a minimum capacity requirement of 12,000 BTU. " \
-                  "Because the value is missing, code cannot prove whether this product row meets that requirement. " \
-                  "Admin should inspect the source product-list PDF or supporting product documents for the missing capacity value. " \
-                  "If the source list has been parsed incorrectly, refresh or repair the heat-pump product-list import before relying on this code rule."
+            return(
+              base_rulecheck_row(
+                rule: RULES.fetch(:minimum_capacity),
+                rule_result: "warn",
+                confidence: 0,
+                expected_text:
+                  "The matched heat-pump product-list row should show rated capacity at -5C of at least 12,000 BTU.",
+                calculation:
+                  "AHRI #{ahri_text} matched a product-list row, but rated capacity at -5C was blank in the imported data.",
+                evidence_text: product_evidence(product),
+                reason_and_likely_causes:
+                  "The AHRI product-list match succeeded, but the imported row did not provide a rated capacity at -5C value. " \
+                    "The Energy Savings Program air-source heat-pump requirements include a minimum capacity requirement of 12,000 BTU. " \
+                    "Because the value is missing, code cannot prove whether this product row meets that requirement. " \
+                    "Admin should inspect the source product-list PDF or supporting product documents for the missing capacity value. " \
+                    "If the source list has been parsed incorrectly, refresh or repair the heat-pump product-list import before relying on this code rule."
+              )
             )
           end
 
@@ -234,7 +256,11 @@ module Claims
               "Rated capacity at -5C = #{format_decimal(capacity)} BTU; required minimum = 12,000 BTU.",
             evidence_text: product_evidence(product),
             reason_and_likely_causes:
-              minimum_capacity_reason_text(product: product, capacity: capacity, passed: passed)
+              minimum_capacity_reason_text(
+                product: product,
+                capacity: capacity,
+                passed: passed
+              )
           )
         end
 
@@ -242,37 +268,47 @@ module Claims
           ahri_text = normalized_ahri(located_field&.value_text)
 
           if product.nil?
-            return dependent_info_row(
-              rule: RULES.fetch(:efficiency_threshold),
-              ahri_text: ahri_text,
-              expected_text:
-                "The matched heat-pump product-list row should meet either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5.",
-              metric_name: "SEER/HSPF or SEER2/HSPF2"
+            return(
+              dependent_info_row(
+                rule: RULES.fetch(:efficiency_threshold),
+                ahri_text: ahri_text,
+                expected_text:
+                  "The matched heat-pump product-list row should meet either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5.",
+                metric_name: "SEER/HSPF or SEER2/HSPF2"
+              )
             )
           end
 
-          legacy_complete = metric_present?(product.seer) && metric_present?(product.hspf)
-          current_complete = metric_present?(product.seer2) && metric_present?(product.hspf2)
-          legacy_pass = legacy_complete && product.seer >= MIN_SEER && product.hspf >= MIN_HSPF
-          current_pass = current_complete && product.seer2 >= MIN_SEER2 && product.hspf2 >= MIN_HSPF2
+          legacy_complete =
+            metric_present?(product.seer) && metric_present?(product.hspf)
+          current_complete =
+            metric_present?(product.seer2) && metric_present?(product.hspf2)
+          legacy_pass =
+            legacy_complete && product.seer >= MIN_SEER &&
+              product.hspf >= MIN_HSPF
+          current_pass =
+            current_complete && product.seer2 >= MIN_SEER2 &&
+              product.hspf2 >= MIN_HSPF2
           passed = legacy_pass || current_pass
 
           if !legacy_complete && !current_complete
-            return base_rulecheck_row(
-              rule: RULES.fetch(:efficiency_threshold),
-              rule_result: "warn",
-              confidence: 0,
-              expected_text:
-                "The matched heat-pump product-list row should meet either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5.",
-              calculation:
-                "AHRI #{ahri_text} matched a product-list row, but neither a complete SEER/HSPF pair nor a complete SEER2/HSPF2 pair was available.",
-              evidence_text: product_evidence(product),
-              reason_and_likely_causes:
-                "The AHRI product-list match succeeded, but the imported row did not include enough efficiency metrics for a deterministic threshold check. " \
-                  "The Energy Savings Program allows the product to qualify using either the legacy SEER/HSPF pair or the newer SEER2/HSPF2 pair. " \
-                  "Code needs one complete pair to evaluate the threshold safely. " \
-                  "Admin should inspect the source product-list PDF or product documentation for the missing efficiency values. " \
-                  "If the source values are visible but missing here, refresh or repair the heat-pump product-list import."
+            return(
+              base_rulecheck_row(
+                rule: RULES.fetch(:efficiency_threshold),
+                rule_result: "warn",
+                confidence: 0,
+                expected_text:
+                  "The matched heat-pump product-list row should meet either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5.",
+                calculation:
+                  "AHRI #{ahri_text} matched a product-list row, but neither a complete SEER/HSPF pair nor a complete SEER2/HSPF2 pair was available.",
+                evidence_text: product_evidence(product),
+                reason_and_likely_causes:
+                  "The AHRI product-list match succeeded, but the imported row did not include enough efficiency metrics for a deterministic threshold check. " \
+                    "The Energy Savings Program allows the product to qualify using either the legacy SEER/HSPF pair or the newer SEER2/HSPF2 pair. " \
+                    "Code needs one complete pair to evaluate the threshold safely. " \
+                    "Admin should inspect the source product-list PDF or product documentation for the missing efficiency values. " \
+                    "If the source values are visible but missing here, refresh or repair the heat-pump product-list import."
+              )
             )
           end
 
@@ -285,11 +321,24 @@ module Claims
             calculation: efficiency_calculation_text(product: product),
             evidence_text: product_evidence(product),
             reason_and_likely_causes:
-              efficiency_reason_text(product: product, legacy_pass: legacy_pass, current_pass: current_pass, passed: passed)
+              efficiency_reason_text(
+                product: product,
+                legacy_pass: legacy_pass,
+                current_pass: current_pass,
+                passed: passed
+              )
           )
         end
 
-        def base_rulecheck_row(rule:, rule_result:, confidence:, expected_text:, calculation:, evidence_text:, reason_and_likely_causes:)
+        def base_rulecheck_row(
+          rule:,
+          rule_result:,
+          confidence:,
+          expected_text:,
+          calculation:,
+          evidence_text:,
+          reason_and_likely_causes:
+        )
           now = Time.current
 
           {
@@ -324,7 +373,7 @@ module Claims
             confidence: 0,
             expected_text: expected_text,
             calculation:
-              "The #{metric_name} check was not run because no matching heat-pump product-list row was available for AHRI #{ahri_text.presence || '(missing)'}.",
+              "The #{metric_name} check was not run because no matching heat-pump product-list row was available for AHRI #{ahri_text.presence || "(missing)"}.",
             evidence_text: ahri_text.presence,
             reason_and_likely_causes:
               "This code rule depends on a successful AHRI product-list match before it can inspect product-list metrics. " \
@@ -347,9 +396,17 @@ module Claims
         end
 
         def product_list_calculation_text(ahri_text:, product:)
-          return "No #{AHRI_FIELD_KEY} located field was stored for this heat-pump upgrade call." if ahri_text.blank?
+          if ahri_text.blank?
+            return(
+              "No #{AHRI_FIELD_KEY} located field was stored for this heat-pump upgrade call."
+            )
+          end
 
-          return "No current imported BC Hydro heat-pump product-list rows were available to search." unless current_heat_pump_products_available?
+          unless current_heat_pump_products_available?
+            return(
+              "No current imported BC Hydro heat-pump product-list rows were available to search."
+            )
+          end
 
           if product
             "AHRI #{ahri_text} matched ahri_products.id=#{product.id} from source=#{product.import_run&.ahri_source&.description}."
@@ -432,7 +489,12 @@ module Claims
           "#{legacy_text}; #{current_text}."
         end
 
-        def efficiency_reason_text(product:, legacy_pass:, current_pass:, passed:)
+        def efficiency_reason_text(
+          product:,
+          legacy_pass:,
+          current_pass:,
+          passed:
+        )
           if passed
             passing_path =
               if current_pass
@@ -471,10 +533,26 @@ module Claims
 
         def efficiency_metric_summary(product)
           [
-            ("SEER #{format_decimal(product.seer)}" if metric_present?(product.seer)),
-            ("HSPF #{format_decimal(product.hspf)}" if metric_present?(product.hspf)),
-            ("SEER2 #{format_decimal(product.seer2)}" if metric_present?(product.seer2)),
-            ("HSPF2 #{format_decimal(product.hspf2)}" if metric_present?(product.hspf2))
+            (
+              if metric_present?(product.seer)
+                "SEER #{format_decimal(product.seer)}"
+              end
+            ),
+            (
+              if metric_present?(product.hspf)
+                "HSPF #{format_decimal(product.hspf)}"
+              end
+            ),
+            (
+              if metric_present?(product.seer2)
+                "SEER2 #{format_decimal(product.seer2)}"
+              end
+            ),
+            (
+              if metric_present?(product.hspf2)
+                "HSPF2 #{format_decimal(product.hspf2)}"
+              end
+            )
           ].compact.join(", ")
         end
 

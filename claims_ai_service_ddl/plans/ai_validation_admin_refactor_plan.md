@@ -1,6 +1,6 @@
 # AI Validation Admin Refactor Plan
 
-Date: 2026-05-25
+Date: 2026-05-27
 
 Status: partially implemented at the admin/config layer. Use this as the broader strategy document, not the exact current UI contract.
 
@@ -16,6 +16,7 @@ Use this document for:
 - broad architecture
 - sequencing across admin, history, and runtime concerns
 - explaining why the refactor exists
+- understanding how the validation-admin portal now relates to adjacent support-doc registries
 
 For the current chunk-1 implementation slice, use:
 
@@ -39,7 +40,7 @@ That tracker is now a required working artifact for this refactor because it rec
 
 - source quote and PDF page
 - evidence sources required
-- intended check style: `genai` | `code` | `hybrid` | `not a claims rule`
+- intended check style: `genai` | `code` | `manual_review` | `not a claims rule`
 - likely located fields required
 - current traceability keys
 - missing coverage and priority
@@ -59,6 +60,11 @@ Plan the refactor of the validation-admin area so that:
 - invoice and supplement evidence can both participate in one coherent rule-review surface
 - executed runs still retain one bundled snapshot artifact for audit/repro
 - document intake can evolve toward a single mixed upload experience while keeping invoice and supplement classification responsibilities cleanly separated
+
+Current local admin note:
+
+- the portal now also includes adjacent entry points for `Validation Prompt Config` and `Supporting Document Types`
+- `Supporting Document Types` is intentionally a separate registry screen, not a tab inside the taxonomy editor
 
 ## Core Decisions
 
@@ -156,6 +162,11 @@ Preferred intake/classification model:
 - after that gate passes, run one follow-up Azure Document Intelligence `prebuilt-invoice` pass for the resolved invoice only
 
 This keeps the intake path simple and lets the current invoice validation path stay intact once the invoice file is identified.
+
+Current local state:
+
+- this early-branching intake path is now implemented with shell-invoice staging and per-file `ingest_documents`
+- the validation-admin screens are no longer blocked on that intake design
 
 ## Current Problems
 

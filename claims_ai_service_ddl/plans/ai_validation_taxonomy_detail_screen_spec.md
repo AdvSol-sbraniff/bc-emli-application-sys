@@ -1,6 +1,6 @@
 # AI Validation Taxonomy Detail Screen Spec
 
-Date: 2026-05-25
+Date: 2026-05-27
 
 Status: partially implemented UX contract. This doc should match the current portal -> editor -> typed-edit flow used in the codebase.
 
@@ -19,7 +19,7 @@ That tracker is the working audit source for deciding:
 
 - which record families must exist
 - which evidence-source patterns the UI must eventually explain
-- which rules are `code`, `genai`, `hybrid`, or `not a claims rule`
+- which rules are `code`, `genai`, `manual_review`, or `not a claims rule`
 - which located fields are likely required
 
 This screen spec should therefore be read together with the tracker and not in isolation.
@@ -85,7 +85,13 @@ Portal header content:
 
 - `Validation Rules Portal`
 - upgrade-type entry tiles
+- `Validation Prompt Config` button
+- `Supporting Document Types` button
 - optional publish/rebuild controls later
+
+Important:
+
+- `Supporting Document Types` is an adjacent registry screen, not a tab inside the taxonomy editor
 
 ## 2. Current taxonomy editor header
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Badge,
   Box,
@@ -8,10 +8,18 @@ import {
   Flex,
   FormControl,
   FormLabel,
+  Grid,
+  GridItem,
   HStack,
+  IconButton,
   Input,
   Spinner,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
   Table,
+  Tabs,
   Tbody,
   Td,
   Text,
@@ -21,7 +29,7 @@ import {
   Tr,
   VStack,
 } from '@chakra-ui/react';
-import { PencilSimple, Plus } from '@phosphor-icons/react';
+import { ListChecks, PencilSimple, Plus } from '@phosphor-icons/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
@@ -32,7 +40,14 @@ type SupportingDocumentTypeRow = {
   enabled: boolean;
   created_at?: string | null;
   updated_at?: string | null;
-  supporting_documents_count?: number;
+  invoice_upgrade_type_ids?: string[];
+  upgrade_types?: UpgradeTypeRow[];
+};
+
+type UpgradeTypeRow = {
+  id: string;
+  upgrade_type_key: string;
+  description?: string | null;
 };
 
 type EditorState = {
@@ -40,6 +55,13 @@ type EditorState = {
   typeKey: string;
   description: string;
   enabled: boolean;
+  mappings: MappingEditorRow[];
+};
+
+type MappingEditorRow = {
+  invoice_upgrade_type_id: string;
+  label: string;
+  checked: boolean;
 };
 
 const fmtDate = (value?: string | null) => {
@@ -67,14 +89,40 @@ export default function SupportingDocumentTypesAdminScreen() {
 
   const [rows, setRows] = useState<SupportingDocumentTypeRow[]>([]);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [upgradeTypes, setUpgradeTypes] = useState<UpgradeTypeRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const selectedRow = useMemo(
-    () => rows.find((row) => row.id === editorId) || null,
-    [editorId, rows]
+  const buildMappings = useCallback(
+    (selectedIds: string[] = []) =>
+      upgradeTypes.map((row) => ({
+        invoice_upgrade_type_id: row.id,
+        label: row.description || row.upgrade_type_key,
+        checked: selectedIds.includes(row.id),
+      })),
+    [upgradeTypes],
   );
+
+  const loadUpgradeTypes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/claims/admin/validation_rules/upgrade_types', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+
+      const data = await res.json().catch(() => ({ rows: [] }));
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      }
+
+      setUpgradeTypes(Array.isArray(data?.rows) ? data.rows : []);
+    } catch (e: any) {
+      setUpgradeTypes([]);
+      setError((current) => current || e?.message || 'Failed to load upgrade types.');
+    }
+  }, []);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -107,11 +155,16 @@ export default function SupportingDocumentTypesAdminScreen() {
       return;
     }
 
+    if (upgradeTypes.length === 0) {
+      return;
+    }
+
     if (editorMode === 'create') {
       setEditor({
         typeKey: '',
         description: '',
         enabled: true,
+        mappings: buildMappings(),
       });
       return;
     }
@@ -136,17 +189,22 @@ export default function SupportingDocumentTypesAdminScreen() {
         typeKey: data.type_key || '',
         description: data.description || '',
         enabled: !!data.enabled,
+        mappings: buildMappings(Array.isArray(data?.invoice_upgrade_type_ids) ? data.invoice_upgrade_type_ids : []),
       });
     } catch (e: any) {
       setError(e?.message || 'Failed to load supporting document type.');
     } finally {
       setLoading(false);
     }
-  }, [editorId, editorMode, isEditorScreen]);
+  }, [buildMappings, editorId, editorMode, isEditorScreen, upgradeTypes.length]);
 
   useEffect(() => {
     loadRows();
   }, [loadRows]);
+
+  useEffect(() => {
+    loadUpgradeTypes();
+  }, [loadUpgradeTypes]);
 
   useEffect(() => {
     loadEditor();
@@ -166,6 +224,13 @@ export default function SupportingDocumentTypesAdminScreen() {
     });
   };
 
+  const openFields = (row: SupportingDocumentTypeRow) => {
+    navigate({
+      pathname: '/supporting-document-type-fields-admin',
+      search: `?${buildSearchParams({ type_id: row.id }).toString()}`,
+    });
+  };
+
   const closeEditor = () => {
     navigate('/supporting-document-types-admin');
     setError('');
@@ -182,6 +247,9 @@ export default function SupportingDocumentTypesAdminScreen() {
         type_key: editor.typeKey,
         description: editor.description,
         enabled: editor.enabled,
+        invoice_upgrade_type_ids: editor.mappings
+          .filter((row) => row.checked)
+          .map((row) => row.invoice_upgrade_type_id),
       };
 
       const res = await fetch(
@@ -196,7 +264,7 @@ export default function SupportingDocumentTypesAdminScreen() {
           },
           credentials: 'include',
           body: JSON.stringify(body),
-        }
+        },
       );
 
       const data = await res.json().catch(() => ({}));
@@ -213,6 +281,19 @@ export default function SupportingDocumentTypesAdminScreen() {
     }
   };
 
+  const onMappingCheckedChange = (invoiceUpgradeTypeId: string, checked: boolean) => {
+    setEditor((current) =>
+      current
+        ? {
+            ...current,
+            mappings: current.mappings.map((row) =>
+              row.invoice_upgrade_type_id === invoiceUpgradeTypeId ? { ...row, checked } : row,
+            ),
+          }
+        : current,
+    );
+  };
+
   if (isEditorScreen) {
     return (
       <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
@@ -222,15 +303,7 @@ export default function SupportingDocumentTypesAdminScreen() {
         <Container maxW="container.md" pb={4} flex="1" pt={6}>
           <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
             {error ? (
-              <Box
-                mb={4}
-                borderWidth="1px"
-                borderColor="red.200"
-                bg="red.50"
-                color="red.700"
-                borderRadius="md"
-                p={3}
-              >
+              <Box mb={4} borderWidth="1px" borderColor="red.200" bg="red.50" color="red.700" borderRadius="md" p={3}>
                 {error}
               </Box>
             ) : null}
@@ -241,51 +314,76 @@ export default function SupportingDocumentTypesAdminScreen() {
               </Flex>
             ) : (
               <VStack align="stretch" spacing={5}>
-                <FormControl>
-                  <FormLabel>Type key</FormLabel>
-                  <Input
-                    value={editor.typeKey}
-                    onChange={(event) =>
-                      setEditor((current) =>
-                        current ? { ...current, typeKey: event.target.value } : current
-                      )
-                    }
-                  />
-                </FormControl>
+                <Tabs variant="enclosed" isLazy>
+                  <TabList>
+                    <Tab>Details</Tab>
+                    <Tab>Upgrade Type Mappings</Tab>
+                  </TabList>
 
-                <FormControl>
-                  <FormLabel>Description</FormLabel>
-                  <Input
-                    value={editor.description}
-                    onChange={(event) =>
-                      setEditor((current) =>
-                        current ? { ...current, description: event.target.value } : current
-                      )
-                    }
-                  />
-                </FormControl>
+                  <TabPanels>
+                    <TabPanel px={0} pt={5}>
+                      <VStack align="stretch" spacing={5}>
+                        <Checkbox
+                          isChecked={editor.enabled}
+                          onChange={(event) =>
+                            setEditor((current) => (current ? { ...current, enabled: event.target.checked } : current))
+                          }
+                        >
+                          Enabled
+                        </Checkbox>
 
-                <Checkbox
-                  isChecked={editor.enabled}
-                  onChange={(event) =>
-                    setEditor((current) =>
-                      current ? { ...current, enabled: event.target.checked } : current
-                    )
-                  }
-                >
-                  Enabled
-                </Checkbox>
+                        <FormControl>
+                          <FormLabel>Type key</FormLabel>
+                          <Input
+                            value={editor.typeKey}
+                            onChange={(event) =>
+                              setEditor((current) => (current ? { ...current, typeKey: event.target.value } : current))
+                            }
+                          />
+                        </FormControl>
 
-                {selectedRow ? (
-                  <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4} bg="gray.50">
-                    <Text fontSize="sm">
-                      <Text as="span" fontWeight="semibold">
-                        Linked supporting documents:
-                      </Text>{' '}
-                      {selectedRow.supporting_documents_count || 0}
-                    </Text>
-                  </Box>
-                ) : null}
+                        <FormControl>
+                          <FormLabel>Description</FormLabel>
+                          <Input
+                            value={editor.description}
+                            onChange={(event) =>
+                              setEditor((current) =>
+                                current ? { ...current, description: event.target.value } : current,
+                              )
+                            }
+                          />
+                        </FormControl>
+                      </VStack>
+                    </TabPanel>
+
+                    <TabPanel px={0} pt={5}>
+                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={4}>
+                        <Text fontWeight="bold" mb={1}>
+                          Upgrade type mappings
+                        </Text>
+                        <Text fontSize="sm" opacity={0.75} mb={4}>
+                          Check the upgrade types that should treat this supporting document type as relevant.
+                        </Text>
+                        <Grid templateColumns="repeat(2, minmax(0, 1fr))" gap={3}>
+                          {editor.mappings.map((mapping) => (
+                            <GridItem key={mapping.invoice_upgrade_type_id}>
+                              <Box borderWidth="1px" borderRadius="md" p={3} h="100%" bg="white">
+                                <Checkbox
+                                  isChecked={mapping.checked}
+                                  onChange={(event) =>
+                                    onMappingCheckedChange(mapping.invoice_upgrade_type_id, event.target.checked)
+                                  }
+                                >
+                                  {mapping.label}
+                                </Checkbox>
+                              </Box>
+                            </GridItem>
+                          ))}
+                        </Grid>
+                      </Box>
+                    </TabPanel>
+                  </TabPanels>
+                </Tabs>
 
                 <HStack justify="end">
                   <Button variant="outline" onClick={closeEditor}>
@@ -323,15 +421,7 @@ export default function SupportingDocumentTypesAdminScreen() {
           </Flex>
 
           {error ? (
-            <Box
-              mb={4}
-              borderWidth="1px"
-              borderColor="red.200"
-              bg="red.50"
-              color="red.700"
-              borderRadius="md"
-              p={3}
-            >
+            <Box mb={4} borderWidth="1px" borderColor="red.200" bg="red.50" color="red.700" borderRadius="md" p={3}>
               {error}
             </Box>
           ) : null}
@@ -347,7 +437,6 @@ export default function SupportingDocumentTypesAdminScreen() {
                   <Tr>
                     <Th>Key</Th>
                     <Th>Description</Th>
-                    <Th>Used By</Th>
                     <Th>Enabled</Th>
                     <Th>Updated</Th>
                     <Th textAlign="right">Actions</Th>
@@ -360,7 +449,6 @@ export default function SupportingDocumentTypesAdminScreen() {
                         <Text fontWeight="semibold">{row.type_key}</Text>
                       </Td>
                       <Td>{row.description || ''}</Td>
-                      <Td>{row.supporting_documents_count || 0}</Td>
                       <Td>
                         <Badge colorScheme={row.enabled ? 'green' : 'red'} variant="subtle">
                           {row.enabled ? 'Enabled' : 'Disabled'}
@@ -368,7 +456,16 @@ export default function SupportingDocumentTypesAdminScreen() {
                       </Td>
                       <Td>{fmtDate(row.updated_at)}</Td>
                       <Td>
-                        <Flex justify="end">
+                        <HStack justify="end" spacing={2}>
+                          <Tooltip label="Manage fields">
+                            <IconButton
+                              aria-label="Manage supporting document fields"
+                              icon={<ListChecks size={18} />}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openFields(row)}
+                            />
+                          </Tooltip>
                           <Tooltip label="Edit type">
                             <Button
                               aria-label="Edit type"
@@ -380,7 +477,7 @@ export default function SupportingDocumentTypesAdminScreen() {
                               Edit
                             </Button>
                           </Tooltip>
-                        </Flex>
+                        </HStack>
                       </Td>
                     </Tr>
                   ))}

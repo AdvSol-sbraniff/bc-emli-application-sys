@@ -33,6 +33,10 @@ module Claims
           ).call
         end
 
+        def self.implemented_rule_keys
+          RULES.values.map { |rule| rule.fetch(:key) }
+        end
+
         def initialize(invoice_version_id:, invoice_upgrade_type_id:)
           @invoice_version_id = invoice_version_id
           @invoice_upgrade_type_id = invoice_upgrade_type_id
@@ -128,30 +132,40 @@ module Claims
         end
 
         def split_field_value(value)
-          value
-            .to_s
-            .split(/\s*(?:\||,|;|\n|\r|&)\s*/)
-            .reject(&:blank?)
+          value.to_s.split(/\s*(?:\||,|;|\n|\r|&)\s*/).reject(&:blank?)
         end
 
         def product_for(field_bundle)
           model_values = field_bundle.fetch(:model_values)
           return nil if model_values.empty?
 
-          manufacturers = field_bundle.fetch(:manufacturer_values).map { |value| normalize_text(value) }.compact
+          manufacturers =
+            field_bundle
+              .fetch(:manufacturer_values)
+              .map { |value| normalize_text(value) }
+              .compact
 
           matches =
-            candidate_products(field_bundle: field_bundle).filter_map do |product|
-              model_score = model_match_score(product: product, model_values: model_values)
+            candidate_products(
+              field_bundle: field_bundle
+            ).filter_map do |product|
+              model_score =
+                model_match_score(product: product, model_values: model_values)
               next if model_score.zero?
 
               manufacturer_score =
-                manufacturer_match_score(product: product, manufacturers: manufacturers)
+                manufacturer_match_score(
+                  product: product,
+                  manufacturers: manufacturers
+                )
 
               [manufacturer_score + model_score, product]
             end
 
-          match = matches.max_by { |score, product| [score, effective_tier(product).to_i, product.id] }
+          match =
+            matches.max_by do |score, product|
+              [score, effective_tier(product).to_i, product.id]
+            end
           ::Claims::NeeaProduct.find_by(id: match.last.id) if match
         end
 
@@ -188,17 +202,35 @@ module Claims
         def model_match_score(product:, model_values:)
           product_model = product.model_number.to_s
           product_loose = loose_model_key(product_model)
-          product_components = Array(product.model_components).map { |component| loose_model_key(component) }.reject(&:blank?)
+          product_components =
+            Array(product.model_components)
+              .map { |component| loose_model_key(component) }
+              .reject(&:blank?)
 
           model_values.each do |value|
             strict_value = strict_model_key(value)
             loose_value = loose_model_key(value)
 
-            return 100 if strict_model_matches_regex?(product.model_number_regex, strict_value)
-            return 95 if product.model_number_normalized.present? && product.model_number_normalized == strict_value
+            if strict_model_matches_regex?(
+                 product.model_number_regex,
+                 strict_value
+               )
+              return 100
+            end
+            if product.model_number_normalized.present? &&
+                 product.model_number_normalized == strict_value
+              return 95
+            end
             return 90 if product_loose.present? && loose_value == product_loose
-            return 80 if product_loose.present? && loose_value.include?(product_loose)
-            return 70 if all_components_match?(product_components: product_components, loose_value: loose_value)
+            if product_loose.present? && loose_value.include?(product_loose)
+              return 80
+            end
+            if all_components_match?(
+                 product_components: product_components,
+                 loose_value: loose_value
+               )
+              return 70
+            end
           end
 
           0
@@ -215,7 +247,9 @@ module Claims
         def all_components_match?(product_components:, loose_value:)
           return false if product_components.empty? || loose_value.blank?
 
-          product_components.all? { |component| loose_value.include?(component) }
+          product_components.all? do |component|
+            loose_value.include?(component)
+          end
         end
 
         def replace_rulechecks!(rows)
@@ -232,12 +266,20 @@ module Claims
         def rulecheck_rows(field_bundle:, product:, enabled_rules:)
           [
             (
-              product_list_match_row(field_bundle: field_bundle, product: product) if
-                enabled_rules.key?(:product_list_match)
+              if enabled_rules.key?(:product_list_match)
+                product_list_match_row(
+                  field_bundle: field_bundle,
+                  product: product
+                )
+              end
             ),
             (
-              tier_two_or_higher_row(field_bundle: field_bundle, product: product) if
-                enabled_rules.key?(:tier_two_or_higher)
+              if enabled_rules.key?(:tier_two_or_higher)
+                tier_two_or_higher_row(
+                  field_bundle: field_bundle,
+                  product: product
+                )
+              end
             )
           ].compact
         end
@@ -252,41 +294,51 @@ module Claims
             expected_text:
               "The heat pump water heater manufacturer/model found on the invoice should match a row in the imported NEEA Residential HPWH Qualified Products List.",
             calculation:
-              product_list_calculation_text(field_bundle: field_bundle, product: product),
+              product_list_calculation_text(
+                field_bundle: field_bundle,
+                product: product
+              ),
             evidence_text: field_evidence(field_bundle),
             reason_and_likely_causes:
-              product_list_reason_text(field_bundle: field_bundle, product: product)
+              product_list_reason_text(
+                field_bundle: field_bundle,
+                product: product
+              )
           )
         end
 
         def tier_two_or_higher_row(field_bundle:, product:)
           if product.nil?
-            return dependent_info_row(
-              field_bundle: field_bundle,
-              rule: RULES.fetch(:tier_two_or_higher),
-              expected_text:
-                "The matched NEEA product-list row should show Tier 2 or higher."
+            return(
+              dependent_info_row(
+                field_bundle: field_bundle,
+                rule: RULES.fetch(:tier_two_or_higher),
+                expected_text:
+                  "The matched NEEA product-list row should show Tier 2 or higher."
+              )
             )
           end
 
           tier = effective_tier(product)
 
           if tier.nil?
-            return base_rulecheck_row(
-              rule: RULES.fetch(:tier_two_or_higher),
-              rule_result: "warn",
-              confidence: 0,
-              expected_text:
-                "The matched NEEA product-list row should show Tier 2 or higher.",
-              calculation:
-                "Matched neea_products.id=#{product.id}, but indoor_tier and outdoor_tier were both blank in the imported NEEA row.",
-              evidence_text: product_evidence(product),
-              reason_and_likely_causes:
-                "The product-list match succeeded, but the imported NEEA row did not provide a usable tier value. " \
-                "The Energy Savings Program requirement is that the heat pump water heater be listed as a qualifying product, and the NEEA list expresses qualification through product-list tier data. " \
-                "Because code cannot see a tier value, it cannot prove the Tier 2 or higher threshold. " \
-                "Admin should inspect the source NEEA PDF row and confirm whether the list import missed the tier. " \
-                "If the source PDF is correct but the imported row is incomplete, refresh or repair the NEEA import before relying on this code rule."
+            return(
+              base_rulecheck_row(
+                rule: RULES.fetch(:tier_two_or_higher),
+                rule_result: "warn",
+                confidence: 0,
+                expected_text:
+                  "The matched NEEA product-list row should show Tier 2 or higher.",
+                calculation:
+                  "Matched neea_products.id=#{product.id}, but indoor_tier and outdoor_tier were both blank in the imported NEEA row.",
+                evidence_text: product_evidence(product),
+                reason_and_likely_causes:
+                  "The product-list match succeeded, but the imported NEEA row did not provide a usable tier value. " \
+                    "The Energy Savings Program requirement is that the heat pump water heater be listed as a qualifying product, and the NEEA list expresses qualification through product-list tier data. " \
+                    "Because code cannot see a tier value, it cannot prove the Tier 2 or higher threshold. " \
+                    "Admin should inspect the source NEEA PDF row and confirm whether the list import missed the tier. " \
+                    "If the source PDF is correct but the imported row is incomplete, refresh or repair the NEEA import before relying on this code rule."
+              )
             )
           end
 
@@ -312,18 +364,26 @@ module Claims
             confidence: 0,
             expected_text: expected_text,
             calculation:
-              "The NEEA tier check was not run because no matching NEEA product-list row was available for #{field_summary(field_bundle).presence || '(missing model evidence)'}.",
+              "The NEEA tier check was not run because no matching NEEA product-list row was available for #{field_summary(field_bundle).presence || "(missing model evidence)"}.",
             evidence_text: field_evidence(field_bundle),
             reason_and_likely_causes:
               "This code rule depends on a successful NEEA product-list match before it can inspect product-list tier values. " \
-              "Code Rule 1 records whether the manufacturer/model evidence was missing, not found, or matched. " \
-              "Until a product row is matched, this dependent tier check cannot make a meaningful pass or fail decision. " \
-              "This is shown as information rather than a second warning so the admin is not asked to resolve the same root issue twice. " \
-              "After the NEEA match is corrected, rerun GenAI/code checks to evaluate the product-list tier."
+                "Code Rule 1 records whether the manufacturer/model evidence was missing, not found, or matched. " \
+                "Until a product row is matched, this dependent tier check cannot make a meaningful pass or fail decision. " \
+                "This is shown as information rather than a second warning so the admin is not asked to resolve the same root issue twice. " \
+                "After the NEEA match is corrected, rerun GenAI/code checks to evaluate the product-list tier."
           )
         end
 
-        def base_rulecheck_row(rule:, rule_result:, confidence:, expected_text:, calculation:, evidence_text:, reason_and_likely_causes:)
+        def base_rulecheck_row(
+          rule:,
+          rule_result:,
+          confidence:,
+          expected_text:,
+          calculation:,
+          evidence_text:,
+          reason_and_likely_causes:
+        )
           now = Time.current
 
           {
@@ -363,9 +423,17 @@ module Claims
         end
 
         def product_list_calculation_text(field_bundle:, product:)
-          return "No HPWH manufacturer/model located fields were stored for this heat pump water heater upgrade call." if field_bundle.fetch(:model_values).empty?
+          if field_bundle.fetch(:model_values).empty?
+            return(
+              "No HPWH manufacturer/model located fields were stored for this heat pump water heater upgrade call."
+            )
+          end
 
-          return "No current imported NEEA Residential HPWH Qualified Products List rows were available to search." unless current_neea_products_available?
+          unless current_neea_products_available?
+            return(
+              "No current imported NEEA Residential HPWH Qualified Products List rows were available to search."
+            )
+          end
 
           if product
             "Invoice model evidence #{field_summary(field_bundle)} matched neea_products.id=#{product.id} from source=#{product.import_run&.neea_source&.description}."
@@ -435,7 +503,9 @@ module Claims
             .fetch(:fields)
             .values
             .flatten
-            .filter_map { |field| field.evidence_text.presence || field.value_text.presence }
+            .filter_map do |field|
+              field.evidence_text.presence || field.value_text.presence
+            end
             .uniq
             .join("; ")
             .presence
@@ -443,8 +513,16 @@ module Claims
 
         def field_summary(field_bundle)
           [
-            ("manufacturer=#{field_bundle.fetch(:manufacturer_values).join(' / ')}" if field_bundle.fetch(:manufacturer_values).any?),
-            ("model=#{field_bundle.fetch(:model_values).join(' / ')}" if field_bundle.fetch(:model_values).any?)
+            (
+              if field_bundle.fetch(:manufacturer_values).any?
+                "manufacturer=#{field_bundle.fetch(:manufacturer_values).join(" / ")}"
+              end
+            ),
+            (
+              if field_bundle.fetch(:model_values).any?
+                "model=#{field_bundle.fetch(:model_values).join(" / ")}"
+              end
+            )
           ].compact.join("; ")
         end
 
@@ -452,12 +530,36 @@ module Claims
           [
             product.brand,
             product.model_number,
-            ("#{format_decimal(product.storage_volume_gallons)} gallons" if product.storage_volume_gallons.present?),
-            ("configuration #{product.configuration}" if product.configuration.present?),
-            ("indoor tier #{product.indoor_tier}" if product.indoor_tier.present?),
-            ("outdoor tier #{product.outdoor_tier}" if product.outdoor_tier.present?),
-            ("qualified #{product.qualified_date}" if product.qualified_date.present?),
-            ("source #{product.import_run&.neea_source&.description}" if product.import_run&.neea_source&.description.present?)
+            (
+              if product.storage_volume_gallons.present?
+                "#{format_decimal(product.storage_volume_gallons)} gallons"
+              end
+            ),
+            (
+              if product.configuration.present?
+                "configuration #{product.configuration}"
+              end
+            ),
+            (
+              if product.indoor_tier.present?
+                "indoor tier #{product.indoor_tier}"
+              end
+            ),
+            (
+              if product.outdoor_tier.present?
+                "outdoor tier #{product.outdoor_tier}"
+              end
+            ),
+            (
+              if product.qualified_date.present?
+                "qualified #{product.qualified_date}"
+              end
+            ),
+            (
+              if product.import_run&.neea_source&.description.present?
+                "source #{product.import_run&.neea_source&.description}"
+              end
+            )
           ].compact_blank.join("; ")
         end
 

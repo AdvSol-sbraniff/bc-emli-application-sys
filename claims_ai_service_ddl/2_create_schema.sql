@@ -987,6 +987,42 @@ CREATE INDEX IF NOT EXISTS idx_supporting_document_types_enabled
   ON claims.supporting_document_types (enabled);
 
 
+--
+-- supporting_document_type_upgrade_types
+-- PURPOSE: Declares which invoice upgrade types each supporting
+-- document type applies to. This keeps supplement-type applicability
+-- normalized the same way code/genai rules are mapped to upgrade types.
+--
+CREATE TABLE IF NOT EXISTS claims.supporting_document_type_upgrade_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  supporting_document_type_id uuid NOT NULL,
+  invoice_upgrade_type_id uuid NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_type_upgrade_types_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_supporting_document_type_upgrade_types_type
+    FOREIGN KEY (supporting_document_type_id)
+    REFERENCES claims.supporting_document_types(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_supporting_document_type_upgrade_types_upgrade_type
+    FOREIGN KEY (invoice_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
+  CONSTRAINT supporting_document_type_upgrade_types_uniq
+    UNIQUE (supporting_document_type_id, invoice_upgrade_type_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supporting_document_type_upgrade_types_type
+  ON claims.supporting_document_type_upgrade_types (supporting_document_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_supporting_document_type_upgrade_types_upgrade_type
+  ON claims.supporting_document_type_upgrade_types (invoice_upgrade_type_id);
+
+
 -- 
 -- supporting documents
 --
@@ -1012,6 +1048,8 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
+  supplement_routing_quality text NULL,
+  supplement_routing_quality_reason text NULL,
   classified_at timestamp(6) without time zone NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
@@ -1027,7 +1065,13 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
     REFERENCES claims.supporting_document_types(id),
 
   CONSTRAINT supporting_documents_classification_status_chk
-    CHECK (classification_status IN ('pending','classified','needs_review','failed'))
+    CHECK (classification_status IN ('pending','classified','needs_review','failed')),
+
+  CONSTRAINT supporting_documents_routing_quality_chk
+    CHECK (
+      supplement_routing_quality IS NULL OR
+      supplement_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
+    )
 );
 
 CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_invoice_id
@@ -1039,6 +1083,121 @@ CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_type_id
 -- Optional: prevent duplicate uploads of same blob/key under the same invoice
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_supporting_documents_invoice_storage_key
   ON claims.supporting_documents (invoice_id, storage_key);
+
+
+-- ============================================================
+-- supporting_document_type_located_fields
+-- PURPOSE: Defines the fields GenAI/vision should locate for each
+-- supporting document type, and the order used in prompts/admin UI.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.supporting_document_type_located_fields (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  supporting_document_type_id uuid NOT NULL,
+
+  field_key text NOT NULL,
+  prompt_text text NOT NULL,
+  field_number integer NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_type_located_fields_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_supporting_document_type_located_fields_type
+    FOREIGN KEY (supporting_document_type_id)
+    REFERENCES claims.supporting_document_types(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT supporting_document_type_located_fields_field_number_chk
+    CHECK (field_number >= 1),
+
+  CONSTRAINT supporting_document_type_located_fields_key_uniq
+    UNIQUE (supporting_document_type_id, field_key),
+
+  CONSTRAINT supporting_document_type_located_fields_order_uniq
+    UNIQUE (supporting_document_type_id, field_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sdtlf_type
+  ON claims.supporting_document_type_located_fields (supporting_document_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdtlf_enabled
+  ON claims.supporting_document_type_located_fields (enabled);
+
+
+-- ============================================================
+-- supporting_document_located_fields
+-- PURPOSE: Runtime values located inside one uploaded supporting
+-- document, separate from the field definitions above.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.supporting_document_located_fields (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  supporting_document_id uuid NOT NULL,
+  supporting_document_type_located_field_id uuid NULL,
+
+  source_engine text NOT NULL DEFAULT 'genai',
+  field_key text NOT NULL,
+
+  value_type text NOT NULL,
+  value_text text NULL,
+  value_json jsonb NULL,
+
+  confidence smallint NOT NULL DEFAULT 0,
+
+  page integer NULL,
+  polygon jsonb NULL,
+  evidence_text text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_located_fields_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_supporting_document_located_fields_document
+    FOREIGN KEY (supporting_document_id)
+    REFERENCES claims.supporting_documents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_supporting_document_located_fields_definition
+    FOREIGN KEY (supporting_document_type_located_field_id)
+    REFERENCES claims.supporting_document_type_located_fields(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT supporting_document_located_fields_source_engine_chk
+    CHECK (source_engine IN ('genai','vision','code','manual')),
+
+  CONSTRAINT supporting_document_located_fields_confidence_chk
+    CHECK (confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT supporting_document_located_fields_value_type_chk
+    CHECK (value_type IN ('text','currency','number','date','bool','json')),
+
+  CONSTRAINT supporting_document_located_fields_value_storage_chk
+    CHECK (
+      (value_type = 'json' AND value_json IS NOT NULL AND value_text IS NULL)
+      OR
+      (value_type <> 'json' AND value_text IS NOT NULL AND value_json IS NULL)
+      OR
+      (value_text IS NULL AND value_json IS NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_sdlf_document
+  ON claims.supporting_document_located_fields (supporting_document_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdlf_definition
+  ON claims.supporting_document_located_fields (supporting_document_type_located_field_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdlf_lookup
+  ON claims.supporting_document_located_fields (supporting_document_id, field_key);
+
+CREATE INDEX IF NOT EXISTS idx_sdlf_engine
+  ON claims.supporting_document_located_fields (supporting_document_id, source_engine);
 
 
 
@@ -1097,7 +1256,10 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   system_record character varying NULL,
-  classifier_system_record character varying NULL,
+  classifier_combined_with_extraction_system_record character varying NULL,
+  classifier_without_extraction_system_record character varying NULL,
+  supporting_document_extraction_system_record character varying NULL,
+  supporting_document_extraction_mode text NOT NULL DEFAULT 'combined_with_classifier',
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
   admin_advice_closing character varying NULL,
@@ -1105,7 +1267,9 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
-  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id)
+  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id),
+  CONSTRAINT validationgenai_config_supporting_document_extraction_mode_chk
+    CHECK (supporting_document_extraction_mode IN ('combined_with_classifier','separate_extraction'))
 );
 
 
@@ -1542,6 +1706,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
   classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
+  supplement_routing_quality text NULL,
+  supplement_routing_quality_reason text NULL,
   classified_at timestamp(6) without time zone NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
@@ -1587,7 +1753,13 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
     CHECK (classification_status IN ('pending','classified','needs_review','failed')),
 
   CONSTRAINT ingest_documents_classification_confidence_chk
-    CHECK (classification_confidence BETWEEN 0 AND 100)
+    CHECK (classification_confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT ingest_documents_routing_quality_chk
+    CHECK (
+      supplement_routing_quality IS NULL OR
+      supplement_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
+    )
 );
 
 CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_ingest_run_id
@@ -1634,7 +1806,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   invoice_upgrade_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | ocr | classifier | genai | genai_common | genai_upgrade | ocr_read | triage_classifier | ocr_invoice
+  step_type text NOT NULL,  -- upload | ocr | classifier | genai | genai_common | genai_upgrade | code_common | code_upgrade | ocr_read | triage_classifier | supporting_document_extraction | ocr_invoice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -1681,7 +1853,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     REFERENCES claims.invoice_upgrade_types(id),
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','ocr','classifier','genai','genai_common','genai_upgrade','ocr_read','triage_classifier','ocr_invoice')),
+    CHECK (step_type IN ('upload','ocr','classifier','genai','genai_common','genai_upgrade','code_common','code_upgrade','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -1707,7 +1879,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   -- Only require upgrade type for the new typed GenAI calls.
   CONSTRAINT ingest_step_runs_upgrade_type_required_for_typed_genai_chk
     CHECK (
-      (step_type NOT IN ('genai_common','genai_upgrade'))
+      (step_type NOT IN ('genai_common','genai_upgrade','code_common','code_upgrade'))
       OR
       (invoice_upgrade_type_id IS NOT NULL)
     ),
@@ -1722,13 +1894,13 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   CONSTRAINT ingest_step_runs_target_compatibility_chk
     CHECK (
       (
-        step_type IN ('ocr_read','triage_classifier')
+        step_type IN ('ocr_read','triage_classifier','supporting_document_extraction')
         AND ingest_document_id IS NOT NULL
         AND invoice_version_id IS NULL
       )
       OR
       (
-        step_type NOT IN ('ocr_read','triage_classifier')
+        step_type NOT IN ('ocr_read','triage_classifier','supporting_document_extraction')
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
       )

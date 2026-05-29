@@ -1,8 +1,8 @@
 # AI Validation Normalization Chunk 1 Plan
 
-Date: 2026-05-26
+Date: 2026-05-27
 
-Status: partially implemented. Schema, seed, API, and UI changes now exist locally, but runtime cleanup and final plan reconciliation are still in progress.
+Status: largely implemented locally. Schema, seed, API, UI, runtime cleanup, and plan reconciliation now exist. The remaining work has mostly moved into publish/runtime-composer follow-on slices and optional shared-row UX polish.
 
 ## Purpose
 
@@ -39,12 +39,14 @@ Done locally:
 - taxonomy-first validation admin screen created
 - portal -> taxonomy editor UX created
 - typed record editors split by record kind
+- `Validation Prompt Config` portal entry restored
+- `Supporting Document Types` portal entry and CRUD screen created
+- `code_located_fields.enabled` runtime omission behavior implemented
+- `classifier.eligibility_code` removed from the code-located-field concept/runtime path
+- older active plan docs reconciled to the implemented UX shape
 
-Still open in chunk 1:
+Still optional / follow-up from chunk 1:
 
-- make `code_located_fields.enabled` actually control runtime omission
-- remove `classifier.eligibility_code` from the code-located-field path
-- reconcile all older plan docs to the implemented UX
 - decide whether the shared-row warning before save should be implemented now or deferred
 
 ## Required Companion Artifacts
@@ -69,7 +71,7 @@ Chunk 1 includes:
 
 Chunk 1 does not include:
 
-- supplement OCR/classifier pipeline
+- supplement OCR/classifier pipeline as a required dependency for admin normalization
 - `supporting_document_located_fields`
 - session removal or session redesign
 - replacement of current GenAI runtime blob execution
@@ -353,7 +355,7 @@ Chunk 1 is successful if we can verify:
 
 Note:
 
-- item 6 is not complete yet and remains an explicit follow-up task.
+- item 6 is now complete locally
 
 ## Explicitly Deferred
 
@@ -363,17 +365,17 @@ These are not blockers for chunk 1 and should stay out:
 - supplement located fields
 - supplement rulechecks
 - invoice-vs-session intake redesign
-- mixed invoice/supplement upload redesign
+- mixed invoice/supplement upload redesign as a prerequisite for chunk 1
 - runtime prompt publish/composition flow rewrite
 
 ## Recommendation
 
 This should become the official first implementation chunk.
 
-It is the best boundary because it:
+It was the right boundary because it:
 
 - improves admin clarity immediately
 - normalizes the worst GenAI blob problem
 - adds history in a controlled way
 - keeps runtime behavior stable
-- avoids coupling this work to the still-unresolved session/supplement architecture fork
+- avoided coupling this work to the then-unresolved session/supplement architecture fork

@@ -1,8 +1,8 @@
 # AI Validation Runtime Refactor Plan
 
-Date: 2026-05-26
+Date: 2026-05-27
 
-Status: planning for the next implementation slice. This document covers runtime composition and execution changes that follow the admin/config normalization work.
+Status: partially implemented. Code-located-field cleanup and supplement typed-presence runtime facts now exist locally. Compiler/publish/runtime-snapshot work is still the next major slice.
 
 ## Purpose
 
@@ -44,6 +44,7 @@ Do not use this document as the primary UX contract.
 ### Already done
 
 1. Admin/config tables exist locally:
+
 - `claims.genai_rules`
 - `claims.genai_rule_upgrade_types`
 - `claims.genai_located_fields`
@@ -51,6 +52,7 @@ Do not use this document as the primary UX contract.
 - `claims.code_located_fields`
 
 2. History tables exist locally:
+
 - `claims.code_rule_history`
 - `claims.code_rule_upgrade_type_history`
 - `claims.code_located_field_history`
@@ -60,39 +62,59 @@ Do not use this document as the primary UX contract.
 - `claims.genai_located_field_upgrade_type_history`
 
 3. Normalized GenAI seed/backfill exists locally:
+
 - duplicate prompt groups collapsed into shared canonical records
 - normalized seed file generated and loaded
 
 4. Admin UI/API exists locally:
+
 - portal screen
 - taxonomy editor screen
 - typed add/edit screens
 - read-only info and audit flows
+- `Validation Prompt Config` portal entry
+- `Supporting Document Types` portal entry
 
 5. Current runtime is intentionally still blob-driven:
+
 - upgrade/common execution continues to use `claims.validationgenai_rulesets`
 - `run_genai_job` still injects `validationgenai_rulesets.user_record1`
+
+6. Code-located-field runtime cleanup now exists locally:
+
+- `claims.code_located_fields.enabled` controls runtime inclusion/omission
+- classifier-found `eligibility_code` is no longer treated as a code-located field
+
+7. Supplement typed-presence runtime facts now exist locally:
+
+- mixed-bundle intake resolves invoice vs supplement before final invoice runtime
+- `Claims::GenaiCaseFacts::Build` now emits supporting-document summary facts
+- each upgrade-type call receives supplement facts narrowed by `claims.supporting_document_type_upgrade_types`
 
 ### Not done yet
 
 1. There is no runtime composer that builds the blob from normalized GenAI tables.
 2. There is no publish flow that inserts new composed snapshot rows into `claims.validationgenai_rulesets`.
-3. `code_located_fields.enabled` is not yet honored by runtime fact-building.
-4. `classifier.eligibility_code` is still being persisted in the code-located-field path, which does not match the plan.
+3. Published snapshots are not yet the sole source-of-truth for runtime selection.
+4. Supplement adequacy/quality rules are not yet part of runtime.
 
 ## Guiding Principles
 
 1. Keep runtime reproducibility.
+
 - executed runs should still point to one bundled snapshot artifact
 
 2. Keep rollout low risk.
+
 - do not switch composition, publish, and execution all at once
 
 3. Keep normalized config as the authoring source.
+
 - active editing belongs in normalized tables
 - blob rows become published runtime artifacts
 
 4. Keep code and GenAI semantics clean.
+
 - DB/code facts come from the code-located-field registry
 - classifier-found facts are not code-located fields
 
@@ -149,14 +171,16 @@ Goals:
 
 Status:
 
-- not done
+- done locally
 
 Goals:
 
 1. Make `claims.code_located_fields` the runtime registry for DB/code facts.
 2. Make `enabled=false` actually omit the fact from:
+
 - the context window payload
 - persisted `source_engine='code'` located-field rows
+
 3. Remove `classifier.eligibility_code` from the code-located-field runtime path.
 
 Expected code changes:
@@ -164,7 +188,7 @@ Expected code changes:
 - refactor `app/services/claims/genai_case_facts/build.rb`
 - replace the hardcoded persisted-field list with registry-backed behavior
 
-Acceptance checks:
+Implemented outcome:
 
 - disabling a seeded code-located field removes it from runtime output
 - classifier eligibility code is no longer persisted as a code-located field
@@ -305,13 +329,15 @@ Important:
 
 Status:
 
-- deferred
+- partially implemented locally for typed presence; deferred for adequacy/quality and extracted evidence
 
-Goals:
-
-Once supplement processing exists:
+Implemented now:
 
 - v1 supplement runtime should read supplement type inventory/presence only
+- each upgrade-type call now receives configured/present/missing supplement type facts
+
+Still later:
+
 - upgrade-type execution should continue to read invoice evidence + enabled code facts
 - later runtime may optionally read curated supplement evidence if real sample documents prove it is needed
 
@@ -327,12 +353,12 @@ Important refinement:
 
 ## Recommended Sequence
 
-1. Finish Step 1 first.
-2. Build the compiler in Step 2 second.
-3. Add publish in Step 3 third.
-4. Expose publish controls in Step 4 fourth.
-5. Switch runtime sourcing in Step 5 fifth.
-6. Retire old blob authoring in Step 6 last.
+1. Build the compiler in Step 2 next.
+2. Add publish in Step 3 after that.
+3. Expose publish controls in Step 4 next.
+4. Switch runtime sourcing in Step 5 after publish is proven.
+5. Retire old blob authoring in Step 6 last.
+6. Extend supplement runtime beyond typed presence only if real document samples justify it.
 
 ## Risks
 
@@ -365,3 +391,4 @@ This refactor is successful when:
 4. Existing run-audit links still work unchanged.
 5. `code_located_fields.enabled` actually controls runtime inclusion.
 6. `classifier.eligibility_code` is no longer modeled as a code-located field.
+7. Attached supplement types are visible to upgrade-type runtime calls through persisted DB facts.

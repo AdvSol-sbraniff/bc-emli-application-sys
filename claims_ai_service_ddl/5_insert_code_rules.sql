@@ -130,6 +130,19 @@ WITH code_rules_seed (
     'This rule compares stored eligibility-code dates against the invoice date and is intended to remain admin-configurable like other code rules.',
     TIMESTAMP '2026-05-25 00:00:00',
     NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53301'::uuid,
+    'wd_u_factor_threshold',
+    'Checks whether the structured metric U-factor values extracted for windows and doors are 1.22 W/m2-K or less.',
+    true,
+    'No follow-up is required for the U-factor threshold when all extracted metric U-factor values are at or below 1.22 W/m2-K.',
+    'Review the visible product/certification evidence and confirm the U-factor value before moving the claim forward.',
+    'Ask the contractor for corrected product or certification evidence if the installed window/door U-factor exceeds 1.22 W/m2-K.',
+    'Resolve the extracted U-factor evidence first, then rerun validation if needed.',
+    'This rule compares structured metric U-factor values after the windows/doors GenAI located-field pass. It is intended to remain admin-configurable like other code rules.',
+    TIMESTAMP '2026-05-28 00:00:00',
+    NOW()
   )
 )
 INSERT INTO claims.code_rules (
@@ -191,6 +204,7 @@ WITH code_rule_upgrade_type_seed (
   ('first_class_invoice_fields_present', 'common'),
   ('submission_within_six_months', 'common'),
   ('eligibility_code_valid_for_invoice_date', 'common'),
+  ('wd_u_factor_threshold', 'windows_doors'),
   ('hpwh_neea_found_in_product_list', 'heat_pump_water_heater'),
   ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater')
 )

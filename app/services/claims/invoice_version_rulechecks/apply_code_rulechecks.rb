@@ -5,6 +5,20 @@ module Claims
     class ApplyCodeRulechecks
       SOURCE_VINTAGE_DATE = Date.new(2026, 4, 1)
       COMMON_RULE_FALLBACK_ENABLED = false
+      COMMON_RULE_KEYS = %w[
+        source_vintage_applies
+        first_class_invoice_fields_present
+        submission_within_six_months
+        eligibility_code_valid_for_invoice_date
+      ].freeze
+      COMMON_RULE_BUILDERS = {
+        "source_vintage_applies" => :source_vintage_applies,
+        "first_class_invoice_fields_present" =>
+          :first_class_invoice_fields_present,
+        "submission_within_six_months" => :submission_within_six_months,
+        "eligibility_code_valid_for_invoice_date" =>
+          :eligibility_code_valid_for_invoice_date
+      }.freeze
 
       def self.call(invoice_version_id:)
         new(invoice_version_id: invoice_version_id).call
@@ -19,18 +33,21 @@ module Claims
         @invoice = Claims::Invoice.find(@invoice_version.invoice_id)
         @session = Claims::Session.find_by(id: @invoice.session_id)
         @code_fields = load_fields("code")
+        validate_common_rule_coverage!
 
-        rows = [
-          source_vintage_applies,
-          first_class_invoice_fields_present,
-          submission_within_six_months,
-          eligibility_code_valid_for_invoice_date
-        ].compact
+        rows =
+          COMMON_RULE_BUILDERS.filter_map do |rule_key, builder_method|
+            next unless enabled_common_rule?(rule_key)
+
+            send(builder_method)
+          end
 
         Claims::InvoiceVersionRulecheck.transaction do
           Claims::InvoiceVersionRulecheck.where(
             invoice_version_id: @invoice_version_id,
-            source_engine: "code"
+            invoice_upgrade_type_id: common_upgrade_type_id,
+            source_engine: "code",
+            rule_key: COMMON_RULE_KEYS
           ).delete_all
 
           Claims::InvoiceVersionRulecheck.insert_all!(rows) if rows.any?
@@ -85,7 +102,9 @@ module Claims
       end
 
       def first_class_invoice_fields_present
-        return nil unless enabled_common_rule?("first_class_invoice_fields_present")
+        unless enabled_common_rule?("first_class_invoice_fields_present")
+          return nil
+        end
 
         required = {
           "Invoice number" => invoice_version.di_ocr_invoice_id,
@@ -177,7 +196,9 @@ module Claims
       end
 
       def eligibility_code_valid_for_invoice_date
-        return nil unless enabled_common_rule?("eligibility_code_valid_for_invoice_date")
+        unless enabled_common_rule?("eligibility_code_valid_for_invoice_date")
+          return nil
+        end
 
         invoice_date = invoice_version.di_ocr_invoice_date
         approved_at =
@@ -273,6 +294,29 @@ module Claims
         )
       end
 
+      def enabled_common_rule_keys
+        @enabled_common_rule_keys ||=
+          ::Claims::CodeRule
+            .joins(:code_rule_upgrade_types)
+            .where(enabled: true)
+            .where(
+              ::Claims::CodeRuleUpgradeType.table_name => {
+                invoice_upgrade_type_id: common_upgrade_type_id
+              }
+            )
+            .order(:code_rule_key)
+            .pluck(:code_rule_key)
+      end
+
+      def validate_common_rule_coverage!
+        missing_keys = enabled_common_rule_keys - COMMON_RULE_BUILDERS.keys
+        return if missing_keys.empty?
+
+        raise(
+          "Enabled common code rules have no executor implementation: #{missing_keys.join(", ")}"
+        )
+      end
+
       def common_upgrade_type_id
         @common_upgrade_type_id ||=
           ::Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common").id
@@ -331,6 +375,7 @@ module Claims
 
         attrs = {
           invoice_version_id: invoice_version.id,
+          invoice_upgrade_type_id: common_upgrade_type_id,
           source_engine: "code",
           rule_number: rule_number,
           rule_name: "#{rule_key}: #{rule_name}",

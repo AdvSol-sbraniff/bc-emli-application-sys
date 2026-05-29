@@ -5,7 +5,11 @@ module Claims
     class ApplyDocumentTriageResult
       ALLOWED_DOCUMENT_KINDS = %w[invoice supplement unknown].freeze
 
-      def self.call(ingest_document_id: nil, invoice_version_id: nil, triage_payload:)
+      def self.call(
+        ingest_document_id: nil,
+        invoice_version_id: nil,
+        triage_payload:
+      )
         new(
           ingest_document_id: ingest_document_id,
           invoice_version_id: invoice_version_id,
@@ -23,10 +27,14 @@ module Claims
         document_kind = normalized_document_kind
         type_key = supplement_type_key
         type =
-          ::Claims::SupportingDocumentType.find_by(type_key: type_key) if type_key.present?
+          ::Claims::SupportingDocumentType.find_by(
+            type_key: type_key
+          ) if type_key.present?
 
         if @ingest_document_id.blank? && @invoice_version_id.present?
-          return apply_legacy_invoice_version_result(document_kind: document_kind)
+          return(
+            apply_legacy_invoice_version_result(document_kind: document_kind)
+          )
         end
 
         ingest_document = ::Claims::IngestDocument.find(@ingest_document_id)
@@ -64,6 +72,10 @@ module Claims
                 @triage_payload["document_kind_reason"] ||
                 @triage_payload[:document_kind_reason]
             ).to_s.presence,
+          supplement_routing_quality:
+            supplement_routing_quality(document_kind: document_kind),
+          supplement_routing_quality_reason:
+            supplement_routing_quality_reason(document_kind: document_kind),
           classified_at: Time.current,
           updated_at: Time.current
         )
@@ -73,7 +85,8 @@ module Claims
           document_kind: document_kind,
           document_kind_confidence: ingest_document.document_kind_confidence,
           supplement_type_key: type_key,
-          supplement_type_confidence: ingest_document.classification_confidence
+          supplement_type_confidence: ingest_document.classification_confidence,
+          supplement_routing_quality: ingest_document.supplement_routing_quality
         }
       rescue => e
         { ok: false, error: e.message, error_class: e.class.name }
@@ -107,6 +120,32 @@ module Claims
         "needs_review"
       end
 
+      def supplement_routing_quality(document_kind:)
+        return nil unless document_kind == "supplement"
+
+        value =
+          (
+            @triage_payload["supplement_routing_quality"] ||
+              @triage_payload[:supplement_routing_quality]
+          ).to_s.strip.presence
+        if %w[usable needs_review requires_visual_review unusable].include?(
+             value
+           )
+          return value
+        end
+
+        nil
+      end
+
+      def supplement_routing_quality_reason(document_kind:)
+        return nil unless document_kind == "supplement"
+
+        (
+          @triage_payload["supplement_routing_quality_reason"] ||
+            @triage_payload[:supplement_routing_quality_reason]
+        ).to_s.presence
+      end
+
       def apply_legacy_invoice_version_result(document_kind:)
         ::Claims::InvoiceVersionUpgradeType.transaction do
           if document_kind == "invoice"
@@ -115,7 +154,9 @@ module Claims
                 invoice_version_id: @invoice_version_id,
                 classifier_payload: @triage_payload
               )
-            raise "ApplyClassifierResult failed: #{result.inspect}" unless result[:ok]
+            unless result[:ok]
+              raise "ApplyClassifierResult failed: #{result.inspect}"
+            end
           else
             ::Claims::InvoiceVersionUpgradeType.where(
               invoice_version_id: @invoice_version_id,

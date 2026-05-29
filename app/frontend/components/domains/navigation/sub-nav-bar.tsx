@@ -87,6 +87,11 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
       ],
+      '/supporting-document-type-fields-admin': [
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
+        { href: '/supporting-document-type-fields-admin', title: 'Located Fields' },
+      ],
       '/downloads-admin': [{ href: '/downloads-admin', title: 'Downloads' }],
       '/heat-pump-product-list-admin': [
         { href: '/downloads-admin', title: 'Downloads' },
@@ -178,10 +183,30 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         },
         {
           href: `/supporting-document-types-admin?mode=${encodeURIComponent(validationRulesMode)}${recordId ? `&id=${encodeURIComponent(recordId)}` : ''}`,
-          title:
-            validationRulesMode === 'create'
-              ? 'Add Supporting Document Type'
-              : 'Edit Supporting Document Type',
+          title: validationRulesMode === 'create' ? 'Add Supporting Document Type' : 'Edit Supporting Document Type',
+        },
+      ]);
+      return;
+    }
+
+    if (path === '/supporting-document-type-fields-admin' && validationRulesMode) {
+      const typeId = searchParams.get('type_id') || '';
+      const recordId = searchParams.get('id') || '';
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
+        {
+          href: `/supporting-document-type-fields-admin${typeId ? `?type_id=${encodeURIComponent(typeId)}` : ''}`,
+          title: 'Located Fields',
+        },
+        {
+          href: `/supporting-document-type-fields-admin?${new URLSearchParams({
+            ...(typeId ? { type_id: typeId } : {}),
+            mode: validationRulesMode,
+            ...(recordId ? { id: recordId } : {}),
+          }).toString()}`,
+          title: validationRulesMode === 'create' ? 'Add Field' : 'Edit Field',
         },
       ]);
       return;

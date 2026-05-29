@@ -17,35 +17,35 @@ module Claims
       CODE_FIELD_DEFINITIONS = {
         "invoices.submitted_at" => {
           value_type: "date",
-          path: [:invoices, :submitted_at]
+          path: %i[invoices submitted_at]
         },
         "contractors.business_name" => {
           value_type: "text",
-          path: [:contractors, :business_name]
+          path: %i[contractors business_name]
         },
         "contractors.address" => {
           value_type: "text",
-          path: [:contractors, :address]
+          path: %i[contractors address]
         },
         "users_eligibilitycodes.eligibility_code" => {
           value_type: "text",
-          path: [:users_eligibilitycodes, :eligibility_code]
+          path: %i[users_eligibilitycodes eligibility_code]
         },
         "users_eligibilitycodes.income_level" => {
           value_type: "number",
-          path: [:users_eligibilitycodes, :income_level]
+          path: %i[users_eligibilitycodes income_level]
         },
         "users_eligibilitycodes.approved_at" => {
           value_type: "date",
-          path: [:users_eligibilitycodes, :approved_at]
+          path: %i[users_eligibilitycodes approved_at]
         },
         "users_eligibilitycodes.expires_at" => {
           value_type: "date",
-          path: [:users_eligibilitycodes, :expires_at]
+          path: %i[users_eligibilitycodes expires_at]
         },
         "users.participant_name" => {
           value_type: "text",
-          path: [:users, :participant_name]
+          path: %i[users participant_name]
         }
       }.freeze
 
@@ -133,6 +133,17 @@ module Claims
         }
       end
 
+      def self.case_facts_for_upgrade_type(case_facts:, invoice_upgrade_type:)
+        facts = case_facts.deep_dup
+        facts[
+          :supporting_document_summary_for_upgrade_type
+        ] = build_supporting_document_summary_for_upgrade_type(
+          supporting_document_summary: facts[:supporting_document_summary],
+          invoice_upgrade_type: invoice_upgrade_type
+        )
+        facts
+      end
+
       # ------------------------------------------------------------
       # PUBLIC: persist_code_located_fields!
       # ------------------------------------------------------------
@@ -180,7 +191,8 @@ module Claims
           add_row.call(
             field_key: field_key,
             value_type: definition[:value_type],
-            value_text: persisted_value_text_for(definition[:value_type], raw_value)
+            value_text:
+              persisted_value_text_for(definition[:value_type], raw_value)
           )
         end
 
@@ -236,7 +248,10 @@ module Claims
 
       def self.enabled_code_field_keys
         configured_keys =
-          ::Claims::CodeLocatedField.where(enabled: true).pluck(:code_field_key).map(&:to_s)
+          ::Claims::CodeLocatedField
+            .where(enabled: true)
+            .pluck(:code_field_key)
+            .map(&:to_s)
         return configured_keys if configured_keys.present?
 
         CODE_FIELD_DEFINITIONS.keys
@@ -283,7 +298,11 @@ module Claims
         docs =
           invoice
             .supporting_documents
-            .includes(:supporting_document_type)
+            .includes(
+              :supporting_document_type,
+              supporting_document_located_fields:
+                :supporting_document_type_located_field
+            )
             .order(created_at: :asc, id: :asc)
             .map do |doc|
               {
@@ -292,22 +311,146 @@ module Claims
                 type_description: doc.supporting_document_type&.description,
                 original_filename: doc.original_filename,
                 classification_status: doc.classification_status,
-                classification_confidence: doc.classification_confidence
+                classification_confidence: doc.classification_confidence,
+                supplement_routing_quality: doc.supplement_routing_quality,
+                supplement_routing_quality_reason:
+                  doc.supplement_routing_quality_reason,
+                located_fields:
+                  serialize_supporting_document_located_fields(doc)
               }
             end
 
+        type_counts = count_document_types(docs)
+
         {
           document_count: docs.size,
+          typed_document_count:
+            docs.count { |row| row[:type_key].to_s.present? },
           type_keys:
             docs.map { |row| row[:type_key].to_s.presence }.compact.uniq.sort,
+          type_counts: type_counts,
           documents: docs
         }
       rescue StandardError
         {
           document_count: 0,
+          typed_document_count: 0,
           type_keys: [],
+          type_counts: {
+          },
           documents: []
         }
+      end
+
+      def self.build_supporting_document_summary_for_upgrade_type(
+        supporting_document_summary:,
+        invoice_upgrade_type:
+      )
+        summary = supporting_document_summary || {}
+        documents = Array(summary[:documents] || summary["documents"])
+        configured_types =
+          enabled_supporting_document_types_for_upgrade_type(
+            invoice_upgrade_type: invoice_upgrade_type
+          )
+        configured_type_keys = configured_types.map(&:type_key).compact.sort
+
+        relevant_documents =
+          documents.select do |row|
+            configured_type_keys.include?(
+              row[:type_key].to_s.presence || row["type_key"].to_s.presence
+            )
+          end
+
+        present_type_keys =
+          relevant_documents
+            .map do |row|
+              row[:type_key].to_s.presence || row["type_key"].to_s.presence
+            end
+            .compact
+            .uniq
+            .sort
+
+        {
+          upgrade_type_key: invoice_upgrade_type.upgrade_type_key,
+          upgrade_type_description: invoice_upgrade_type.description,
+          configured_type_keys: configured_type_keys,
+          configured_types:
+            configured_types.map do |type|
+              { type_key: type.type_key, type_description: type.description }
+            end,
+          configured_document_count: relevant_documents.size,
+          present_configured_type_keys: present_type_keys,
+          missing_configured_type_keys:
+            configured_type_keys - present_type_keys,
+          present_configured_type_counts:
+            count_document_types(relevant_documents),
+          configured_documents: relevant_documents
+        }
+      rescue StandardError
+        {
+          upgrade_type_key: invoice_upgrade_type&.upgrade_type_key,
+          upgrade_type_description: invoice_upgrade_type&.description,
+          configured_type_keys: [],
+          configured_types: [],
+          configured_document_count: 0,
+          present_configured_type_keys: [],
+          missing_configured_type_keys: [],
+          present_configured_type_counts: {
+          },
+          configured_documents: []
+        }
+      end
+
+      def self.enabled_supporting_document_types_for_upgrade_type(
+        invoice_upgrade_type:
+      )
+        invoice_upgrade_type
+          .supporting_document_types
+          .where(enabled: true)
+          .order(:type_key, :id)
+      rescue StandardError
+        []
+      end
+
+      def self.count_document_types(documents)
+        Array(documents)
+          .each_with_object(Hash.new(0)) do |row, counts|
+            type_key =
+              row[:type_key].to_s.presence || row["type_key"].to_s.presence
+            next if type_key.blank?
+
+            counts[type_key] += 1
+          end
+          .sort
+          .to_h
+      end
+
+      def self.serialize_supporting_document_located_fields(document)
+        document
+          .supporting_document_located_fields
+          .sort_by do |field|
+            [
+              field.supporting_document_type_located_field&.field_number ||
+                99_999,
+              field.field_key.to_s
+            ]
+          end
+          .map do |field|
+            {
+              supporting_document_located_field_id: field.id,
+              supporting_document_type_located_field_id:
+                field.supporting_document_type_located_field_id,
+              field_key: field.field_key,
+              source_engine: field.source_engine,
+              value_type: field.value_type,
+              value_text: field.value_text,
+              value_json: field.value_json,
+              confidence: field.confidence,
+              page: field.page,
+              polygon: field.polygon,
+              evidence_text: field.evidence_text
+            }
+          end
       end
     end
   end

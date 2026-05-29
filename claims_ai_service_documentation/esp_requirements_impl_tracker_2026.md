@@ -2,9 +2,13 @@
 
 This markdown file is now the hand-edited source of truth for the tracker.
 
-- The old DOCX tracker is a legacy snapshot only.
-- `build_esp_traceability_doc.py` is legacy source material, not the working tracker source anymore.
-- The main cleanup in this markdown is that supplement references are split into:
+- Generated/DOCX tracker artifacts have been retired. Maintain this markdown directly.
+- Each rule block uses the same compact metadata order: `Evidence`, `Check`, `Invoice/runtime fields`, and `Support docs`.
+- The `Support docs` line is the at-a-glance flag:
+  - `no` means the rule does not depend on uploaded supporting documents.
+  - `yes` means uploaded supporting documents matter, with subtype and extracted-field detail listed on the same line.
+  - `n/a` is used only for documentation-only audit notes.
+- Supplement references are split into:
   - supplement subtype / classification on `claims.supporting_documents`
   - true supplement-extracted fields that would justify `claims.supporting_document_located_fields`
 
@@ -17,7 +21,7 @@ Use this file as both:
 
 Editing rules:
 
-- Prefer direct markdown edits here over generator changes.
+- Edit this markdown directly.
 - Keep real implemented keys under `Traceability keys in system`.
 - Keep not-yet-implemented keys under `Proposed future registry keys`.
 - When supporting documents are involved, always decide all three:
@@ -73,11 +77,13 @@ Decision labels used below:
 
 **Source quote:** This working document quotes the actual 2026 Energy Savings Program requirement text and then marks coverage in red.
 
-**Evidence sources required:** documentation_only
+**Evidence:** documentation_only
 
-**How this check should be done:** documentation_only
+**Check:** documentation_only
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** n/a
 
 **Traceability keys in system:**
 
@@ -95,11 +101,13 @@ Decision labels used below:
 
 **Source quote:** Effective date: For invoices dated on or after April 1, 2026.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -109,19 +117,15 @@ Decision labels used below:
 
 **Source quote:** Participant must reside in an income qualified household... Income verification documentation must be submitted for each member of the household that is over the age of 18...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** income_verification_document
+**Support docs:** yes - types: income_verification_document; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current intent is document-presence / admin-review support, not structured OCR facts persisted per supporting document.
+**Note:** Current intent is document-presence / admin-review support, not structured OCR facts persisted per supporting document.
 
 **Proposed future registry keys:**
 
@@ -138,11 +142,13 @@ Decision labels used below:
 
 **Source quote:** Home must be a year-round primary residence in British Columbia that is at least 12 months old... The following types of homes are not eligible...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Missing now:**
 
@@ -152,19 +158,15 @@ Decision labels used below:
 
 **Source quote:** The home must be connected to a residential account with one of the following utilities... The home must be primarily heated by one of the following...
 
-**Evidence sources required:** database, supporting_document
+**Evidence:** database, supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** utility_bill_or_account_document
+**Support docs:** yes - types: utility_bill_or_account_document; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** The tracker should treat this as possible supporting evidence, but not as a current supplement-located-field requirement.
+**Note:** The tracker should treat this as possible supporting evidence, but not as a current supplement-located-field requirement.
 
 **External source note:** No separate downloadable utility-eligibility feed is identified yet. Better Homes currently publishes the municipal-utility list as a webpage/FAQ, and the broader utility universe still reads as BC Hydro, FortisBC, and the named municipal utilities rather than a seeded product-style download. See:
 
@@ -190,11 +192,13 @@ Decision labels used below:
 
 **Source quote:** The property must have a total assessed value at or under the referenced BC Assessment listing...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **External source note:** BC Assessment looks more like a licensed lookup path than a periodic seeded download. The public site exposes Assessment Search, and BC Assessment points users to BC OnLine for database access. Treat this as a realtime/licensed data-source investigation, not a new CSV/PDF seed like AHRI or NEEA. See:
 
@@ -209,11 +213,13 @@ Decision labels used below:
 
 **Source quote:** Participants must pre-register and confirm eligibility prior to installing upgrades. Eligibility codes... are valid for upgrades completed within 6 months of the participants approval date.
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -227,11 +233,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be installed by a Registered Contractor... Registered Contractors must comply with the CleanBC Better Homes Energy Savings Program Registered Contractor Terms and Conditions.
 
-**Evidence sources required:** database, invoice_pdf
+**Evidence:** database, invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** invoice_contractor_name, invoice_contractor_address
+**Invoice/runtime fields:** invoice_contractor_name, invoice_contractor_address
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -247,11 +255,13 @@ Decision labels used below:
 
 **Source quote:** Participants may only receive one rebate payment... under any of the following programs...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Missing now:**
 
@@ -261,11 +271,13 @@ Decision labels used below:
 
 **Source quote:** Rebates cannot exceed the cost on the invoice and the paid cost of the upgrade. Upgrade costs covered by warranty or home insurance are not eligible for rebates.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** overall_rebate_line_amount, overall_rebate_line_description, amount_due_after_rebate, customer_deposit
+**Invoice/runtime fields:** overall_rebate_line_amount, overall_rebate_line_description, amount_due_after_rebate, customer_deposit
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -282,19 +294,15 @@ Decision labels used below:
 
 **Source quote:** Utility accounts must be in the name of the resident and/or homeowner... If you currently rent your home, the registered property owner must complete the Landlord Consent Form... Landlords and/or property owners are only eligible... with two eligible homes...
 
-**Evidence sources required:** database, supporting_document
+**Evidence:** database, supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** invoice_homeowner_name
+**Invoice/runtime fields:** invoice_homeowner_name
 
-**Supplement subtype likely required:** utility_bill_or_account_document, landlord_consent_form
+**Support docs:** yes - types: utility_bill_or_account_document, landlord_consent_form; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** These are supporting-document classes rather than true extracted supplement fields in the current design.
+**Note:** These are supporting-document classes rather than true extracted supplement fields in the current design.
 
 **Proposed future registry keys:**
 
@@ -316,11 +324,13 @@ Decision labels used below:
 
 **Source quote:** Insulation upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -330,11 +340,13 @@ Decision labels used below:
 
 **Source quote:** New insulation must be batt, loose fill, board or spray foam... installed in an eligible location... installed between a conditioned and unconditioned space... result in an increased R-value.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** ins_material_type, ins_upgrade_location, ins_conditioned_boundary_evidence, ins_new_r_value, ins_existing_r_value, ins_r_value_added
+**Invoice/runtime fields:** ins_material_type, ins_upgrade_location, ins_conditioned_boundary_evidence, ins_new_r_value, ins_existing_r_value, ins_r_value_added
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -351,11 +363,13 @@ Decision labels used below:
 
 **Source quote:** Rebates are calculated based on R-value of the new insulation added... If pre-existing insulation was removed... the rebate is calculated on the difference in R-value...
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** ins_new_r_value, ins_existing_r_value, ins_r_value_added, ins_area_square_feet, ins_line_amount, upgrade_specific_rebate_line_amount, ins_location_specific_rebate_amount, ins_rebate_formula_or_rate_evidence
+**Invoice/runtime fields:** ins_new_r_value, ins_existing_r_value, ins_r_value_added, ins_area_square_feet, ins_line_amount, upgrade_specific_rebate_line_amount, ins_location_specific_rebate_amount, ins_rebate_formula_or_rate_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -370,11 +384,13 @@ Decision labels used below:
 
 **Source quote:** Pest infestations and rodent tunnels... must be resolved prior to installation... Any existing health and safety concerns (vermiculite, asbestos, mould)... must be resolved prior to installation...
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** ins_removed_existing_insulation_evidence, ins_health_safety_resolution_evidence
+**Invoice/runtime fields:** ins_removed_existing_insulation_evidence, ins_health_safety_resolution_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -389,11 +405,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor who is approved to install insulation...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -407,19 +425,15 @@ Decision labels used below:
 
 **Source quote:** Before and after photos of the insulation area... Floor plan drawing... may be requested. Invoice... must show the itemized CleanBC rebate and deduct the CleanBC rebate... The rebate application... must be submitted... within six (6) months of the invoice date.
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** ins_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** ins_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** before_after_photo_set, floor_plan_document
+**Support docs:** yes - types: before_after_photo_set, floor_plan_document; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** The current requirement is evidence presence. A future floor-plan extraction path could change this, but it is not needed for the current architecture.
+**Note:** The current requirement is evidence presence. A future floor-plan extraction path could change this, but it is not needed for the current architecture.
 
 **Proposed future registry keys:**
 
@@ -449,11 +463,13 @@ Decision labels used below:
 
 **Source quote:** Windows and doors upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -463,19 +479,15 @@ Decision labels used below:
 
 **Source quote:** Pre-approval is required; a quote for windows and doors upgrades must be submitted and approved prior to installation.
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** preapproval_quote, preapproval_notice
+**Support docs:** yes - types: preapproval_quote, preapproval_notice; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Treat this as supporting-document classification / presence unless later automation needs approval reference/date extraction.
+**Note:** Treat this as supporting-document classification / presence unless later automation needs approval reference/date extraction.
 
 **Proposed future registry keys:**
 
@@ -499,19 +511,15 @@ Decision labels used below:
 
 **Source quote:** The new windows and/or doors must replace existing windows and doors in the building envelope... skylights are not eligible... be listed with one of the following certification bodies...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** envelope_replacement_evidence, skylight_detected
+**Invoice/runtime fields:** envelope_replacement_evidence, skylight_detected
 
-**Supplement subtype likely required:** certification_sheet, energy_performance_label, manufacturer_label_photo
+**Support docs:** yes - types: certification_sheet, energy_performance_label, manufacturer_label_photo; extracted fields: certification_body, nrcan_number, cpd_number, brand_and_model; located-field table: yes
 
-**Supplement extracted fields likely required:** certification_body, nrcan_number, cpd_number, brand_and_model
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** This is one of the clearest cases where true supplement-extracted facts would be useful if we automate certification validation.
+**Note:** This is one of the clearest cases where true supplement-extracted facts would be useful if we automate certification validation.
 
 **External source note:** No single Better Homes-owned downloadable certification list has been identified for this requirement. This currently reads more like certification-body evidence plus possible certification-body lookup/registry work than a straightforward new seeded download.
 
@@ -540,11 +548,13 @@ Decision labels used below:
 
 **Source quote:** The number of windows and/or doors eligible for rebates is based on the number of Rough Openings...
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** rough_opening_count, window_or_door_quantity, pane_count
+**Invoice/runtime fields:** rough_opening_count, window_or_door_quantity, pane_count
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -554,11 +564,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor who is approved to install windows and doors...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -572,19 +584,15 @@ Decision labels used below:
 
 **Source quote:** Install eligible window/doors with a U-factor of 1.22 (W/m2-K) or less... 95% or 60% of eligible upgrade costs... $950 per window or door... Homes within the City of Vancouver municipal boundary are not eligible...
 
-**Evidence sources required:** invoice_pdf, supporting_document, database, external_list
+**Evidence:** invoice_pdf, supporting_document, database, external_list
 
-**How this check should be done:** genai
+**Check:** genai plus code
 
-**Invoice / runtime fields likely required:** window_or_door_line_amount, hardware_per_unit, labour_per_unit, upgrade_specific_rebate_line_amount, city_of_vancouver_evidence
+**Invoice/runtime fields:** window_or_door_line_amount, hardware_per_unit, labour_per_unit, upgrade_specific_rebate_line_amount, city_of_vancouver_evidence, metric_u_factor
 
-**Supplement subtype likely required:** energy_performance_label, certification_sheet
+**Support docs:** yes - types: energy_performance_label, certification_sheet; extracted fields: metric_u_factor; located-field table: yes
 
-**Supplement extracted fields likely required:** metric_u_factor
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** If U-factor is proven from the supplement rather than the invoice, the value itself is a true extracted supplement field.
+**Note:** If U-factor is proven from the supplement rather than the invoice, the value itself is a true extracted supplement field.
 
 **External source note:** Same as the certification requirement above: no single program-owned downloadable window/door qualifying list was identified in this pass. This likely remains supplement evidence first, with any external validation coming from certification-body references rather than a seed file.
 
@@ -596,32 +604,25 @@ Decision labels used below:
 
 **Traceability keys in system:**
 
+- Code `code_rule_key=wd_u_factor_threshold`.
 - GenAI `rule_key=wd_income_level_and_vancouver_review`.
 - GenAI `rule_key=wd_per_unit_rebate_math_within_cap`.
 - GenAI `rule_key=wd_per_home_rebate_math_within_cap`.
 - GenAI `rule_key=wd_customer_portion_math_matches`.
 
-**Missing now:**
-
-- No persisted check currently validates the U-factor itself from a structured product source.
-
 ### 7. Partial (High) — key: `wd_label_photo_reference_present`
 
 **Source quote:** A photo of a manufacturer label from each installed window/door... The rebate application... must be submitted... within six (6) months of the invoice date.
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** manufacturer_label_photo
+**Support docs:** yes - types: manufacturer_label_photo; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** This was one of the buggy tracker examples. The primary need is supplement subtype / evidence presence, not a supplement-located-field row.
+**Note:** This was one of the buggy tracker examples. The primary need is supplement subtype / evidence presence, not a supplement-located-field row.
 
 **Proposed future registry keys:**
 
@@ -650,11 +651,13 @@ Decision labels used below:
 
 **Source quote:** Electric to heat pump upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Missing now:**
 
@@ -664,11 +667,13 @@ Decision labels used below:
 
 **Source quote:** The home must primarily be heated by electricity... The new heat pump must replace an existing hard-wired electric heating system... be sized to function as the primary heating system... serve a main living area...
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hp_existing_electric_heat_evidence, hp_main_living_area_evidence, hp_new_equipment_type
+**Invoice/runtime fields:** hp_existing_electric_heat_evidence, hp_main_living_area_evidence, hp_new_equipment_type
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -680,11 +685,13 @@ Decision labels used below:
 
 **Source quote:** The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Minimum capacity of 12,000 BTU...
 
-**Evidence sources required:** external_list
+**Evidence:** external_list
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
+**Invoice/runtime fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
+
+**Support docs:** no
 
 **External source note:** Existing download path already in place. The current seeded examples are the AHRI source tables in `claims_ai_service_ddl/3_insert_ahri_sources.sql`, which back the implemented `hp_ahri_found_in_product_list` and related heat-pump code rules.
 
@@ -703,11 +710,13 @@ Decision labels used below:
 
 **Source quote:** Replacing, adding to an existing heat pump or adding a secondary heat pump to a home with an existing heat pump is not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hp_existing_heat_pump_flag
+**Invoice/runtime fields:** hp_existing_heat_pump_flag
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -717,11 +726,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -736,19 +747,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... The rebate application... must be submitted... within six (6) months of the invoice date.
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hp_line_amount, upgrade_specific_rebate_line_amount, hp_new_equipment_type
+**Invoice/runtime fields:** hp_line_amount, upgrade_specific_rebate_line_amount, hp_new_equipment_type
 
-**Supplement subtype likely required:** f280_heat_load_calculation
+**Support docs:** yes - types: f280_heat_load_calculation; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current requirement reads more like supporting-document presence than structured F280 field extraction.
+**Note:** Current requirement reads more like supporting-document presence than structured F280 field extraction.
 
 **Proposed future registry keys:**
 
@@ -777,11 +784,13 @@ Decision labels used below:
 
 **Source quote:** Wood to heat pump upgrade rebates are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Missing now:**
 
@@ -791,11 +800,13 @@ Decision labels used below:
 
 **Source quote:** The home must primarily be heated by a wood or solid fuel heating system... The back-up heating system must be wood or electric. Fossil fuel back-up systems are not eligible...
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hp_existing_wood_heat_evidence, hp_backup_heat_evidence
+**Invoice/runtime fields:** hp_existing_wood_heat_evidence, hp_backup_heat_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -806,11 +817,13 @@ Decision labels used below:
 
 **Source quote:** The new heat pump must be sized... serve a main living area... have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List...
 
-**Evidence sources required:** external_list
+**Evidence:** external_list
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity, hp_main_living_area_evidence
+**Invoice/runtime fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity, hp_main_living_area_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -827,19 +840,15 @@ Decision labels used below:
 
 **Source quote:** The existing wood or solid fuel heating system may be retained in safe and working order or removed... Before and after photos... Copy of a WETT-certified inspection report...
 
-**Evidence sources required:** supporting_document
+**Evidence:** supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** before_after_photo_set, wett_report
+**Support docs:** yes - types: before_after_photo_set, wett_report; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current architecture only needs document classification / presence here.
+**Note:** Current architecture only needs document classification / presence here.
 
 **Proposed future registry keys:**
 
@@ -863,11 +872,13 @@ Decision labels used below:
 
 **Source quote:** Replacing, adding to an existing heat pump or adding a secondary heat pump to a home with an existing heat pump is not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hp_existing_heat_pump_flag
+**Invoice/runtime fields:** hp_existing_heat_pump_flag
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -877,11 +888,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -896,19 +909,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... The rebate application... must be submitted... within six (6) months of the invoice date.
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hp_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** hp_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** f280_heat_load_calculation
+**Support docs:** yes - types: f280_heat_load_calculation; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Same as the electric path: current need is supporting-document presence, not extracted supplement fields.
+**Note:** Same as the electric path: current need is supporting-document presence, not extracted supplement fields.
 
 **Proposed future registry keys:**
 
@@ -936,11 +945,13 @@ Decision labels used below:
 
 **Source quote:** The home must be primarily heated by fossil fuel (natural gas or propane)...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** hp_existing_gas_propane_heat_evidence
+**Invoice/runtime fields:** hp_existing_gas_propane_heat_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -950,19 +961,15 @@ Decision labels used below:
 
 **Source quote:** The new heat pump must be capable of distributing heat throughout all the conditioned space... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
+**Invoice/runtime fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
 
-**Supplement subtype likely required:** fossil_fuel_removal_proof
+**Support docs:** yes - types: fossil_fuel_removal_proof; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** The removal-proof part is supplement-driven, but this requirement does not yet force a true extracted supplement field.
+**Note:** The removal-proof part is supplement-driven, but this requirement does not yet force a true extracted supplement field.
 
 **Proposed future registry keys:**
 
@@ -990,19 +997,15 @@ Decision labels used below:
 
 **Source quote:** Homes in Non-Integrated Areas of the electricity grid must contact ... for pre-approval prior to installation.
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** non_integrated_area_preapproval_notice
+**Support docs:** yes - types: non_integrated_area_preapproval_notice; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Preapproval is currently best modeled as supporting-document subtype/presence plus DB context.
+**Note:** Preapproval is currently best modeled as supporting-document subtype/presence plus DB context.
 
 **Proposed future registry keys:**
 
@@ -1026,11 +1029,13 @@ Decision labels used below:
 
 **Source quote:** The back-up heating system must be electric or wood... Replacing, adding to an existing heat pump or adding a secondary heat pump... is not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hp_backup_heat_evidence, hp_existing_heat_pump_flag
+**Invoice/runtime fields:** hp_backup_heat_evidence, hp_existing_heat_pump_flag
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1041,11 +1046,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1060,19 +1067,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... Proof of fossil fuel system removal... The rebate application... must be submitted... within six (6) months...
 
-**Evidence sources required:** invoice_pdf, database
+**Evidence:** invoice_pdf, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hp_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** hp_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** f280_heat_load_calculation, fossil_fuel_removal_proof
+**Support docs:** yes - types: f280_heat_load_calculation, fossil_fuel_removal_proof; extracted fields: removal_date_or_permit_reference; located-field table: maybe
 
-**Supplement extracted fields likely required:** removal_date_or_permit_reference
-
-**Would this justify `claims.supporting_document_located_fields`?** maybe
-
-**Supplement interpretation note:** A table is only justified here if we decide to automate permit/date extraction rather than just document presence.
+**Note:** A table is only justified here if we decide to automate permit/date extraction rather than just document presence.
 
 **Proposed future registry keys:**
 
@@ -1101,11 +1104,13 @@ Decision labels used below:
 
 **Source quote:** The home must be primarily heated by oil... The home must meet a minimum oil consumption baseline of 500 Ltrs. annually...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** hp_existing_oil_heat_evidence, hp_oil_consumption_baseline_evidence
+**Invoice/runtime fields:** hp_existing_oil_heat_evidence, hp_oil_consumption_baseline_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1116,19 +1121,15 @@ Decision labels used below:
 
 **Source quote:** The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Resources Canada Oil to Heat Pump Affordability Qualified Heat Pump Product List...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
+**Invoice/runtime fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
 
-**Supplement subtype likely required:** oil_removal_proof
+**Support docs:** yes - types: oil_removal_proof; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Removal-proof is supplement evidence, but not yet a true extracted-field requirement.
+**Note:** Removal-proof is supplement evidence, but not yet a true extracted-field requirement.
 
 **External source note:** This row is the one place where the source text explicitly names the Natural Resources Canada Oil to Heat Pump Affordability qualified list. Current implementation still rides the existing AHRI-based download path. If the client wants strict source fidelity here, this may justify a distinct download/source investigation beyond the current AHRI seed.
 
@@ -1159,19 +1160,15 @@ Decision labels used below:
 
 **Source quote:** Homes in Non-Integrated Areas of the electricity grid must contact ... for pre-approval prior to installation.
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** non_integrated_area_preapproval_notice
+**Support docs:** yes - types: non_integrated_area_preapproval_notice; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Same interpretation as the gas/propane path.
+**Note:** Same interpretation as the gas/propane path.
 
 **Proposed future registry keys:**
 
@@ -1191,11 +1188,13 @@ Decision labels used below:
 
 **Source quote:** The back-up heating system must be electric or wood... Replacing, adding to an existing heat pump or adding a secondary heat pump... is not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hp_backup_heat_evidence, hp_existing_heat_pump_flag
+**Invoice/runtime fields:** hp_backup_heat_evidence, hp_existing_heat_pump_flag
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1206,11 +1205,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1225,19 +1226,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... Proof of fossil fuel (oil) system removal... The rebate application... within six (6) months...
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hp_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** hp_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** f280_heat_load_calculation, oil_removal_proof
+**Support docs:** yes - types: f280_heat_load_calculation, oil_removal_proof; extracted fields: removal_date_or_permit_reference; located-field table: maybe
 
-**Supplement extracted fields likely required:** removal_date_or_permit_reference
-
-**Would this justify `claims.supporting_document_located_fields`?** maybe
-
-**Supplement interpretation note:** Only needs a supplement field table if we automate date/permit extraction.
+**Note:** Only needs a supplement field table if we automate date/permit extraction.
 
 **Proposed future registry keys:**
 
@@ -1266,11 +1263,13 @@ Decision labels used below:
 
 **Source quote:** The home must be primarily heated by tanked propane or natural gas provided by Pacific Northern Gas (PNG)...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** dfhp_existing_png_or_tank_propane_evidence
+**Invoice/runtime fields:** dfhp_existing_png_or_tank_propane_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1280,19 +1279,15 @@ Decision labels used below:
 
 **Source quote:** The new heat pump must be integrated with a propane or natural gas heating system... have the thermostat / outdoor temperature switch-over control set to the following region-specific temperatures... be sized to ensure it has the capacity to meet the home's heat demand...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** dfhp_equipment_type, hp_ahri_reference
+**Invoice/runtime fields:** dfhp_equipment_type, hp_ahri_reference
 
-**Supplement subtype likely required:** commissioning_or_control_document, fossil_modification_or_removal_proof
+**Support docs:** yes - types: commissioning_or_control_document, fossil_modification_or_removal_proof; extracted fields: switchover_setpoint; located-field table: maybe
 
-**Supplement extracted fields likely required:** switchover_setpoint
-
-**Would this justify `claims.supporting_document_located_fields`?** maybe
-
-**Supplement interpretation note:** This becomes a true supplement field only if we automate reading the switchover setpoint from supporting material.
+**Note:** This becomes a true supplement field only if we automate reading the switchover setpoint from supporting material.
 
 **Proposed future registry keys:**
 
@@ -1322,19 +1317,15 @@ Decision labels used below:
 
 **Source quote:** A program approved Heat Load Calculation is required to properly size the system. Rule of thumb equipment sizing will not be accepted.
 
-**Evidence sources required:** supporting_document
+**Evidence:** supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** approved_heat_load_calculation
+**Support docs:** yes - types: approved_heat_load_calculation; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Presence of the approved heat-load document is the current need.
+**Note:** Presence of the approved heat-load document is the current need.
 
 **Proposed future registry keys:**
 
@@ -1358,19 +1349,15 @@ Decision labels used below:
 
 **Source quote:** Homes in Non-Integrated Areas of the electricity grid must contact ... for pre-approval prior to installation.
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** non_integrated_area_preapproval_notice
+**Support docs:** yes - types: non_integrated_area_preapproval_notice; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Subtype/presence only for now.
+**Note:** Subtype/presence only for now.
 
 **Proposed future registry keys:**
 
@@ -1386,11 +1373,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1405,19 +1394,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... Proof of fossil fuel system removal or modification... A copy of CSA-F280-12 Heat Load Calculation is required... within six (6) months...
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** dfhp_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** dfhp_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** approved_heat_load_calculation, fossil_modification_or_removal_proof
+**Support docs:** yes - types: approved_heat_load_calculation, fossil_modification_or_removal_proof; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current requirement does not force supplement field extraction.
+**Note:** Current requirement does not force supplement field extraction.
 
 **Proposed future registry keys:**
 
@@ -1446,11 +1431,13 @@ Decision labels used below:
 
 **Source quote:** The home must be primarily heated by fossil fuel (oil, propane or natural gas), electricity, or wood...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** atw_conversion_source_fuel_evidence
+**Invoice/runtime fields:** atw_conversion_source_fuel_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1462,19 +1449,15 @@ Decision labels used below:
 
 **Source quote:** The new air-to-water heat pump must... be listed as an eligible system on the Air-to-Water and Combined Heat Pump Qualifying Product List...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** atw_product_list_reference
+**Invoice/runtime fields:** atw_product_list_reference
 
-**Supplement subtype likely required:** product_spec_sheet, manufacturer_label_photo
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo; extracted fields: atw_make_model; located-field table: yes
 
-**Supplement extracted fields likely required:** atw_make_model
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** If the make/model is proved from supplement material rather than invoice text, it is a true extracted supplement field.
+**Note:** If the make/model is proved from supplement material rather than invoice text, it is a true extracted supplement field.
 
 **External source note:** This looks like a real new downloadable-list candidate. Better Homes publishes the Air-to-Water and Combination Heat Pump qualified list directly, including a dedicated page and a PDF list. If we expand beyond AHRI/NEEA, this is one of the strongest next seeded-download candidates. See:
 
@@ -1500,19 +1483,15 @@ Decision labels used below:
 
 **Source quote:** If the new air-to-water heat pump replaces a fossil fuel heating system, all the fossil fuel heating equipment... must be removed... If it replaces a wood or solid fuel heating system, the existing wood or solid fuel heating system may be retained... or removed...
 
-**Evidence sources required:** supporting_document
+**Evidence:** supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** fossil_removal_proof, before_after_photo_set, wett_report
+**Support docs:** yes - types: fossil_removal_proof, before_after_photo_set, wett_report; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current need is document classification/presence.
+**Note:** Current need is document classification/presence.
 
 **Proposed future registry keys:**
 
@@ -1537,19 +1516,15 @@ Decision labels used below:
 
 **Source quote:** Replacing, adding to an existing heat pump or adding a secondary heat pump... is not eligible. Homes in Non-Integrated Areas... must contact... for pre-approval...
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** atw_existing_heat_pump_flag
+**Invoice/runtime fields:** atw_existing_heat_pump_flag
 
-**Supplement subtype likely required:** non_integrated_area_preapproval_notice
+**Support docs:** yes - types: non_integrated_area_preapproval_notice; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Preapproval is not yet a true supplement field requirement.
+**Note:** Preapproval is not yet a true supplement field requirement.
 
 **Proposed future registry keys:**
 
@@ -1573,11 +1548,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1592,19 +1569,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... Proof of fossil fuel system removal... Before and after photos of the wood or solid fuel heating system... WETT-certified inspection report...
 
-**Evidence sources required:** invoice_pdf, database
+**Evidence:** invoice_pdf, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** atw_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** atw_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** f280_heat_load_calculation, fossil_removal_proof, before_after_photo_set, wett_report
+**Support docs:** yes - types: f280_heat_load_calculation, fossil_removal_proof, before_after_photo_set, wett_report; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current path is still evidence-presence oriented.
+**Note:** Current path is still evidence-presence oriented.
 
 **Proposed future registry keys:**
 
@@ -1634,11 +1607,13 @@ Decision labels used below:
 
 **Source quote:** The home must be primarily heated by fossil fuel (oil, propane or natural gas), electricity, or wood...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** cshp_conversion_source_fuel_evidence
+**Invoice/runtime fields:** cshp_conversion_source_fuel_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1649,19 +1624,15 @@ Decision labels used below:
 
 **Source quote:** Combined space and water heat pump... Must be listed on the air-to-water and combined heat pump qualifying product list.
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** cshp_product_list_reference
+**Invoice/runtime fields:** cshp_product_list_reference
 
-**Supplement subtype likely required:** product_spec_sheet, manufacturer_label_photo
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo; extracted fields: cshp_make_model; located-field table: yes
 
-**Supplement extracted fields likely required:** cshp_make_model
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** Make/model from supplement material is a genuine extracted fact if we automate it.
+**Note:** Make/model from supplement material is a genuine extracted fact if we automate it.
 
 **External source note:** Same source path as the air-to-water row above. The Better Homes Air-to-Water and Combination Heat Pump qualified list appears to cover both air-to-water-only and combined systems, so this likely points to the same next seeded-download family rather than a separate one. See:
 
@@ -1687,19 +1658,15 @@ Decision labels used below:
 
 **Source quote:** If the new air-to-water heat pump replaces a fossil fuel heating system... must be removed... If it replaces a wood or solid fuel heating system... may be retained in safe and working order or removed...
 
-**Evidence sources required:** supporting_document
+**Evidence:** supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** cshp_domestic_hot_water_evidence
+**Invoice/runtime fields:** cshp_domestic_hot_water_evidence
 
-**Supplement subtype likely required:** fossil_removal_proof, before_after_photo_set, wett_report
+**Support docs:** yes - types: fossil_removal_proof, before_after_photo_set, wett_report; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** The current architecture only needs supporting-document subtype/presence here.
+**Note:** The current architecture only needs supporting-document subtype/presence here.
 
 **Proposed future registry keys:**
 
@@ -1724,11 +1691,13 @@ Decision labels used below:
 
 **Source quote:** Replacing, adding to an existing heat pump or adding a secondary heat pump... is not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** cshp_existing_heat_pump_flag
+**Invoice/runtime fields:** cshp_existing_heat_pump_flag
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1738,11 +1707,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1757,19 +1728,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... Proof of fossil fuel system removal... Before and after photos... WETT-certified inspection report...
 
-**Evidence sources required:** invoice_pdf, supporting_document, database
+**Evidence:** invoice_pdf, supporting_document, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** cshp_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** cshp_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** f280_heat_load_calculation, fossil_removal_proof, before_after_photo_set, wett_report
+**Support docs:** yes - types: f280_heat_load_calculation, fossil_removal_proof, before_after_photo_set, wett_report; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** No supplement table is required unless we later automate detailed extraction from these docs.
+**Note:** No supplement table is required unless we later automate detailed extraction from these docs.
 
 **Proposed future registry keys:**
 
@@ -1799,11 +1766,13 @@ Decision labels used below:
 
 **Source quote:** The existing water heater being replaced must be the home's primary water heater.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** hpwh_existing_water_heater_evidence
+**Invoice/runtime fields:** hpwh_existing_water_heater_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1813,19 +1782,15 @@ Decision labels used below:
 
 **Source quote:** Eligible systems are listed as Tier 2 or higher on NEEA's Advanced Water Heater Specification Qualified Products List...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** product_spec_sheet, manufacturer_label_photo
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo; extracted fields: hpwh_manufacturer, hpwh_model_number, hpwh_neea_reference, hpwh_tier_reference; located-field table: yes
 
-**Supplement extracted fields likely required:** hpwh_manufacturer, hpwh_model_number, hpwh_neea_reference, hpwh_tier_reference
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** This is a strong supplement-field-table candidate because label/spec OCR can produce real persisted product facts.
+**Note:** This is a strong supplement-field-table candidate because label/spec OCR can produce real persisted product facts.
 
 **External source note:** Existing download path already in place. The current seeded example is the NEEA qualified-products source in `claims_ai_service_ddl/3_insert_neea_sources.sql`, backing `hpwh_neea_found_in_product_list` and `hpwh_neea_tier_2_or_higher`.
 
@@ -1845,19 +1810,15 @@ Decision labels used below:
 
 **Source quote:** If the new heat pump water heater replaces a fossil fuel water heating system, all the fossil fuel heating equipment... must be removed or decommissioned... Homes in Non-Integrated Areas... must contact... for pre-approval...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** hpwh_existing_fuel_type
+**Invoice/runtime fields:** hpwh_existing_fuel_type
 
-**Supplement subtype likely required:** fossil_fuel_removal_proof, non_integrated_area_preapproval_notice, permit_document
+**Support docs:** yes - types: fossil_fuel_removal_proof, non_integrated_area_preapproval_notice, permit_document; extracted fields: hpwh_fossil_removal_date_or_permit_reference; located-field table: maybe
 
-**Supplement extracted fields likely required:** hpwh_fossil_removal_date_or_permit_reference
-
-**Would this justify `claims.supporting_document_located_fields`?** maybe
-
-**Supplement interpretation note:** A supplement field table is justified only if we automate permit/date extraction instead of pure document presence.
+**Note:** A supplement field table is justified only if we automate permit/date extraction instead of pure document presence.
 
 **Proposed future registry keys:**
 
@@ -1884,11 +1845,13 @@ Decision labels used below:
 
 **Source quote:** Replacing or adding a secondary heat pump water heater to a home with an existing heat pump water heater is not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hpwh_secondary_system_flag, hpwh_existing_hpwh_flag
+**Invoice/runtime fields:** hpwh_secondary_system_flag, hpwh_existing_hpwh_flag
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1899,11 +1862,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1918,19 +1883,15 @@ Decision labels used below:
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... Proof of gas water heater removal... The rebate application... must be submitted... within six (6) months...
 
-**Evidence sources required:** invoice_pdf, database
+**Evidence:** invoice_pdf, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** hpwh_existing_fuel_type, hpwh_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** hpwh_existing_fuel_type, hpwh_line_amount, upgrade_specific_rebate_line_amount
 
-**Supplement subtype likely required:** fossil_fuel_removal_proof
+**Support docs:** yes - types: fossil_fuel_removal_proof; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** Current need is supporting evidence presence, not extracted supplement values.
+**Note:** Current need is supporting evidence presence, not extracted supplement values.
 
 **Proposed future registry keys:**
 
@@ -1954,11 +1915,13 @@ Decision labels used below:
 
 **Source quote:** Only homes that convert from a fossil fuel primary space and/or water heating system to a heat pump... are eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** esu_fossil_to_heat_pump_context
+**Invoice/runtime fields:** esu_fossil_to_heat_pump_context
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -1968,19 +1931,15 @@ Decision labels used below:
 
 **Source quote:** The electric service (new wire) must be upgraded by the participant's electrical utility... The service upgrade... must be installed within six months of the heat pump installation.
 
-**Evidence sources required:** invoice_pdf, supporting_document
+**Evidence:** invoice_pdf, supporting_document
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** esu_utility_reference
+**Invoice/runtime fields:** esu_utility_reference
 
-**Supplement subtype likely required:** utility_bill_or_invoice, utility_upgrade_document
+**Support docs:** yes - types: utility_bill_or_invoice, utility_upgrade_document; extracted fields: previous_service_size, new_service_size; located-field table: maybe
 
-**Supplement extracted fields likely required:** previous_service_size, new_service_size
-
-**Would this justify `claims.supporting_document_located_fields`?** maybe
-
-**Supplement interpretation note:** This only needs a supplement field table if we automate service-size extraction from utility-side docs.
+**Note:** This only needs a supplement field table if we automate service-size extraction from utility-side docs.
 
 **External source note:** This looks more like utility-issued document evidence than a reusable central download. No general public utility-upgrade master list was identified in this pass; if automation is pursued here it likely depends on uploaded utility documents or direct utility-specific integrations rather than a seeded reference file.
 
@@ -2010,11 +1969,13 @@ Decision labels used below:
 
 **Source quote:** Eligible expenses include utility connection fees, electrical panel or sub-panel upgrade, service mast alterations... labour.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** esu_eligible_expense_lines, esu_line_amount
+**Invoice/runtime fields:** esu_eligible_expense_lines, esu_line_amount
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2028,11 +1989,13 @@ Decision labels used below:
 
 **Source quote:** Electrical panel or sub-panel upgrades or heat pump connections to the panel without an electric service upgrade by the utility are not eligible.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** esu_ineligible_panel_only_evidence
+**Invoice/runtime fields:** esu_ineligible_panel_only_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2042,19 +2005,15 @@ Decision labels used below:
 
 **Source quote:** If the contractor is being billed by the utility for the line upgrade, then all work completed by the contractor and the utility must be on one invoice.
 
-**Evidence sources required:** invoice_pdf, supporting_document
+**Evidence:** invoice_pdf, supporting_document
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** esu_contractor_utility_management_evidence
+**Invoice/runtime fields:** esu_contractor_utility_management_evidence
 
-**Supplement subtype likely required:** utility_invoice
+**Support docs:** yes - types: utility_invoice; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** The current requirement is mainly one-invoice / evidence-presence logic.
+**Note:** The current requirement is mainly one-invoice / evidence-presence logic.
 
 **Proposed future registry keys:**
 
@@ -2074,11 +2033,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2093,11 +2054,13 @@ Decision labels used below:
 
 **Source quote:** Electrical service upgrade... up to a maximum... Maximum of one electrical service upgrade per home... Invoice... must show the itemized CleanBC rebate... within six (6) months...
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** esu_line_amount, upgrade_specific_rebate_line_amount, esu_new_service_size
+**Invoice/runtime fields:** esu_line_amount, upgrade_specific_rebate_line_amount, esu_new_service_size
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2115,11 +2078,13 @@ Decision labels used below:
 
 **Source quote:** Remediation must be for existing health and safety issues... required to enable the safe installation and operation of a rebate-eligible upgrade... completed in association with an eligible upgrade... Rebates will not be paid for health and safety remediation on its own... confirmed as rebate-eligible prior to beginning remediation.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hs_issue_type, hs_associated_upgrade_evidence, hs_remediation_scope
+**Invoice/runtime fields:** hs_issue_type, hs_associated_upgrade_evidence, hs_remediation_scope
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2136,11 +2101,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be completed by a Registered Contractor who is approved to complete health and safety remediation...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** hs_registered_contractor_evidence
+**Invoice/runtime fields:** hs_registered_contractor_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2154,11 +2121,13 @@ Decision labels used below:
 
 **Source quote:** Must be used to remediate pest, asbestos, structural and/or mould issues... Invoice... must show the itemized CleanBC rebate...
 
-**Evidence sources required:** invoice_pdf, database
+**Evidence:** invoice_pdf, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** hs_issue_type, hs_remediation_scope, hs_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** hs_issue_type, hs_remediation_scope, hs_line_amount, upgrade_specific_rebate_line_amount
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2171,19 +2140,15 @@ Decision labels used below:
 
 **Source quote:** Before and after photos of the health and safety issue that was remediated.
 
-**Evidence sources required:** supporting_document
+**Evidence:** supporting_document
 
-**How this check should be done:** code
+**Check:** code
 
-**Invoice / runtime fields likely required:** none
+**Invoice/runtime fields:** none
 
-**Supplement subtype likely required:** before_after_photo_set
+**Support docs:** yes - types: before_after_photo_set; extracted fields: none; located-field table: no
 
-**Supplement extracted fields likely required:** none
-
-**Would this justify `claims.supporting_document_located_fields`?** no
-
-**Supplement interpretation note:** This is photo-evidence presence, not a structured supplement field.
+**Note:** This is photo-evidence presence, not a structured supplement field.
 
 **Proposed future registry keys:**
 
@@ -2207,11 +2172,13 @@ Decision labels used below:
 
 **Source quote:** The rebate application and supporting documentation must be submitted by the Registered Contractor within six (6) months of the invoice date.
 
-**Evidence sources required:** invoice_pdf, database
+**Evidence:** invoice_pdf, database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2223,11 +2190,13 @@ Decision labels used below:
 
 **Source quote:** Ventilation upgrades must be installed in association with a rebate-eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade. Rebates will not be paid for ventilation upgrades on their own.
 
-**Evidence sources required:** invoice_pdf
+**Evidence:** invoice_pdf
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** vent_associated_upgrade_evidence
+**Invoice/runtime fields:** vent_associated_upgrade_evidence
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2238,19 +2207,15 @@ Decision labels used below:
 
 **Source quote:** Heat/energy recovery ventilators must be ENERGY STAR certified and listed on Natural Resources Canada's searchable product list... be installed in accordance with the BC Housing Heat Recovery Ventilation Guide...
 
-**Evidence sources required:** invoice_pdf, supporting_document, external_list
+**Evidence:** invoice_pdf, supporting_document, external_list
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** vent_system_type
+**Invoice/runtime fields:** vent_system_type
 
-**Supplement subtype likely required:** product_spec_sheet, energy_star_label
+**Support docs:** yes - types: product_spec_sheet, energy_star_label; extracted fields: vent_energy_star_reference, vent_nrcan_or_product_list_reference; located-field table: yes
 
-**Supplement extracted fields likely required:** vent_energy_star_reference, vent_nrcan_or_product_list_reference
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** If the Energy Star / NRCan proof is coming from supplement docs, those are true extracted facts.
+**Note:** If the Energy Star / NRCan proof is coming from supplement docs, those are true extracted facts.
 
 **External source note:** An official NRCan searchable product list exists for ENERGY STAR certified products, including HRVs/ERVs, but this pass did not identify a simple seeded CSV/PDF equivalent like AHRI/NEEA. Treat this as a likely lookup/search integration or future scraper/API research item unless NRCan exposes a cleaner export path. See:
 
@@ -2277,19 +2242,15 @@ Decision labels used below:
 
 **Source quote:** Bathroom fan systems must... be ENERGY STAR certified... be ducted directly to the outside... have a capacity of at least 85 cfm... be rated for continuous duty... be equipped with self-closing backdraft damper... ducts must be sealed... ducts must be insulated to minimum R4...
 
-**Evidence sources required:** invoice_pdf, supporting_document
+**Evidence:** invoice_pdf, supporting_document
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Invoice / runtime fields likely required:** vent_system_type
+**Invoice/runtime fields:** vent_system_type
 
-**Supplement subtype likely required:** product_spec_sheet, energy_star_label
+**Support docs:** yes - types: product_spec_sheet, energy_star_label; extracted fields: vent_bathroom_fan_cfm, vent_static_pressure, vent_continuous_duty_motor_evidence, vent_backdraft_damper_evidence, vent_ducting_evidence, vent_main_bathroom_evidence, vent_direct_exterior_ducting_evidence; located-field table: yes
 
-**Supplement extracted fields likely required:** vent_bathroom_fan_cfm, vent_static_pressure, vent_continuous_duty_motor_evidence, vent_backdraft_damper_evidence, vent_ducting_evidence, vent_main_bathroom_evidence, vent_direct_exterior_ducting_evidence
-
-**Would this justify `claims.supporting_document_located_fields`?** yes
-
-**Supplement interpretation note:** This is one of the clearest supplement-field-table cases because the spec-sheet values themselves matter.
+**Note:** This is one of the clearest supplement-field-table cases because the spec-sheet values themselves matter.
 
 **Proposed future registry keys:**
 
@@ -2310,11 +2271,13 @@ Decision labels used below:
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor who is approved to install ventilation upgrades... Heat/energy recovery ventilators must be installed by a licensed HVAC contractor...
 
-**Evidence sources required:** database
+**Evidence:** database
 
-**How this check should be done:** code
+**Check:** code
 
-**Likely located fields required:** none
+**Invoice/runtime fields:** none
+
+**Support docs:** no
 
 **Traceability keys in system:**
 
@@ -2329,11 +2292,13 @@ Decision labels used below:
 
 **Source quote:** Ventilation... 95% or 60% of eligible upgrade costs... up to a maximum of $1,600 per home... Invoice... must show the itemized CleanBC rebate... within six (6) months...
 
-**Evidence sources required:** invoice_pdf, database
+**Evidence:** invoice_pdf, database
 
-**How this check should be done:** genai
+**Check:** genai
 
-**Likely located fields required:** vent_line_amount, upgrade_specific_rebate_line_amount
+**Invoice/runtime fields:** vent_line_amount, upgrade_specific_rebate_line_amount
+
+**Support docs:** no
 
 **Traceability keys in system:**
 

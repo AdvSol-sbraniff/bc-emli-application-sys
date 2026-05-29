@@ -30,12 +30,30 @@ type ContextPayload = {
   latest_ocr_invoice_number?: string | null;
 };
 
+type SupportingDocumentLocatedField = {
+  id?: string;
+  field_key?: string | null;
+  value_text?: string | null;
+  value_json?: any;
+  confidence?: number | null;
+  page?: number | null;
+  evidence_text?: string | null;
+  field_number?: number | null;
+  prompt_text?: string | null;
+};
+
 type SupportingDocumentRow = {
   id: string;
   invoice_id: string;
   supporting_document_type_id?: string | null;
   supporting_document_type_key?: string | null;
   supporting_document_type_description?: string | null;
+  classification_status?: string | null;
+  classification_confidence?: number | null;
+  classification_reason?: string | null;
+  supplement_routing_quality?: string | null;
+  supplement_routing_quality_reason?: string | null;
+  located_fields?: SupportingDocumentLocatedField[];
   storage_provider?: string | null;
   storage_key?: string | null;
   original_filename?: string | null;
@@ -67,6 +85,14 @@ function fmtBytes(n?: number | null) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function fmtLocatedFieldValue(field: SupportingDocumentLocatedField) {
+  if (field.value_text !== null && field.value_text !== undefined && String(field.value_text).trim()) {
+    return String(field.value_text);
+  }
+  if (field.value_json !== null && field.value_json !== undefined) return JSON.stringify(field.value_json);
+  return '-';
 }
 
 export default function InvoiceSupportingDocumentsAdminScreen() {
@@ -404,6 +430,8 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                 <Th>created_at</Th>
                 <Th>filename</Th>
                 <Th>type</Th>
+                <Th>routing</Th>
+                <Th>located fields</Th>
                 <Th isNumeric>size</Th>
                 <Th>actions</Th>
               </Tr>
@@ -415,7 +443,51 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                     {fmtTs(row.created_at)}
                   </Td>
                   <Td fontSize="sm">{row.original_filename || '—'}</Td>
-                  <Td fontSize="xs">{row.content_type || '—'}</Td>
+                  <Td fontSize="xs" maxW="220px">
+                    <Text fontSize="xs">{row.content_type || '—'}</Text>
+                    {row.classification_confidence !== null && row.classification_confidence !== undefined && (
+                      <Text fontSize="xs" opacity={0.65}>
+                        conf {Number(row.classification_confidence).toFixed(0)}
+                      </Text>
+                    )}
+                    {String(row.classification_reason || '').trim() && (
+                      <Text fontSize="xs" opacity={0.65} noOfLines={2}>
+                        {row.classification_reason}
+                      </Text>
+                    )}
+                  </Td>
+                  <Td fontSize="xs" maxW="220px">
+                    <Text fontSize="xs">{row.supplement_routing_quality || '—'}</Text>
+                    {String(row.supplement_routing_quality_reason || '').trim() && (
+                      <Text fontSize="xs" opacity={0.65} noOfLines={2}>
+                        {row.supplement_routing_quality_reason}
+                      </Text>
+                    )}
+                  </Td>
+                  <Td fontSize="xs" maxW="360px">
+                    {Array.isArray(row.located_fields) && row.located_fields.length > 0 ? (
+                      row.located_fields.map((field) => (
+                        <Box key={field.id || `${row.id}:${field.field_key}`} mb={1}>
+                          <Text fontSize="xs" fontWeight="semibold">
+                            {field.field_key || 'field'}: {fmtLocatedFieldValue(field)}
+                          </Text>
+                          <Text fontSize="xs" opacity={0.65}>
+                            conf {field.confidence ?? 0}
+                            {field.page ? `, page ${field.page}` : ''}
+                          </Text>
+                          {String(field.evidence_text || '').trim() && (
+                            <Text fontSize="xs" opacity={0.65} noOfLines={2}>
+                              {field.evidence_text}
+                            </Text>
+                          )}
+                        </Box>
+                      ))
+                    ) : (
+                      <Text fontSize="xs" opacity={0.65}>
+                        -
+                      </Text>
+                    )}
+                  </Td>
                   <Td isNumeric fontSize="xs">
                     {fmtBytes(row.byte_size)}
                   </Td>
@@ -448,7 +520,7 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
 
               {!loading && rows.length === 0 && (
                 <Tr>
-                  <Td colSpan={5}>
+                  <Td colSpan={7}>
                     <Text fontSize="sm" opacity={0.7}>
                       No supporting documents uploaded for this invoice yet.
                     </Text>

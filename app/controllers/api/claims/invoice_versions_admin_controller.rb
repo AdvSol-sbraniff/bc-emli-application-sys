@@ -148,7 +148,13 @@ module Api
                  read:
                    iv.as_json.merge(
                      "ahri_product_match" => serialize_ahri_product_match(iv),
-                     "neea_product_match" => serialize_neea_product_match(iv)
+                     "neea_product_match" => serialize_neea_product_match(iv),
+                     "supporting_document_types_by_upgrade_type" =>
+                       serialize_supporting_document_types_by_upgrade_type(
+                         iv.id
+                       ),
+                     "uploaded_supporting_documents" =>
+                       serialize_uploaded_supporting_documents(invoice.id)
                    ),
                  invoice:
                    invoice.as_json(
@@ -285,7 +291,13 @@ module Api
                  read:
                    iv.as_json.merge(
                      "ahri_product_match" => serialize_ahri_product_match(iv),
-                     "neea_product_match" => serialize_neea_product_match(iv)
+                     "neea_product_match" => serialize_neea_product_match(iv),
+                     "supporting_document_types_by_upgrade_type" =>
+                       serialize_supporting_document_types_by_upgrade_type(
+                         iv.id
+                       ),
+                     "uploaded_supporting_documents" =>
+                       serialize_uploaded_supporting_documents(iv.invoice_id)
                    ),
                  invoice:
                    invoice&.as_json(
@@ -553,6 +565,127 @@ module Api
         end
       end
 
+      def serialize_supporting_document_types_by_upgrade_type(
+        invoice_version_id
+      )
+        rows = upgrade_type_results_for(invoice_version_id).to_a
+        upgrade_types = []
+        seen_upgrade_type_ids = {}
+
+        rows.each do |row|
+          upgrade_type_id = row.invoice_upgrade_type_id
+          if upgrade_type_id.blank? || seen_upgrade_type_ids[upgrade_type_id]
+            next
+          end
+
+          seen_upgrade_type_ids[upgrade_type_id] = true
+          upgrade_types << {
+            invoice_upgrade_type_id: upgrade_type_id,
+            upgrade_type_key: row.read_attribute("upgrade_type_key"),
+            upgrade_type_description:
+              row.read_attribute("upgrade_type_description")
+          }
+        end
+
+        return [] if upgrade_types.empty?
+
+        mappings =
+          ::Claims::SupportingDocumentTypeUpgradeType
+            .includes(:supporting_document_type)
+            .where(
+              invoice_upgrade_type_id:
+                upgrade_types.map { |row| row[:invoice_upgrade_type_id] }
+            )
+            .references(:supporting_document_type)
+            .merge(::Claims::SupportingDocumentType.where(enabled: true))
+            .order("claims.supporting_document_types.type_key ASC")
+            .to_a
+            .group_by(&:invoice_upgrade_type_id)
+
+        upgrade_types.map do |row|
+          type_rows = Array(mappings[row[:invoice_upgrade_type_id]])
+
+          row.merge(
+            supporting_document_types:
+              type_rows.map do |mapping|
+                type = mapping.supporting_document_type
+                {
+                  supporting_document_type_id: type.id,
+                  type_key: type.type_key,
+                  description: type.description
+                }
+              end
+          )
+        end
+      end
+
+      def serialize_uploaded_supporting_documents(invoice_id)
+        ::Claims::SupportingDocument
+          .where(invoice_id: invoice_id)
+          .includes(:supporting_document_type)
+          .order(created_at: :desc, id: :desc)
+          .map do |row|
+            display_type =
+              row.supporting_document_type&.description ||
+                row.supporting_document_type&.type_key || row.content_type
+
+            {
+              id: row.id,
+              invoice_id: row.invoice_id,
+              supporting_document_type_id: row.supporting_document_type_id,
+              supporting_document_type_key:
+                row.supporting_document_type&.type_key,
+              supporting_document_type_description:
+                row.supporting_document_type&.description,
+              classification_status: row.classification_status,
+              classification_confidence: row.classification_confidence,
+              classification_reason: row.classification_reason,
+              supplement_routing_quality: row.supplement_routing_quality,
+              supplement_routing_quality_reason:
+                row.supplement_routing_quality_reason,
+              located_fields: serialize_supporting_document_located_fields(row),
+              classified_at: row.classified_at,
+              original_filename: row.original_filename,
+              content_type: display_type,
+              mime_content_type: row.content_type,
+              byte_size: row.byte_size,
+              created_at: row.created_at,
+              updated_at: row.updated_at
+            }
+          end
+      end
+
+      def serialize_supporting_document_located_fields(row)
+        row
+          .supporting_document_located_fields
+          .includes(:supporting_document_type_located_field)
+          .order(:field_key, :created_at)
+          .map do |field|
+            definition = field.supporting_document_type_located_field
+            field.as_json(
+              only: %i[
+                id
+                supporting_document_id
+                supporting_document_type_located_field_id
+                source_engine
+                field_key
+                value_type
+                value_text
+                value_json
+                confidence
+                page
+                polygon
+                evidence_text
+                created_at
+                updated_at
+              ]
+            ).merge(
+              "field_number" => definition&.field_number,
+              "prompt_text" => definition&.prompt_text
+            )
+          end
+      end
+
       def serialize_ahri_product_match(invoice_version)
         product = invoice_version.ahri_product
         return nil unless product
@@ -567,8 +700,7 @@ module Api
             heat_pump_type: product.heat_pump_type,
             make: product.make,
             outdoor_model: product.outdoor_model,
-            indoor_model_or_air_handler:
-              product.indoor_model_or_air_handler,
+            indoor_model_or_air_handler: product.indoor_model_or_air_handler,
             furnace_model: product.furnace_model,
             rated_capacity_btu_at_minus_5c:
               product.rated_capacity_btu_at_minus_5c,
@@ -577,8 +709,7 @@ module Api
             hspf: product.hspf,
             hspf2: product.hspf2,
             cop: product.cop,
-            capacity_maintenance_percent:
-              product.capacity_maintenance_percent,
+            capacity_maintenance_percent: product.capacity_maintenance_percent,
             cold_climate_rated: product.cold_climate_rated,
             eligibility_notes: product.eligibility_notes
           },

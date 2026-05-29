@@ -20,8 +20,13 @@ module Claims
         payload = latest_triage_payload(invoice_version.id)
 
         type_key =
-          (payload["supplement_type_key"] || payload[:supplement_type_key]).to_s.strip
-        type = ::Claims::SupportingDocumentType.find_by(type_key: type_key) if type_key.present?
+          (
+            payload["supplement_type_key"] || payload[:supplement_type_key]
+          ).to_s.strip
+        type =
+          ::Claims::SupportingDocumentType.find_by(
+            type_key: type_key
+          ) if type_key.present?
 
         document =
           ::Claims::SupportingDocument.find_or_initialize_by(
@@ -38,7 +43,8 @@ module Claims
           sha256: invoice_version.sha256,
           di_read_raw_json: invoice_version.di_raw_json,
           classifier_raw_json: payload,
-          classification_status: classification_status_for(type_key: type_key, type: type),
+          classification_status:
+            classification_status_for(type_key: type_key, type: type),
           classification_confidence:
             coerce_confidence(
               payload["supplement_type_confidence"] ||
@@ -51,11 +57,23 @@ module Claims
                 payload["document_kind_reason"] ||
                 payload[:document_kind_reason]
             ).to_s.presence,
+          supplement_routing_quality: supplement_routing_quality(payload),
+          supplement_routing_quality_reason:
+            supplement_routing_quality_reason(payload),
           classified_at: Time.current,
           updated_at: Time.current
         )
         document.created_at ||= Time.current
         document.save!
+
+        located_result =
+          ::Claims::SupportingDocuments::ApplyLocatedFields.call(
+            supporting_document_id: document.id,
+            classifier_payload: payload
+          )
+        unless located_result[:ok]
+          raise "ApplyLocatedFields failed: #{located_result.inspect}"
+        end
 
         document
       end
@@ -82,6 +100,28 @@ module Claims
         return "classified" if type.present?
 
         "needs_review"
+      end
+
+      def supplement_routing_quality(payload)
+        value =
+          (
+            payload["supplement_routing_quality"] ||
+              payload[:supplement_routing_quality]
+          ).to_s.strip.presence
+        if %w[usable needs_review requires_visual_review unusable].include?(
+             value
+           )
+          return value
+        end
+
+        nil
+      end
+
+      def supplement_routing_quality_reason(payload)
+        (
+          payload["supplement_routing_quality_reason"] ||
+            payload[:supplement_routing_quality_reason]
+        ).to_s.presence
       end
 
       def coerce_confidence(value)

@@ -4,7 +4,14 @@ module Claims
   module Ingest
     class ReconcileRun
       TERMINAL_STATUSES = %w[succeeded failed partial].freeze
-      GENAI_STEP_TYPES = %w[genai classifier genai_common genai_upgrade].freeze
+      VALIDATION_STEP_TYPES = %w[
+        genai
+        classifier
+        genai_common
+        genai_upgrade
+        code_common
+        code_upgrade
+      ].freeze
       INVOICE_CANDIDATE_ERROR_CODE = "invoice_bundle_count_invalid"
 
       def self.call(ingest_run_id:)
@@ -53,16 +60,16 @@ module Claims
           end
 
           # OCR succeeded
-          genai_steps = latest_genai_steps(run.id, invoice_version_id)
+          validation_steps = latest_validation_steps(run.id, invoice_version_id)
           invoice_status = invoice_status_for(invoice_version_id)
 
-          if genai_steps.empty?
+          if validation_steps.empty?
             succeeded += 1
-          elsif genai_steps.any? { |step| step.status == "failed" } ||
+          elsif validation_steps.any? { |step| step.status == "failed" } ||
                 invoice_status == "genai_failed"
             failed += 1
           elsif invoice_status == "genai_complete" &&
-                genai_steps.all? { |step| step.status == "succeeded" }
+                validation_steps.all? { |step| step.status == "succeeded" }
             succeeded += 1
           else
             running += 1
@@ -98,7 +105,8 @@ module Claims
           if bundle_validation
             status = "failed"
             succeeded = 0
-            failed = total_files.positive? ? total_files : invoice_version_ids.size
+            failed =
+              total_files.positive? ? total_files : invoice_version_ids.size
             messages = upsert_invoice_bundle_error(messages, bundle_validation)
           else
             messages = remove_invoice_bundle_error(messages)
@@ -131,11 +139,11 @@ module Claims
           .first
       end
 
-      def latest_genai_steps(ingest_run_id, invoice_version_id)
+      def latest_validation_steps(ingest_run_id, invoice_version_id)
         ::Claims::IngestStepRun.where(
           ingest_run_id: ingest_run_id,
           invoice_version_id: invoice_version_id,
-          step_type: GENAI_STEP_TYPES
+          step_type: VALIDATION_STEP_TYPES
         ).order(created_at: :desc)
       end
 
@@ -200,8 +208,10 @@ module Claims
       def remove_invoice_bundle_error(messages)
         Array(messages).reject do |row|
           row.is_a?(Hash) &&
-            (row["code"].to_s == INVOICE_CANDIDATE_ERROR_CODE ||
-              row[:code].to_s == INVOICE_CANDIDATE_ERROR_CODE)
+            (
+              row["code"].to_s == INVOICE_CANDIDATE_ERROR_CODE ||
+                row[:code].to_s == INVOICE_CANDIDATE_ERROR_CODE
+            )
         end
       end
     end

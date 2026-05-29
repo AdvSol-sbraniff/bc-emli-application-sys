@@ -23,7 +23,12 @@ module Claims
       )
 
       mode = mode.to_s.presence || "normal"
-      unless %w[normal classifier_only triage_only use_existing_classifier].include?(mode)
+      unless %w[
+               normal
+               classifier_only
+               triage_only
+               use_existing_classifier
+             ].include?(mode)
         raise "Invalid RunGenaiJob mode=#{mode}"
       end
 
@@ -47,10 +52,14 @@ module Claims
       classifier_payload = nil
 
       if mode == "use_existing_classifier"
-        classifier_payload = existing_classifier_payload_for(invoice_version_id: iv.id)
-        raise "Missing stored classifier payload for invoice_version_id=#{iv.id}" if classifier_payload.blank?
+        classifier_payload =
+          existing_classifier_payload_for(invoice_version_id: iv.id)
+        if classifier_payload.blank?
+          raise "Missing stored classifier payload for invoice_version_id=#{iv.id}"
+        end
       else
-        classifier_step_type = (mode == "triage_only" ? "triage_classifier" : "classifier")
+        classifier_step_type =
+          (mode == "triage_only" ? "triage_classifier" : "classifier")
 
         step =
           find_or_create_step!(
@@ -139,6 +148,7 @@ module Claims
 
       common_upgrade_type = upgrade_type_by_key!("common")
       common_ruleset = ruleset_for_upgrade_type!(common_upgrade_type)
+      upgrade_types = detected_upgrade_types(classifier_payload)
       ruleset_results = []
 
       ruleset_results << run_genai_ruleset!(
@@ -152,7 +162,13 @@ module Claims
         di_raw_json: iv.di_raw_json
       )
 
-      detected_upgrade_types(classifier_payload).each do |upgrade_type|
+      upgrade_types.each do |upgrade_type|
+        upgrade_type_case_facts =
+          Claims::GenaiCaseFacts::Build.case_facts_for_upgrade_type(
+            case_facts: case_facts,
+            invoice_upgrade_type: upgrade_type
+          )
+
         ruleset_results << run_genai_ruleset!(
           ingest_run_id: ingest_run_id,
           session_id: sess.id,
@@ -160,9 +176,40 @@ module Claims
           step_type: "genai_upgrade",
           upgrade_type: upgrade_type,
           ruleset: ruleset_for_upgrade_type!(upgrade_type),
-          case_facts: case_facts,
+          case_facts: upgrade_type_case_facts,
           di_raw_json: iv.di_raw_json
         )
+      end
+
+      if code_rules_enabled_for_upgrade_type?(common_upgrade_type)
+        run_code_ruleset!(
+          ingest_run_id: ingest_run_id,
+          session_id: sess.id,
+          invoice_version_id: iv.id,
+          step_type: "code_common",
+          upgrade_type: common_upgrade_type
+        ) do
+          ::Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks.call(
+            invoice_version_id: iv.id
+          )
+        end
+      end
+
+      upgrade_types.each do |upgrade_type|
+        next unless code_rules_enabled_for_upgrade_type?(upgrade_type)
+
+        run_code_ruleset!(
+          ingest_run_id: ingest_run_id,
+          session_id: sess.id,
+          invoice_version_id: iv.id,
+          step_type: "code_upgrade",
+          upgrade_type: upgrade_type
+        ) do
+          ::Claims::InvoiceVersionRulechecks::ApplyUpgradeCodeRulechecks.call(
+            invoice_version_id: iv.id,
+            invoice_upgrade_type_id: upgrade_type.id
+          )
+        end
       end
 
       apply_combined_overall!(
@@ -238,6 +285,24 @@ module Claims
           .first
 
       payload = step&.genai_results_json
+      return payload if payload.is_a?(Hash)
+
+      document =
+        Claims::IngestDocument.find_by(
+          resolved_invoice_version_id: invoice_version_id,
+          document_kind: "invoice"
+        )
+      payload = document&.classifier_raw_json
+      return payload if payload.is_a?(Hash)
+
+      invoice_id =
+        Claims::InvoiceVersion.where(id: invoice_version_id).pick(:invoice_id)
+      document =
+        Claims::IngestDocument
+          .where(resolved_invoice_id: invoice_id, document_kind: "invoice")
+          .order(created_at: :asc)
+          .first
+      payload = document&.classifier_raw_json
       payload.is_a?(Hash) ? payload : nil
     end
 
@@ -309,11 +374,17 @@ module Claims
 
     def build_classifier_contextwindowjson(di_raw_json:)
       config = Claims::ValidationgenaiConfig.order(:created_at).first
-      sys = config&.classifier_system_record.to_s
+      sys = config&.classifier_system_record_for_current_mode.to_s
       user0 = config&.user_record0.to_s
+      supporting_document_field_tasks =
+        if config&.supporting_document_extraction_separate?
+          ""
+        else
+          ::Claims::SupportingDocuments::LocatedFieldPrompt.call
+        end
 
       if sys.strip.empty?
-        raise "validationgenai_config.classifier_system_record is empty"
+        raise "validationgenai_config classifier system record is empty for current supporting-document extraction mode"
       end
 
       messages = [
@@ -326,6 +397,14 @@ module Claims
           content: [{ type: "input_text", text: user0 }]
         }
       end
+      if supporting_document_field_tasks.present?
+        messages << {
+          role: "user",
+          content: [
+            { type: "input_text", text: supporting_document_field_tasks }
+          ]
+        }
+      end
 
       messages.concat(
         [
@@ -336,7 +415,8 @@ module Claims
           TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
             User record 2 (Actual Ask)
-            Locate the visible eligibility code, classify which invoice upgrade types appear to be present, and map clear invoice line items to those upgrade types.
+            Classify the document. If it is an invoice, locate the visible eligibility code, classify which invoice upgrade types appear to be present, and map clear invoice line items to those upgrade types. If it is a supporting document, classify the supporting document type and assess routing quality.
+            #{config&.supporting_document_extraction_separate? ? "Do not extract supporting-document located fields in this call." : "Return the configured supporting_document_located_fields for that selected type."}
             Reply must be strict JSON using the classifier schema from the system record.
           TEXT
         ]
@@ -406,30 +486,6 @@ module Claims
         raise "ApplyGenaiLocatedFields failed: #{located_field_result.inspect}"
       end
 
-      ahri_result =
-        ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch.call(
-          invoice_version_id: invoice_version_id,
-          invoice_upgrade_type_id: upgrade_type.id
-        )
-      Rails.logger.info(
-        "[CLAIMS][RUN_GENAI_JOB] ApplyProductListMatch=#{ahri_result.inspect}"
-      )
-      unless ahri_result[:ok]
-        raise "ApplyProductListMatch failed: #{ahri_result.inspect}"
-      end
-
-      neea_result =
-        ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch.call(
-          invoice_version_id: invoice_version_id,
-          invoice_upgrade_type_id: upgrade_type.id
-        )
-      Rails.logger.info(
-        "[CLAIMS][RUN_GENAI_JOB] ApplyNeeaProductListMatch=#{neea_result.inspect}"
-      )
-      unless neea_result[:ok]
-        raise "ApplyNeeaProductListMatch failed: #{neea_result.inspect}"
-      end
-
       upsert_genai_manifest!(
         invoice_version_id: invoice_version_id,
         upgrade_type: upgrade_type,
@@ -458,6 +514,51 @@ module Claims
       rescue StandardError
         nil
       end
+      begin
+        step&.update!(
+          status: "failed",
+          error_text: "#{e.class}: #{e.message}",
+          updated_at: Time.current
+        )
+      rescue StandardError
+        nil
+      end
+      raise
+    end
+
+    def run_code_ruleset!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version_id:,
+      step_type:,
+      upgrade_type:
+    )
+      step =
+        find_or_create_step!(
+          ingest_run_id: ingest_run_id,
+          session_id: session_id,
+          invoice_version_id: invoice_version_id,
+          step_type: step_type,
+          invoice_upgrade_type_id: upgrade_type.id
+        )
+      step.update!(
+        status: "in_progress",
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      result = yield
+      raise "Code rules failed: #{result.inspect}" unless result[:ok]
+
+      step.update!(
+        status: "succeeded",
+        genai_results_json: result,
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      result
+    rescue => e
       begin
         step&.update!(
           status: "failed",
@@ -499,7 +600,8 @@ module Claims
           ),
         validationgenai_ruleset_id: ruleset.id,
         raw_json: payload,
-        admin_advice: payload ? advice_from_rulechecks(payload) : row.admin_advice,
+        admin_advice:
+          payload ? advice_from_rulechecks(payload) : row.admin_advice,
         result:
           (
             if payload
@@ -527,6 +629,14 @@ module Claims
         .reject { |key| key.empty? || key == "common" }
         .uniq
         .map { |key| upgrade_type_by_key!(key) }
+    end
+
+    def code_rules_enabled_for_upgrade_type?(upgrade_type)
+      ::Claims::CodeRuleUpgradeType
+        .joins(:code_rule)
+        .where(invoice_upgrade_type_id: upgrade_type.id)
+        .where("#{::Claims::CodeRule.table_name}.enabled = ?", true)
+        .exists?
     end
 
     def classifier_eligibility_code(classifier_payload)
@@ -571,13 +681,16 @@ module Claims
         end
       result_values =
         overall_rows.map { |overall| coerce_overall_result(overall) }.compact
+      code_result_values =
+        code_result_values_for(invoice_version_id: invoice_version.id)
       code_advice_sections =
         code_advice_sections_for(invoice_version_id: invoice_version.id)
-      advice = combined_admin_advice(
-        config: config,
-        invoice_version_id: invoice_version.id,
-        extra_sections: code_advice_sections
-      )
+      advice =
+        combined_admin_advice(
+          config: config,
+          invoice_version_id: invoice_version.id,
+          extra_sections: code_advice_sections
+        )
 
       invoice_version.update!(
         genai_raw_json: {
@@ -592,7 +705,7 @@ module Claims
             end
         },
         genai_overall_confidence: confidences.compact.min || 0,
-        genai_result: combined_result(result_values),
+        genai_result: combined_result(result_values + code_result_values),
         genai_admin_advice: advice
       )
 
@@ -625,7 +738,7 @@ module Claims
 
             title =
               row.read_attribute("upgrade_type_description").presence ||
-              "Upgrade type"
+                "Upgrade type"
             "#{title}\n#{advice}"
           end
 
@@ -660,13 +773,23 @@ module Claims
           )
 
       rows
-        .group_by { |row| row.read_attribute("upgrade_type_description").presence || "Code-owned checks" }
+        .group_by do |row|
+          row.read_attribute("upgrade_type_description").presence ||
+            "Code-owned checks"
+        end
         .filter_map do |description, grouped_rows|
           advice = advice_from_rulecheck_rows(grouped_rows)
           next if advice.blank?
 
           "#{description} code checks\n#{advice}"
         end
+    end
+
+    def code_result_values_for(invoice_version_id:)
+      Claims::InvoiceVersionRulecheck
+        .where(invoice_version_id: invoice_version_id, source_engine: "code")
+        .pluck(:rule_result)
+        .filter_map { |result| coerce_rule_result(result) }
     end
 
     def advice_from_rulechecks(payload)
@@ -739,10 +862,10 @@ module Claims
 
     def advice_message_for_rule(row)
       if row.respond_to?(:reason_and_likely_causes)
-        [
-          row.reason_and_likely_causes,
-          row.evidence_text
-        ].map { |value| value.to_s.strip }.find(&:present?)
+        [row.reason_and_likely_causes, row.evidence_text].map do |value|
+            value.to_s.strip
+          end
+          .find(&:present?)
       else
         [
           row["reason_and_likely_causes"] || row[:reason_and_likely_causes],

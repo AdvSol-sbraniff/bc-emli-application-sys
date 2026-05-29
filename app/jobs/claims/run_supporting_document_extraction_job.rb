@@ -4,7 +4,7 @@ require "json"
 require "net/http"
 
 module Claims
-  class RunIngestTriageJob
+  class RunSupportingDocumentExtractionJob
     include Sidekiq::Job
     sidekiq_options queue: :claims_genai, retry: 0
 
@@ -17,12 +17,18 @@ module Claims
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
       end
+      unless document.document_kind == "supplement"
+        raise "Document is not a supporting document: ingest_document_id=#{document.id}"
+      end
+      if document.supporting_document_type_id.blank?
+        raise "Missing supporting_document_type_id for ingest_document_id=#{document.id}"
+      end
 
       step =
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
           document: document,
-          step_type: "triage_classifier"
+          step_type: "supporting_document_extraction"
         )
       step.update!(
         status: "in_progress",
@@ -30,23 +36,12 @@ module Claims
         updated_at: Time.current
       )
 
-      contextwindowjson =
-        build_classifier_contextwindowjson(
-          di_raw_json: document.di_read_raw_json
-        )
-      triage_payload = call_node_genai!(contextwindowjson: contextwindowjson)
-      result =
-        ::Claims::Ingest::ApplyDocumentTriageResult.call(
-          ingest_document_id: document.id,
-          triage_payload: triage_payload
-        )
-      unless result[:ok]
-        raise "ApplyDocumentTriageResult failed: #{result.inspect}"
-      end
+      contextwindowjson = build_contextwindowjson(document: document)
+      payload = call_node_genai!(contextwindowjson: contextwindowjson)
 
       step.update!(
         status: "succeeded",
-        genai_results_json: triage_payload,
+        genai_results_json: payload,
         context_window_json: contextwindowjson,
         error_text: nil,
         updated_at: Time.current
@@ -100,54 +95,41 @@ module Claims
         )
     end
 
-    def build_classifier_contextwindowjson(di_raw_json:)
+    def build_contextwindowjson(document:)
       config = ::Claims::ValidationgenaiConfig.order(:created_at).first
-      sys = config&.classifier_system_record_for_current_mode.to_s
-      user0 = config&.user_record0.to_s
-      supporting_document_field_tasks =
-        if config&.supporting_document_extraction_separate?
-          ""
-        else
-          ::Claims::SupportingDocuments::LocatedFieldPrompt.call
-        end
-
+      sys = config&.supporting_document_extraction_system_record.to_s
       if sys.strip.empty?
-        raise "validationgenai_config classifier system record is empty for current supporting-document extraction mode"
+        raise "validationgenai_config.supporting_document_extraction_system_record is empty"
       end
 
-      messages = [
-        { role: "system", content: [{ type: "input_text", text: sys }] }
+      type = document.supporting_document_type
+      field_tasks =
+        ::Claims::SupportingDocuments::LocatedFieldPrompt.call(
+          supporting_document_type: type
+        )
+      if field_tasks.blank?
+        raise "No supporting-document located-field tasks configured for #{type&.type_key || document.supporting_document_type_id}"
+      end
+
+      [
+        { role: "system", content: [{ type: "input_text", text: sys }] },
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                User record: Selected supporting document type
+                supporting_document_type_key: #{type.type_key}
+                supporting_document_type_description: #{type.description}
+
+                #{field_tasks}
+              TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
+                User record: Supporting document to extract
+                Document Intelligence raw json:
+                #{document.di_read_raw_json.to_json}
+
+                Actual ask:
+                Extract the configured supporting_document_located_fields for supporting_document_type_key=#{type.type_key}.
+                Reply must be strict JSON using the supporting-document extraction schema from the system record.
+              TEXT
       ]
-      if user0.strip.present?
-        messages << {
-          role: "user",
-          content: [{ type: "input_text", text: user0 }]
-        }
-      end
-      if supporting_document_field_tasks.present?
-        messages << {
-          role: "user",
-          content: [
-            { type: "input_text", text: supporting_document_field_tasks }
-          ]
-        }
-      end
-
-      messages << {
-        role: "user",
-        content: [{ type: "input_text", text: <<~TEXT }]
-              User record: Document to classify
-              Document Intelligence raw json:
-              #{di_raw_json.to_json}
-
-              Actual ask:
-              Classify the document. If it is a supporting document, classify the supporting document type and assess routing quality.
-              #{config&.supporting_document_extraction_separate? ? "Do not extract supporting-document located fields in this call." : "Return the configured supporting_document_located_fields for that selected type."}
-              Reply must be strict JSON using the classifier schema from the system record.
-            TEXT
-      }
-
-      messages
     end
 
     def call_node_genai!(contextwindowjson:)

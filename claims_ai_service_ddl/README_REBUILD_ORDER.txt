@@ -9,12 +9,26 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 3. `3_insert_neea_sources.sql`
 4. `4_insert_invoice_upgrade_types.sql`
 5. `4_insert_supporting_document_types.sql`
-6. `5_insert_code_rules.sql`
-7. `5_insert_code_located_fields.sql`
-8. `5_insert_genai_normalized.sql`
-9. `5_insert_validationgenai_rulesets.sql`
-10. `6_views.sql`
-11. `7_reporting_views.sql`
+6. `4_insert_supporting_document_type_upgrade_types.sql`
+7. `4_insert_supporting_document_type_located_fields.sql`
+8. `5_insert_code_rules.sql`
+9. `5_insert_code_located_fields.sql`
+10. `5_insert_genai_normalized.sql`
+11. `5_insert_validationgenai_rulesets.sql`
+12. `6_views.sql`
+13. `7_reporting_views.sql`
+
+## Active existing-database patches
+
+- `8_add_supporting_document_routing_quality.sql`
+  - Run once against an existing claims schema to add supplement routing-quality columns.
+  - A clean rebuild from `2_create_schema.sql` already includes these columns.
+- `8_create_supporting_document_located_fields.sql`
+  - Run once against an existing claims schema to add supporting-document located-field definition/result tables.
+  - A clean rebuild from `2_create_schema.sql` already includes these tables.
+- `8_split_supporting_document_extraction_mode.sql`
+  - Run once against an existing claims schema to rename the classifier prompt column and add the separate supporting-document extraction mode/config columns.
+  - A clean rebuild from `2_create_schema.sql` already includes these columns and step-type constraints.
 
 ## Not part of normal claims rebuild
 

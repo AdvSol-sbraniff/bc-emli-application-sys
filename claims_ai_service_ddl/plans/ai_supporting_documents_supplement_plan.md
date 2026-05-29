@@ -1,8 +1,8 @@
 # AI Supporting Documents Supplement Plan
 
-Date: 2026-05-25
+Date: 2026-05-27
 
-Status: planning only. No schema, OCR, GenAI, or UI changes are made by this document.
+Status: partially implemented locally. Mixed-bundle intake, shell-invoice staging, supplement typing, supporting-document-type admin, and runtime supplement-presence facts now exist. Supplement adequacy/quality rules and supplement extracted-field design remain future work.
 
 ## Required Companion Artifact
 
@@ -42,16 +42,37 @@ Relevant current files:
 - `app/jobs/claims/run_genai_job.rb`
 - `claims.invoice_versions.di_raw_json`
 
-### Supporting-document path today
+### Supporting-document and mixed-bundle path today
 
-Current supporting-document handling is much more limited.
+Current local supplement handling is no longer upload-only.
 
-Today:
+Implemented locally:
 
-- `claims.supporting_documents` exists
-- it stores document storage metadata
-- it does not currently store OCR/raw-read JSON for each supporting document
-- there is currently no parallel OCR/evidence pipeline for supporting PDFs comparable to the invoice pipeline
+- `claims.supporting_documents` now has supplement typing fields
+- `claims.supporting_document_types` exists
+- `claims.supporting_document_type_upgrade_types` exists
+- `claims.ingest_documents` stages each uploaded file before invoice resolution
+- one shell `claims.invoices` row is created immediately for the whole bundle
+- Azure Document Intelligence `read` runs on every uploaded PDF
+- one unified `triage_classifier` runs on every uploaded PDF
+- triage returns:
+  - `document_kind = invoice | supplement | unknown`
+  - invoice upgrade types for invoice files
+  - `supplement_type_key` for supplement files
+- bundle auto-continues only when exactly one invoice is found
+- the resolved invoice alone gets the follow-up `prebuilt-invoice` OCR pass
+- supplement files are promoted into `claims.supporting_documents` under the resolved invoice
+- the admin portal now has a `Supporting Document Types` screen
+- the admin PDF viewer now has a `Supplement docs` accordion showing:
+  - configured supplement types by detected upgrade type
+  - actually uploaded supporting documents
+
+Not done yet:
+
+- supplement-specific adequacy / quality rule families
+- supplement extracted-field persistence
+- curated supplement evidence packs injected into upgrade-type calls
+- a `claims.supporting_document_located_fields` table
 
 ## Requirements Interpretation
 
@@ -242,12 +263,17 @@ Not:
 
 ## Stage 0. Mixed-file upload intake
 
-For each uploaded PDF in the same drag-and-drop batch:
+Status:
 
-1. store the file
-2. run Azure Document Intelligence `read`
-3. run the document-triage classifier on the `read` output
-4. branch into invoice or supplement processing
+- implemented locally
+
+Current implemented shape:
+
+1. create one shell `claims.invoices` row for the bundle
+2. create one `claims.ingest_documents` row per uploaded PDF
+3. run Azure Document Intelligence `read`
+4. run the document-triage classifier on the `read` output
+5. branch into invoice or supplement processing
 
 The system should not assume every uploaded PDF is an invoice.
 
@@ -261,15 +287,20 @@ Bundle gate:
 
 ## Stage 1. Supporting document storage
 
+Status:
+
+- implemented locally for v1 typing/presence scope
+
 Keep `claims.supporting_documents` as the uploaded-file table.
 
 We do need supplement-processing persistence beyond storage metadata, but the current v1 target is narrow.
 
-Recommended v1 additions:
+Implemented v1 additions:
 
 - add `supporting_document_type_id`
 - add classification status/confidence/reason fields
 - keep OCR artifact persistence minimal and implementation-friendly
+- map supplement applicability through `claims.supporting_document_type_upgrade_types`
 
 Current leaning:
 
@@ -284,6 +315,10 @@ Related runtime-evidence note:
 - if a future supplement-field table ever becomes justified, it should still be invoice-level rather than invoice-version-level
 
 ## Stage 2. Per-file document triage classifier
+
+Status:
+
+- implemented locally
 
 For each uploaded PDF after DI `read`:
 
@@ -313,12 +348,16 @@ For v1, one classifier call per file is the preferred simplification.
 
 ## Stage 3. Invoice path after triage
 
+Status:
+
+- implemented locally
+
 For the one file classified as invoice:
 
 1. run one follow-up Azure Document Intelligence `prebuilt-invoice` call for that resolved invoice
 2. persist that invoice-model artifact on `claims.invoice_versions.di_raw_json`
 3. continue with the current invoice path unchanged after that point
-4. current invoice classifier result feeds the current common + upgrade-type validation flow
+4. the triage classifier result feeds the current common + upgrade-type validation flow
 5. current code rules and current per-upgrade-type GenAI calls remain the main adjudication path
 
 This is a major design constraint:
@@ -328,6 +367,10 @@ This is a major design constraint:
 - the bundle resolver should hand the invoice back into today’s proven pipeline
 
 ## Stage 4. Supplement typing
+
+Status:
+
+- implemented locally for typed presence and manual admin visibility
 
 For every non-invoice file in the bundle:
 
@@ -358,6 +401,10 @@ Examples of target supplement types:
 
 ## Stage 5. V1 runtime use of supplements
 
+Status:
+
+- partially implemented locally
+
 For v1, runtime supplement use should stay narrow.
 
 The current preferred direction is:
@@ -365,6 +412,19 @@ The current preferred direction is:
 1. invoice validation runs primarily from invoice evidence, code facts, and existing upgrade-type logic
 2. supplement docs contribute typed presence/inventory only
 3. upgrade-type rules may later ask whether specific supplement families are present
+
+Current local runtime behavior:
+
+- `Claims::GenaiCaseFacts::Build` now includes a global supporting-document summary
+- each upgrade-type call now also receives an upgrade-type-specific supporting-document summary derived from:
+  - attached `claims.supporting_documents`
+  - enabled `claims.supporting_document_types`
+  - `claims.supporting_document_type_upgrade_types`
+- runtime can therefore reason about:
+  - all present supplement type keys
+  - counts by supplement type
+  - configured supplement types for the current upgrade type
+  - missing configured supplement types for the current upgrade type
 
 Do not, in v1:
 
@@ -444,7 +504,7 @@ So the current architecture direction supports:
 - Should the triage classifier return only one supplement type or also a small ranked candidate list?
 - Should supplement docs also be linked to specific upgrade types explicitly after classification, or is invoice parentage plus supplement type enough?
 - Which supplement types deserve later extraction subcalls versus staying subtype-only?
-- How should supplement evidence be shown in the admin UI so admins can see type, confidence, and any manual override?
+- How should supplement evidence be shown in the admin UI so admins can see type, confidence, any manual override, and later adequacy results?
 - For which requirement families do we only need `supporting_documents.supplement_type`, and for which do we later need true extracted supplement fields?
 - Which of those later extracted supplement fields are strong enough to justify `claims.supporting_document_located_fields` rather than staying at supplement-subtype / evidence-presence level?
 
@@ -452,10 +512,10 @@ So the current architecture direction supports:
 
 The next design conversations should likely focus on:
 
-1. supplement-side schema shape
-2. triage-classifier output shape
-3. mixed-bundle exactly-one-invoice error handling
-4. which requirement families become first supplement-type-only candidates
+1. supplement adequacy / quality rule-table shape
+2. whether supplement rules should reuse normalized GenAI rule infrastructure or get their own registry
+3. which supplement types need only typed presence versus richer validity checks
+4. which requirement families become the first supplement-rule candidates
 
 ## Working Conclusion
 
@@ -466,6 +526,7 @@ So far, the agreed direction is:
 - the existing classifier should be extended into a per-file document-triage classifier
 - the bundle should auto-continue only when exactly one file is classified as `invoice`
 - the resolved invoice should get one follow-up `prebuilt-invoice` pass and then continue through today's current invoice pipeline
-- each non-invoice file should become a `claims.supporting_documents` row and receive a classified supplement type
-- v1 supplement work should stop at supplement typing plus persistence of that type on `claims.supporting_documents`
-- raw supplement OCR, curated evidence packs, supplement extraction subcalls, and `claims.supporting_document_located_fields` are all later-stage additions only if real sample documents justify them
+- each non-invoice file now becomes a `claims.supporting_documents` row and receives a classified supplement type
+- v1 supplement work currently stops at supplement typing plus persistence of that type on `claims.supporting_documents`
+- upgrade-type runtime now sees typed supplement presence from the database
+- raw supplement OCR, curated evidence packs, supplement adequacy rules, supplement extraction subcalls, and `claims.supporting_document_located_fields` are all later-stage additions only if real sample documents justify them

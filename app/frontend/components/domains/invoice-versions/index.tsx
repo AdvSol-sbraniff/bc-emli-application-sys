@@ -100,10 +100,7 @@ const FieldRow = ({ label, value, active, disabled, onClick }: FieldRowProps) =>
 const ruleDisplayTitle = (rulecheck: any) => {
   const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
   const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
-  const prefix =
-    sourceEngine === 'code'
-      ? `Code Rule ${num ?? ''}`.trim()
-      : `${num != null ? `Rule ${num}` : 'Rule'}`;
+  const prefix = sourceEngine === 'code' ? `Code Rule ${num ?? ''}`.trim() : `${num != null ? `Rule ${num}` : 'Rule'}`;
 
   return `${prefix} - ${String(rulecheck.rule_name ?? '')}`.trim();
 };
@@ -119,6 +116,14 @@ const displayLocatedFieldValue = (row: any): string => {
   if (row?.value_text != null && row.value_text !== '') return String(row.value_text);
   if (row?.value_json != null) return JSON.stringify(row.value_json);
   return '-';
+};
+
+const fmtBytes = (value: any): string => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '-';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 const upgradeTypeSortValue = (upgradeTypeKey: string) => {
@@ -1024,6 +1029,12 @@ export const InvoiceVersionShowScreen = () => {
   const neeaProductMatch = readData?.neea_product_match;
   const neeaProduct = neeaProductMatch?.product;
   const neeaSource = neeaProductMatch?.source;
+  const supportingDocumentTypeGroups = Array.isArray(readData?.supporting_document_types_by_upgrade_type)
+    ? readData.supporting_document_types_by_upgrade_type
+    : [];
+  const uploadedSupportingDocuments = Array.isArray(readData?.uploaded_supporting_documents)
+    ? readData.uploaded_supporting_documents
+    : [];
   const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
 
   // ============================================================
@@ -1328,6 +1339,190 @@ export const InvoiceVersionShowScreen = () => {
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
                           <Text size="sm" fontWeight="bold">
+                            Supplement docs
+                          </Text>
+                          <Text fontSize="xs" opacity={0.65}>
+                            Configured supplement types for the detected upgrade types, plus the actual uploaded
+                            supporting documents attached to this invoice.
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+
+                    <AccordionPanel px="0" pt="8px">
+                      <Box display="flex" flexDirection="column" gap="12px">
+                        <Box>
+                          <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
+                            Possible document types for this invoice&apos;s upgrade types
+                          </Text>
+                          {supportingDocumentTypeGroups.length === 0 ? (
+                            <Text fontSize="sm" opacity={0.7}>
+                              No supplement-type mappings are configured for the detected upgrade types.
+                            </Text>
+                          ) : (
+                            <Box display="flex" flexDirection="column" gap="10px">
+                              {supportingDocumentTypeGroups.map((group: any) => {
+                                const types = Array.isArray(group?.supporting_document_types)
+                                  ? group.supporting_document_types
+                                  : [];
+
+                                return (
+                                  <Box
+                                    key={String(group?.invoice_upgrade_type_id || group?.upgrade_type_key || 'group')}
+                                    borderWidth="1px"
+                                    borderColor="gray.200"
+                                    borderRadius="md"
+                                    bg="white"
+                                    p="10px"
+                                  >
+                                    <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                                      <InvoiceUpgradeTypeTile
+                                        upgradeTypeKey={String(group?.upgrade_type_key || 'common')}
+                                        description={group?.upgrade_type_description}
+                                        size={28}
+                                      />
+                                      <Text fontSize="sm" fontWeight="bold">
+                                        {String(
+                                          group?.upgrade_type_description ||
+                                            getInvoiceUpgradeTypeMeta(String(group?.upgrade_type_key || 'common'))
+                                              .label,
+                                        )}
+                                      </Text>
+                                      <Badge colorScheme="gray" variant="subtle">
+                                        {types.length} configured
+                                      </Badge>
+                                    </Flex>
+
+                                    {types.length === 0 ? (
+                                      <Text fontSize="sm" opacity={0.7}>
+                                        No supplement document types mapped to this upgrade type.
+                                      </Text>
+                                    ) : (
+                                      <Flex gap="6px" wrap="wrap">
+                                        {types.map((typeRow: any) => (
+                                          <Badge
+                                            key={String(
+                                              typeRow?.supporting_document_type_id || typeRow?.type_key || 'type',
+                                            )}
+                                            colorScheme="purple"
+                                            variant="subtle"
+                                            textTransform="none"
+                                          >
+                                            {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
+                                          </Badge>
+                                        ))}
+                                      </Flex>
+                                    )}
+                                  </Box>
+                                );
+                              })}
+                            </Box>
+                          )}
+                        </Box>
+
+                        <Box>
+                          <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
+                            Uploaded supporting documents
+                          </Text>
+                          {uploadedSupportingDocuments.length === 0 ? (
+                            <Text fontSize="sm" opacity={0.7}>
+                              No supporting documents uploaded for this invoice.
+                            </Text>
+                          ) : (
+                            <Box display="flex" flexDirection="column" gap="10px">
+                              {uploadedSupportingDocuments.map((doc: any) => (
+                                <Box
+                                  key={String(doc?.id || doc?.storage_key || 'supporting-doc')}
+                                  borderWidth="1px"
+                                  borderColor="gray.200"
+                                  borderRadius="md"
+                                  bg="white"
+                                  p="10px"
+                                >
+                                  <Flex align="center" gap="8px" mb="6px" wrap="wrap">
+                                    <Badge colorScheme="blue" variant="subtle" textTransform="none">
+                                      {String(
+                                        doc?.supporting_document_type_description ||
+                                          doc?.supporting_document_type_key ||
+                                          doc?.content_type ||
+                                          'Unclassified document',
+                                      )}
+                                    </Badge>
+                                    <Badge colorScheme={doc?.classification_status === 'classified' ? 'green' : 'gray'}>
+                                      {String(doc?.classification_status || 'pending')}
+                                    </Badge>
+                                    {doc?.classification_confidence != null && (
+                                      <Text fontSize="xs" opacity={0.75}>
+                                        confidence: {String(doc.classification_confidence)}
+                                      </Text>
+                                    )}
+                                  </Flex>
+
+                                  <Text fontSize="sm" fontWeight="bold" mb="2px">
+                                    {String(doc?.original_filename || 'Unnamed file')}
+                                  </Text>
+
+                                  <Text fontSize="xs" opacity={0.7}>
+                                    Uploaded {fmtDate(doc?.created_at)} • size {fmtBytes(doc?.byte_size)}
+                                  </Text>
+
+                                  {String(doc?.classification_reason || '').trim() && (
+                                    <Text fontSize="xs" opacity={0.8} mt="4px">
+                                      {String(doc.classification_reason)}
+                                    </Text>
+                                  )}
+
+                                  {String(doc?.supplement_routing_quality || '').trim() && (
+                                    <Box mt="6px">
+                                      <Badge colorScheme="teal" variant="subtle" textTransform="none">
+                                        routing: {String(doc.supplement_routing_quality)}
+                                      </Badge>
+                                      {String(doc?.supplement_routing_quality_reason || '').trim() && (
+                                        <Text fontSize="xs" opacity={0.8} mt="4px">
+                                          {String(doc.supplement_routing_quality_reason)}
+                                        </Text>
+                                      )}
+                                    </Box>
+                                  )}
+
+                                  {Array.isArray(doc?.located_fields) && doc.located_fields.length > 0 && (
+                                    <Box mt="8px" display="flex" flexDirection="column" gap="4px">
+                                      {doc.located_fields.map((field: any) => (
+                                        <Flex
+                                          key={String(field?.id || field?.field_key)}
+                                          gap="8px"
+                                          align="baseline"
+                                          wrap="wrap"
+                                          fontSize="xs"
+                                        >
+                                          <Text fontWeight="bold">{String(field?.field_key || 'field')}</Text>
+                                          <Text opacity={0.8}>
+                                            {field?.value_text != null
+                                              ? String(field.value_text)
+                                              : field?.value_json != null
+                                                ? JSON.stringify(field.value_json)
+                                                : 'not found'}
+                                          </Text>
+                                          <Text opacity={0.6}>confidence: {String(field?.confidence ?? 0)}</Text>
+                                        </Flex>
+                                      ))}
+                                    </Box>
+                                  )}
+                                </Box>
+                              ))}
+                            </Box>
+                          )}
+                        </Box>
+                      </Box>
+                    </AccordionPanel>
+                  </AccordionItem>
+
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
                             Overall advice
                           </Text>
                           <Text fontSize="xs" opacity={0.65}>
@@ -1399,10 +1594,25 @@ export const InvoiceVersionShowScreen = () => {
                               ['HSPF2', ahriProduct.hspf2],
                               ['COP', ahriProduct.cop],
                               ['Capacity maintenance %', ahriProduct.capacity_maintenance_percent],
-                              ['Cold climate rated', ahriProduct.cold_climate_rated == null ? null : ahriProduct.cold_climate_rated ? 'Yes' : 'No'],
+                              [
+                                'Cold climate rated',
+                                ahriProduct.cold_climate_rated == null
+                                  ? null
+                                  : ahriProduct.cold_climate_rated
+                                    ? 'Yes'
+                                    : 'No',
+                              ],
                               ['Eligibility notes', ahriProduct.eligibility_notes],
                             ].map(([label, value]) => (
-                              <Box key={String(label)} px="10px" py="8px" borderRadius="md" borderWidth="1px" borderColor="blue.100" bg="white">
+                              <Box
+                                key={String(label)}
+                                px="10px"
+                                py="8px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="blue.100"
+                                bg="white"
+                              >
                                 <Text fontSize="xs" opacity={0.7}>
                                   {String(label)}
                                 </Text>
@@ -1425,7 +1635,8 @@ export const InvoiceVersionShowScreen = () => {
                               AHRI source id: {fmtText(ahriSource?.ahri_source_id)}
                             </Text>
                             <Text fontSize="xs" opacity={0.75}>
-                              Imported {fmtDate(ahriSource?.completed_at)} with {fmtText(ahriSource?.records_imported)} rows.
+                              Imported {fmtDate(ahriSource?.completed_at)} with {fmtText(ahriSource?.records_imported)}{' '}
+                              rows.
                             </Text>
                             {ahriSource?.source_url && (
                               <Text
@@ -1496,7 +1707,10 @@ export const InvoiceVersionShowScreen = () => {
                                     ? 'Yes'
                                     : 'No',
                               ],
-                              ['Qualified date', neeaProduct.qualified_date ? fmtDate(neeaProduct.qualified_date) : null],
+                              [
+                                'Qualified date',
+                                neeaProduct.qualified_date ? fmtDate(neeaProduct.qualified_date) : null,
+                              ],
                               ['Specification version', neeaProduct.specification_version],
                               ['Eligibility notes', neeaProduct.eligibility_notes],
                             ].map(([label, value]) => (
@@ -1531,7 +1745,8 @@ export const InvoiceVersionShowScreen = () => {
                               NEEA source id: {fmtText(neeaSource?.neea_source_id)}
                             </Text>
                             <Text fontSize="xs" opacity={0.75}>
-                              Imported {fmtDate(neeaSource?.completed_at)} with {fmtText(neeaSource?.records_imported)} rows.
+                              Imported {fmtDate(neeaSource?.completed_at)} with {fmtText(neeaSource?.records_imported)}{' '}
+                              rows.
                             </Text>
                             {neeaSource?.source_url && (
                               <Text
@@ -1848,7 +2063,6 @@ export const InvoiceVersionShowScreen = () => {
                                 </Box>
                               )}
                             </Box>
-
                           </AccordionPanel>
                         </AccordionItem>
                       );

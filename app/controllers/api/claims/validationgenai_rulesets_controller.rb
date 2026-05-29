@@ -94,9 +94,7 @@ module Api
         invoice_upgrade_type_id =
           params[:invoice_upgrade_type_id].to_s.strip.presence
         current_only =
-          ActiveModel::Type::Boolean.new.cast(
-            params.fetch(:current_only, true)
-          )
+          ActiveModel::Type::Boolean.new.cast(params.fetch(:current_only, true))
 
         scope = ruleset_scope
 
@@ -213,7 +211,10 @@ module Api
         ::Claims::ValidationgenaiConfig.order(:created_at).first ||
           ::Claims::ValidationgenaiConfig.create!(
             system_record: "",
-            classifier_system_record: "",
+            classifier_combined_with_extraction_system_record: "",
+            classifier_without_extraction_system_record: "",
+            supporting_document_extraction_system_record: "",
+            supporting_document_extraction_mode: "combined_with_classifier",
             user_record0: "",
             admin_advice_intro: "",
             admin_advice_closing: "",
@@ -261,10 +262,7 @@ module Api
       end
 
       def update_params
-        params.permit(
-          :ruleset_shortname,
-          :user_record1
-        )
+        params.permit(:ruleset_shortname, :user_record1)
       end
 
       def create_params
@@ -279,7 +277,10 @@ module Api
         attrs = {}
         %i[
           system_record
-          classifier_system_record
+          classifier_combined_with_extraction_system_record
+          classifier_without_extraction_system_record
+          supporting_document_extraction_system_record
+          supporting_document_extraction_mode
           user_record0
           admin_advice_intro
           admin_advice_closing
@@ -315,7 +316,14 @@ module Api
         {
           id: c.id,
           system_record: c.system_record,
-          classifier_system_record: c.classifier_system_record,
+          classifier_combined_with_extraction_system_record:
+            c.classifier_combined_with_extraction_system_record,
+          classifier_without_extraction_system_record:
+            c.classifier_without_extraction_system_record,
+          supporting_document_extraction_system_record:
+            c.supporting_document_extraction_system_record,
+          supporting_document_extraction_mode:
+            c.supporting_document_extraction_mode,
           user_record0: c.user_record0,
           admin_advice_intro: c.admin_advice_intro,
           admin_advice_closing: c.admin_advice_closing,

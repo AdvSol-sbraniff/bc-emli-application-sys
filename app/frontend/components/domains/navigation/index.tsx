@@ -45,6 +45,9 @@ const ValidationRulesConfigScreen = lazy(() =>
 const SupportingDocumentTypesAdminScreen = lazy(() =>
   import('../supporting-document-types-admin').then((module) => ({ default: module.default })),
 );
+const SupportingDocumentTypeFieldsAdminScreen = lazy(() =>
+  import('../supporting-document-type-fields-admin').then((module) => ({ default: module.default })),
+);
 const HeatPumpProductListAdminScreen = lazy(() =>
   import('../heat-pump-product-list-admin').then((module) => ({ default: module.default })),
 );
@@ -831,6 +834,7 @@ const AppRoutes = observer(() => {
           <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
           <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />
           <Route path="/supporting-document-types-admin" element={<SupportingDocumentTypesAdminScreen />} />
+          <Route path="/supporting-document-type-fields-admin" element={<SupportingDocumentTypeFieldsAdminScreen />} />
           <Route path="/downloads-admin" element={<DownloadsAdminScreen />} />
           <Route path="/heat-pump-product-list-admin" element={<HeatPumpProductListAdminScreen />} />
           <Route path="/hpwh-product-list-admin" element={<HpwhProductListAdminScreen />} />

@@ -4,6 +4,7 @@ import {
   Flex,
   Heading,
   IconButton,
+  Select,
   Spinner,
   Tab,
   TabList,
@@ -21,7 +22,10 @@ import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 type ConfigDto = {
   id: string;
   system_record: string | null;
-  classifier_system_record: string | null;
+  classifier_combined_with_extraction_system_record: string | null;
+  classifier_without_extraction_system_record: string | null;
+  supporting_document_extraction_system_record: string | null;
+  supporting_document_extraction_mode: string | null;
   user_record0: string | null;
   admin_advice_intro: string | null;
   admin_advice_closing: string | null;
@@ -34,13 +38,21 @@ export default function RulesetConfigEditorScreen() {
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<ConfigDto | null>(null);
   const [systemRecord, setSystemRecord] = useState<string>('');
-  const [classifierSystemRecord, setClassifierSystemRecord] = useState<string>('');
+  const [classifierCombinedWithExtractionSystemRecord, setClassifierCombinedWithExtractionSystemRecord] =
+    useState<string>('');
+  const [classifierWithoutExtractionSystemRecord, setClassifierWithoutExtractionSystemRecord] = useState<string>('');
+  const [supportingDocumentExtractionSystemRecord, setSupportingDocumentExtractionSystemRecord] = useState<string>('');
+  const [supportingDocumentExtractionMode, setSupportingDocumentExtractionMode] =
+    useState<string>('combined_with_classifier');
   const [userRecord0, setUserRecord0] = useState<string>('');
   const [adminAdviceIntro, setAdminAdviceIntro] = useState<string>('');
   const [adminAdviceClosing, setAdminAdviceClosing] = useState<string>('');
   const [initialValues, setInitialValues] = useState({
     systemRecord: '',
-    classifierSystemRecord: '',
+    classifierCombinedWithExtractionSystemRecord: '',
+    classifierWithoutExtractionSystemRecord: '',
+    supportingDocumentExtractionSystemRecord: '',
+    supportingDocumentExtractionMode: 'combined_with_classifier',
     userRecord0: '',
     adminAdviceIntro: '',
     adminAdviceClosing: '',
@@ -48,7 +60,10 @@ export default function RulesetConfigEditorScreen() {
 
   const isDirty =
     systemRecord !== initialValues.systemRecord ||
-    classifierSystemRecord !== initialValues.classifierSystemRecord ||
+    classifierCombinedWithExtractionSystemRecord !== initialValues.classifierCombinedWithExtractionSystemRecord ||
+    classifierWithoutExtractionSystemRecord !== initialValues.classifierWithoutExtractionSystemRecord ||
+    supportingDocumentExtractionSystemRecord !== initialValues.supportingDocumentExtractionSystemRecord ||
+    supportingDocumentExtractionMode !== initialValues.supportingDocumentExtractionMode ||
     userRecord0 !== initialValues.userRecord0 ||
     adminAdviceIntro !== initialValues.adminAdviceIntro ||
     adminAdviceClosing !== initialValues.adminAdviceClosing;
@@ -72,13 +87,19 @@ export default function RulesetConfigEditorScreen() {
       const data: ConfigDto = await resp.json();
       setConfig(data);
       setSystemRecord(data.system_record ?? '');
-      setClassifierSystemRecord(data.classifier_system_record ?? '');
+      setClassifierCombinedWithExtractionSystemRecord(data.classifier_combined_with_extraction_system_record ?? '');
+      setClassifierWithoutExtractionSystemRecord(data.classifier_without_extraction_system_record ?? '');
+      setSupportingDocumentExtractionSystemRecord(data.supporting_document_extraction_system_record ?? '');
+      setSupportingDocumentExtractionMode(data.supporting_document_extraction_mode ?? 'combined_with_classifier');
       setUserRecord0(data.user_record0 ?? '');
       setAdminAdviceIntro(data.admin_advice_intro ?? '');
       setAdminAdviceClosing(data.admin_advice_closing ?? '');
       setInitialValues({
         systemRecord: data.system_record ?? '',
-        classifierSystemRecord: data.classifier_system_record ?? '',
+        classifierCombinedWithExtractionSystemRecord: data.classifier_combined_with_extraction_system_record ?? '',
+        classifierWithoutExtractionSystemRecord: data.classifier_without_extraction_system_record ?? '',
+        supportingDocumentExtractionSystemRecord: data.supporting_document_extraction_system_record ?? '',
+        supportingDocumentExtractionMode: data.supporting_document_extraction_mode ?? 'combined_with_classifier',
         userRecord0: data.user_record0 ?? '',
         adminAdviceIntro: data.admin_advice_intro ?? '',
         adminAdviceClosing: data.admin_advice_closing ?? '',
@@ -101,7 +122,10 @@ export default function RulesetConfigEditorScreen() {
         credentials: 'include',
         body: JSON.stringify({
           system_record: systemRecord,
-          classifier_system_record: classifierSystemRecord,
+          classifier_combined_with_extraction_system_record: classifierCombinedWithExtractionSystemRecord,
+          classifier_without_extraction_system_record: classifierWithoutExtractionSystemRecord,
+          supporting_document_extraction_system_record: supportingDocumentExtractionSystemRecord,
+          supporting_document_extraction_mode: supportingDocumentExtractionMode,
           user_record0: userRecord0,
           admin_advice_intro: adminAdviceIntro,
           admin_advice_closing: adminAdviceClosing,
@@ -116,13 +140,19 @@ export default function RulesetConfigEditorScreen() {
       const data: ConfigDto = await resp.json();
       setConfig(data);
       setSystemRecord(data.system_record ?? '');
-      setClassifierSystemRecord(data.classifier_system_record ?? '');
+      setClassifierCombinedWithExtractionSystemRecord(data.classifier_combined_with_extraction_system_record ?? '');
+      setClassifierWithoutExtractionSystemRecord(data.classifier_without_extraction_system_record ?? '');
+      setSupportingDocumentExtractionSystemRecord(data.supporting_document_extraction_system_record ?? '');
+      setSupportingDocumentExtractionMode(data.supporting_document_extraction_mode ?? 'combined_with_classifier');
       setUserRecord0(data.user_record0 ?? '');
       setAdminAdviceIntro(data.admin_advice_intro ?? '');
       setAdminAdviceClosing(data.admin_advice_closing ?? '');
       setInitialValues({
         systemRecord: data.system_record ?? '',
-        classifierSystemRecord: data.classifier_system_record ?? '',
+        classifierCombinedWithExtractionSystemRecord: data.classifier_combined_with_extraction_system_record ?? '',
+        classifierWithoutExtractionSystemRecord: data.classifier_without_extraction_system_record ?? '',
+        supportingDocumentExtractionSystemRecord: data.supporting_document_extraction_system_record ?? '',
+        supportingDocumentExtractionMode: data.supporting_document_extraction_mode ?? 'combined_with_classifier',
         userRecord0: data.user_record0 ?? '',
         adminAdviceIntro: data.admin_advice_intro ?? '',
         adminAdviceClosing: data.admin_advice_closing ?? '',
@@ -192,11 +222,14 @@ export default function RulesetConfigEditorScreen() {
           <Box borderWidth="1px" borderRadius="lg" p={3} bg="white">
             <Tabs variant="line" isFitted colorScheme="gray">
               <TabList>
-                <Tab>system_record</Tab>
-                <Tab>classifier_system_record</Tab>
-                <Tab>user_record0</Tab>
-                <Tab>admin_advice_intro</Tab>
-                <Tab>admin_advice_closing</Tab>
+                <Tab>Main</Tab>
+                <Tab>Classify + Extract</Tab>
+                <Tab>Classify Only</Tab>
+                <Tab>Support Extract</Tab>
+                <Tab>Mode</Tab>
+                <Tab>DI Guidance</Tab>
+                <Tab>Advice Intro</Tab>
+                <Tab>Advice Close</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel px={0} pt={3}>
@@ -208,14 +241,52 @@ export default function RulesetConfigEditorScreen() {
 
                 <TabPanel px={0} pt={3}>
                   <Text fontSize="sm" opacity={0.75} mb={3}>
-                    Classifier-only system prompt. It decides which upgrade-type rulesets appear relevant before the
-                    deeper GenAI validation calls.
+                    Combined classifier prompt. It routes the document and extracts supporting-document located fields
+                    in the same call.
                   </Text>
                   <Textarea
-                    value={classifierSystemRecord}
-                    onChange={(e) => setClassifierSystemRecord(e.target.value)}
+                    value={classifierCombinedWithExtractionSystemRecord}
+                    onChange={(e) => setClassifierCombinedWithExtractionSystemRecord(e.target.value)}
                     minH="420px"
                   />
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Routing-only classifier prompt. It routes invoice/supporting documents but leaves
+                    supporting-document located fields to the separate extraction call.
+                  </Text>
+                  <Textarea
+                    value={classifierWithoutExtractionSystemRecord}
+                    onChange={(e) => setClassifierWithoutExtractionSystemRecord(e.target.value)}
+                    minH="420px"
+                  />
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Extraction-only prompt for one already-classified supporting document type.
+                  </Text>
+                  <Textarea
+                    value={supportingDocumentExtractionSystemRecord}
+                    onChange={(e) => setSupportingDocumentExtractionSystemRecord(e.target.value)}
+                    minH="420px"
+                  />
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Choose whether supporting-document located fields are extracted inside the classifier call or in a
+                    separate extraction call.
+                  </Text>
+                  <Select
+                    value={supportingDocumentExtractionMode}
+                    onChange={(e) => setSupportingDocumentExtractionMode(e.target.value)}
+                    maxW="360px"
+                  >
+                    <option value="combined_with_classifier">combined_with_classifier</option>
+                    <option value="separate_extraction">separate_extraction</option>
+                  </Select>
                 </TabPanel>
 
                 <TabPanel px={0} pt={3}>

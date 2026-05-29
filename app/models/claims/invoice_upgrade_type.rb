@@ -25,5 +25,13 @@ module Claims
     has_many :genai_located_fields,
              through: :genai_located_field_upgrade_types,
              class_name: "Claims::GenaiLocatedField"
+
+    has_many :supporting_document_type_upgrade_types,
+             class_name: "Claims::SupportingDocumentTypeUpgradeType",
+             foreign_key: :invoice_upgrade_type_id
+
+    has_many :supporting_document_types,
+             through: :supporting_document_type_upgrade_types,
+             source: :supporting_document_type
   end
 end
