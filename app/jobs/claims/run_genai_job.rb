@@ -9,28 +9,25 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_genai, retry: 0
 
-    # args must match controller perform_async call order:
-    # perform(session_id, invoice_version_id, validationgenai_ruleset_id, ingest_run_id=nil, mode="normal")
+    # args must match controller perform_async call order.
+    # GenAI validation reruns always reuse the classifier payload persisted by
+    # the upload triage phase; classifier execution belongs in RunIngestTriageJob.
     def perform(
       session_id,
       invoice_version_id,
       validationgenai_ruleset_id,
       ingest_run_id = nil,
-      mode = "normal"
+      mode = "use_existing_classifier"
     )
       Rails.logger.info(
         "[CLAIMS][RUN_GENAI_JOB] START session_id=#{session_id} invoice_version_id=#{invoice_version_id} ruleset_id=#{validationgenai_ruleset_id} mode=#{mode}"
       )
 
-      mode = mode.to_s.presence || "normal"
-      unless %w[
-               normal
-               classifier_only
-               triage_only
-               use_existing_classifier
-             ].include?(mode)
-        raise "Invalid RunGenaiJob mode=#{mode}"
+      requested_mode = mode.to_s.presence
+      if %w[classifier_only triage_only].include?(requested_mode)
+        raise "RunGenaiJob no longer runs classifier modes. Use RunIngestTriageJob through OCR/triage instead."
       end
+      mode = "use_existing_classifier"
 
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
@@ -43,108 +40,38 @@ module Claims
       end
 
       # GenAI reruns must not leave stale common/upgrade outputs from a prior run.
-      # For the bundle loopback path we preserve classifier rows from the triage pass.
+      # Preserve classifier-derived upgrade mappings from the OCR/triage phase.
       ::Claims::InvoiceVersions::ResetAiOutputs.call(
         invoice_version_id: iv.id,
-        preserve_classifier: (mode == "use_existing_classifier")
+        preserve_classifier: true
       )
 
-      classifier_payload = nil
-
-      if mode == "use_existing_classifier"
-        classifier_payload =
-          existing_classifier_payload_for(invoice_version_id: iv.id)
-        if classifier_payload.blank?
-          raise "Missing stored classifier payload for invoice_version_id=#{iv.id}"
-        end
-      else
-        classifier_step_type =
-          (mode == "triage_only" ? "triage_classifier" : "classifier")
-
-        step =
-          find_or_create_step!(
-            ingest_run_id: ingest_run_id,
-            session_id: sess.id,
-            invoice_version_id: iv.id,
-            step_type: classifier_step_type
-          )
-        step.update!(
-          status: "in_progress",
-          error_text: nil,
-          updated_at: Time.current
+      classifier_payload =
+        existing_classifier_payload_for(invoice_version_id: iv.id)
+      if classifier_payload.blank?
+        raise "Missing stored triage classifier payload for invoice_version_id=#{iv.id}"
+      end
+      classifier_result =
+        ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
+          invoice_version_id: iv.id,
+          classifier_payload: classifier_payload
         )
-
-        classifier_contextwindowjson =
-          build_classifier_contextwindowjson(di_raw_json: iv.di_raw_json)
-        classifier_payload =
-          call_node_genai!(contextwindowjson: classifier_contextwindowjson)
-
-        classifier_result =
-          (
-            if mode == "triage_only"
-              ::Claims::Ingest::ApplyDocumentTriageResult.call(
-                invoice_version_id: iv.id,
-                triage_payload: classifier_payload
-              )
-            else
-              ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
-                invoice_version_id: iv.id,
-                classifier_payload: classifier_payload
-              )
-            end
-          )
-        unless classifier_result[:ok]
-          raise(
-            (
-              if mode == "triage_only"
-                "ApplyDocumentTriageResult failed: #{classifier_result.inspect}"
-              else
-                "ApplyClassifierResult failed: #{classifier_result.inspect}"
-              end
-            )
-          )
-        end
-
-        step.update!(
-          status: "succeeded",
-          genai_results_json: classifier_payload,
-          context_window_json: classifier_contextwindowjson,
-          error_text: nil,
-          updated_at: Time.current
-        )
-
-        if %w[classifier_only triage_only].include?(mode)
-          if ingest_run_id.present?
-            advance_run!(
-              ingest_run_id: ingest_run_id,
-              validationgenai_ruleset_id: validationgenai_ruleset_id,
-              mode: mode
-            )
-          end
-          return
-        end
-
-        step = nil
+      unless classifier_result[:ok]
+        raise "ApplyClassifierResult failed: #{classifier_result.inspect}"
       end
 
       inv.update!(status: "genai_in_progress", status_updated_at: Time.current)
 
-      classifier_eligibility_code =
-        classifier_eligibility_code(classifier_payload)
-      shared_context =
-        Claims::GenaiCaseFacts::Build.build_shared_context(
-          sess: sess,
+      case_facts_result =
+        run_case_facts_step!(
+          ingest_run_id: ingest_run_id,
+          session_id: sess.id,
+          invoice_version: iv,
           invoice: inv,
-          eligibility_code: classifier_eligibility_code
+          claim_session: sess,
+          classifier_payload: classifier_payload
         )
-      case_facts = shared_context.fetch(:case_facts)
-
-      Claims::GenaiCaseFacts::Build.persist_code_located_fields!(
-        invoice_version_id: iv.id,
-        case_facts: case_facts,
-        classifier_eligibility_code:
-          shared_context[:classifier_eligibility_code]
-      )
+      case_facts = case_facts_result.fetch(:case_facts)
 
       common_upgrade_type = upgrade_type_by_key!("common")
       common_ruleset = ruleset_for_upgrade_type!(common_upgrade_type)
@@ -212,19 +139,24 @@ module Claims
         end
       end
 
-      apply_combined_overall!(
-        invoice_version: iv,
-        classifier_payload: classifier_payload,
-        ruleset_results: ruleset_results
-      )
+      run_aggregate_advice_step!(
+        ingest_run_id: ingest_run_id,
+        session_id: sess.id,
+        invoice_version: iv
+      ) do
+        apply_combined_overall!(
+          invoice_version: iv,
+          classifier_payload: classifier_payload,
+          ruleset_results: ruleset_results
+        )
+      end
 
       inv.update!(status: "genai_complete", status_updated_at: Time.current)
 
       if ingest_run_id.present?
         advance_run!(
           ingest_run_id: ingest_run_id,
-          validationgenai_ruleset_id: validationgenai_ruleset_id,
-          mode: mode
+          validationgenai_ruleset_id: validationgenai_ruleset_id
         )
       end
     rescue => e
@@ -249,8 +181,7 @@ module Claims
         if ingest_run_id.present?
           advance_run!(
             ingest_run_id: ingest_run_id,
-            validationgenai_ruleset_id: validationgenai_ruleset_id,
-            mode: mode
+            validationgenai_ruleset_id: validationgenai_ruleset_id
           )
         end
       rescue StandardError
@@ -262,31 +193,124 @@ module Claims
 
     private
 
-    def advance_run!(ingest_run_id:, validationgenai_ruleset_id:, mode:)
-      if %w[triage_only use_existing_classifier].include?(mode)
-        Claims::Ingest::AdvanceBundleRun.call(
+    def run_case_facts_step!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version:,
+      invoice:,
+      claim_session:,
+      classifier_payload:
+    )
+      step =
+        find_or_create_step!(
           ingest_run_id: ingest_run_id,
-          validationgenai_ruleset_id: validationgenai_ruleset_id
+          session_id: session_id,
+          invoice_version_id: invoice_version.id,
+          step_type: "case_facts"
         )
-      else
-        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+      step.update!(
+        status: "in_progress",
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      classifier_eligibility_code =
+        classifier_eligibility_code(classifier_payload)
+      shared_context =
+        Claims::GenaiCaseFacts::Build.build_shared_context(
+          sess: claim_session,
+          invoice: invoice,
+          eligibility_code: classifier_eligibility_code
+        )
+      case_facts = shared_context.fetch(:case_facts)
+
+      Claims::GenaiCaseFacts::Build.persist_code_located_fields!(
+        invoice_version_id: invoice_version.id,
+        case_facts: case_facts,
+        classifier_eligibility_code:
+          shared_context[:classifier_eligibility_code]
+      )
+
+      payload = {
+        case_facts: case_facts,
+        classifier_eligibility_code:
+          shared_context[:classifier_eligibility_code]
+      }
+
+      step.update!(
+        status: "succeeded",
+        genai_results_json: payload,
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      payload
+    rescue => e
+      begin
+        step&.update!(
+          status: "failed",
+          error_text: "#{e.class}: #{e.message}",
+          updated_at: Time.current
+        )
+      rescue StandardError
+        nil
       end
+      raise
+    end
+
+    def run_aggregate_advice_step!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version:
+    )
+      step =
+        find_or_create_step!(
+          ingest_run_id: ingest_run_id,
+          session_id: session_id,
+          invoice_version_id: invoice_version.id,
+          step_type: "aggregate_advice"
+        )
+      step.update!(
+        status: "in_progress",
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      yield
+
+      invoice_version.reload
+      step.update!(
+        status: "succeeded",
+        genai_results_json: {
+          genai_result: invoice_version.genai_result,
+          genai_overall_confidence: invoice_version.genai_overall_confidence,
+          genai_admin_advice_present:
+            invoice_version.genai_admin_advice.to_s.strip.present?
+        },
+        error_text: nil,
+        updated_at: Time.current
+      )
+    rescue => e
+      begin
+        step&.update!(
+          status: "failed",
+          error_text: "#{e.class}: #{e.message}",
+          updated_at: Time.current
+        )
+      rescue StandardError
+        nil
+      end
+      raise
+    end
+
+    def advance_run!(ingest_run_id:, validationgenai_ruleset_id:)
+      Claims::Ingest::AdvanceBundleRun.call(
+        ingest_run_id: ingest_run_id,
+        validationgenai_ruleset_id: validationgenai_ruleset_id
+      )
     end
 
     def existing_classifier_payload_for(invoice_version_id:)
-      step =
-        Claims::IngestStepRun
-          .where(
-            invoice_version_id: invoice_version_id,
-            step_type: %w[triage_classifier classifier],
-            status: "succeeded"
-          )
-          .order(created_at: :desc)
-          .first
-
-      payload = step&.genai_results_json
-      return payload if payload.is_a?(Hash)
-
       document =
         Claims::IngestDocument.find_by(
           resolved_invoice_version_id: invoice_version_id,
@@ -303,6 +327,19 @@ module Claims
           .order(created_at: :asc)
           .first
       payload = document&.classifier_raw_json
+      return payload if payload.is_a?(Hash)
+
+      step =
+        Claims::IngestStepRun
+          .where(
+            invoice_version_id: invoice_version_id,
+            step_type: "triage_classifier",
+            status: "succeeded"
+          )
+          .order(created_at: :desc)
+          .first
+
+      payload = step&.genai_results_json
       payload.is_a?(Hash) ? payload : nil
     end
 
@@ -370,57 +407,6 @@ module Claims
       end
 
       JSON.parse(resp.body)
-    end
-
-    def build_classifier_contextwindowjson(di_raw_json:)
-      config = Claims::ValidationgenaiConfig.order(:created_at).first
-      sys = config&.classifier_system_record_for_current_mode.to_s
-      user0 = config&.user_record0.to_s
-      supporting_document_field_tasks =
-        if config&.supporting_document_extraction_separate?
-          ""
-        else
-          ::Claims::SupportingDocuments::LocatedFieldPrompt.call
-        end
-
-      if sys.strip.empty?
-        raise "validationgenai_config classifier system record is empty for current supporting-document extraction mode"
-      end
-
-      messages = [
-        { role: "system", content: [{ type: "input_text", text: sys }] }
-      ]
-
-      if user0.strip.present?
-        messages << {
-          role: "user",
-          content: [{ type: "input_text", text: user0 }]
-        }
-      end
-      if supporting_document_field_tasks.present?
-        messages << {
-          role: "user",
-          content: [
-            { type: "input_text", text: supporting_document_field_tasks }
-          ]
-        }
-      end
-
-      messages.concat(
-        [
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 1 (the case)
-            Document Intelligence raw json:
-            #{di_raw_json.to_json}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
-            User record 2 (Actual Ask)
-            Classify the document. If it is an invoice, locate the visible eligibility code, classify which invoice upgrade types appear to be present, and map clear invoice line items to those upgrade types. If it is a supporting document, classify the supporting document type and assess routing quality.
-            #{config&.supporting_document_extraction_separate? ? "Do not extract supporting-document located fields in this call." : "Return the configured supporting_document_located_fields for that selected type."}
-            Reply must be strict JSON using the classifier schema from the system record.
-          TEXT
-        ]
-      )
     end
 
     def run_genai_ruleset!(

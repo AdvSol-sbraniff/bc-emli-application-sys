@@ -113,7 +113,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/ai-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/ai-admin', title: 'OCR & GenAI' },
+        { href: '/ai-admin', title: 'Redo GenAI Only' },
       ],
       '/hello-ai-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
@@ -130,6 +130,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/invoice-supporting-documents-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/invoice-supporting-documents-admin', title: 'Invoice Supporting Documents' },
+      ],
+      '/redo-invoice-package': [
+        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
+        { href: '/redo-invoice-package', title: 'Redo Invoice Package' },
       ],
       '/submission-simulator-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },

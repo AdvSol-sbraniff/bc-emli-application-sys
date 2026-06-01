@@ -15,7 +15,7 @@ module Claims
     # - validationgenai_ruleset_id (optional) => enqueue GenAI after OCR success
     # - model_id (optional) => DI model, default prebuilt-invoice
     # - enqueue_genai_after (optional) => whether to queue RunGenaiJob after OCR
-    # - genai_mode (optional) => RunGenaiJob mode when enqueueing
+    # - genai_mode (optional) => classifier payload handling when enqueueing GenAI
     # - step_type (optional) => ingest step type
     def perform(
       invoice_version_id,
@@ -23,7 +23,7 @@ module Claims
       validationgenai_ruleset_id = nil,
       model_id = "prebuilt-invoice",
       enqueue_genai_after = true,
-      genai_mode = "normal",
+      genai_mode = "use_existing_classifier",
       step_type = "ocr"
     )
       Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
@@ -150,20 +150,6 @@ module Claims
       inv.update!(status: "ocr_complete", status_updated_at: Time.current)
 
       if validationgenai_ruleset_id.present? && enqueue_genai_after
-        if ingest_run_id.present? && genai_mode != "use_existing_classifier"
-          Claims::IngestStepRun.find_or_create_by!(
-            ingest_run_id: ingest_run_id,
-            invoice_version_id: iv.id,
-            step_type: "classifier"
-          ) do |queued_step|
-            queued_step.session_id = sess.id
-            queued_step.status = "queued"
-            queued_step.error_text = nil
-            queued_step.created_at = Time.current
-            queued_step.updated_at = Time.current
-          end
-        end
-
         inv.update!(status: "genai_queued", status_updated_at: Time.current)
 
         Claims::RunGenaiJob.perform_async(
@@ -224,19 +210,6 @@ module Claims
     private
 
     def existing_classifier_payload_for(invoice_version_id:)
-      step =
-        Claims::IngestStepRun
-          .where(
-            invoice_version_id: invoice_version_id,
-            step_type: %w[triage_classifier classifier],
-            status: "succeeded"
-          )
-          .order(created_at: :desc)
-          .first
-
-      payload = step&.genai_results_json
-      return payload if payload.is_a?(Hash)
-
       document =
         Claims::IngestDocument.find_by(
           resolved_invoice_version_id: invoice_version_id,
@@ -253,6 +226,19 @@ module Claims
           .order(created_at: :asc)
           .first
       payload = document&.classifier_raw_json
+      return payload if payload.is_a?(Hash)
+
+      step =
+        Claims::IngestStepRun
+          .where(
+            invoice_version_id: invoice_version_id,
+            step_type: "triage_classifier",
+            status: "succeeded"
+          )
+          .order(created_at: :desc)
+          .first
+
+      payload = step&.genai_results_json
       payload.is_a?(Hash) ? payload : nil
     end
   end

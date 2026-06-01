@@ -50,11 +50,16 @@ module Claims
         located_result =
           ::Claims::SupportingDocuments::ApplyLocatedFields.call(
             supporting_document_id: document.id,
-            classifier_payload: located_field_payload_for(ingest_document)
+            located_fields_payload: located_field_payload_for(ingest_document)
           )
         unless located_result[:ok]
           raise "ApplyLocatedFields failed: #{located_result.inspect}"
         end
+
+        ingest_document.update!(
+          promoted_supporting_document_id: document.id,
+          updated_at: Time.current
+        )
 
         document
       end
@@ -62,17 +67,14 @@ module Claims
       private
 
       def located_field_payload_for(ingest_document)
-        extraction_payload =
-          ::Claims::IngestStepRun
-            .where(
-              ingest_document_id: ingest_document.id,
-              step_type: "supporting_document_extraction",
-              status: "succeeded"
-            )
-            .order(created_at: :desc)
-            .pick(:genai_results_json)
-
-        extraction_payload.presence || ingest_document.classifier_raw_json
+        ::Claims::IngestStepRun
+          .where(
+            ingest_document_id: ingest_document.id,
+            step_type: "supporting_document_extraction",
+            status: "succeeded"
+          )
+          .order(created_at: :desc)
+          .pick(:genai_results_json)
       end
     end
   end

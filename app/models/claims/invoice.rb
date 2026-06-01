@@ -13,6 +13,11 @@ module Claims
              foreign_key: :invoice_id,
              dependent: :destroy
 
+    has_many :ingest_documents,
+             class_name: "Claims::IngestDocument",
+             foreign_key: :invoice_id,
+             dependent: :nullify
+
     has_many :supporting_document_types,
              through: :supporting_documents,
              source: :supporting_document_type

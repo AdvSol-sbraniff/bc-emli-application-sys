@@ -102,17 +102,11 @@ module Claims
 
     def build_classifier_contextwindowjson(di_raw_json:)
       config = ::Claims::ValidationgenaiConfig.order(:created_at).first
-      sys = config&.classifier_system_record_for_current_mode.to_s
+      sys = config&.classifier_system_record.to_s
       user0 = config&.user_record0.to_s
-      supporting_document_field_tasks =
-        if config&.supporting_document_extraction_separate?
-          ""
-        else
-          ::Claims::SupportingDocuments::LocatedFieldPrompt.call
-        end
 
       if sys.strip.empty?
-        raise "validationgenai_config classifier system record is empty for current supporting-document extraction mode"
+        raise "validationgenai_config.classifier_system_record is empty"
       end
 
       messages = [
@@ -124,15 +118,6 @@ module Claims
           content: [{ type: "input_text", text: user0 }]
         }
       end
-      if supporting_document_field_tasks.present?
-        messages << {
-          role: "user",
-          content: [
-            { type: "input_text", text: supporting_document_field_tasks }
-          ]
-        }
-      end
-
       messages << {
         role: "user",
         content: [{ type: "input_text", text: <<~TEXT }]
@@ -142,7 +127,7 @@ module Claims
 
               Actual ask:
               Classify the document. If it is a supporting document, classify the supporting document type and assess routing quality.
-              #{config&.supporting_document_extraction_separate? ? "Do not extract supporting-document located fields in this call." : "Return the configured supporting_document_located_fields for that selected type."}
+              Do not extract supporting-document located fields in this call. Supporting-document located fields are extracted in a separate downstream call after routing.
               Reply must be strict JSON using the classifier schema from the system record.
             TEXT
       }

@@ -24,24 +24,22 @@ module Claims
       attr_reader :invoice_upgrade_type
 
       def header_text
-        if common_upgrade_type?
-          <<~TEXT.strip
+        common_upgrade_type? ? <<~TEXT.strip : <<~TEXT.strip
             Common ESP invoice evidence tasks.
             These common tasks run as the common invoice evidence ruleset before upgrade-type-specific rulesets.
           TEXT
-        else
-          <<~TEXT.strip
             Upgrade type: #{display_name}.
             Source vintage: Better Homes BC Energy Savings Program requirements for invoices dated on or after 2026-04-01.
           TEXT
-        end
       end
 
       def located_fields_section
         body =
-          located_field_mappings.map do |mapping|
-            "#{mapping.field_number} [field_key: #{mapping.genai_located_field.genai_field_key}] #{mapping.genai_located_field.prompt_text.to_s.strip}"
-          end.join("\n")
+          located_field_mappings
+            .map do |mapping|
+              "#{mapping.field_number} [field_key: #{mapping.genai_located_field.genai_field_key}] #{mapping.genai_located_field.prompt_text.to_s.strip}"
+            end
+            .join("\n")
 
         [located_fields_heading, body.presence].compact.join("\n")
       end
@@ -57,37 +55,47 @@ module Claims
           end
         )
 
-        [rulechecks_heading, body_parts.compact_blank.join("\n\n").presence].compact.join("\n")
+        [
+          rulechecks_heading,
+          body_parts.compact_blank.join("\n\n").presence
+        ].compact.join("\n")
       end
 
       def located_fields_heading
-        common_upgrade_type? ? "Common located fields:" : "#{display_name} located fields:"
+        if common_upgrade_type?
+          "Common located fields:"
+        else
+          "#{display_name} located fields:"
+        end
       end
 
       def rulechecks_heading
-        common_upgrade_type? ? "Common GenAI rulecheck tasks:" : "#{display_name} GenAI rulecheck tasks:"
+        if common_upgrade_type?
+          "Common GenAI rulecheck tasks:"
+        else
+          "#{display_name} GenAI rulecheck tasks:"
+        end
       end
 
       def rule_intro_text
-        if common_upgrade_type?
-          <<~TEXT.strip
+        common_upgrade_type? ? <<~TEXT.strip : <<~TEXT.strip
             For v1, create these rulechecks from the OCR/DI JSON and supplied database values.
+            Use the supplied supporting-document summaries and located fields when a common rule asks about application attachments, utility/account documents, income documents, landlord consent, labels, photos, permits, or other non-invoice evidence.
             For shared database facts such as invoices.submitted_at, classifier.eligibility_code, and users_eligibilitycodes.*, use the supplied database values exactly as provided.
             For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
             Show the date math in calculation when a date rule is evaluated.
           TEXT
-        else
-          <<~TEXT.strip
-            Use the OCR/DI JSON and supplied database values for this upgrade type.
+            Use the OCR/DI JSON, supplied database values, and supporting_document_summary_for_upgrade_type for this upgrade type.
+            When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, or other supporting documents, inspect configured_documents[].located_fields before warning or failing for missing evidence.
             For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
             Show the date math in calculation when a date rule is evaluated.
           TEXT
-        end
       end
 
       def located_field_mappings
         @located_field_mappings ||=
-          invoice_upgrade_type.genai_located_field_upgrade_types
+          invoice_upgrade_type
+            .genai_located_field_upgrade_types
             .joins(:genai_located_field)
             .merge(::Claims::GenaiLocatedField.where(enabled: true))
             .includes(:genai_located_field)
@@ -96,7 +104,8 @@ module Claims
 
       def rule_mappings
         @rule_mappings ||=
-          invoice_upgrade_type.genai_rule_upgrade_types
+          invoice_upgrade_type
+            .genai_rule_upgrade_types
             .joins(:genai_rule)
             .merge(::Claims::GenaiRule.where(enabled: true))
             .includes(:genai_rule)

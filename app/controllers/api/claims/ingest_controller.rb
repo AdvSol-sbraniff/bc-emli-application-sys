@@ -385,8 +385,8 @@ module Api
       # ROUTE: POST /api/claims/ingest/run_genai
       # BODY: { session_id: "uuid", invoice_version_id: "uuid", validationgenai_ruleset_id?: "uuid", ingest_run_id?: "uuid" }
       # PURPOSE (milestone 1):
-      # - enqueue Sidekiq job that calls Node /inv/genai
-      # - job will create ingest_step_runs row (step_type='genai')
+      # - enqueue validation GenAI only
+      # - reuse the stored triage classifier result from the ingest pipeline
       # ============================================================
       def run_genai
         session_id = params[:session_id].to_s.strip
@@ -395,18 +395,56 @@ module Api
         invoice_version_id = params[:invoice_version_id].to_s.strip
         raise "Missing invoice_version_id" if invoice_version_id.empty?
 
+        invoice_id =
+          ::Claims::InvoiceVersion.where(id: invoice_version_id).pick(
+            :invoice_id
+          )
+        raise "Invoice version not found." if invoice_id.blank?
+
+        latest_invoice_version_created_at =
+          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).maximum(
+            :created_at
+          )
+        pending_count =
+          ::Claims::IngestDocument
+            .where(
+              "invoice_id = :invoice_id OR resolved_invoice_id = :invoice_id",
+              invoice_id: invoice_id
+            )
+            .where(promoted_supporting_document_id: nil)
+            .where(resolved_invoice_version_id: nil)
+            .where(
+              "classification_status IS NULL OR classification_status <> ?",
+              "superseded"
+            )
+            .where(
+              (
+                if latest_invoice_version_created_at.present?
+                  ["created_at > ?", latest_invoice_version_created_at]
+                else
+                  "1=1"
+                end
+              )
+            )
+            .count
+        if pending_count.positive?
+          raise "This invoice has #{pending_count} unprocessed package PDF#{"s" unless pending_count == 1}. Use Redo Entire Package before running GenAI."
+        end
+
         validationgenai_ruleset_id =
           params[:validationgenai_ruleset_id].to_s.strip
         validationgenai_ruleset_id = nil if validationgenai_ruleset_id.empty?
 
-        mode = params[:mode].to_s.strip
-        mode = "normal" if mode.empty?
-        raise "Invalid mode" unless %w[normal classifier_only].include?(mode)
+        requested_mode = params[:mode].to_s.strip
+        if requested_mode == "classifier_only"
+          raise "Classifier-only GenAI rerun has been removed. Run OCR to refresh triage classification."
+        end
+        mode = "use_existing_classifier"
 
         ingest_run_id = params[:ingest_run_id].to_s.strip
         ingest_run_id = nil if ingest_run_id.empty?
 
-        if validationgenai_ruleset_id.nil? && mode == "normal"
+        if validationgenai_ruleset_id.nil?
           validationgenai_ruleset_id = resolve_default_ruleset_id_for_run_genai!
         end
 
@@ -650,32 +688,35 @@ module Api
             .order(created_at: :asc)
             .to_a
 
-        documents.group_by(&:resolved_invoice_id).each do |invoice_id, docs|
-          invoice = ::Claims::Invoice.find_by(id: invoice_id)
-          next if invoice.nil?
+        documents
+          .group_by(&:resolved_invoice_id)
+          .each do |invoice_id, docs|
+            invoice = ::Claims::Invoice.find_by(id: invoice_id)
+            next if invoice.nil?
 
-          primary_doc =
-            docs.find { |doc| doc.document_kind == "invoice" } || docs.first
-          invoice_version =
-            ::Claims::InvoiceVersion.find_by(
-              id:
-                primary_doc&.resolved_invoice_version_id ||
-                  docs.map(&:resolved_invoice_version_id).compact.first
-            )
+            primary_doc =
+              docs.find { |doc| doc.document_kind == "invoice" } || docs.first
+            invoice_version =
+              ::Claims::InvoiceVersion.find_by(
+                id:
+                  primary_doc&.resolved_invoice_version_id ||
+                    docs.map(&:resolved_invoice_version_id).compact.first
+              )
 
-          rows_by_invoice_id[invoice.id] = {
-            invoice_id: invoice.id,
-            invoice_status: invoice.status,
-            invoice_status_updated_at: invoice.status_updated_at,
-            invoice_version_id: invoice_version&.id,
-            invoice_versionno: invoice_version&.invoice_versionno,
-            original_filename:
-              primary_doc&.original_filename || invoice_version&.original_filename,
-            storage_key: invoice_version&.storage_key,
-            created_at: invoice.created_at,
-            updated_at: invoice.updated_at
-          }
-        end
+            rows_by_invoice_id[invoice.id] = {
+              invoice_id: invoice.id,
+              invoice_status: invoice.status,
+              invoice_status_updated_at: invoice.status_updated_at,
+              invoice_version_id: invoice_version&.id,
+              invoice_versionno: invoice_version&.invoice_versionno,
+              original_filename:
+                primary_doc&.original_filename ||
+                  invoice_version&.original_filename,
+              storage_key: invoice_version&.storage_key,
+              created_at: invoice.created_at,
+              updated_at: invoice.updated_at
+            }
+          end
 
         invoice_version_ids =
           ::Claims::IngestStepRun
@@ -703,13 +744,18 @@ module Api
             }
           end
 
-        rows_by_invoice_id.values.sort_by { |row| row[:created_at] || Time.at(0) }
+        rows_by_invoice_id.values.sort_by do |row|
+          row[:created_at] || Time.at(0)
+        end
       end
 
       def ingest_invoice_step_rows(invoice_id:, ingest_run_id:, limit:)
         invoice = ::Claims::Invoice.find(invoice_id)
         document_scope =
-          ::Claims::IngestDocument.where(resolved_invoice_id: invoice.id)
+          ::Claims::IngestDocument.where(
+            "invoice_id = :invoice_id OR resolved_invoice_id = :invoice_id",
+            invoice_id: invoice.id
+          )
         document_scope =
           document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
         documents = document_scope.order(created_at: :asc).to_a
@@ -732,12 +778,31 @@ module Api
             "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
           ).where("iv.invoice_id = ?", invoice.id)
         invoice_step_scope =
-          invoice_step_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+          invoice_step_scope.where(
+            ingest_run_id: ingest_run_id
+          ) if ingest_run_id
         invoice_steps = invoice_step_scope.to_a
         invoice_versions_by_id =
-          ::Claims::InvoiceVersion
-            .where(id: invoice_steps.map(&:invoice_version_id).compact.uniq)
-            .index_by(&:id)
+          ::Claims::InvoiceVersion.where(
+            id: invoice_steps.map(&:invoice_version_id).compact.uniq
+          ).index_by(&:id)
+
+        run_ids =
+          (
+            documents.map(&:ingest_run_id) + invoice_steps.map(&:ingest_run_id)
+          ).compact.uniq
+        run_level_steps =
+          if run_ids.empty?
+            []
+          else
+            scope =
+              ::Claims::IngestStepRun.where(ingest_run_id: run_ids).where(
+                ingest_document_id: nil,
+                invoice_version_id: nil
+              )
+            scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+            scope.to_a
+          end
 
         rows =
           document_steps.map do |step|
@@ -763,6 +828,29 @@ module Api
           end
 
         rows.concat(
+          run_level_steps.map do |step|
+            {
+              id: step.id,
+              ingest_run_id: step.ingest_run_id,
+              session_id: step.session_id,
+              invoice_id: invoice.id,
+              ingest_document_id: nil,
+              invoice_version_id: nil,
+              invoice_versionno: nil,
+              original_filename: nil,
+              document_kind: "package",
+              invoice_status: invoice.status,
+              step_type: step.step_type,
+              status: step.status,
+              error_text: step.error_text,
+              validationgenai_ruleset_id: step.validationgenai_ruleset_id,
+              created_at: step.created_at,
+              updated_at: step.updated_at
+            }
+          end
+        )
+
+        rows.concat(
           invoice_steps.map do |step|
             invoice_version = invoice_versions_by_id[step.invoice_version_id]
             {
@@ -786,14 +874,15 @@ module Api
           end
         )
 
-        rows.sort_by { |row| row[:created_at] || Time.at(0) }.reverse.first(limit)
+        rows
+          .sort_by { |row| row[:created_at] || Time.at(0) }
+          .reverse
+          .first(limit)
       end
 
       def ingest_invoice_classifier_results(invoice_id:, ingest_run_id:)
         invoice_version_ids =
-          ::Claims::InvoiceVersion
-            .where(invoice_id: invoice_id)
-            .pluck(:id)
+          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).pluck(:id)
 
         if invoice_version_ids.any?
           scope =
@@ -806,25 +895,30 @@ module Api
                 "iut.upgrade_type_key AS upgrade_type_key",
                 "iut.description AS upgrade_type_description"
               )
-              .where(invoice_version_id: invoice_version_ids, source_engine: "classifier")
+              .where(
+                invoice_version_id: invoice_version_ids,
+                source_engine: "classifier"
+              )
 
           rows =
-            scope.order(updated_at: :desc).map do |row|
-              {
-                id: row.id,
-                invoice_version_id: row.invoice_version_id,
-                invoice_upgrade_type_id: row.invoice_upgrade_type_id,
-                upgrade_type_key: row.read_attribute("upgrade_type_key"),
-                upgrade_type_description:
-                  row.read_attribute("upgrade_type_description"),
-                call_status: row.call_status,
-                confidence: row.confidence,
-                evidence_text: row.raw_json&.dig("evidence_text"),
-                classifier_notes:
-                  row.raw_json&.dig("classification_explanation"),
-                updated_at: row.updated_at
-              }
-            end
+            scope
+              .order(updated_at: :desc)
+              .map do |row|
+                {
+                  id: row.id,
+                  invoice_version_id: row.invoice_version_id,
+                  invoice_upgrade_type_id: row.invoice_upgrade_type_id,
+                  upgrade_type_key: row.read_attribute("upgrade_type_key"),
+                  upgrade_type_description:
+                    row.read_attribute("upgrade_type_description"),
+                  call_status: row.call_status,
+                  confidence: row.confidence,
+                  evidence_text: row.raw_json&.dig("evidence_text"),
+                  classifier_notes:
+                    row.raw_json&.dig("classification_explanation"),
+                  updated_at: row.updated_at
+                }
+              end
           return rows if rows.any?
         end
 
@@ -837,9 +931,10 @@ module Api
           document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
         document =
           document_scope.order(created_at: :asc).first ||
-            ::Claims::IngestDocument.where(
-              resolved_invoice_id: invoice_id
-            ).order(created_at: :asc).first
+            ::Claims::IngestDocument
+              .where(resolved_invoice_id: invoice_id)
+              .order(created_at: :asc)
+              .first
         payload = document&.classifier_raw_json
         return [] unless payload.is_a?(Hash)
 
@@ -857,9 +952,10 @@ module Api
             upgrade_type_key:
               (row["upgrade_type_key"] || row[:upgrade_type_key]).to_s.presence,
             upgrade_type_description:
-              (row["upgrade_type_description"] || row[:upgrade_type_description])
-                .to_s
-                .presence,
+              (
+                row["upgrade_type_description"] ||
+                  row[:upgrade_type_description]
+              ).to_s.presence,
             call_status: "classified",
             confidence: row["confidence"] || row[:confidence],
             evidence_text: row["evidence_text"] || row[:evidence_text],

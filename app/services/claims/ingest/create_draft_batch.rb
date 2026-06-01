@@ -35,7 +35,9 @@ module Claims
 
       def call
         raise "Missing contractor_id" if contractor_id.empty?
-        raise "No files received. Expected multipart field pdfs[] (or pdfs)." if files.empty?
+        if files.empty?
+          raise "No files received. Expected multipart field pdfs[] (or pdfs)."
+        end
 
         ruleset_id =
           validationgenai_ruleset_id.presence || resolve_default_ruleset_id!
@@ -67,6 +69,17 @@ module Claims
             updated_at: Time.current
           )
 
+        stage_step =
+          ::Claims::IngestStepRun.create!(
+            ingest_run_id: ingest_run.id,
+            session_id: session_id,
+            step_type: "upload_package_stage",
+            status: "in_progress",
+            error_text: nil,
+            created_at: Time.current,
+            updated_at: Time.current
+          )
+
         results =
           files.each_with_index.map do |file, index|
             process_file(
@@ -78,6 +91,22 @@ module Claims
               shell_invoice.id
             )
           end
+
+        failed_results = results.select { |row| row[:status].to_s == "failed" }
+        if failed_results.any?
+          stage_step.update!(
+            status: "failed",
+            error_text:
+              "One or more PDFs failed during upload package staging.",
+            updated_at: Time.current
+          )
+        else
+          stage_step.update!(
+            status: "succeeded",
+            error_text: nil,
+            updated_at: Time.current
+          )
+        end
 
         shell_invoice.update!(
           status: "ocr_in_progress",
@@ -133,6 +162,7 @@ module Claims
               ingest_run_id: ingest_run.id,
               session_id: session_id,
               contractor_id: contractor_id,
+              invoice_id: shell_invoice_id,
               resolved_invoice_id: shell_invoice_id,
               storage_provider: "azure_blob",
               storage_key:
@@ -155,11 +185,20 @@ module Claims
             )
 
           final_storage_key = node_resp.fetch("storage_key").to_s.strip
-          raise "Node upload returned no storage_key" if final_storage_key.empty?
+          if final_storage_key.empty?
+            raise "Node upload returned no storage_key"
+          end
 
           ingest_document.update!(
             storage_key: final_storage_key,
-            byte_size: node_resp.key?("byte_size") ? node_resp["byte_size"] : ingest_document.byte_size,
+            byte_size:
+              (
+                if node_resp.key?("byte_size")
+                  node_resp["byte_size"]
+                else
+                  ingest_document.byte_size
+                end
+              ),
             sha256: node_resp["sha256"],
             updated_at: Time.current
           )
@@ -246,7 +285,9 @@ module Claims
             )
             .first
 
-        raise "No default/common validationgenai_ruleset found for full GenAI run." if row.nil?
+        if row.nil?
+          raise "No default/common validationgenai_ruleset found for full GenAI run."
+        end
 
         row.id
       end
@@ -289,7 +330,9 @@ module Claims
           ) { |http| http.request(req) }
 
         body = res.body.to_s
-        raise "Node upload failed HTTP=#{res.code} body=#{body}" unless res.is_a?(Net::HTTPSuccess)
+        unless res.is_a?(Net::HTTPSuccess)
+          raise "Node upload failed HTTP=#{res.code} body=#{body}"
+        end
 
         JSON.parse(body)
       ensure

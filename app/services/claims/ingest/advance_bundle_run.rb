@@ -165,85 +165,83 @@ module Claims
           )
         end
 
-        if supporting_document_extraction_separate?
-          extraction_documents =
-            documents_requiring_supporting_document_extraction(documents)
-          extraction_ids = extraction_documents.map(&:id)
-          extraction_steps =
-            latest_document_steps_map(
-              run.id,
-              extraction_ids,
-              "supporting_document_extraction"
-            )
+        extraction_documents =
+          documents_requiring_supporting_document_extraction(documents)
+        extraction_ids = extraction_documents.map(&:id)
+        extraction_steps =
+          latest_document_steps_map(
+            run.id,
+            extraction_ids,
+            "supporting_document_extraction"
+          )
 
-          missing_extraction_documents =
-            extraction_documents.reject do |document|
-              extraction_steps.key?(document.id)
+        missing_extraction_documents =
+          extraction_documents.reject do |document|
+            extraction_steps.key?(document.id)
+          end
+
+        if missing_extraction_documents.any?
+          enqueue_supporting_document_extraction_jobs!(
+            documents: missing_extraction_documents
+          )
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
+            )
+          )
+        end
+
+        if extraction_steps.size < extraction_documents.size
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
+            )
+          )
+        end
+
+        if failed_row =
+             extraction_steps.values.find { |row| row.status == "failed" }
+          failed_doc =
+            extraction_documents.detect do |doc|
+              doc.id == failed_row.ingest_document_id
             end
+          return(
+            update_failed!(
+              run: run,
+              total_files: total_files,
+              failed_files: 1,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id,
+              shell_invoice_status: "ocr_failed",
+              extra_messages: [
+                {
+                  code: "bundle_supporting_document_extraction_failed",
+                  level: "error",
+                  message:
+                    "One or more supporting documents failed during located-field extraction.",
+                  ingest_document_id: failed_row.ingest_document_id,
+                  filename: failed_doc&.original_filename
+                }
+              ]
+            )
+          )
+        end
 
-          if missing_extraction_documents.any?
-            enqueue_supporting_document_extraction_jobs!(
-              documents: missing_extraction_documents
+        if extraction_steps.values.any? { |row| row.status != "succeeded" }
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
             )
-            return(
-              update_running!(
-                run: run,
-                total_files: total_files,
-                messages: messages,
-                shell_invoice_id: shell_invoice_id
-              )
-            )
-          end
-
-          if extraction_steps.size < extraction_documents.size
-            return(
-              update_running!(
-                run: run,
-                total_files: total_files,
-                messages: messages,
-                shell_invoice_id: shell_invoice_id
-              )
-            )
-          end
-
-          if failed_row =
-               extraction_steps.values.find { |row| row.status == "failed" }
-            failed_doc =
-              extraction_documents.detect do |doc|
-                doc.id == failed_row.ingest_document_id
-              end
-            return(
-              update_failed!(
-                run: run,
-                total_files: total_files,
-                failed_files: 1,
-                messages: messages,
-                shell_invoice_id: shell_invoice_id,
-                shell_invoice_status: "ocr_failed",
-                extra_messages: [
-                  {
-                    code: "bundle_supporting_document_extraction_failed",
-                    level: "error",
-                    message:
-                      "One or more supporting documents failed during located-field extraction.",
-                    ingest_document_id: failed_row.ingest_document_id,
-                    filename: failed_doc&.original_filename
-                  }
-                ]
-              )
-            )
-          end
-
-          if extraction_steps.values.any? { |row| row.status != "succeeded" }
-            return(
-              update_running!(
-                run: run,
-                total_files: total_files,
-                messages: messages,
-                shell_invoice_id: shell_invoice_id
-              )
-            )
-          end
+          )
         end
 
         invoice_docs = documents.select { |doc| doc.document_kind == "invoice" }
@@ -436,7 +434,14 @@ module Claims
         ::Claims::IngestStepRun.where(
           ingest_run_id: ingest_run_id,
           invoice_version_id: invoice_version_id,
-          step_type: %w[genai_common genai_upgrade code_common code_upgrade]
+          step_type: %w[
+            case_facts
+            genai_common
+            genai_upgrade
+            code_common
+            code_upgrade
+            aggregate_advice
+          ]
         ).order(created_at: :desc)
       end
 
@@ -484,11 +489,6 @@ module Claims
         end
       end
 
-      def supporting_document_extraction_separate?
-        config = ::Claims::ValidationgenaiConfig.order(:created_at).first
-        config&.supporting_document_extraction_separate?
-      end
-
       def documents_requiring_supporting_document_extraction(documents)
         supplements =
           documents.select do |doc|
@@ -525,10 +525,44 @@ module Claims
             raise "Missing shell invoice for resolved ingest document #{resolved_document.id}"
           end
 
+          existing_invoice_version =
+            ::Claims::InvoiceVersion.find_by(
+              invoice_id: invoice.id,
+              storage_key: resolved_document.storage_key
+            )
+          if existing_invoice_version.present?
+            existing_invoice_version.update!(
+              storage_provider:
+                resolved_document.storage_provider.presence ||
+                  existing_invoice_version.storage_provider,
+              original_filename:
+                resolved_document.original_filename.presence ||
+                  existing_invoice_version.original_filename,
+              content_type:
+                resolved_document.content_type.presence ||
+                  existing_invoice_version.content_type,
+              byte_size:
+                resolved_document.byte_size.presence ||
+                  existing_invoice_version.byte_size,
+              sha256:
+                resolved_document.sha256.presence ||
+                  existing_invoice_version.sha256,
+              updated_at: Time.current
+            )
+
+            resolved_document.update!(
+              resolved_invoice_id: invoice.id,
+              resolved_invoice_version_id: existing_invoice_version.id,
+              updated_at: Time.current
+            )
+
+            return existing_invoice_version.id
+          end
+
           invoice_version =
             ::Claims::InvoiceVersion.create!(
               invoice_id: invoice.id,
-              invoice_versionno: 1,
+              invoice_versionno: next_invoice_versionno(invoice.id),
               storage_provider: resolved_document.storage_provider,
               storage_key: resolved_document.storage_key,
               original_filename: resolved_document.original_filename,
@@ -547,6 +581,14 @@ module Claims
 
           invoice_version.id
         end
+      end
+
+      def next_invoice_versionno(invoice_id)
+        (
+          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).maximum(
+            :invoice_versionno
+          ) || 0
+        ) + 1
       end
 
       def enqueue_invoice_finalize_ocr!(invoice_version_id:)

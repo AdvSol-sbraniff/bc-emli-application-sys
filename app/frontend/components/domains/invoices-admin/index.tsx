@@ -37,8 +37,8 @@ import {
   FilePdf,
   Info,
   MagnifyingGlass,
+  Package,
   Question,
-  Scan,
   Sparkle,
   Trash,
   Wrench,
@@ -394,6 +394,11 @@ export function InvoicesAdminScreen() {
     navigate(`/invoice-supporting-documents-admin?invoice_id=${encodeURIComponent(String(row.invoice_id))}`);
   };
 
+  const handleOpenRedoPackage = (row: InvoiceGridRow) => {
+    if (!row.invoice_id) return;
+    navigate(`/redo-invoice-package?invoice_id=${encodeURIComponent(String(row.invoice_id))}`);
+  };
+
   const handleOpenUploadFix = (row: InvoiceGridRow) => {
     const params = new URLSearchParams();
     if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
@@ -582,7 +587,7 @@ export function InvoicesAdminScreen() {
             </Box>
 
             <HStack spacing={1.5} pb={1} flexShrink={0} alignSelf="flex-end">
-              <Tooltip label="Help: upload fix, OCR / AI, inspect versions">
+              <Tooltip label="Help: upload fix, Redo GenAI, inspect versions">
                 <IconButton
                   aria-label="Open invoices help"
                   icon={<Question size={18} />}
@@ -661,10 +666,10 @@ export function InvoicesAdminScreen() {
                   <Th>status</Th>
                   <Th minW="180px">upgrade types</Th>
                   <Th>AI</Th>
-                  <Th minW="160px" textAlign="right">
+                  <Th minW="190px" textAlign="right">
                     Actions
                   </Th>
-                  <Th minW="180px" textAlign="right">
+                  <Th minW="160px" textAlign="right">
                     Admin Tools
                   </Th>
                 </Tr>
@@ -737,7 +742,7 @@ export function InvoicesAdminScreen() {
                         </HStack>
                       </Td>
 
-                      <Td whiteSpace="nowrap" minW="160px">
+                      <Td whiteSpace="nowrap" minW="190px">
                         <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
                           <Tooltip label="Open details drawer">
                             <IconButton
@@ -782,20 +787,31 @@ export function InvoicesAdminScreen() {
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
+
+                          <Tooltip label="View processed supporting documents for this invoice">
+                            <IconButton
+                              aria-label="View supporting documents"
+                              size="xs"
+                              variant="outline"
+                              icon={<Files size={14} />}
+                              onClick={() => handleOpenSupportingDocuments(r)}
+                              isDisabled={!hasInvoice}
+                            />
+                          </Tooltip>
                         </Flex>
                       </Td>
 
-                      <Td whiteSpace="nowrap" minW="180px">
+                      <Td whiteSpace="nowrap" minW="160px">
                         <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
-                          <Tooltip label="Re-run OCR and AI jobs for this invoice">
+                          <Tooltip label="Redo GenAI Only: opens the Redo GenAI screen and reruns validation using existing OCR, classifier, and supporting-document extraction results. It does not rebuild the PDF bundle.">
                             <IconButton
-                              aria-label="Run OCR and AI jobs"
+                              aria-label="Redo GenAI only"
                               size="xs"
                               variant="outline"
                               icon={
                                 <HStack spacing={0.5}>
-                                  <Scan size={12} />
                                   <Sparkle size={12} />
+                                  <ArrowsClockwise size={10} />
                                 </HStack>
                               }
                               onClick={() => handlePopulateJobAdminWithInvoice(r)}
@@ -803,13 +819,18 @@ export function InvoicesAdminScreen() {
                             />
                           </Tooltip>
 
-                          <Tooltip label="Manage supporting PDFs for this invoice">
+                          <Tooltip label="Redo Entire Package / bundle resubmit: opens the package staging screen so admins can add PDFs and rerun OCR, classifier, supporting-document extraction, invoice OCR, GenAI, and code rules from the full bundle.">
                             <IconButton
-                              aria-label="Manage supporting PDFs"
+                              aria-label="Redo entire invoice package"
                               size="xs"
                               variant="outline"
-                              icon={<Files size={14} />}
-                              onClick={() => handleOpenSupportingDocuments(r)}
+                              icon={
+                                <HStack spacing={0.5}>
+                                  <Package size={13} />
+                                  <ArrowsClockwise size={10} />
+                                </HStack>
+                              }
+                              onClick={() => handleOpenRedoPackage(r)}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
@@ -910,10 +931,9 @@ export function InvoicesAdminScreen() {
           <DrawerHeader>Invoices Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This screen has five related but distinct actions: Submission, upload fix, OCR / AI, Inspect Versions, and
-              Revision Requests. They are intentionally separated so full-pipeline simulation, document upload
-              correction, OCR/GenAI processing, version inspection, and revision-request review remain clear and
-              testable.
+              This screen has five related but distinct actions: Submission, upload fix, Redo GenAI, Inspect Versions,
+              and Revision Requests. They are intentionally separated so full-pipeline simulation, document upload
+              correction, GenAI reruns, version inspection, and revision-request review remain clear and testable.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
@@ -925,12 +945,12 @@ export function InvoicesAdminScreen() {
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
-              OCR / AI
+              Redo GenAI
             </Text>
             <Text fontSize="sm" mb={3}>
-              The upload-fix action only stores the PDF and creates a new invoice-version record. It does not run OCR
-              extraction or GenAI rule checks. OCR and GenAI are run separately via OCR / AI so they can be re-run
-              without re-uploading files.
+              The upload-fix action only stores the PDF and creates a new invoice-version record. It does not run GenAI
+              rule checks. Use Redo GenAI Only to rerun validation from existing OCR, classifier, and
+              supporting-document extraction results without re-uploading files or rebuilding the package.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>

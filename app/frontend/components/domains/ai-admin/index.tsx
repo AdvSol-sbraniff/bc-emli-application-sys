@@ -181,17 +181,9 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
     }
   }, [sessionId]);
 
-  const [isRunningOcr, setIsRunningOcr] = useState(false);
-  const [ocrError, setOcrError] = useState('');
-  const [ocrOkMsg, setOcrOkMsg] = useState('');
-
   const [isRunningGenai, setIsRunningGenai] = useState(false);
   const [genaiError, setGenaiError] = useState('');
   const [genaiOkMsg, setGenaiOkMsg] = useState('');
-
-  const [isRunningClassifier, setIsRunningClassifier] = useState(false);
-  const [classifierError, setClassifierError] = useState('');
-  const [classifierOkMsg, setClassifierOkMsg] = useState('');
 
   const POLL_INTERVAL_MS = 2500;
   const POLL_GRACE_MS = 45000;
@@ -208,9 +200,7 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
   }, [steps, pollTargetInvoiceVersionId]);
 
   const shouldPollSteps =
-    autoPollEnabled &&
-    !!sessionId.trim() &&
-    (isRunningOcr || isRunningGenai || isRunningClassifier || Date.now() < pollGraceUntilMs || hasPendingTargetStep);
+    autoPollEnabled && !!sessionId.trim() && (isRunningGenai || Date.now() < pollGraceUntilMs || hasPendingTargetStep);
 
   useEffect(() => {
     if (!shouldPollSteps) return;
@@ -231,48 +221,6 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
     await fetchStepsBySession();
   };
 
-  const handleRunOcr = async () => {
-    setIsRunningOcr(true);
-    setOcrError('');
-    setOcrOkMsg('');
-
-    try {
-      const sid = sessionId.trim();
-      const ivid = invoiceVersionId.trim();
-
-      if (!sid) throw new Error('Enter a session_id first.');
-      if (!ivid) throw new Error('Enter an invoice_version_id first (or load context).');
-
-      await beginPollingFor(ivid);
-
-      const res = await fetch('/api/claims/ingest/run_ocr', {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ session_id: sid, invoice_version_id: ivid }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-
-      const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
-      setOcrOkMsg(
-        String(
-          data?.message ||
-            data?.summary ||
-            `OCR queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
-        ),
-      );
-
-      setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
-      await fetchStepsBySession();
-    } catch (e: any) {
-      setOcrError(e?.message || 'Run OCR failed.');
-    } finally {
-      setIsRunningOcr(false);
-    }
-  };
-
   const handleRunGenai = async () => {
     setIsRunningGenai(true);
     setGenaiError('');
@@ -291,7 +239,7 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
         method: 'POST',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ session_id: sid, invoice_version_id: ivid, mode: 'normal' }),
+        body: JSON.stringify({ session_id: sid, invoice_version_id: ivid }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -302,71 +250,29 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
         String(
           data?.message ||
             data?.summary ||
-            `GenAI full queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
+            `Redo GenAI Only queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
         ),
       );
 
       setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
       await fetchStepsBySession();
     } catch (e: any) {
-      setGenaiError(e?.message || 'Run GenAI full failed.');
+      setGenaiError(e?.message || 'Redo GenAI Only failed.');
     } finally {
       setIsRunningGenai(false);
     }
   };
 
-  const handleRunClassifierOnly = async () => {
-    setIsRunningClassifier(true);
-    setClassifierError('');
-    setClassifierOkMsg('');
-
-    try {
-      const sid = sessionId.trim();
-      const ivid = invoiceVersionId.trim();
-
-      if (!sid) throw new Error('Enter a session_id first.');
-      if (!ivid) throw new Error('Enter an invoice_version_id first (or load context).');
-
-      await beginPollingFor(ivid);
-
-      const res = await fetch('/api/claims/ingest/run_genai', {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ session_id: sid, invoice_version_id: ivid, mode: 'classifier_only' }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-
-      const stepRunId = data?.step_run_id ?? data?.ingest_step_run_id ?? data?.id ?? '';
-      setClassifierOkMsg(
-        String(
-          data?.message ||
-            data?.summary ||
-            `Classifier-only queued/started for invoice_version_id=${ivid}${stepRunId ? ` step_run_id=${stepRunId}` : ''}`,
-        ),
-      );
-
-      setPollGraceUntilMs(Date.now() + POLL_GRACE_MS);
-      await fetchStepsBySession();
-    } catch (e: any) {
-      setClassifierError(e?.message || 'Run classifier failed.');
-    } finally {
-      setIsRunningClassifier(false);
-    }
-  };
-
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Invoices Admin - OCR & GenAI" />
+      <ThinBlueTitleBar title="Invoices Admin - Redo GenAI Only" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex justify="flex-end" mb={3}>
             <Tooltip label="Help: buttons, statuses, and step runs">
               <IconButton
-                aria-label="Open OCR and GenAI help"
+                aria-label="Open Redo GenAI Only help"
                 icon={<Question size={18} />}
                 size="sm"
                 variant="outline"
@@ -381,8 +287,8 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                 Autodetect Flow
               </Text>
               <Text as="div" fontSize="sm" opacity={0.8}>
-                This screen no longer asks you to choose a ruleset. Full GenAI now starts from the invoice context on
-                the server, and the classifier-only path is available as its own button for targeted testing.
+                This screen no longer asks you to choose a ruleset. Full GenAI reruns validation from the stored triage
+                classifier output and does not run classifier again.
               </Text>
 
               {ctxError && (
@@ -531,7 +437,7 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                   </>
                 ) : (
                   <Text as="div" fontSize="sm" opacity={0.7}>
-                    No context loaded yet. Open this screen from Invoices Admin (OCR / AI action) to populate it.
+                    No context loaded yet. Open this screen from Invoices Admin (Redo GenAI action) to populate it.
                   </Text>
                 )}
               </Box>
@@ -555,51 +461,15 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
               <Flex gap={3} wrap="wrap">
                 <Button
                   colorScheme="blue"
-                  onClick={handleRunOcr}
-                  isLoading={isRunningOcr}
-                  loadingText="Running..."
-                  isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
-                >
-                  Run OCR
-                </Button>
-
-                <Button
-                  colorScheme="blue"
-                  variant="outline"
                   onClick={handleRunGenai}
                   isLoading={isRunningGenai}
                   loadingText="Running..."
                   isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
                 >
-                  Run GenAI Full
-                </Button>
-
-                <Button
-                  colorScheme="teal"
-                  variant="outline"
-                  onClick={handleRunClassifierOnly}
-                  isLoading={isRunningClassifier}
-                  loadingText="Running..."
-                  isDisabled={!sessionId.trim() || !invoiceVersionId.trim()}
-                >
-                  Run GenAI ClassifierOnly
+                  Redo GenAI Only
                 </Button>
               </Flex>
 
-              {ocrError && (
-                <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-                  <Text as="div" fontSize="sm" color="red.700">
-                    {ocrError}
-                  </Text>
-                </Box>
-              )}
-              {ocrOkMsg && (
-                <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-                  <Text as="div" fontSize="sm" color="green.800">
-                    {ocrOkMsg}
-                  </Text>
-                </Box>
-              )}
               {genaiError && (
                 <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
                   <Text as="div" fontSize="sm" color="red.700">
@@ -611,20 +481,6 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                 <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
                   <Text as="div" fontSize="sm" color="green.800">
                     {genaiOkMsg}
-                  </Text>
-                </Box>
-              )}
-              {classifierError && (
-                <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-                  <Text as="div" fontSize="sm" color="red.700">
-                    {classifierError}
-                  </Text>
-                </Box>
-              )}
-              {classifierOkMsg && (
-                <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-                  <Text as="div" fontSize="sm" color="green.800">
-                    {classifierOkMsg}
                   </Text>
                 </Box>
               )}
@@ -741,23 +597,16 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Invoices Admin OCR and GenAI Help</DrawerHeader>
+          <DrawerHeader>Invoices Admin Redo GenAI Only Help</DrawerHeader>
           <DrawerBody>
             <Flex direction="column" gap={4}>
               <Box>
                 <Heading size="sm" mb={2}>
-                  Three Buttons
+                  Redo GenAI Only
                 </Heading>
                 <Text as="div" fontSize="sm">
-                  Run OCR sends the invoice PDF through Document Intelligence and writes OCR results back to the invoice
-                  version.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Run GenAI Full starts the server-side full path without asking you to choose a ruleset on this screen.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Run GenAI ClassifierOnly stops after the classifier step so you can test upgrade-type detection in
-                  isolation.
+                  Redo GenAI Only reruns validation from stored OCR, classifier, and supporting-document extraction
+                  results. It does not redo OCR or classifier.
                 </Text>
               </Box>
 

@@ -3,16 +3,16 @@
 module Claims
   module SupportingDocuments
     class ApplyLocatedFields
-      def self.call(supporting_document_id:, classifier_payload:)
+      def self.call(supporting_document_id:, located_fields_payload:)
         new(
           supporting_document_id: supporting_document_id,
-          classifier_payload: classifier_payload
+          located_fields_payload: located_fields_payload
         ).call
       end
 
-      def initialize(supporting_document_id:, classifier_payload:)
+      def initialize(supporting_document_id:, located_fields_payload:)
         @supporting_document_id = supporting_document_id
-        @classifier_payload = classifier_payload
+        @located_fields_payload = located_fields_payload
       end
 
       def call
@@ -60,11 +60,11 @@ module Claims
       end
 
       def extract_located_fields
-        return [] unless @classifier_payload.is_a?(Hash)
+        return [] unless @located_fields_payload.is_a?(Hash)
 
         rows =
-          @classifier_payload["supporting_document_located_fields"] ||
-            @classifier_payload[:supporting_document_located_fields]
+          @located_fields_payload["supporting_document_located_fields"] ||
+            @located_fields_payload[:supporting_document_located_fields]
         rows.is_a?(Array) ? rows : []
       end
 

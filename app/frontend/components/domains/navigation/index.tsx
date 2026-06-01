@@ -80,6 +80,9 @@ const SubmissionSimulatorAdminScreen = lazy(() =>
 const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
   import('../invoice-supporting-documents-admin').then((module) => ({ default: module.default })),
 );
+const RedoInvoicePackageScreen = lazy(() =>
+  import('../redo-invoice-package').then((module) => ({ default: module.default })),
+);
 const ContractorInvoiceReviewScreen = lazy(() =>
   import('../contractor-invoice-review').then((module) => ({ default: module.default })),
 );
@@ -843,6 +846,7 @@ const AppRoutes = observer(() => {
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
+          <Route path="/redo-invoice-package" element={<RedoInvoicePackageScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />

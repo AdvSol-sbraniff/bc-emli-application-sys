@@ -1,9 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box,
-  Button,
   Container,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
   Flex,
+  Heading,
   HStack,
   IconButton,
   Spinner,
@@ -16,7 +22,7 @@ import {
   Tooltip,
   Tr,
 } from '@chakra-ui/react';
-import { FilePdf, Trash, UploadSimple } from '@phosphor-icons/react';
+import { FilePdf, Info } from '@phosphor-icons/react';
 import { useLocation } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
@@ -102,21 +108,10 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
   const [context, setContext] = useState<ContextPayload | null>(null);
   const [rows, setRows] = useState<SupportingDocumentRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [deletingId, setDeletingId] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [isDragActive, setIsDragActive] = useState(false);
+  const [selectedInfoRow, setSelectedInfoRow] = useState<SupportingDocumentRow | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const canUpload = useMemo(
-    () => invoiceId.trim().length > 0 && selectedFiles.length > 0 && !uploading,
-    [invoiceId, selectedFiles, uploading],
-  );
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!invoiceId.trim()) {
       setError('Missing invoice_id in URL.');
       setContext(null);
@@ -156,61 +151,11 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [invoiceId]);
 
   useEffect(() => {
     void loadData();
-  }, [invoiceId]);
-
-  const mergeFiles = (incoming: File[]) => {
-    const pdfsOnly = incoming.filter((f) => {
-      const byType = String(f.type || '').toLowerCase() === 'application/pdf';
-      const byExt = String(f.name || '')
-        .toLowerCase()
-        .endsWith('.pdf');
-      return byType || byExt;
-    });
-
-    setSelectedFiles((prev) => {
-      const seen = new Set(prev.map((f) => `${f.name}:${f.size}:${f.lastModified}`));
-      const next = [...prev];
-      pdfsOnly.forEach((f) => {
-        const key = `${f.name}:${f.size}:${f.lastModified}`;
-        if (!seen.has(key)) next.push(f);
-      });
-      return next;
-    });
-  };
-
-  const handleUpload = async () => {
-    if (!canUpload) return;
-
-    setUploading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const form = new FormData();
-      selectedFiles.forEach((f) => form.append('pdfs[]', f, f.name));
-
-      const res = await fetch(`/api/claims/admin/invoices/${encodeURIComponent(invoiceId)}/supporting_documents`, {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-
-      setSelectedFiles([]);
-      setSuccess(`Uploaded ${Number(data?.uploaded_count || 0)} supporting PDF(s).`);
-      await loadData();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to upload supporting PDFs.');
-    } finally {
-      setUploading(false);
-    }
-  };
+  }, [loadData]);
 
   const handleOpenSupportingPdf = async (id: string) => {
     try {
@@ -227,33 +172,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
       window.open(String(data.sas_url), '_blank', 'noopener,noreferrer');
     } catch (e: any) {
       setError(e?.message || 'Failed to open supporting PDF.');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    const confirmed = window.confirm('Delete this supporting PDF? This cannot be undone.');
-    if (!confirmed) return;
-
-    setDeletingId(id);
-    setError('');
-    setSuccess('');
-
-    try {
-      const res = await fetch(`/api/claims/admin/supporting_documents/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-
-      setSuccess('Supporting PDF deleted.');
-      await loadData();
-    } catch (e: any) {
-      setError(e?.message || 'Failed to delete supporting PDF.');
-    } finally {
-      setDeletingId('');
     }
   };
 
@@ -300,118 +218,22 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
         </Box>
 
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white" mb={5}>
-          <Text fontSize="sm" fontWeight="bold" mb={4}>
-            Add Supporting PDFs
-          </Text>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="application/pdf,.pdf"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              mergeFiles(Array.from(e.target.files || []));
-              e.target.value = '';
-            }}
-          />
-
-          <Box
-            borderWidth="2px"
-            borderStyle="dashed"
-            borderColor={isDragActive ? 'blue.400' : 'gray.200'}
-            borderRadius="lg"
-            p={8}
-            textAlign="center"
-            bg={isDragActive ? 'blue.50' : 'gray.50'}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setIsDragActive(true);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragActive(true);
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setIsDragActive(false);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDragActive(false);
-              mergeFiles(Array.from(e.dataTransfer.files || []));
-            }}
-          >
-            <Text fontWeight="bold" mb={2}>
-              Drag and drop PDF files here
-            </Text>
-            <Text fontSize="sm" opacity={0.8} mb={4}>
-              Files upload directly to this invoice. No staging area is used.
-            </Text>
-            <Button
-              variant="outline"
-              leftIcon={<UploadSimple size={16} />}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Select Files
-            </Button>
-          </Box>
-
-          <Box mt={4}>
-            <Text fontSize="xs" opacity={0.7} mb={2}>
-              Selected files
-            </Text>
-            {selectedFiles.length ? (
-              selectedFiles.map((file) => (
-                <Flex
-                  key={`${file.name}:${file.size}:${file.lastModified}`}
-                  justify="space-between"
-                  align="center"
-                  py={1}
-                >
-                  <Text fontSize="sm">{file.name}</Text>
-                  <Text fontSize="xs" opacity={0.7}>
-                    {fmtBytes(file.size)}
-                  </Text>
-                </Flex>
-              ))
-            ) : (
-              <Text fontSize="sm" opacity={0.7}>
-                No files selected.
+          <Flex justify="space-between" align="center" gap={4} wrap="wrap">
+            <Box>
+              <Text fontSize="sm" fontWeight="bold" mb={1}>
+                Processed Supporting Documents
               </Text>
-            )}
-          </Box>
-
-          <HStack mt={4} spacing={3}>
-            <Button
-              colorScheme="blue"
-              onClick={() => void handleUpload()}
-              isLoading={uploading}
-              isDisabled={!canUpload}
-            >
-              Upload{' '}
-              {selectedFiles.length ? `${selectedFiles.length} PDF${selectedFiles.length === 1 ? '' : 's'}` : 'PDFs'}
-            </Button>
-            {!!selectedFiles.length && (
-              <Button variant="outline" onClick={() => setSelectedFiles([])} isDisabled={uploading}>
-                Clear Selection
-              </Button>
-            )}
-          </HStack>
+              <Text fontSize="sm" opacity={0.78}>
+                This screen is read-only for documents that have already been classified and promoted.
+              </Text>
+            </Box>
+          </Flex>
         </Box>
 
         {error && (
           <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
             <Text fontSize="sm" color="red.700">
               {error}
-            </Text>
-          </Box>
-        )}
-
-        {success && (
-          <Box mb={4} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-            <Text fontSize="sm" color="green.700">
-              {success}
             </Text>
           </Box>
         )}
@@ -431,7 +253,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                 <Th>filename</Th>
                 <Th>type</Th>
                 <Th>routing</Th>
-                <Th>located fields</Th>
                 <Th isNumeric>size</Th>
                 <Th>actions</Th>
               </Tr>
@@ -444,7 +265,12 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                   </Td>
                   <Td fontSize="sm">{row.original_filename || '—'}</Td>
                   <Td fontSize="xs" maxW="220px">
-                    <Text fontSize="xs">{row.content_type || '—'}</Text>
+                    <Text fontSize="xs">
+                      {row.supporting_document_type_description ||
+                        row.supporting_document_type_key ||
+                        row.content_type ||
+                        '—'}
+                    </Text>
                     {row.classification_confidence !== null && row.classification_confidence !== undefined && (
                       <Text fontSize="xs" opacity={0.65}>
                         conf {Number(row.classification_confidence).toFixed(0)}
@@ -464,35 +290,20 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                       </Text>
                     )}
                   </Td>
-                  <Td fontSize="xs" maxW="360px">
-                    {Array.isArray(row.located_fields) && row.located_fields.length > 0 ? (
-                      row.located_fields.map((field) => (
-                        <Box key={field.id || `${row.id}:${field.field_key}`} mb={1}>
-                          <Text fontSize="xs" fontWeight="semibold">
-                            {field.field_key || 'field'}: {fmtLocatedFieldValue(field)}
-                          </Text>
-                          <Text fontSize="xs" opacity={0.65}>
-                            conf {field.confidence ?? 0}
-                            {field.page ? `, page ${field.page}` : ''}
-                          </Text>
-                          {String(field.evidence_text || '').trim() && (
-                            <Text fontSize="xs" opacity={0.65} noOfLines={2}>
-                              {field.evidence_text}
-                            </Text>
-                          )}
-                        </Box>
-                      ))
-                    ) : (
-                      <Text fontSize="xs" opacity={0.65}>
-                        -
-                      </Text>
-                    )}
-                  </Td>
                   <Td isNumeric fontSize="xs">
                     {fmtBytes(row.byte_size)}
                   </Td>
                   <Td>
                     <HStack spacing={2}>
+                      <Tooltip label="View document details and located fields">
+                        <IconButton
+                          aria-label="View supporting document details"
+                          size="xs"
+                          variant="outline"
+                          icon={<Info size={14} />}
+                          onClick={() => setSelectedInfoRow(row)}
+                        />
+                      </Tooltip>
                       <Tooltip label="Open supporting PDF in a new browser tab">
                         <IconButton
                           aria-label="Open supporting PDF"
@@ -502,17 +313,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                           onClick={() => void handleOpenSupportingPdf(row.id)}
                         />
                       </Tooltip>
-                      <Tooltip label="Delete supporting PDF">
-                        <IconButton
-                          aria-label="Delete supporting PDF"
-                          size="xs"
-                          variant="outline"
-                          colorScheme="red"
-                          icon={<Trash size={14} />}
-                          isLoading={deletingId === row.id}
-                          onClick={() => void handleDelete(row.id)}
-                        />
-                      </Tooltip>
                     </HStack>
                   </Td>
                 </Tr>
@@ -520,7 +320,7 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
 
               {!loading && rows.length === 0 && (
                 <Tr>
-                  <Td colSpan={7}>
+                  <Td colSpan={6}>
                     <Text fontSize="sm" opacity={0.7}>
                       No supporting documents uploaded for this invoice yet.
                     </Text>
@@ -531,6 +331,114 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
           </Table>
         </Box>
       </Container>
+
+      <Drawer isOpen={!!selectedInfoRow} placement="right" onClose={() => setSelectedInfoRow(null)} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Supporting Document Details</DrawerHeader>
+          <DrawerBody>
+            {selectedInfoRow && (
+              <Flex direction="column" gap={5}>
+                <Box>
+                  <Heading size="sm" mb={2}>
+                    Document
+                  </Heading>
+                  <Table size="sm">
+                    <Tbody>
+                      <Tr>
+                        <Td fontWeight="semibold">filename</Td>
+                        <Td>{selectedInfoRow.original_filename || '—'}</Td>
+                      </Tr>
+                      <Tr>
+                        <Td fontWeight="semibold">supporting type</Td>
+                        <Td>
+                          {selectedInfoRow.supporting_document_type_description ||
+                            selectedInfoRow.supporting_document_type_key ||
+                            '—'}
+                        </Td>
+                      </Tr>
+                      <Tr>
+                        <Td fontWeight="semibold">routing</Td>
+                        <Td>{selectedInfoRow.supplement_routing_quality || '—'}</Td>
+                      </Tr>
+                      <Tr>
+                        <Td fontWeight="semibold">classification confidence</Td>
+                        <Td>{selectedInfoRow.classification_confidence ?? '—'}</Td>
+                      </Tr>
+                      <Tr>
+                        <Td fontWeight="semibold">size</Td>
+                        <Td>{fmtBytes(selectedInfoRow.byte_size)}</Td>
+                      </Tr>
+                      <Tr>
+                        <Td fontWeight="semibold">created</Td>
+                        <Td>{fmtTs(selectedInfoRow.created_at)}</Td>
+                      </Tr>
+                    </Tbody>
+                  </Table>
+                </Box>
+
+                {String(selectedInfoRow.classification_reason || '').trim() && (
+                  <Box>
+                    <Heading size="sm" mb={2}>
+                      Classification Reason
+                    </Heading>
+                    <Text fontSize="sm">{selectedInfoRow.classification_reason}</Text>
+                  </Box>
+                )}
+
+                {String(selectedInfoRow.supplement_routing_quality_reason || '').trim() && (
+                  <Box>
+                    <Heading size="sm" mb={2}>
+                      Routing Quality Reason
+                    </Heading>
+                    <Text fontSize="sm">{selectedInfoRow.supplement_routing_quality_reason}</Text>
+                  </Box>
+                )}
+
+                <Box>
+                  <Heading size="sm" mb={2}>
+                    Located Fields
+                  </Heading>
+
+                  {Array.isArray(selectedInfoRow.located_fields) && selectedInfoRow.located_fields.length > 0 ? (
+                    <Table size="sm">
+                      <Thead bg="gray.50">
+                        <Tr>
+                          <Th>field</Th>
+                          <Th>value</Th>
+                          <Th>confidence</Th>
+                          <Th>page</Th>
+                          <Th>evidence</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {selectedInfoRow.located_fields.map((field) => (
+                          <Tr key={field.id || `${selectedInfoRow.id}:${field.field_key}`}>
+                            <Td fontSize="xs" fontWeight="semibold">
+                              {field.field_key || 'field'}
+                            </Td>
+                            <Td fontSize="xs">{fmtLocatedFieldValue(field)}</Td>
+                            <Td fontSize="xs">{field.confidence ?? 0}</Td>
+                            <Td fontSize="xs">{field.page ?? '—'}</Td>
+                            <Td fontSize="xs" whiteSpace="pre-wrap">
+                              {field.evidence_text || '—'}
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  ) : (
+                    <Text fontSize="sm" opacity={0.7}>
+                      No located fields were stored for this supporting document.
+                    </Text>
+                  )}
+                </Box>
+              </Flex>
+            )}
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Flex>
   );
 }

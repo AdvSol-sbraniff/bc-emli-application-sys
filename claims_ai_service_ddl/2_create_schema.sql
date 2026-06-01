@@ -1256,10 +1256,8 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   system_record character varying NULL,
-  classifier_combined_with_extraction_system_record character varying NULL,
-  classifier_without_extraction_system_record character varying NULL,
+  classifier_system_record character varying NULL,
   supporting_document_extraction_system_record character varying NULL,
-  supporting_document_extraction_mode text NOT NULL DEFAULT 'combined_with_classifier',
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
   admin_advice_closing character varying NULL,
@@ -1267,9 +1265,7 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
-  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id),
-  CONSTRAINT validationgenai_config_supporting_document_extraction_mode_chk
-    CHECK (supporting_document_extraction_mode IN ('combined_with_classifier','separate_extraction'))
+  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id)
 );
 
 
@@ -1685,8 +1681,10 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
   session_id uuid NOT NULL,
   contractor_id uuid NOT NULL,
 
+  invoice_id uuid NULL,
   resolved_invoice_id uuid NULL,
   resolved_invoice_version_id uuid NULL,
+  promoted_supporting_document_id uuid NULL,
 
   storage_provider character varying NOT NULL DEFAULT 'azure_blob',
   storage_key character varying NOT NULL,
@@ -1729,6 +1727,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
     FOREIGN KEY (contractor_id)
     REFERENCES public.contractors(id),
 
+  CONSTRAINT fk_ingest_documents_invoice
+    FOREIGN KEY (invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE CASCADE,
+
   CONSTRAINT fk_ingest_documents_resolved_invoice
     FOREIGN KEY (resolved_invoice_id)
     REFERENCES claims.invoices(id)
@@ -1737,6 +1740,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
   CONSTRAINT fk_ingest_documents_resolved_invoice_version
     FOREIGN KEY (resolved_invoice_version_id)
     REFERENCES claims.invoice_versions(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT fk_ingest_documents_promoted_supporting_document
+    FOREIGN KEY (promoted_supporting_document_id)
+    REFERENCES claims.supporting_documents(id)
     ON DELETE SET NULL,
 
   CONSTRAINT fk_ingest_documents_supporting_document_type
@@ -1750,7 +1758,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
     CHECK (document_kind_confidence BETWEEN 0 AND 100),
 
   CONSTRAINT ingest_documents_classification_status_chk
-    CHECK (classification_status IN ('pending','classified','needs_review','failed')),
+    CHECK (classification_status IN ('pending','classified','needs_review','failed','superseded')),
 
   CONSTRAINT ingest_documents_classification_confidence_chk
     CHECK (classification_confidence BETWEEN 0 AND 100),
@@ -1771,11 +1779,17 @@ CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_session_id
 CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_contractor_id
   ON claims.ingest_documents (contractor_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_invoice_id
+  ON claims.ingest_documents (invoice_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_document_kind
   ON claims.ingest_documents (document_kind, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_resolved_invoice_id
   ON claims.ingest_documents (resolved_invoice_id);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_promoted_supporting_document_id
+  ON claims.ingest_documents (promoted_supporting_document_id);
 
 
 -- ============================================================
@@ -1806,7 +1820,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   invoice_upgrade_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | ocr | classifier | genai | genai_common | genai_upgrade | code_common | code_upgrade | ocr_read | triage_classifier | supporting_document_extraction | ocr_invoice
+  step_type text NOT NULL,  -- upload | upload_package_stage | reprocess_package_stage | ocr | classifier | genai | case_facts | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | supporting_document_extraction | ocr_invoice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -1853,7 +1867,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     REFERENCES claims.invoice_upgrade_types(id),
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','ocr','classifier','genai','genai_common','genai_upgrade','code_common','code_upgrade','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
+    CHECK (step_type IN ('upload','upload_package_stage','reprocess_package_stage','ocr','classifier','genai','case_facts','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -1886,6 +1900,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   CONSTRAINT ingest_step_runs_target_required_chk
     CHECK (
+      step_type IN ('upload_package_stage','reprocess_package_stage')
+      OR
       (invoice_version_id IS NOT NULL AND ingest_document_id IS NULL)
       OR
       (invoice_version_id IS NULL AND ingest_document_id IS NOT NULL)
@@ -1893,6 +1909,12 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   CONSTRAINT ingest_step_runs_target_compatibility_chk
     CHECK (
+      (
+        step_type IN ('upload_package_stage','reprocess_package_stage')
+        AND invoice_version_id IS NULL
+        AND ingest_document_id IS NULL
+      )
+      OR
       (
         step_type IN ('ocr_read','triage_classifier','supporting_document_extraction')
         AND ingest_document_id IS NOT NULL

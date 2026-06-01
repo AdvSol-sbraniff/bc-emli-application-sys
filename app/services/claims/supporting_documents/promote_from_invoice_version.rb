@@ -69,7 +69,8 @@ module Claims
         located_result =
           ::Claims::SupportingDocuments::ApplyLocatedFields.call(
             supporting_document_id: document.id,
-            classifier_payload: payload
+            located_fields_payload: {
+            }
           )
         unless located_result[:ok]
           raise "ApplyLocatedFields failed: #{located_result.inspect}"

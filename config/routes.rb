@@ -107,12 +107,22 @@ Rails.application.routes.draw do
           to: "invoice_supporting_documents#context"
       get "admin/invoices/:invoice_id/supporting_documents",
           to: "invoice_supporting_documents#index"
-      post "admin/invoices/:invoice_id/supporting_documents",
-           to: "invoice_supporting_documents#create"
       delete "admin/supporting_documents/:id",
              to: "invoice_supporting_documents#destroy"
       get "admin/supporting_documents/:id/pdf_url",
           to: "invoice_supporting_documents#pdf_url"
+      get "admin/invoices/:invoice_id/redo_package/context",
+          to: "redo_invoice_package#context"
+      get "admin/invoices/:invoice_id/redo_package/documents",
+          to: "redo_invoice_package#documents"
+      post "admin/invoices/:invoice_id/redo_package/documents",
+           to: "redo_invoice_package#create"
+      post "admin/invoices/:invoice_id/redo_package",
+           to: "redo_invoice_package#redo"
+      delete "admin/redo_package/documents/:id",
+             to: "redo_invoice_package#destroy"
+      get "admin/redo_package/documents/:id/pdf_url",
+          to: "redo_invoice_package#pdf_url"
 
       get "admin/reports/volume_value/summary",
           to: "reports_volume_value#summary"

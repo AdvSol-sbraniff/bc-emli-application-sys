@@ -7,13 +7,13 @@ module Api
       include Api::Claims::Concerns::AdminAuthorization
 
       skip_before_action :authenticate_user!,
-                         only: %i[context index create destroy pdf_url]
+                         only: %i[context index destroy pdf_url]
       skip_before_action :require_confirmation,
-                         only: %i[context index create destroy pdf_url]
+                         only: %i[context index destroy pdf_url]
       skip_after_action :verify_authorized,
-                        only: %i[context index create destroy pdf_url]
+                        only: %i[context index destroy pdf_url]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[context index create destroy pdf_url]
+      skip_forgery_protection only: %i[context index destroy pdf_url]
 
       def context
         invoice = ::Claims::Invoice.find(params[:invoice_id])
@@ -66,36 +66,6 @@ module Api
         )
         render json: {
                  rows: [],
-                 error: e.message
-               },
-               status: :unprocessable_entity
-      end
-
-      def create
-        invoice = ::Claims::Invoice.find(params[:invoice_id])
-
-        files =
-          Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
-            Array(params[:files]) + Array(params[:file])
-
-        result =
-          ::Claims::SupportingDocuments::UploadPdfs.call(
-            invoice_id: invoice.id,
-            files: files
-          )
-        render json: result, status: :ok
-      rescue ActiveRecord::RecordNotFound
-        render json: {
-                 ok: false,
-                 error: "Invoice not found"
-               },
-               status: :not_found
-      rescue => e
-        Rails.logger.error(
-          "[claims][invoice_supporting_documents][create] ERROR: #{e.class}: #{e.message}"
-        )
-        render json: {
-                 ok: false,
                  error: e.message
                },
                status: :unprocessable_entity

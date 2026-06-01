@@ -7,10 +7,12 @@ module Claims
       VALIDATION_STEP_TYPES = %w[
         genai
         classifier
+        case_facts
         genai_common
         genai_upgrade
         code_common
         code_upgrade
+        aggregate_advice
       ].freeze
       INVOICE_CANDIDATE_ERROR_CODE = "invoice_bundle_count_invalid"
 

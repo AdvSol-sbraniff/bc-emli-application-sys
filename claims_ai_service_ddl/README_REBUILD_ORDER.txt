@@ -26,9 +26,12 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 - `8_create_supporting_document_located_fields.sql`
   - Run once against an existing claims schema to add supporting-document located-field definition/result tables.
   - A clean rebuild from `2_create_schema.sql` already includes these tables.
-- `8_split_supporting_document_extraction_mode.sql`
-  - Run once against an existing claims schema to rename the classifier prompt column and add the separate supporting-document extraction mode/config columns.
+- `8_enforce_separate_supporting_document_extraction.sql`
+  - Run once against an existing claims schema to collapse classifier config to one routing-only prompt and make supporting-document field extraction a separate pipeline step.
   - A clean rebuild from `2_create_schema.sql` already includes these columns and step-type constraints.
+- `8_redo_invoice_package_ingest_documents.sql`
+  - Run once against an existing claims schema to make `claims.ingest_documents` a child of `claims.invoices`, add promotion traceability, and add redo-package/case-facts/aggregate step types.
+  - A clean rebuild from `2_create_schema.sql` already includes these columns and constraints.
 
 ## Not part of normal claims rebuild
 
