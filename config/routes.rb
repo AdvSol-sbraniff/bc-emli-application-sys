@@ -205,6 +205,11 @@ Rails.application.routes.draw do
           to: "awhp_products_admin#import_status"
       post "admin/awhp_products/import_downloaded_pdf",
            to: "awhp_products_admin#import_downloaded_pdf"
+      get "admin/ohpa_products", to: "ohpa_products_admin#index"
+      get "admin/ohpa_products/import_status",
+          to: "ohpa_products_admin#import_status"
+      post "admin/ohpa_products/import_downloaded_csv",
+           to: "ohpa_products_admin#import_downloaded_csv"
       get "admin/validation_rules", to: "validation_rules_admin#index"
       get "admin/validation_rules/upgrade_types",
           to: "validation_rules_admin#upgrade_types"

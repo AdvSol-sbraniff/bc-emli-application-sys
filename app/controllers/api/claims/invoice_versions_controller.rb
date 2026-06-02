@@ -75,7 +75,9 @@ module Api
                      neea_product_match:
                        serialize_neea_product_match(invoice_version),
                      awhp_product_match:
-                       serialize_awhp_product_match(invoice_version)
+                       serialize_awhp_product_match(invoice_version),
+                     ohpa_product_match:
+                       serialize_ohpa_product_match(invoice_version)
                    ),
                  lineitems: lineitems
                }
@@ -481,6 +483,50 @@ module Api
           source: {
             awhp_import_run_id: import_run&.id,
             awhp_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
+      end
+
+      def serialize_ohpa_product_match(invoice_version)
+        return nil unless invoice_version
+
+        product = invoice_version.ohpa_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.ohpa_source
+
+        {
+          product: {
+            id: product.id,
+            ahri_reference_number: product.ahri_reference_number,
+            brand: product.brand,
+            model_number: product.model_number,
+            indoor_model_numbers: product.indoor_model_numbers,
+            furnace_model_number: product.furnace_model_number,
+            product_group: product.product_group,
+            ahri_type: product.ahri_type,
+            ducting_configuration: product.ducting_configuration,
+            model_status: product.model_status,
+            series_name: product.series_name,
+            rated_capacity_47f: product.rated_capacity_47f,
+            rated_capacity_95f: product.rated_capacity_95f,
+            capacity_maintenance_percent: product.capacity_maintenance_percent,
+            cop_5f: product.cop_5f,
+            hspf2_region_iv: product.hspf2_region_iv,
+            hspf2_region_v: product.hspf2_region_v,
+            seer2: product.seer2,
+            eligibility_notes: product.eligibility_notes
+          },
+          source: {
+            ohpa_import_run_id: import_run&.id,
+            ohpa_source_id: source&.id,
             source_url: source&.source_url,
             source_description: source&.description,
             publishing_notes: import_run&.publishing_notes,

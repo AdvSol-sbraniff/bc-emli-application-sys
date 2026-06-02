@@ -8,6 +8,7 @@ module Claims
         ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch,
         ::Claims::CodeRules::IncomeLevel::ApplyLevelOneOrTwoRequired,
+        ::Claims::CodeRules::OilHeatPumpOhpa::ApplyProductListMatch,
         ::Claims::CodeRules::WindowsDoorsUFactor::ApplyThresholdCheck
       ].freeze
 

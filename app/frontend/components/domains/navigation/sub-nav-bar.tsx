@@ -78,17 +78,22 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/reports-volume-value', title: 'Reports - Volume and Value' },
       ],
-      '/validation-rules-admin': [{ href: '/validation-rules-admin', title: 'Validation Rules Portal' }],
+      '/validation-rules-admin': [
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+      ],
+      '/validation-rules-alphabetic-admin': [
+        { href: '/validation-rules-alphabetic-admin', title: 'Validation Rules Portal Alphabetic' },
+      ],
       '/validation-rules-config': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         { href: '/validation-rules-config', title: 'Validation Prompt Config' },
       ],
       '/supporting-document-types-admin': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
       ],
       '/supporting-document-type-fields-admin': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
         { href: '/supporting-document-type-fields-admin', title: 'Located Fields' },
       ],
@@ -104,6 +109,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/awhp-product-list-admin': [
         { href: '/downloads-admin', title: 'Downloads' },
         { href: '/awhp-product-list-admin', title: 'Air-to-water product list config' },
+      ],
+      '/ohpa-product-list-admin': [
+        { href: '/downloads-admin', title: 'Downloads' },
+        { href: '/ohpa-product-list-admin', title: 'OHPA BC product list config' },
       ],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
       '/users-admin': [{ href: '/users-admin', title: t('home.usersAdminTitle') }],
@@ -167,7 +176,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       const recordId = searchParams.get('record_id') || '';
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         {
           href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}`,
           title: 'Validation Rules Editor',
@@ -184,7 +193,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       const recordId = searchParams.get('id') || '';
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         {
           href: '/supporting-document-types-admin',
           title: 'Supporting Document Types',
@@ -202,7 +211,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       const recordId = searchParams.get('id') || '';
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
         {
           href: `/supporting-document-type-fields-admin${typeId ? `?type_id=${encodeURIComponent(typeId)}` : ''}`,
@@ -223,7 +232,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
     if (path === '/validation-rules-admin' && validationRulesUpgradeTypeId) {
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal' },
+        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
         {
           href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}`,
           title: 'Validation Rules Editor',

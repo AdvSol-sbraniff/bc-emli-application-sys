@@ -22,6 +22,7 @@ WITH supporting_document_type_upgrade_types_seed (
   ('energy_performance_label', 'windows_doors'),
   ('manufacturer_label_photo', 'windows_doors'),
 
+  ('utility_bill_or_account_document', 'air_source_heat_pump_electric'),
   ('f280_heat_load_calculation', 'air_source_heat_pump_electric'),
   ('product_spec_sheet', 'air_source_heat_pump_electric'),
   ('manufacturer_label_photo', 'air_source_heat_pump_electric'),

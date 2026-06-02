@@ -32,12 +32,7 @@ import {
   VStack,
   useDisclosure,
 } from '@chakra-ui/react';
-import {
-  ClockCounterClockwise,
-  Info,
-  PencilSimple,
-  Plus,
-} from '@phosphor-icons/react';
+import { ClockCounterClockwise, Info, PencilSimple, Plus } from '@phosphor-icons/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CodeLocatedFieldEditorScreen,
@@ -46,16 +41,9 @@ import {
   GenaiRuleEditorScreen,
 } from './editor-screens';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
-import {
-  getInvoiceUpgradeTypeMeta,
-  InvoiceUpgradeTypeTile,
-} from '../../shared/claims/invoice-upgrade-type-visual';
+import { getInvoiceUpgradeTypeMeta, InvoiceUpgradeTypeTile } from '../../shared/claims/invoice-upgrade-type-visual';
 
-type RecordType =
-  | 'code_rule'
-  | 'code_located_field'
-  | 'genai_rule'
-  | 'genai_located_field';
+type RecordType = 'code_rule' | 'code_located_field' | 'genai_rule' | 'genai_located_field';
 
 type UpgradeTypeRow = {
   id: string;
@@ -150,17 +138,9 @@ const EDITOR_LABELS: Record<RecordType, string> = {
   genai_located_field: 'GenAI Field',
 };
 
-const TAB_ORDER: RecordType[] = [
-  'code_rule',
-  'code_located_field',
-  'genai_rule',
-  'genai_located_field',
-];
+const TAB_ORDER: RecordType[] = ['code_rule', 'code_located_field', 'genai_rule', 'genai_located_field'];
 
-const CREATEABLE_RECORD_TYPES: RecordType[] = [
-  'genai_rule',
-  'genai_located_field',
-];
+const CREATEABLE_RECORD_TYPES: RecordType[] = ['genai_rule', 'genai_located_field'];
 
 const fmtDate = (value?: string | null) => {
   if (!value) return '';
@@ -168,19 +148,15 @@ const fmtDate = (value?: string | null) => {
   return str.includes('T') ? str.split('T')[0] : str.slice(0, 10);
 };
 
-const isCodeRuleEditor = (editor: EditorState): editor is CodeRuleEditorState =>
-  editor.recordType === 'code_rule';
+const isCodeRuleEditor = (editor: EditorState): editor is CodeRuleEditorState => editor.recordType === 'code_rule';
 
-const isCodeLocatedFieldEditor = (
-  editor: EditorState
-): editor is CodeLocatedFieldEditorState => editor.recordType === 'code_located_field';
+const isCodeLocatedFieldEditor = (editor: EditorState): editor is CodeLocatedFieldEditorState =>
+  editor.recordType === 'code_located_field';
 
-const isGenaiRuleEditor = (editor: EditorState): editor is GenaiRuleEditorState =>
-  editor.recordType === 'genai_rule';
+const isGenaiRuleEditor = (editor: EditorState): editor is GenaiRuleEditorState => editor.recordType === 'genai_rule';
 
-const isGenaiLocatedFieldEditor = (
-  editor: EditorState
-): editor is GenaiLocatedFieldEditorState => editor.recordType === 'genai_located_field';
+const isGenaiLocatedFieldEditor = (editor: EditorState): editor is GenaiLocatedFieldEditorState =>
+  editor.recordType === 'genai_located_field';
 
 const buildSearchParams = (obj: Record<string, string | undefined>) => {
   const params = new URLSearchParams();
@@ -191,13 +167,7 @@ const buildSearchParams = (obj: Record<string, string | undefined>) => {
   return params;
 };
 
-function HistorySection({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: Record<string, any>[];
-}) {
+function HistorySection({ title, rows }: { title: string; rows: Record<string, any>[] }) {
   return (
     <Box>
       <Text fontWeight="bold" mb={2}>
@@ -235,8 +205,7 @@ export default function ValidationRulesAdminScreen() {
 
   const selectedUpgradeTypeId = searchParams.get('invoice_upgrade_type_id') || '';
   const editorMode = searchParams.get('mode') || '';
-  const editorRecordTypeParam =
-    (searchParams.get('record_type') as RecordType | null) || null;
+  const editorRecordTypeParam = (searchParams.get('record_type') as RecordType | null) || null;
   const editorRecordId = searchParams.get('record_id') || '';
 
   const [upgradeTypes, setUpgradeTypes] = useState<UpgradeTypeRow[]>([]);
@@ -255,7 +224,7 @@ export default function ValidationRulesAdminScreen() {
 
   const selectedUpgradeType = useMemo(
     () => upgradeTypes.find((item) => item.id === selectedUpgradeTypeId) || null,
-    [selectedUpgradeTypeId, upgradeTypes]
+    [selectedUpgradeTypeId, upgradeTypes],
   );
   const isEditorScreen = editorMode === 'create' || editorMode === 'edit';
   const editorBannerTitle =
@@ -325,7 +294,7 @@ export default function ValidationRulesAdminScreen() {
         acc[key] = rows.filter((row) => row.record_type === key);
         return acc;
       },
-      {} as Record<RecordType, ValidationRow[]>
+      {} as Record<RecordType, ValidationRow[]>,
     );
   }, [rows]);
 
@@ -334,8 +303,7 @@ export default function ValidationRulesAdminScreen() {
       const mappings = upgradeTypes.map((type) => ({
         invoice_upgrade_type_id: type.id,
         label: type.description || type.upgrade_type_key,
-        checked:
-          recordType === 'code_located_field' ? false : selectedUpgradeTypeId === type.id,
+        checked: recordType === 'code_located_field' ? false : selectedUpgradeTypeId === type.id,
       }));
 
       switch (recordType) {
@@ -378,15 +346,13 @@ export default function ValidationRulesAdminScreen() {
           };
       }
     },
-    [selectedUpgradeTypeId, upgradeTypes]
+    [selectedUpgradeTypeId, upgradeTypes],
   );
 
   const hydrateMappings = useCallback(
     (recordType: RecordType, row: ValidationRow | null): MappingEditorRow[] =>
       upgradeTypes.map((type) => {
-        const mapping = row?.mappings.find(
-          (item) => item.invoice_upgrade_type_id === type.id
-        );
+        const mapping = row?.mappings.find((item) => item.invoice_upgrade_type_id === type.id);
 
         return {
           invoice_upgrade_type_id: type.id,
@@ -394,7 +360,7 @@ export default function ValidationRulesAdminScreen() {
           checked: Boolean(mapping),
         };
       }),
-    [upgradeTypes]
+    [upgradeTypes],
   );
 
   const editorSearchParams = useCallback(
@@ -403,7 +369,7 @@ export default function ValidationRulesAdminScreen() {
         invoice_upgrade_type_id: selectedUpgradeTypeId || undefined,
         ...params,
       }),
-    [selectedUpgradeTypeId]
+    [selectedUpgradeTypeId],
   );
 
   const closeEditorScreen = useCallback(() => {
@@ -420,7 +386,7 @@ export default function ValidationRulesAdminScreen() {
       editorSearchParams({
         mode: 'create',
         record_type: recordType,
-      })
+      }),
     );
   };
 
@@ -479,7 +445,7 @@ export default function ValidationRulesAdminScreen() {
         mode: 'edit',
         record_type: row.record_type,
         record_id: row.id,
-      })
+      }),
     );
   };
 
@@ -497,13 +463,13 @@ export default function ValidationRulesAdminScreen() {
     try {
       const res = await fetch(
         `/api/claims/admin/validation_rules/${encodeURIComponent(
-          row.record_type
+          row.record_type,
         )}/${encodeURIComponent(row.id)}/history`,
         {
           method: 'GET',
           headers: { Accept: 'application/json' },
           credentials: 'include',
-        }
+        },
       );
       const data = await res.json().catch(() => ({
         row_history: [],
@@ -512,9 +478,7 @@ export default function ValidationRulesAdminScreen() {
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setHistory({
         row_history: Array.isArray(data?.row_history) ? data.row_history : [],
-        mapping_history: Array.isArray(data?.mapping_history)
-          ? data.mapping_history
-          : [],
+        mapping_history: Array.isArray(data?.mapping_history) ? data.mapping_history : [],
       });
     } catch (e: any) {
       setHistory({
@@ -541,10 +505,7 @@ export default function ValidationRulesAdminScreen() {
     }
 
     if (editorMode === 'edit' && editorRecordTypeParam && editorRecordId) {
-      const row = rows.find(
-        (item) =>
-          item.record_type === editorRecordTypeParam && item.id === editorRecordId
-      );
+      const row = rows.find((item) => item.record_type === editorRecordTypeParam && item.id === editorRecordId);
       if (!row) return;
 
       setSelectedRow(row);
@@ -609,21 +570,16 @@ export default function ValidationRulesAdminScreen() {
     selectedUpgradeTypeId,
   ]);
 
-  const updateMapping = (
-    invoiceUpgradeTypeId: string,
-    patch: Partial<MappingEditorRow>
-  ) => {
+  const updateMapping = (invoiceUpgradeTypeId: string, patch: Partial<MappingEditorRow>) => {
     setEditor((current) =>
       current
         ? {
             ...current,
             mappings: current.mappings.map((row) =>
-              row.invoice_upgrade_type_id === invoiceUpgradeTypeId
-                ? { ...row, ...patch }
-                : row
+              row.invoice_upgrade_type_id === invoiceUpgradeTypeId ? { ...row, ...patch } : row,
             ),
           }
-        : current
+        : current,
     );
   };
 
@@ -666,11 +622,9 @@ export default function ValidationRulesAdminScreen() {
 
       const isCreate = !editor.recordId;
       const endpoint = isCreate
-        ? `/api/claims/admin/validation_rules/${encodeURIComponent(
-            editor.recordType
-          )}`
+        ? `/api/claims/admin/validation_rules/${encodeURIComponent(editor.recordType)}`
         : `/api/claims/admin/validation_rules/${encodeURIComponent(
-            editor.recordType
+            editor.recordType,
           )}/${encodeURIComponent(editor.recordId || '')}`;
 
       const res = await fetch(endpoint, {
@@ -701,7 +655,7 @@ export default function ValidationRulesAdminScreen() {
   if (!selectedUpgradeTypeId) {
     return (
       <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-        <ThinBlueTitleBar title="Validation Rules Portal" />
+        <ThinBlueTitleBar title="Validation Rules Portal by Upgrade Type" />
         <Container maxW="container.xl" pb={4} flex="1" pt={6}>
           <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
             <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4}>
@@ -712,8 +666,11 @@ export default function ValidationRulesAdminScreen() {
                 <Button
                   colorScheme="blue"
                   variant="outline"
-                  onClick={() => navigate('/validation-rules-config')}
+                  onClick={() => navigate('/validation-rules-alphabetic-admin')}
                 >
+                  Alphabetic Portal
+                </Button>
+                <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-config')}>
                   Validation Prompt Config
                 </Button>
                 <Button
@@ -733,10 +690,7 @@ export default function ValidationRulesAdminScreen() {
             ) : (
               <Grid templateColumns="repeat(auto-fit, minmax(260px, 1fr))" gap={4}>
                 {upgradeTypes.map((upgradeType) => {
-                  const meta = getInvoiceUpgradeTypeMeta(
-                    upgradeType.upgrade_type_key,
-                    upgradeType.description
-                  );
+                  const meta = getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key, upgradeType.description);
 
                   return (
                     <GridItem key={upgradeType.id}>
@@ -802,43 +756,39 @@ export default function ValidationRulesAdminScreen() {
                   mappings={editor.mappings}
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
                   onEnabledChange={(next) =>
-                    setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, enabled: next } : current
-                    )
+                    setEditorField((current) => (isCodeRuleEditor(current) ? { ...current, enabled: next } : current))
                   }
                   onRecordKeyChange={(next) =>
-                    setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, recordKey: next } : current
-                    )
+                    setEditorField((current) => (isCodeRuleEditor(current) ? { ...current, recordKey: next } : current))
                   }
                   onDescriptionChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, description: next } : current
+                      isCodeRuleEditor(current) ? { ...current, description: next } : current,
                     )
                   }
                   onPassAdminMessageChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, passAdminMessage: next } : current
+                      isCodeRuleEditor(current) ? { ...current, passAdminMessage: next } : current,
                     )
                   }
                   onWarnAdminMessageChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, warnAdminMessage: next } : current
+                      isCodeRuleEditor(current) ? { ...current, warnAdminMessage: next } : current,
                     )
                   }
                   onFailAdminMessageChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, failAdminMessage: next } : current
+                      isCodeRuleEditor(current) ? { ...current, failAdminMessage: next } : current,
                     )
                   }
                   onInfoAdminMessageChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, infoAdminMessage: next } : current
+                      isCodeRuleEditor(current) ? { ...current, infoAdminMessage: next } : current,
                     )
                   }
                   onAdminNotesChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, adminNotes: next } : current
+                      isCodeRuleEditor(current) ? { ...current, adminNotes: next } : current,
                     )
                   }
                   onMappingCheckedChange={(invoiceUpgradeTypeId, checked) =>
@@ -857,19 +807,17 @@ export default function ValidationRulesAdminScreen() {
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
                   onEnabledChange={(next) =>
                     setEditorField((current) =>
-                      isCodeLocatedFieldEditor(current) ? { ...current, enabled: next } : current
+                      isCodeLocatedFieldEditor(current) ? { ...current, enabled: next } : current,
                     )
                   }
                   onRecordKeyChange={(next) =>
                     setEditorField((current) =>
-                      isCodeLocatedFieldEditor(current) ? { ...current, recordKey: next } : current
+                      isCodeLocatedFieldEditor(current) ? { ...current, recordKey: next } : current,
                     )
                   }
                   onDescriptionChange={(next) =>
                     setEditorField((current) =>
-                      isCodeLocatedFieldEditor(current)
-                        ? { ...current, description: next }
-                        : current
+                      isCodeLocatedFieldEditor(current) ? { ...current, description: next } : current,
                     )
                   }
                   onMappingCheckedChange={(invoiceUpgradeTypeId, checked) =>
@@ -887,18 +835,16 @@ export default function ValidationRulesAdminScreen() {
                   mappings={editor.mappings}
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
                   onEnabledChange={(next) =>
-                    setEditorField((current) =>
-                      isGenaiRuleEditor(current) ? { ...current, enabled: next } : current
-                    )
+                    setEditorField((current) => (isGenaiRuleEditor(current) ? { ...current, enabled: next } : current))
                   }
                   onRecordKeyChange={(next) =>
                     setEditorField((current) =>
-                      isGenaiRuleEditor(current) ? { ...current, recordKey: next } : current
+                      isGenaiRuleEditor(current) ? { ...current, recordKey: next } : current,
                     )
                   }
                   onPromptTextChange={(next) =>
                     setEditorField((current) =>
-                      isGenaiRuleEditor(current) ? { ...current, promptText: next } : current
+                      isGenaiRuleEditor(current) ? { ...current, promptText: next } : current,
                     )
                   }
                   onMappingCheckedChange={(invoiceUpgradeTypeId, checked) =>
@@ -917,21 +863,17 @@ export default function ValidationRulesAdminScreen() {
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
                   onEnabledChange={(next) =>
                     setEditorField((current) =>
-                      isGenaiLocatedFieldEditor(current) ? { ...current, enabled: next } : current
+                      isGenaiLocatedFieldEditor(current) ? { ...current, enabled: next } : current,
                     )
                   }
                   onRecordKeyChange={(next) =>
                     setEditorField((current) =>
-                      isGenaiLocatedFieldEditor(current)
-                        ? { ...current, recordKey: next }
-                        : current
+                      isGenaiLocatedFieldEditor(current) ? { ...current, recordKey: next } : current,
                     )
                   }
                   onPromptTextChange={(next) =>
                     setEditorField((current) =>
-                      isGenaiLocatedFieldEditor(current)
-                        ? { ...current, promptText: next }
-                        : current
+                      isGenaiLocatedFieldEditor(current) ? { ...current, promptText: next } : current,
                     )
                   }
                   onMappingCheckedChange={(invoiceUpgradeTypeId, checked) =>
@@ -956,33 +898,25 @@ export default function ValidationRulesAdminScreen() {
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar title="Validation Rules Editor" />
-        <Container maxW="container.xl" pb={4} flex="1" pt={6}>
-          <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-            <Box mb={5}>
-              <HStack align="start" spacing={3}>
-                <InvoiceUpgradeTypeTile
-                  upgradeTypeKey={selectedUpgradeType?.upgrade_type_key}
-                  description={selectedUpgradeType?.description}
-                  size={44}
-                />
-                <Box>
-                  <Text fontSize="lg" fontWeight="bold">
-                    {selectedUpgradeType?.description || 'Upgrade type'}
-                  </Text>
-                </Box>
-              </HStack>
-            </Box>
+      <Container maxW="container.xl" pb={4} flex="1" pt={6}>
+        <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
+          <Box mb={5}>
+            <HStack align="start" spacing={3}>
+              <InvoiceUpgradeTypeTile
+                upgradeTypeKey={selectedUpgradeType?.upgrade_type_key}
+                description={selectedUpgradeType?.description}
+                size={44}
+              />
+              <Box>
+                <Text fontSize="lg" fontWeight="bold">
+                  {selectedUpgradeType?.description || 'Upgrade type'}
+                </Text>
+              </Box>
+            </HStack>
+          </Box>
 
           {error ? (
-            <Box
-              mb={4}
-              borderWidth="1px"
-              borderColor="red.200"
-              bg="red.50"
-              color="red.700"
-              borderRadius="md"
-              p={3}
-            >
+            <Box mb={4} borderWidth="1px" borderColor="red.200" bg="red.50" color="red.700" borderRadius="md" p={3}>
               {error}
             </Box>
           ) : null}
@@ -992,12 +926,12 @@ export default function ValidationRulesAdminScreen() {
               <Spinner />
             </Flex>
           ) : (
-              <Tabs variant="enclosed" colorScheme="blue">
-                <TabList>
-                  {TAB_ORDER.map((recordType) => (
-                    <Tab key={recordType}>{TYPE_LABELS[recordType]}</Tab>
-                  ))}
-                </TabList>
+            <Tabs variant="enclosed" colorScheme="blue">
+              <TabList>
+                {TAB_ORDER.map((recordType) => (
+                  <Tab key={recordType}>{TYPE_LABELS[recordType]}</Tab>
+                ))}
+              </TabList>
 
               <TabPanels>
                 {TAB_ORDER.map((recordType) => (
@@ -1006,15 +940,12 @@ export default function ValidationRulesAdminScreen() {
                       <Box>
                         <Text fontWeight="bold">{TYPE_LABELS[recordType]}</Text>
                         <Text fontSize="sm" opacity={0.7}>
-                          Shared records are still shown with all mapped upgrade types so edits
-                          never hide cross-taxonomy impact.
+                          Shared records are still shown with all mapped upgrade types so edits never hide
+                          cross-taxonomy impact.
                         </Text>
                       </Box>
                       {CREATEABLE_RECORD_TYPES.includes(recordType) ? (
-                        <Button
-                          leftIcon={<Plus size={16} />}
-                          onClick={() => openCreate(recordType)}
-                        >
+                        <Button leftIcon={<Plus size={16} />} onClick={() => openCreate(recordType)}>
                           Add
                         </Button>
                       ) : null}
@@ -1022,28 +953,23 @@ export default function ValidationRulesAdminScreen() {
 
                     <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflowX="auto">
                       <Table size="sm">
-                         <Thead bg="gray.50">
-                           <Tr>
-                             <Th>Key</Th>
-                             <Th>Updated</Th>
-                             <Th>Enabled</Th>
-                             <Th textAlign="right">Actions</Th>
-                           </Tr>
-                         </Thead>
+                        <Thead bg="gray.50">
+                          <Tr>
+                            <Th>Key</Th>
+                            <Th>Updated</Th>
+                            <Th>Enabled</Th>
+                            <Th textAlign="right">Actions</Th>
+                          </Tr>
+                        </Thead>
                         <Tbody>
                           {(tabRows[recordType] || []).map((row) => (
                             <Tr key={`${row.record_type}-${row.id}`}>
                               <Td>
                                 <Text fontWeight="semibold">{row.record_key}</Text>
                               </Td>
+                              <Td>{fmtDate(row.updated_at)}</Td>
                               <Td>
-                                {fmtDate(row.updated_at)}
-                              </Td>
-                              <Td>
-                                <Badge
-                                  colorScheme={row.enabled ? 'green' : 'red'}
-                                  variant="subtle"
-                                >
+                                <Badge colorScheme={row.enabled ? 'green' : 'red'} variant="subtle">
                                   {row.enabled ? 'Enabled' : 'Disabled'}
                                 </Badge>
                               </Td>
@@ -1144,9 +1070,7 @@ export default function ValidationRulesAdminScreen() {
                       {key}
                     </Text>
                     <Text whiteSpace="pre-wrap">
-                      {value === null || value === undefined || value === ''
-                        ? 'n/a'
-                        : String(value)}
+                      {value === null || value === undefined || value === '' ? 'n/a' : String(value)}
                     </Text>
                   </Box>
                 ))}
@@ -1181,7 +1105,6 @@ export default function ValidationRulesAdminScreen() {
           </DrawerBody>
         </DrawerContent>
       </Drawer>
-
     </Flex>
   );
 }

@@ -514,19 +514,35 @@
 
 **Source quote:** The home must primarily be heated by electricity... The new heat pump must replace an existing hard-wired electric heating system... be sized to function as the primary heating system... serve a main living area...
 
-**Evidence:** invoice_pdf
+**Evidence:** invoice_pdf, supporting_document
 
 **Check:** genai
 
-**Fields:** hp_existing_electric_heat_evidence, hp_main_living_area_evidence, hp_new_equipment_type
+**Fields:** hp_existing_electric_heat_evidence, hp_main_living_area_evidence, hp_new_equipment_type, utility_provider, account_holder_name, service_address, account_or_bill_date, residential_account_evidence, strata_or_landlord_account_evidence, utility_service_type_or_fuel_evidence, account_number_or_reference, fuel_consumption_quantity_or_period
 
-**Support docs:** no
+**Support docs:** yes - types: utility_bill_or_account_document; extracted fields: utility_provider, account_holder_name, service_address, account_or_bill_date, residential_account_evidence, strata_or_landlord_account_evidence, utility_service_type_or_fuel_evidence, account_number_or_reference, fuel_consumption_quantity_or_period; located-field table: yes
 
 **Tests:**
 
-- Rule 2 / `test 001 - ashp-electric-existing-heat-context-present`: The home must primarily be heated by electricity... The new heat pump must replace an existing hard-wired electric heating system... be sized to function as the primary h. Expected output: `ashp_electric_existing_heat_context_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 001 - ashp-electric-existing-heat-context-present`.
+- Rule 2 / `test 001 - ashp-electric-existing-heat-context-present`: The invoice supports hard-wired electric primary heat replacement and the utility account supporting document corroborates electric/residential/account context. Expected output: `ashp_electric_existing_heat_context_present` returns `pass` when invoice evidence is clear, `warn` when invoice evidence is partial and only utility facts corroborate it, and `fail` when the invoice lacks electric/replacement context or supporting utility facts contradict the claim.
 
-### 3. Implemented now (High) - key: `hp_ahri_found_in_product_list`
+### 3. Implemented now (High) - key: `ashp_electric_utility_account_supporting_document_present`
+
+**Source quote:** The home must be connected to a residential account with one of the following utilities... The home must primarily be heated by electricity...
+
+**Evidence:** supporting_document
+
+**Check:** genai
+
+**Fields:** utility_provider, account_holder_name, service_address, account_or_bill_date, residential_account_evidence, strata_or_landlord_account_evidence, utility_service_type_or_fuel_evidence, account_number_or_reference, fuel_consumption_quantity_or_period
+
+**Support docs:** yes - types: utility_bill_or_account_document; extracted fields: utility_provider, account_holder_name, service_address, account_or_bill_date, residential_account_evidence, strata_or_landlord_account_evidence, utility_service_type_or_fuel_evidence, account_number_or_reference, fuel_consumption_quantity_or_period; located-field table: yes
+
+**Tests:**
+
+- Rule 3 / `test 001 - ashp-electric-existing-heat-context-present`: Electric ASHP submission includes a processed utility bill/account supporting document. Expected output: `ashp_electric_utility_account_supporting_document_present` returns `pass` when the document is attached and appears tied to the participant/home residential account, `warn` when present but incomplete or hard to read, and `fail` when missing or clearly tied to the wrong address/account holder.
+
+### 4. Implemented now (High) - key: `hp_ahri_found_in_product_list`
 
 **Source quote:** The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Minimum capacity of 12,000 BTU...
 
@@ -540,7 +556,7 @@
 
 **Tests:**
 
-- Rule 3 / `test 002 - hp-product-reference-present`: The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Mi. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 002 - hp-product-reference-present`.
+- Rule 4 / `test 002 - hp-product-reference-present`: The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Mi. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 002 - hp-product-reference-present`.
 
 **External source note:** Existing download path already in place. The current seeded examples are the AHRI source tables in `claims_ai_service_ddl/3_insert_ahri_sources.sql`, which back the implemented `hp_ahri_found_in_product_list` and related heat-pump code rules.
 
@@ -548,7 +564,7 @@
 
 - No persisted check currently proves installation-guide compliance.
 
-### 4. Implemented now (Medium) - key: `ashp_electric_no_existing_heat_pump_flag`
+### 5. Implemented now (Medium) - key: `ashp_electric_no_existing_heat_pump_flag`
 
 **Source quote:** Replacing, adding to an existing heat pump or adding a secondary heat pump to a home with an existing heat pump is not eligible.
 
@@ -562,9 +578,9 @@
 
 **Tests:**
 
-- Rule 4 / `test 003 - ashp-electric-no-existing-heat-pump-flag`: Invoice states no existing heat pump is being replaced or added to. Expected output: `ashp_electric_no_existing_heat_pump_flag` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 003 - ashp-electric-no-existing-heat-pump-flag`.
+- Rule 5 / `test 003 - ashp-electric-no-existing-heat-pump-flag`: Invoice states no existing heat pump is being replaced or added to. Expected output: `ashp_electric_no_existing_heat_pump_flag` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 003 - ashp-electric-no-existing-heat-pump-flag`.
 
-### 5. Partial (Medium) - not keyed yet
+### 6. Partial (Medium) - not keyed yet
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor... All upgrades must be completed in accordance with applicable by-laws...
 
@@ -581,7 +597,7 @@
 - No persisted claim-layer rulecheck currently traces this registered-contractor requirement as its own explicit audit result.
 - No persisted AHJ/by-law validation currently enforces these sentences.
 
-### 6. Partial (High) - key: `ashp_electric_rebate_math_within_cap`
+### 7. Partial (High) - key: `ashp_electric_rebate_math_within_cap`
 
 **Source quote:** Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... The rebate application... must be submitted... within six (6) months of the invoice date.
 
@@ -595,7 +611,7 @@
 
 **Tests:**
 
-- Rule 6 / `test 004 - ashp-electric-rebate-math-within-cap`: Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... The rebate application... must be submitted... within six (6). Expected output: `ashp_electric_rebate_math_within_cap` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 004 - ashp-electric-rebate-math-within-cap`.
+- Rule 7 / `test 004 - ashp-electric-rebate-math-within-cap`: Invoice... must show the itemized CleanBC rebate... A CSA-F280-12 Heat Load Calculation may be requested... The rebate application... must be submitted... within six (6). Expected output: `ashp_electric_rebate_math_within_cap` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 004 - ashp-electric-rebate-math-within-cap`.
 
 **Note:** The seed now extracts F280 calculation facts; final heat-load sufficiency validation is still review-oriented.
 
@@ -869,7 +885,7 @@
 
 - Rule 1 / `test 001 - ashp-oil-existing-heat-context-present`: The home must be primarily heated by oil... The home must meet a minimum oil consumption baseline of 500 Ltrs. annually. Expected output: `ashp_oil_existing_heat_context_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_oil/test 001 - ashp-oil-existing-heat-context-present`.
 
-### 2. Implemented now (High) - key: `hp_ahri_found_in_product_list`
+### 2. Implemented now (High) - key: `ashp_oil_ohpa_bc_product_found_in_list`
 
 **Source quote:** The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Resources Canada Oil to Heat Pump Affordability Qualified Heat Pump Product List...
 
@@ -883,16 +899,15 @@
 
 **Tests:**
 
-- Rule 2 / `test 002 - hp-product-reference-present`: The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Re. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_oil/test 002 - hp-product-reference-present`.
+- Rule 2 / `test 002 - hp-product-reference-present`: The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Resources Canada Oil to Heat Pump Affordability list. Expected output: `ashp_oil_ohpa_bc_product_found_in_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported NRCan OHPA BC product list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, the OHPA import has no current rows, or the agreed AHRI is not found. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_oil/test 002 - hp-product-reference-present`.
 
 **Note:** The seed now extracts oil-removal facts; final removal-proof sufficiency validation is still review-oriented.
 
-**External source note:** This row is the one place where the source text explicitly names the Natural Resources Canada Oil to Heat Pump Affordability qualified list. Current implementation still rides the existing AHRI-based download path. If the client wants strict source fidelity here, this may justify a distinct download/source investigation beyond the current AHRI seed.
+**External source note:** This row uses the distinct NRCan Oil to Heat Pump Affordability BC qualified product list source seeded in `claims_ai_service_ddl/3_insert_ohpa_sources.sql`. The cached import is stored in `claims.ohpa_sources`, `claims.ohpa_import_runs`, and `claims.ohpa_products`; the code rule matches through `claims.v_current_ohpa_products`.
 
 **Missing now:**
 
 - The support-document extraction path exists; final oil-removal/date/address/scope sufficiency is still review-oriented.
-- The code layer does not currently use a distinct Oil-to-Heat-Pump product list validator separate from the current AHRI path.
 
 ### 3. Partial (High) - key: `ashp_oil_non_integrated_area_review`
 

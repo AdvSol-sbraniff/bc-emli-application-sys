@@ -1032,6 +1032,9 @@ export const InvoiceVersionShowScreen = () => {
   const awhpProductMatch = readData?.awhp_product_match;
   const awhpProduct = awhpProductMatch?.product;
   const awhpSource = awhpProductMatch?.source;
+  const ohpaProductMatch = readData?.ohpa_product_match;
+  const ohpaProduct = ohpaProductMatch?.product;
+  const ohpaSource = ohpaProductMatch?.source;
   const supportingDocumentTypeGroups = Array.isArray(readData?.supporting_document_types_by_upgrade_type)
     ? readData.supporting_document_types_by_upgrade_type
     : [];
@@ -1856,6 +1859,110 @@ export const InvoiceVersionShowScreen = () => {
                                 rel="noreferrer"
                                 fontSize="xs"
                                 color="cyan.700"
+                                textDecoration="underline"
+                              >
+                                Open source list
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  )}
+
+                  {ohpaProduct && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              OHPA BC product-list match
+                            </Text>
+                            <Text fontSize="xs" opacity={0.65}>
+                              Code-owned match to the imported NRCan Oil to Heat Pump Affordability BC product list.
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Box borderWidth="1px" borderColor="orange.100" borderRadius="md" p="10px" bg="orange.50">
+                          <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                            <StatusDot result="pass" />
+                            <Badge colorScheme="orange">Information on record</Badge>
+                            {ohpaSource?.source_description && (
+                              <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                {String(ohpaSource.source_description)}
+                              </Badge>
+                            )}
+                            <Text fontSize="xs" opacity={0.75}>
+                              AHRI {fmtText(ohpaProduct.ahri_reference_number)}
+                            </Text>
+                          </Flex>
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {[
+                              ['AHRI reference', ohpaProduct.ahri_reference_number],
+                              ['Brand', ohpaProduct.brand],
+                              ['Outdoor model', ohpaProduct.model_number],
+                              ['Indoor model(s)', ohpaProduct.indoor_model_numbers],
+                              ['Furnace model', ohpaProduct.furnace_model_number],
+                              ['Product group', ohpaProduct.product_group],
+                              ['AHRI type', ohpaProduct.ahri_type],
+                              ['Ducting / configuration', ohpaProduct.ducting_configuration],
+                              ['Model status', ohpaProduct.model_status],
+                              ['Series name', ohpaProduct.series_name],
+                              ['Rated capacity 47 F', ohpaProduct.rated_capacity_47f],
+                              ['Rated capacity 95 F', ohpaProduct.rated_capacity_95f],
+                              ['Capacity maintenance %', ohpaProduct.capacity_maintenance_percent],
+                              ['COP 5 F', ohpaProduct.cop_5f],
+                              ['HSPF2 Region IV', ohpaProduct.hspf2_region_iv],
+                              ['HSPF2 Region V', ohpaProduct.hspf2_region_v],
+                              ['SEER2', ohpaProduct.seer2],
+                            ].map(([label, value]) => (
+                              <Box
+                                key={String(label)}
+                                px="10px"
+                                py="8px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="orange.100"
+                                bg="white"
+                              >
+                                <Text fontSize="xs" opacity={0.7}>
+                                  {String(label)}
+                                </Text>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {fmtText(value)}
+                                </Text>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          <Box mt="10px" pt="8px" borderTopWidth="1px" borderColor="orange.100">
+                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="4px">
+                              Source
+                            </Text>
+                            <Text fontSize="sm">
+                              {fmtText(ohpaSource?.source_description)}{' '}
+                              {ohpaSource?.publishing_date ? `(published ${fmtDate(ohpaSource.publishing_date)})` : ''}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75} wordBreak="break-all">
+                              OHPA source id: {fmtText(ohpaSource?.ohpa_source_id)}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75}>
+                              Imported {fmtDate(ohpaSource?.completed_at)} with {fmtText(ohpaSource?.records_imported)}{' '}
+                              rows.
+                            </Text>
+                            {ohpaSource?.source_url && (
+                              <Text
+                                as="a"
+                                href={String(ohpaSource.source_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                fontSize="xs"
+                                color="orange.700"
                                 textDecoration="underline"
                               >
                                 Open source list

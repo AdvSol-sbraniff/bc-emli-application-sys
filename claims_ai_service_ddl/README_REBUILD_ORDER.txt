@@ -8,16 +8,17 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 2. `3_insert_ahri_sources.sql`
 3. `3_insert_neea_sources.sql`
 4. `3_insert_awhp_sources.sql`
-5. `4_insert_invoice_upgrade_types.sql`
-6. `4_insert_supporting_document_types.sql`
-7. `4_insert_supporting_document_type_upgrade_types.sql`
-8. `4_insert_supporting_document_type_located_fields.sql`
-9. `5_insert_code_rules.sql`
-10. `5_insert_code_located_fields.sql`
-11. `5_insert_genai_normalized.sql`
-12. `5_insert_validationgenai_rulesets.sql`
-13. `6_views.sql`
-14. `7_reporting_views.sql`
+5. `3_insert_ohpa_sources.sql`
+6. `4_insert_invoice_upgrade_types.sql`
+7. `4_insert_supporting_document_types.sql`
+8. `4_insert_supporting_document_type_upgrade_types.sql`
+9. `4_insert_supporting_document_type_located_fields.sql`
+10. `5_insert_code_rules.sql`
+11. `5_insert_code_located_fields.sql`
+12. `5_insert_genai_normalized.sql`
+13. `5_insert_validationgenai_rulesets.sql`
+14. `6_views.sql`
+15. `7_reporting_views.sql`
 
 ## Optional local test data
 
@@ -42,6 +43,9 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
   - A clean rebuild from `2_create_schema.sql` already includes these columns and constraints.
 - `8_create_awhp_product_list.sql`
   - Run once against an existing claims schema to add Better Homes BC air-to-water / combined heat pump product-list tables and `claims.invoice_versions.awhp_product_id`.
+  - A clean rebuild from `2_create_schema.sql` already includes these tables and columns.
+- `8_create_ohpa_product_list.sql`
+  - Run once against an existing claims schema to add NRCan Oil to Heat Pump Affordability BC product-list tables and `claims.invoice_versions.ohpa_product_id`.
   - A clean rebuild from `2_create_schema.sql` already includes these tables and columns.
 
 ## Not part of normal claims rebuild

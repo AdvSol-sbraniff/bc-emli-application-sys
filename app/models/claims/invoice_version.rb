@@ -20,6 +20,11 @@ module Claims
                foreign_key: :awhp_product_id,
                optional: true
 
+    belongs_to :ohpa_product,
+               class_name: "Claims::OhpaProduct",
+               foreign_key: :ohpa_product_id,
+               optional: true
+
     has_many :located_fields,
              class_name: "Claims::InvoiceVersionLocatedField",
              foreign_key: :invoice_version_id,

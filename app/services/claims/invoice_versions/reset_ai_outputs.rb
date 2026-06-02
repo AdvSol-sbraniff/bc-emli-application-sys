@@ -23,7 +23,8 @@ module Claims
             ::Claims::InvoiceVersionUpgradeType.where(
               invoice_version_id: invoice_version.id
             )
-          scope = scope.where.not(source_engine: "classifier") if @preserve_classifier
+          scope =
+            scope.where.not(source_engine: "classifier") if @preserve_classifier
           scope.delete_all
 
           ::Claims::InvoiceVersionLocatedField.where(
@@ -39,7 +40,9 @@ module Claims
             genai_result: nil,
             genai_admin_advice: nil,
             ahri_product_id: nil,
-            neea_product_id: nil
+            neea_product_id: nil,
+            awhp_product_id: nil,
+            ohpa_product_id: nil
           )
         end
       end

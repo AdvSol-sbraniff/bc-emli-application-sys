@@ -39,6 +39,9 @@ const AIAdminScreen = lazy(() => import('../ai-admin').then((module) => ({ defau
 const ValidationRulesAdminScreen = lazy(() =>
   import('../validation-rules-admin').then((module) => ({ default: module.default })),
 );
+const ValidationRulesAlphabeticAdminScreen = lazy(() =>
+  import('../validation-rules-alphabetic-admin').then((module) => ({ default: module.default })),
+);
 const ValidationRulesConfigScreen = lazy(() =>
   import('../ruleset-config-editor').then((module) => ({ default: module.default })),
 );
@@ -56,6 +59,9 @@ const HpwhProductListAdminScreen = lazy(() =>
 );
 const AwhpProductListAdminScreen = lazy(() =>
   import('../awhp-product-list-admin').then((module) => ({ default: module.default })),
+);
+const OhpaProductListAdminScreen = lazy(() =>
+  import('../ohpa-product-list-admin').then((module) => ({ default: module.default })),
 );
 const DownloadsAdminScreen = lazy(() => import('../downloads-admin').then((module) => ({ default: module.default })));
 const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
@@ -838,6 +844,7 @@ const AppRoutes = observer(() => {
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
           <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
+          <Route path="/validation-rules-alphabetic-admin" element={<ValidationRulesAlphabeticAdminScreen />} />
           <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />
           <Route path="/supporting-document-types-admin" element={<SupportingDocumentTypesAdminScreen />} />
           <Route path="/supporting-document-type-fields-admin" element={<SupportingDocumentTypeFieldsAdminScreen />} />
@@ -845,6 +852,7 @@ const AppRoutes = observer(() => {
           <Route path="/heat-pump-product-list-admin" element={<HeatPumpProductListAdminScreen />} />
           <Route path="/hpwh-product-list-admin" element={<HpwhProductListAdminScreen />} />
           <Route path="/awhp-product-list-admin" element={<AwhpProductListAdminScreen />} />
+          <Route path="/ohpa-product-list-admin" element={<OhpaProductListAdminScreen />} />
           <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />

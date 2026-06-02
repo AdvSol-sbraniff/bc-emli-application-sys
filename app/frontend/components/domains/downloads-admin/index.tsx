@@ -28,6 +28,12 @@ const downloadTools: DownloadTool[] = [
       'Download, import, and inspect the Better Homes BC air-to-water and combination heat pump qualifying product list.',
     path: '/awhp-product-list-admin',
   },
+  {
+    title: 'OHPA BC product list config',
+    description:
+      'Download, import, and inspect the NRCan Oil to Heat Pump Affordability BC qualified product list used by oil heat pump code rules.',
+    path: '/ohpa-product-list-admin',
+  },
 ];
 
 export default function DownloadsAdminScreen() {

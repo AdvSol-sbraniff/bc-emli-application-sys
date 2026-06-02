@@ -93,6 +93,19 @@ WITH code_rules_seed (
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53181'::uuid,
+    'ashp_oil_ohpa_bc_product_found_in_list',
+    'Checks whether invoice and supporting-document AHRI evidence match each other and exist in the current imported NRCan Oil to Heat Pump Affordability BC qualified product list.',
+    true,
+    'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched NRCan OHPA BC product-list row.',
+    'Refresh the OHPA product-list import if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',
+    'Ask the contractor for corrected invoice/supporting product evidence when AHRI evidence is missing, conflicting, or not found in the imported OHPA BC product list.',
+    NULL,
+    'The code supplies the detailed invoice/supporting-document AHRI comparison and NRCan OHPA BC product-list match explanation; these messages are short admin guidance additions only.',
+    TIMESTAMP '2026-06-02 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53201'::uuid,
     'source_vintage_applies',
     'Checks whether the invoice date falls under the current 2026-04-01 Energy Savings Program requirements vintage or whether an earlier requirements version may apply.',
@@ -206,6 +219,24 @@ ON CONFLICT (code_rule_key) DO UPDATE SET
   admin_notes = COALESCE(claims.code_rules.admin_notes, EXCLUDED.admin_notes),
   updated_at = NOW();
 
+WITH obsolete_oil_ahri_mappings AS (
+  SELECT cru.id
+  FROM claims.code_rule_upgrade_types cru
+  JOIN claims.code_rules cr
+    ON cr.id = cru.code_rule_id
+  JOIN claims.invoice_upgrade_types iut
+    ON iut.id = cru.invoice_upgrade_type_id
+  WHERE iut.upgrade_type_key = 'air_source_heat_pump_oil'
+    AND cr.code_rule_key IN (
+      'hp_ahri_found_in_product_list',
+      'hp_product_minimum_capacity_at_minus_5c',
+      'hp_product_efficiency_threshold'
+    )
+)
+DELETE FROM claims.code_rule_upgrade_types cru
+USING obsolete_oil_ahri_mappings old
+WHERE cru.id = old.id;
+
 WITH code_rule_upgrade_type_seed (
   code_rule_key,
   upgrade_type_key
@@ -214,17 +245,14 @@ WITH code_rule_upgrade_type_seed (
   ('hp_ahri_found_in_product_list', 'air_source_heat_pump_electric'),
   ('hp_ahri_found_in_product_list', 'air_source_heat_pump_wood'),
   ('hp_ahri_found_in_product_list', 'air_source_heat_pump_gas_propane'),
-  ('hp_ahri_found_in_product_list', 'air_source_heat_pump_oil'),
   ('hp_ahri_found_in_product_list', 'dual_fuel_ducted_heat_pump'),
   ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_electric'),
   ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_wood'),
   ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_gas_propane'),
-  ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_oil'),
   ('hp_product_minimum_capacity_at_minus_5c', 'dual_fuel_ducted_heat_pump'),
   ('hp_product_efficiency_threshold', 'air_source_heat_pump_electric'),
   ('hp_product_efficiency_threshold', 'air_source_heat_pump_wood'),
   ('hp_product_efficiency_threshold', 'air_source_heat_pump_gas_propane'),
-  ('hp_product_efficiency_threshold', 'air_source_heat_pump_oil'),
   ('hp_product_efficiency_threshold', 'dual_fuel_ducted_heat_pump'),
   ('source_vintage_applies', 'common'),
   ('first_class_invoice_fields_present', 'common'),
@@ -240,7 +268,8 @@ WITH code_rule_upgrade_type_seed (
   ('hpwh_neea_found_in_product_list', 'heat_pump_water_heater'),
   ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater'),
   ('hydronic_product_found_in_qualifying_list', 'air_to_water_heat_pump'),
-  ('hydronic_product_found_in_qualifying_list', 'combined_space_water_heat_pump')
+  ('hydronic_product_found_in_qualifying_list', 'combined_space_water_heat_pump'),
+  ('ashp_oil_ohpa_bc_product_found_in_list', 'air_source_heat_pump_oil')
 )
 INSERT INTO claims.code_rule_upgrade_types (
   code_rule_id,

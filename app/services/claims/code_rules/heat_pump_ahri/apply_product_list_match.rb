@@ -11,7 +11,6 @@ module Claims
           air_source_heat_pump_electric
           air_source_heat_pump_wood
           air_source_heat_pump_gas_propane
-          air_source_heat_pump_oil
           dual_fuel_ducted_heat_pump
         ].freeze
 
