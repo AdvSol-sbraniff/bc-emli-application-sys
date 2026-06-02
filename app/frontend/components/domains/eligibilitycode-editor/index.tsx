@@ -7,6 +7,7 @@ type EligibilityRecordDto = {
   id: string;
   user_id: string;
   eligibility_code: string;
+  income_level?: number | null;
   applied_at: string;
   approved_at: string;
   expires_at: string;
@@ -17,6 +18,14 @@ type EligibilityRecordDto = {
 function useQueryParam(name: string): string | null {
   const { search } = useLocation();
   return useMemo(() => new URLSearchParams(search).get(name), [search, name]);
+}
+
+function deriveIncomeLevel(value: string): number | null {
+  const token = value.trim().toUpperCase();
+  if (token.startsWith('ESP1') || token.startsWith('ESPI')) return 1;
+  if (token.startsWith('ESP2')) return 2;
+  if (token.startsWith('ESP3')) return 3;
+  return null;
 }
 
 export default function EligibilitycodeEditorScreen() {
@@ -55,6 +64,7 @@ export default function EligibilitycodeEditorScreen() {
     appliedAt !== initialValues.appliedAt ||
     approvedAt !== initialValues.approvedAt ||
     expiresAt !== initialValues.expiresAt;
+  const incomeLevel = deriveIncomeLevel(eligibilityCode) ?? record?.income_level ?? null;
 
   async function load() {
     setIsLoading(true);
@@ -192,7 +202,9 @@ export default function EligibilitycodeEditorScreen() {
         {!id && !isCreateMode && (
           <Box p={4} borderWidth="1px" borderRadius="md">
             <Text fontWeight="bold">Missing id</Text>
-            <Text>Use: /eligibilitycode-editor?id=&lt;uuid&gt; or /eligibilitycode-editor?mode=create&user_id=&lt;uuid&gt;</Text>
+            <Text>
+              Use: /eligibilitycode-editor?id=&lt;uuid&gt; or /eligibilitycode-editor?mode=create&user_id=&lt;uuid&gt;
+            </Text>
           </Box>
         )}
 
@@ -212,7 +224,9 @@ export default function EligibilitycodeEditorScreen() {
 
             {(nameFromQuery || emailFromQuery) && (
               <Box mb={4} p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
-                <Text fontSize="sm" fontWeight="bold">User context</Text>
+                <Text fontSize="sm" fontWeight="bold">
+                  User context
+                </Text>
                 {nameFromQuery && <Text fontSize="sm">name: {nameFromQuery}</Text>}
                 {emailFromQuery && <Text fontSize="sm">email: {emailFromQuery}</Text>}
               </Box>
@@ -227,14 +241,18 @@ export default function EligibilitycodeEditorScreen() {
 
             {error && (
               <Box p={3} borderWidth="1px" borderRadius="md" mb={4} borderColor="red.300" bg="red.50">
-                <Text color="red.800" fontSize="sm">{error}</Text>
+                <Text color="red.800" fontSize="sm">
+                  {error}
+                </Text>
               </Box>
             )}
 
             {!isLoading && !error && (
               <Flex direction="column" gap={4}>
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>user_id</Text>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    user_id
+                  </Text>
                   <Input
                     value={userId}
                     onChange={(e) => setUserId(e.target.value)}
@@ -243,20 +261,49 @@ export default function EligibilitycodeEditorScreen() {
                   />
                 </Box>
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>eligibility_code</Text>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    eligibility_code
+                  </Text>
                   <Input value={eligibilityCode} onChange={(e) => setEligibilityCode(e.target.value)} />
                 </Box>
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>applied_at</Text>
-                  <Input value={appliedAt} onChange={(e) => setAppliedAt(e.target.value)} placeholder="YYYY-MM-DD or timestamp" />
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    income_level
+                  </Text>
+                  <Input value={incomeLevel === null ? '—' : String(incomeLevel)} isReadOnly bg="gray.50" />
+                  <Text fontSize="xs" opacity={0.7} mt={1}>
+                    Stored from the eligibility code prefix on save.
+                  </Text>
                 </Box>
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>approved_at</Text>
-                  <Input value={approvedAt} onChange={(e) => setApprovedAt(e.target.value)} placeholder="YYYY-MM-DD or timestamp" />
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    applied_at
+                  </Text>
+                  <Input
+                    value={appliedAt}
+                    onChange={(e) => setAppliedAt(e.target.value)}
+                    placeholder="YYYY-MM-DD or timestamp"
+                  />
                 </Box>
                 <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>expires_at</Text>
-                  <Input value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} placeholder="YYYY-MM-DD or timestamp" />
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    approved_at
+                  </Text>
+                  <Input
+                    value={approvedAt}
+                    onChange={(e) => setApprovedAt(e.target.value)}
+                    placeholder="YYYY-MM-DD or timestamp"
+                  />
+                </Box>
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    expires_at
+                  </Text>
+                  <Input
+                    value={expiresAt}
+                    onChange={(e) => setExpiresAt(e.target.value)}
+                    placeholder="YYYY-MM-DD or timestamp"
+                  />
                 </Box>
 
                 <Text fontSize="sm" opacity={0.8}>

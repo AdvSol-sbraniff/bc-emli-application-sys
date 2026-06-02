@@ -54,6 +54,9 @@ const HeatPumpProductListAdminScreen = lazy(() =>
 const HpwhProductListAdminScreen = lazy(() =>
   import('../hpwh-product-list-admin').then((module) => ({ default: module.default })),
 );
+const AwhpProductListAdminScreen = lazy(() =>
+  import('../awhp-product-list-admin').then((module) => ({ default: module.default })),
+);
 const DownloadsAdminScreen = lazy(() => import('../downloads-admin').then((module) => ({ default: module.default })));
 const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
 
@@ -841,6 +844,7 @@ const AppRoutes = observer(() => {
           <Route path="/downloads-admin" element={<DownloadsAdminScreen />} />
           <Route path="/heat-pump-product-list-admin" element={<HeatPumpProductListAdminScreen />} />
           <Route path="/hpwh-product-list-admin" element={<HpwhProductListAdminScreen />} />
+          <Route path="/awhp-product-list-admin" element={<AwhpProductListAdminScreen />} />
           <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />

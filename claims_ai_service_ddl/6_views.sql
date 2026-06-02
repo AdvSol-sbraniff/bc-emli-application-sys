@@ -124,6 +124,37 @@ JOIN (
   ON latest.id = run.id;
 
 
+CREATE OR REPLACE VIEW claims.v_current_awhp_products AS
+SELECT
+  p.*,
+  src.id AS awhp_source_id,
+  src.source_url,
+  src.description AS source_description,
+  run.publishing_notes,
+  run.publishing_date,
+  run.storage_provider AS source_storage_provider,
+  run.storage_key AS source_storage_key,
+  run.content_type AS source_content_type,
+  run.byte_size AS source_byte_size,
+  run.file_sha256 AS source_file_sha256,
+  run.completed_at AS source_import_completed_at,
+  run.records_imported AS source_records_imported
+FROM claims.awhp_products p
+JOIN claims.awhp_import_runs run
+  ON run.id = p.import_run_id
+JOIN claims.awhp_sources src
+  ON src.id = run.awhp_source_id
+JOIN (
+  SELECT DISTINCT ON (awhp_source_id)
+    id,
+    awhp_source_id
+  FROM claims.awhp_import_runs
+  WHERE status = 'succeeded'
+  ORDER BY awhp_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
+) latest
+  ON latest.id = run.id;
+
+
 
 -- View: sessions + contractor core fields
 -- Naming: underscores (per your convention)
@@ -334,7 +365,8 @@ SELECT
   uec.approved_at                        AS approved_at,
   uec.expires_at                         AS expires_at,
   uec.created_at                         AS users_eligibilitycode_created_at,
-  uec.updated_at                         AS users_eligibilitycode_updated_at
+  uec.updated_at                         AS users_eligibilitycode_updated_at,
+  uec.income_level                       AS income_level
 
 FROM public.users u
 LEFT JOIN claims.users_eligibilitycodes uec

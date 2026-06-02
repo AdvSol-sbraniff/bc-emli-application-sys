@@ -149,6 +149,7 @@ module Api
                    iv.as_json.merge(
                      "ahri_product_match" => serialize_ahri_product_match(iv),
                      "neea_product_match" => serialize_neea_product_match(iv),
+                     "awhp_product_match" => serialize_awhp_product_match(iv),
                      "supporting_document_types_by_upgrade_type" =>
                        serialize_supporting_document_types_by_upgrade_type(
                          iv.id
@@ -292,6 +293,7 @@ module Api
                    iv.as_json.merge(
                      "ahri_product_match" => serialize_ahri_product_match(iv),
                      "neea_product_match" => serialize_neea_product_match(iv),
+                     "awhp_product_match" => serialize_awhp_product_match(iv),
                      "supporting_document_types_by_upgrade_type" =>
                        serialize_supporting_document_types_by_upgrade_type(
                          iv.id
@@ -753,6 +755,36 @@ module Api
           source: {
             neea_import_run_id: import_run&.id,
             neea_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
+      end
+
+      def serialize_awhp_product_match(invoice_version)
+        product = invoice_version.awhp_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.awhp_source
+
+        {
+          product: {
+            id: product.id,
+            brand: product.brand,
+            model_number: product.model_number,
+            model_number_regex: product.model_number_regex,
+            model_components: product.model_components,
+            system_type: product.system_type,
+            eligibility_notes: product.eligibility_notes
+          },
+          source: {
+            awhp_import_run_id: import_run&.id,
+            awhp_source_id: source&.id,
             source_url: source&.source_url,
             source_description: source&.description,
             publishing_notes: import_run&.publishing_notes,

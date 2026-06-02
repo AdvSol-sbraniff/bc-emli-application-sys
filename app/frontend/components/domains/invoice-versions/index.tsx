@@ -1029,6 +1029,9 @@ export const InvoiceVersionShowScreen = () => {
   const neeaProductMatch = readData?.neea_product_match;
   const neeaProduct = neeaProductMatch?.product;
   const neeaSource = neeaProductMatch?.source;
+  const awhpProductMatch = readData?.awhp_product_match;
+  const awhpProduct = awhpProductMatch?.product;
+  const awhpSource = awhpProductMatch?.source;
   const supportingDocumentTypeGroups = Array.isArray(readData?.supporting_document_types_by_upgrade_type)
     ? readData.supporting_document_types_by_upgrade_type
     : [];
@@ -1756,6 +1759,103 @@ export const InvoiceVersionShowScreen = () => {
                                 rel="noreferrer"
                                 fontSize="xs"
                                 color="green.700"
+                                textDecoration="underline"
+                              >
+                                Open source list
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  )}
+
+                  {awhpProduct && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              Air-to-water product-list match
+                            </Text>
+                            <Text fontSize="xs" opacity={0.65}>
+                              Code-owned match to the imported Better Homes BC qualifying product list.
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Box borderWidth="1px" borderColor="cyan.100" borderRadius="md" p="10px" bg="cyan.50">
+                          <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                            <StatusDot result="pass" />
+                            <Badge colorScheme="cyan">Information on record</Badge>
+                            {awhpSource?.source_description && (
+                              <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                {String(awhpSource.source_description)}
+                              </Badge>
+                            )}
+                            <Text fontSize="xs" opacity={0.75}>
+                              {fmtText(awhpProduct.brand)} {fmtText(awhpProduct.model_number)}
+                            </Text>
+                          </Flex>
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {[
+                              ['Brand', awhpProduct.brand],
+                              ['Model number', awhpProduct.model_number],
+                              [
+                                'Model components',
+                                Array.isArray(awhpProduct.model_components)
+                                  ? awhpProduct.model_components.join(' / ')
+                                  : awhpProduct.model_components,
+                              ],
+                              ['System type', awhpProduct.system_type],
+                              ['Eligibility notes', awhpProduct.eligibility_notes],
+                            ].map(([label, value]) => (
+                              <Box
+                                key={String(label)}
+                                px="10px"
+                                py="8px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="cyan.100"
+                                bg="white"
+                              >
+                                <Text fontSize="xs" opacity={0.7}>
+                                  {String(label)}
+                                </Text>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {fmtText(value)}
+                                </Text>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          <Box mt="10px" pt="8px" borderTopWidth="1px" borderColor="cyan.100">
+                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="4px">
+                              Source
+                            </Text>
+                            <Text fontSize="sm">
+                              {fmtText(awhpSource?.source_description)}{' '}
+                              {awhpSource?.publishing_date ? `(published ${fmtDate(awhpSource.publishing_date)})` : ''}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75} wordBreak="break-all">
+                              AWHP source id: {fmtText(awhpSource?.awhp_source_id)}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75}>
+                              Imported {fmtDate(awhpSource?.completed_at)} with {fmtText(awhpSource?.records_imported)}{' '}
+                              rows.
+                            </Text>
+                            {awhpSource?.source_url && (
+                              <Text
+                                as="a"
+                                href={String(awhpSource.source_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                fontSize="xs"
+                                color="cyan.700"
                                 textDecoration="underline"
                               >
                                 Open source list

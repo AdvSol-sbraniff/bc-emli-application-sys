@@ -110,6 +110,7 @@ WITH field_seed (
   ('manufacturer_label_photo', 'nrcan_number', 8, 'Locate NRCan reference number if visible on the label/photo.', true),
   ('manufacturer_label_photo', 'cpd_number', 9, 'Locate CPD, NFRC Certified Products Directory, or similar fenestration product-directory number if visible on the label/photo.', true),
   ('manufacturer_label_photo', 'installed_unit_location_or_count_evidence', 10, 'Locate labels, filenames, captions, room/location names, unit numbers, or counts that help determine whether label photos cover each installed unit.', true),
+  ('manufacturer_label_photo', 'ahri_reference', 11, 'Locate AHRI reference number, AHRI certificate number, or AHRI certified reference evidence if visible on the label/photo.', true),
 
   ('product_spec_sheet', 'brand_and_model', 1, 'Locate brand, make, product name, and model reference visible on the specification sheet.', true),
   ('product_spec_sheet', 'model_number', 2, 'Locate the model number or model identifier.', true),

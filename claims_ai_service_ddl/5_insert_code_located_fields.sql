@@ -44,7 +44,7 @@ WITH code_located_fields_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d54005'::uuid,
     'users_eligibilitycodes.income_level',
-    'Carries the derived program income-level value based on the matched eligibility-code record into the runtime code-located-field output and GenAI context window.',
+    'Carries the stored program income-level value from the matched eligibility-code record into the runtime code-located-field output and GenAI context window.',
     true,
     TIMESTAMP '2026-05-26 00:00:00',
     NOW()

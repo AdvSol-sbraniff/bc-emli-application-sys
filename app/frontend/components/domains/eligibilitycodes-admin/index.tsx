@@ -27,7 +27,16 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, CaretLeft, CaretRight, Info, PencilSimple, Plus, Question, XCircle } from '@phosphor-icons/react';
+import {
+  ArrowsClockwise,
+  CaretLeft,
+  CaretRight,
+  Info,
+  PencilSimple,
+  Plus,
+  Question,
+  XCircle,
+} from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
@@ -54,6 +63,7 @@ type EligibilityGridRow = {
   users_eligibilitycode_id?: string | null;
   eligibilitycode_user_id?: string | null;
   eligibility_code?: string | null;
+  income_level?: number | null;
   applied_at?: string | null;
   approved_at?: string | null;
   expires_at?: string | null;
@@ -117,11 +127,7 @@ export default function EligibilitycodesAdminScreen() {
   const [total, setTotal] = useState<number>(0);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const {
-    isOpen: isHelpOpen,
-    onOpen: onHelpOpen,
-    onClose: onHelpClose,
-  } = useDisclosure();
+  const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const [selected, setSelected] = useState<EligibilityGridRow | null>(null);
 
   const didInitFromUrl = useRef(false);
@@ -188,7 +194,7 @@ export default function EligibilitycodesAdminScreen() {
         credentials: 'include',
       });
 
-      const data: EligibilityApiResp = await res.json().catch(() => ({ rows: [] } as EligibilityApiResp));
+      const data: EligibilityApiResp = await res.json().catch(() => ({ rows: [] }) as EligibilityApiResp);
 
       if (!res.ok) {
         throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
@@ -275,6 +281,7 @@ export default function EligibilitycodesAdminScreen() {
       ['users_eligibilitycode_id', selected.users_eligibilitycode_id],
       ['eligibilitycode_user_id', selected.eligibilitycode_user_id],
       ['eligibility_code', selected.eligibility_code],
+      ['income_level', selected.income_level],
       ['applied_at', selected.applied_at],
       ['approved_at', selected.approved_at],
       ['expires_at', selected.expires_at],
@@ -292,7 +299,7 @@ export default function EligibilitycodesAdminScreen() {
           <Flex gap={3} align="end" wrap="nowrap" mb={4} overflowX="auto">
             <Box flex="1" minW="280px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
-                Search (user id, name, email, role, provider, eligibility code)
+                Search (user id, name, email, role, provider, eligibility code, income level)
               </Text>
               <Input
                 value={q}
@@ -325,6 +332,8 @@ export default function EligibilitycodesAdminScreen() {
                 <option value="users_eligibilitycode_updated_at:asc">eligibility updated_at asc</option>
                 <option value="eligibility_code:asc">eligibility_code asc</option>
                 <option value="eligibility_code:desc">eligibility_code desc</option>
+                <option value="income_level:asc">income_level asc</option>
+                <option value="income_level:desc">income_level desc</option>
                 <option value="email:asc">email asc</option>
                 <option value="email:desc">email desc</option>
                 <option value="user_created_at:desc">user created_at desc</option>
@@ -403,6 +412,7 @@ export default function EligibilitycodesAdminScreen() {
                   <Th>name</Th>
                   <Th>email</Th>
                   <Th>eligibility_code</Th>
+                  <Th>income_level</Th>
                   <Th>approved_at</Th>
                   <Th>expires_at</Th>
                   <Th>Actions</Th>
@@ -411,7 +421,7 @@ export default function EligibilitycodesAdminScreen() {
               <Tbody>
                 {loading ? (
                   <Tr>
-                    <Td colSpan={6}>
+                    <Td colSpan={7}>
                       <Flex align="center" gap={2} py={3}>
                         <Spinner size="sm" />
                         <Text>Loading rows...</Text>
@@ -420,7 +430,7 @@ export default function EligibilitycodesAdminScreen() {
                   </Tr>
                 ) : rows.length === 0 ? (
                   <Tr>
-                    <Td colSpan={6}>
+                    <Td colSpan={7}>
                       <Text py={3} opacity={0.8}>
                         No users or eligibility codes found.
                       </Text>
@@ -431,9 +441,18 @@ export default function EligibilitycodesAdminScreen() {
                     <Tr key={`${row.user_id}-${row.users_eligibilitycode_id || 'none'}-${idx}`}>
                       <Td>{[row.first_name, row.last_name].filter(Boolean).join(' ') || '—'}</Td>
                       <Td>{row.email || '—'}</Td>
-                      <Td fontFamily="mono" fontSize="xs">{row.eligibility_code || '—'}</Td>
-                      <Td fontFamily="mono" fontSize="xs">{fmtDate(row.approved_at)}</Td>
-                      <Td fontFamily="mono" fontSize="xs">{fmtDate(row.expires_at)}</Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {row.eligibility_code || '—'}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {row.income_level ?? '—'}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {fmtDate(row.approved_at)}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {fmtDate(row.expires_at)}
+                      </Td>
                       <Td>
                         <Flex gap={2}>
                           <Tooltip label="Open details drawer">
@@ -485,12 +504,12 @@ export default function EligibilitycodesAdminScreen() {
                   size="sm"
                   variant="outline"
                   icon={<CaretLeft size={16} />}
-                isDisabled={page <= 1 || loading}
-                onClick={() => {
-                  const next = Math.max(1, page - 1);
-                  setPage(next);
-                  pushUrl({ page: next });
-                }}
+                  isDisabled={page <= 1 || loading}
+                  onClick={() => {
+                    const next = Math.max(1, page - 1);
+                    setPage(next);
+                    pushUrl({ page: next });
+                  }}
                 />
               </Tooltip>
 
@@ -504,12 +523,12 @@ export default function EligibilitycodesAdminScreen() {
                   size="sm"
                   variant="outline"
                   icon={<CaretRight size={16} />}
-                isDisabled={page >= totalPages || loading}
-                onClick={() => {
-                  const next = Math.min(totalPages, page + 1);
-                  setPage(next);
-                  pushUrl({ page: next });
-                }}
+                  isDisabled={page >= totalPages || loading}
+                  onClick={() => {
+                    const next = Math.min(totalPages, page + 1);
+                    setPage(next);
+                    pushUrl({ page: next });
+                  }}
                 />
               </Tooltip>
             </HStack>
@@ -524,55 +543,70 @@ export default function EligibilitycodesAdminScreen() {
           <DrawerHeader>Eligibility Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This page combines two sets of information so staff can see them together in one place: person details and that person’s eligibility code details.
+              This page combines two sets of information so staff can see them together in one place: person details and
+              that person’s eligibility code details.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               What this page is showing
             </Text>
             <Text fontSize="sm" mb={3}>
-              Think of this as a combined view. One side is the person record (name, email, account details), and the other side is the eligibility-code record (code, approval date, expiry date). The person information is managed elsewhere; this screen helps you review and maintain the eligibility part in context.
+              Think of this as a combined view. One side is the person record (name, email, account details), and the
+              other side is the eligibility-code record (code, approval date, expiry date). The person information is
+              managed elsewhere; this screen helps you review and maintain the eligibility part in context.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               How this is used during invoice processing
             </Text>
             <Text fontSize="sm" mb={3}>
-              First, OCR reads the invoice PDF and extracts values such as the eligibility code. Next, the system looks up that code in this eligibility list. Then it follows that record back to the matching person to get the participant name and related details. Those known values are then shown in the PDF viewer section called Pre-existing info on file.
+              First, OCR reads the invoice PDF and extracts values such as the eligibility code. Next, the system looks
+              up that code in this eligibility list. Then it follows that record back to the matching person to get the
+              participant name and related details. Those known values are then shown in the PDF viewer section called
+              Pre-existing info on file.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Why participant name matters in rules
             </Text>
             <Text fontSize="sm" mb={3}>
-              A GenAI validation rule checks whether the participant name and address seen on the invoice are consistent with the participant name and address on file. This helps catch invoices that may have the wrong customer details.
+              A GenAI validation rule checks whether the participant name and address seen on the invoice are consistent
+              with the participant name and address on file. This helps catch invoices that may have the wrong customer
+              details.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               What fuzzy matching means
             </Text>
             <Text fontSize="sm" mb={3}>
-              Fuzzy matching means we allow small, normal differences instead of requiring exact character-by-character matches. For example, shortened first names, abbreviations, punctuation differences, or minor spelling differences can still be treated as a match when appropriate.
+              Fuzzy matching means we allow small, normal differences instead of requiring exact character-by-character
+              matches. For example, shortened first names, abbreviations, punctuation differences, or minor spelling
+              differences can still be treated as a match when appropriate.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Ruleset tuning
             </Text>
             <Text fontSize="sm" mb={3}>
-              If name or address checks are too strict, staff can adjust the ruleset to soften matching behavior. After updating a ruleset, you can re-run GenAI to evaluate the same invoice version again without needing to re-upload the PDF.
+              If name or address checks are too strict, staff can adjust the ruleset to soften matching behavior. After
+              updating a ruleset, you can re-run GenAI to evaluate the same invoice version again without needing to
+              re-upload the PDF.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Operational examples
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 1: Eligibility data was corrected on file. Re-run GenAI so rule checks use the corrected participant/eligibility context.
+              Example 1: Eligibility data was corrected on file. Re-run GenAI so rule checks use the corrected
+              participant/eligibility context.
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 2: Invoice customer name uses an abbreviation. Update fuzzy matching ruleset settings, then re-run GenAI to reduce false failures.
+              Example 2: Invoice customer name uses an abbreviation. Update fuzzy matching ruleset settings, then re-run
+              GenAI to reduce false failures.
             </Text>
             <Text fontSize="sm">
-              Example 3: OCR extracted a questionable code. Verify code ownership here, then decide whether OCR/GenAI rerun or contractor correction is needed.
+              Example 3: OCR extracted a questionable code. Verify code ownership here, then decide whether OCR/GenAI
+              rerun or contractor correction is needed.
             </Text>
           </DrawerBody>
         </DrawerContent>
@@ -583,15 +617,22 @@ export default function EligibilitycodesAdminScreen() {
         <DrawerContent>
           <DrawerCloseButton />
           <DrawerHeader>
-            Eligibility details {selected?.users_eligibilitycode_id ? `(record ${selected.users_eligibilitycode_id})` : '(no eligibility row yet)'}
+            Eligibility details{' '}
+            {selected?.users_eligibilitycode_id
+              ? `(record ${selected.users_eligibilitycode_id})`
+              : '(no eligibility row yet)'}
           </DrawerHeader>
           <DrawerBody>
             {!selected ? (
-              <Text fontSize="sm" opacity={0.7}>No row selected.</Text>
+              <Text fontSize="sm" opacity={0.7}>
+                No row selected.
+              </Text>
             ) : (
               <Box>
                 <Box borderWidth="1px" borderRadius="md" p={4} mb={4}>
-                  <Heading size="sm" mb={3}>User fields</Heading>
+                  <Heading size="sm" mb={3}>
+                    User fields
+                  </Heading>
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                     {selectedUserFields.map(([k, v]) => (
                       <Box key={k}>
@@ -602,7 +643,9 @@ export default function EligibilitycodesAdminScreen() {
                 </Box>
 
                 <Box borderWidth="1px" borderRadius="md" p={4}>
-                  <Heading size="sm" mb={3}>Eligibility code fields</Heading>
+                  <Heading size="sm" mb={3}>
+                    Eligibility code fields
+                  </Heading>
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                     {selectedEligibilityFields.map(([k, v]) => (
                       <Box key={k}>

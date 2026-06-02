@@ -3,9 +3,7 @@ module Claims
   class InvoiceVersion < ApplicationRecord
     self.table_name = "claims.invoice_versions"
 
-    belongs_to :invoice,
-               class_name: "Claims::Invoice",
-               foreign_key: :invoice_id
+    belongs_to :invoice, class_name: "Claims::Invoice", foreign_key: :invoice_id
 
     belongs_to :ahri_product,
                class_name: "Claims::AhriProduct",
@@ -15,6 +13,11 @@ module Claims
     belongs_to :neea_product,
                class_name: "Claims::NeeaProduct",
                foreign_key: :neea_product_id,
+               optional: true
+
+    belongs_to :awhp_product,
+               class_name: "Claims::AwhpProduct",
+               foreign_key: :awhp_product_id,
                optional: true
 
     has_many :located_fields,

@@ -200,6 +200,11 @@ Rails.application.routes.draw do
           to: "neea_products_admin#import_status"
       post "admin/neea_products/import_downloaded_pdf",
            to: "neea_products_admin#import_downloaded_pdf"
+      get "admin/awhp_products", to: "awhp_products_admin#index"
+      get "admin/awhp_products/import_status",
+          to: "awhp_products_admin#import_status"
+      post "admin/awhp_products/import_downloaded_pdf",
+           to: "awhp_products_admin#import_downloaded_pdf"
       get "admin/validation_rules", to: "validation_rules_admin#index"
       get "admin/validation_rules/upgrade_types",
           to: "validation_rules_admin#upgrade_types"

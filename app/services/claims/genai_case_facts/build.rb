@@ -106,7 +106,8 @@ module Claims
           users_eligibilitycodes: {
             eligibility_code: elig&.eligibility_code,
             income_level:
-              income_level_from_eligibility_code(elig&.eligibility_code),
+              elig&.income_level ||
+                income_level_from_eligibility_code(elig&.eligibility_code),
             approved_at: elig&.approved_at,
             expires_at: elig&.expires_at
           },

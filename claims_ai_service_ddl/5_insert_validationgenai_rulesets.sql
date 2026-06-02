@@ -63,7 +63,7 @@ Rules:
 - Use rule_result="info" when the rule passes, but there is helpful context worth surfacing to the admin/contractor. Info is blue: not a requested fix, not a verification task, and not a risk flag.
 - Use rule_result="warn" when there is no visible contradiction or material failure, but an admin should verify one specific context, supporting document, versioning question, duplicate-history question, or ambiguous value. A warning is targeted review, not a contractor failure.
 - Use rule_result="fail" when visible evidence contradicts the rule, a material requirement is clearly not met, or visible math clearly fails.
-- Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn.
+- Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn unless the specific rule identifies the missing evidence as a mandatory supporting-document requirement and instructs fail.
 - For identity and record-matching rules, visible invoice values that clearly identify a different contractor, homeowner/customer, eligibility-code owner, property, claimant, or other matched party than the supplied database record should be fail, not warn.
 - Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice as useful context, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
 - Set overall.overall_result to "fail" if any material rule fails, "warn" if there are warnings but no failures, "info" if there are info notes but no warnings/failures, and "pass" only when all rulechecks are pass.
@@ -87,7 +87,8 @@ Rule result examples:
 - PASS: Standard warranty terms are visible but no warranty-paid/credited costs appear. Admin can skim.
 - INFO: A rule passes, but the invoice includes useful context worth surfacing, such as clearly split rebate amounts by upgrade type, arithmetic that reconciles under a specific acceptable model, or strong documentation that helps explain why review should be easy. This may appear in advice as a helpful note, not a requested fix.
 - WARN: Invoice date is before 2026-04-01, so the prior RER version may apply. Admin should confirm the correct requirements vintage; this is not an invoice eligibility failure by itself.
-- WARN: A required supporting document such as photos, WETT, heat-load calculation, utility bill/invoice, permit, or preapproval is missing from the supplied supporting-document summary, or it is present but the extracted fields are incomplete/illegible. Admin should verify that specific supporting-document file only.
+- WARN: A supporting document is present but the extracted fields are incomplete, ambiguous, visually limited, or illegible. Admin should verify that specific supporting-document file only.
+- FAIL: A mandatory supporting document required by the rule, such as required photos, WETT/removal proof, utility bill/invoice, permit/inspection/removal invoice, approved heat-load calculation, or manufacturer-label photo, is missing from the supplied supporting-document summary.
 - WARN: A one-per-home or duplicate-rebate check cannot be confirmed from invoice text because claim history was not supplied. Admin/application system should verify history; do not fail solely because the invoice cannot prove history.
 - WARN: Rebate math values are incomplete or ambiguous, but no visible value clearly exceeds a cap. Admin should verify the missing amount or source value.
 - FAIL: The visible claimed rebate clearly exceeds the cap or invoice cost.
@@ -415,7 +416,8 @@ Check whether configured supporting-document located fields include a utility bi
 Use utility_bill_or_account_document located fields such as utility_provider, account_holder_name, service_address, account_or_bill_date, residential_account_evidence, strata_or_landlord_account_evidence, utility_service_type_or_fuel_evidence, account_number_or_reference, and fuel_consumption_quantity_or_period.
 Compare the supporting-document account holder and service address against supplied participant/homeowner and claim-address facts when those facts are available.
 Set rule_result="pass" when a utility bill/account document is present, tied to the claim home or participant, and shows residential-account evidence with no visible strata/landlord-only account concern.
-Set rule_result="warn" when the utility account document is missing, unreadable, stale/undated, or lacks enough holder/address/residential-account evidence for confident review.
+Set rule_result="fail" when no utility_bill_or_account_document evidence is supplied in the configured supporting-document fields, because the utility account evidence is a mandatory common supporting-document requirement.
+Set rule_result="warn" when the utility account document is present but unreadable, stale/undated, or lacks enough holder/address/residential-account evidence for confident review.
 Set rule_result="warn" when the provider or primary-heating/service-type evidence is present but not enough to prove eligibility from the supplied facts; admin should verify the eligible utility and primary-heating requirement.
 Set rule_result="fail" when the supporting document clearly appears to be for a different address/account holder, or clearly shows only a strata/landlord account instead of the participant/home residential account.
 Do not fail solely because the invoice text lacks utility details; this rule is primarily about the supporting-document evidence supplied to the model.
@@ -564,13 +566,15 @@ rule 5 [rule_key: wd_label_photo_reference_present]
 Check whether configured supporting documents include manufacturer_label_photo evidence for the installed windows/doors.
 Use manufacturer_label_photo located fields such as brand_and_model, model_number, serial_number, equipment_type_or_product_category, certification_or_listing_reference, metric_u_factor, nrcan_number, cpd_number, installed_unit_location_or_count_evidence, and label_legibility_concern.
 Set rule_result="pass" when label-photo evidence is present and is legible enough for admin review.
-Set rule_result="warn" when label-photo evidence is missing, unavailable, or has a legibility concern. Admin should verify the manufacturer-label photo package only; do not treat absence from invoice OCR as a material failure by itself.
+Set rule_result="fail" when no manufacturer_label_photo supporting-document evidence is supplied, because the ESP requirements require a manufacturer-label photo from each installed window/door.
+Set rule_result="warn" when label-photo evidence is present but incomplete, not clearly tied to the installed units, unavailable for one or more installed units, or has a legibility concern. Admin should verify the manufacturer-label photo package only; do not treat absence from invoice OCR as a material failure by itself.
 
 rule 6 [rule_key: wd_quote_preapproval_reference_present]
 Check whether the invoice or configured supporting documents reference windows/doors quote pre-approval before installation.
 Use preapproval_quote and preapproval_notice located fields such as quote_date, quote_reference, quoted_upgrade_scope, quoted_cost_or_amount, approval_submission_evidence, preapproval_date, approval_reference, approved_upgrade_scope, property_or_participant_reference, preapproval_condition_or_expiry, and approval_status_or_decision.
 Set rule_result="pass" when approval evidence is present and appears tied to the windows/doors scope.
-Set rule_result="warn" when preapproval evidence is missing, ambiguous, not tied to the property/scope, or requires date comparison against installation. This is not a final pre-approval validation; the DB/program record may still need to verify it.
+Set rule_result="fail" when no preapproval_quote or preapproval_notice evidence is supplied, because quote pre-approval is required before windows/doors installation.
+Set rule_result="warn" when preapproval evidence is present but ambiguous, not tied to the property/scope, or requires date comparison against installation. This is not a final pre-approval validation; the DB/program record may still need to verify it.
 
 rule 7 [rule_key: wd_per_unit_rebate_math_within_cap]
 Check whether the per-unit rebate calculations are visibly shown and appear to be within the per-window/per-door cap.
@@ -612,10 +616,11 @@ Set rule_result="warn" when total invoice cost, capped rebate, customer deposit,
 Set rule_result="fail" when visible values clearly contradict the calculated customer portion or amount due.
 In calculation, show the visible formula and values used. Do not invent missing line-item values.
 
-rule 10 [rule_key: wd_income_level_and_vancouver_review]
-Check whether visible evidence suggests the participant is ESP1/ESP2 and not ESP3, and whether any visible address evidence suggests City of Vancouver.
-Set rule_result="fail" if the visible eligibility code is ESP3 or if the invoice clearly shows City of Vancouver.
-Set rule_result="warn" if eligibility level or municipality cannot be determined from invoice/DB context; explain that admin/application data is needed and this is not a material invoice failure by itself.
+rule 10 [rule_key: wd_vancouver_municipal_boundary_review]
+Check whether any visible invoice/address evidence suggests the home is within the City of Vancouver municipal boundary.
+Set rule_result="fail" if the invoice or supplied case facts clearly show the home is within the City of Vancouver municipal boundary.
+Set rule_result="warn" if municipality cannot be determined from invoice/DB context; explain that admin/application data is needed and this is not a material invoice failure by itself.
+Set rule_result="pass" if visible invoice and supplied case-fact evidence clearly point outside the City of Vancouver or contain no City of Vancouver concern.
 
 rule 11 [rule_key: wd_envelope_replacement_evidence_present]
 Check whether visible text supports replacement of existing exterior/building-envelope windows or doors rather than new construction, additions, skylights, interior doors, or unrelated glazing.
@@ -668,8 +673,6 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: ashp_electric_existing_heat_context_present]
 Check whether invoice text supports electric primary heating conversion context.
-rule 2 [rule_key: ashp_electric_product_reference_present]
-Check whether invoice text or configured supporting-document located fields include useful product evidence such as AHRI, make/model, qualified product list, capacity, SEER/SEER2, HSPF/HSPF2, or efficiency ratings.
 rule 3 [rule_key: ashp_electric_primary_system_scope_present]
 Check whether the invoice describes a primary heat-pump system rather than a secondary/add-on system.
 rule 4 [rule_key: ashp_electric_description_sufficient_for_review]
@@ -743,13 +746,12 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: ashp_wood_existing_heat_context_present]
 Check whether invoice text supports wood/solid-fuel primary heating conversion context.
-rule 2 [rule_key: ashp_wood_product_reference_present]
-Check whether invoice text or configured supporting-document located fields include useful product evidence such as AHRI, make/model, qualified product list, capacity, SEER/SEER2, HSPF/HSPF2, or efficiency ratings.
 rule 3 [rule_key: ashp_wood_removal_or_wett_reference_present]
 Check whether invoice evidence or configured supporting-document located fields reference wood-system removal photos or WETT documentation when relevant.
 Use before_after_photo_set located fields for removed wood/solid-fuel systems and wett_report located fields for retained systems, including wett_inspection_date, wett_inspector_certification_number, wett_inspector_or_company_name, wett_appliance_or_system_reference, site_address, and compliance_or_removal_conclusion.
-Set rule_result="pass" when the relevant removal-photo or WETT evidence is present and tied to the site/system.
-Set rule_result="warn" when evidence is missing, visually limited, missing a WETT certification/date/site/conclusion, or does not clearly tie to the site/system.
+Set rule_result="pass" when either before/after removal-photo evidence or WETT safe-retention evidence is present and tied to the site/system.
+Set rule_result="fail" when neither before/after removal-photo evidence nor WETT report evidence is supplied for a wood/solid-fuel conversion, because the existing wood/solid-fuel system must either be removed with photo evidence or retained with WETT evidence.
+Set rule_result="warn" when the relevant evidence is present but visually limited, missing WETT certification/date/site/conclusion, or does not clearly tie to the site/system.
 rule 4 [rule_key: ashp_wood_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
@@ -830,13 +832,12 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: ashp_gas_propane_existing_heat_context_present]
 Check whether invoice text supports natural gas or propane primary heating conversion context.
-rule 2 [rule_key: ashp_gas_propane_product_reference_present]
-Check whether invoice text or configured supporting-document located fields include useful product evidence such as AHRI, make/model, qualified product list, capacity, SEER/SEER2, HSPF/HSPF2, or efficiency ratings.
 rule 3 [rule_key: ashp_gas_propane_removal_reference_present]
 Check whether invoice evidence or configured supporting-document located fields reference fossil-fuel system removal or decommissioning.
-Use fossil_fuel_removal_proof located fields such as removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, and removal_scope_or_description.
+Use fossil_fuel_removal_proof and permit_document located fields such as removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description, permit_number, permit_date, permit_address, authority_name, permit_scope_or_equipment_reference, and permit_status_or_completion_evidence.
 Set rule_result="pass" when removal/decommissioning evidence is present and tied to the site/system.
-Set rule_result="warn" when removal proof is missing, incomplete, ambiguous, not tied to the site/system, or missing date/address/work-description evidence.
+Set rule_result="fail" when no fossil_fuel_removal_proof or permit_document evidence is supplied, because fossil-fuel system removal proof is required for gas/propane-to-heat-pump upgrades.
+Set rule_result="warn" when removal proof is present but incomplete, ambiguous, not tied to the site/system, or missing date/address/work-description evidence.
 rule 4 [rule_key: ashp_gas_propane_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
@@ -925,13 +926,12 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: ashp_oil_existing_heat_context_present]
 Check whether invoice text supports oil primary heating conversion context.
-rule 2 [rule_key: ashp_oil_product_reference_present]
-Check whether invoice text or configured supporting-document located fields include useful product evidence such as AHRI, make/model, qualified product list, capacity, SEER/SEER2, HSPF/HSPF2, or efficiency ratings.
 rule 3 [rule_key: ashp_oil_removal_reference_present]
 Check whether invoice evidence or configured supporting-document located fields reference oil system and oil tank removal.
-Use oil_removal_proof located fields such as removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, and removal_scope_or_description.
+Use oil_removal_proof and permit_document located fields such as removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description, permit_number, permit_date, permit_address, authority_name, permit_scope_or_equipment_reference, and permit_status_or_completion_evidence.
 Set rule_result="pass" when oil system/tank removal or decommissioning evidence is present and tied to the site/system.
-Set rule_result="warn" when oil removal proof is missing, incomplete, ambiguous, not tied to the site/system, or missing date/address/work-description evidence.
+Set rule_result="fail" when no oil_removal_proof or permit_document evidence is supplied, because oil system removal proof is required for oil-to-heat-pump upgrades.
+Set rule_result="warn" when oil removal proof is present but incomplete, ambiguous, not tied to the site/system, or missing date/address/work-description evidence.
 rule 4 [rule_key: ashp_oil_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
@@ -952,8 +952,10 @@ In calculation, show the visible category, eligibility code, visible upgrade cos
 
 rule 6 [rule_key: ashp_oil_consumption_baseline_reference_present]
 Check whether visible text references the 500 L annual oil-consumption baseline, fuel bills, receipts, or similar evidence.
-Use supporting-document located fields when supplied, especially utility_service_type_or_fuel_evidence, utility_provider, account_or_bill_date, or other utility/fuel-bill account evidence.
-Set rule_result="warn" if not visible; note that this commonly requires application/supporting-document evidence and admin should verify the oil-consumption proof only.
+Use supporting-document located fields when supplied, especially utility_bill_or_account_document fields such as utility_service_type_or_fuel_evidence, utility_provider, account_or_bill_date, account_number_or_reference, and fuel_consumption_quantity_or_period.
+Set rule_result="pass" when the invoice or supporting-document fields show at least 500 L of oil consumption within the relevant 12-month application period, or enough fuel-bill/receipt evidence for admin to confirm that threshold.
+Set rule_result="fail" when no invoice or supporting-document evidence of oil consumption proof is supplied for an oil-to-heat-pump claim, because oil-heated homes must provide proof of at least 500 L of oil consumption.
+Set rule_result="warn" when oil-consumption proof is present but the quantity, bill/receipt date, service period, or participant/home tie is incomplete or ambiguous.
 
 rule 7 [rule_key: ashp_oil_backup_not_fossil_primary]
 Check whether visible backup heat evidence appears electric or wood, and whether any natural-gas/propane fireplace is clearly secondary.
@@ -1009,7 +1011,10 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: dfhp_dual_fuel_scope_present]
 Check whether invoice evidence or configured supporting-document located fields support dual-fuel ducted heat-pump scope with fossil backup.
-Use commissioning_or_control_document and fossil_modification_or_removal_proof located fields when present, including equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, region_or_temperature_threshold_evidence, modified_or_removed_equipment_type, modification_or_removal_scope_or_description, and site_address.
+Use commissioning_or_control_document, fossil_modification_or_removal_proof, and permit_document located fields when present, including equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, region_or_temperature_threshold_evidence, modified_or_removed_equipment_type, modification_or_removal_scope_or_description, site_address, permit_number, permit_date, permit_address, authority_name, permit_scope_or_equipment_reference, and permit_status_or_completion_evidence.
+Set rule_result="pass" when the invoice/supporting-document evidence supports dual-fuel scope and includes fossil-fuel removal/modification proof tied to the site/system.
+Set rule_result="fail" when no fossil_modification_or_removal_proof or permit_document evidence is supplied, because fossil-fuel removal/modification proof is required for dual-fuel ducted heat-pump upgrades.
+Set rule_result="warn" when dual-fuel scope or fossil modification/removal evidence is present but incomplete, ambiguous, not tied to the site/system, or missing date/address/work-description evidence.
 rule 2 [rule_key: dfhp_controls_reference_present]
 Check whether invoice evidence or configured supporting-document located fields reference switchover controls or dual-fuel control setup.
 Use commissioning_or_control_document located fields such as commissioning_date, equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, and region_or_temperature_threshold_evidence.
@@ -1019,7 +1024,8 @@ rule 3 [rule_key: dfhp_heat_load_calc_reference_present]
 Check whether invoice evidence or configured supporting-document located fields reference the required program-approved heat load calculation.
 Use approved_heat_load_calculation located fields such as calculation_date, site_address, design_heat_load_value, approval_or_professional_reference, calculation_standard_reference, and approval_status_or_condition.
 Set rule_result="pass" when the heat-load calculation evidence is present and tied to the site/system.
-Set rule_result="warn" when the calculation is missing, lacks site/date/load/professional evidence, or appears to need admin confirmation.
+Set rule_result="fail" when no approved_heat_load_calculation evidence is supplied, because the dual-fuel ducted heat-pump requirements say a copy of the CSA-F280-12 heat load calculation is required.
+Set rule_result="warn" when the calculation is present but lacks site/date/load/professional evidence, has an approval/status concern, or appears to need admin confirmation.
 rule 4 [rule_key: dfhp_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, fossil-backup integration, labour/materials, and this upgrade's rebate line.
 
@@ -1096,12 +1102,13 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: atw_scope_present]
 Check whether invoice text supports air-to-water space-heating scope.
-rule 2 [rule_key: atw_product_reference_present]
-Check whether invoice evidence or configured supporting-document located fields include useful qualifying product-list or make/model evidence.
-Use product_spec_sheet and manufacturer_label_photo located fields such as brand_and_model, model_number, product_list_reference, efficiency_or_capacity_rating, capacity_btu_or_kw, installation_standard_or_guide_reference, equipment_type_or_product_category, certification_or_listing_reference, and label_legibility_concern.
 rule 3 [rule_key: atw_conversion_context_present]
 Check whether invoice evidence or configured supporting-document located fields identify source-fuel conversion context and any removal/supporting-document references.
-Use fossil_removal_proof, before_after_photo_set, wett_report, f280_heat_load_calculation, and non_integrated_area_preapproval_notice located fields when present, including calculation_standard_reference, wett_inspector_or_company_name, and wett_appliance_or_system_reference when available.
+Use fossil_removal_proof, permit_document, before_after_photo_set, wett_report, f280_heat_load_calculation, and non_integrated_area_preapproval_notice located fields when present, including removed_equipment_type, removal_date_or_permit_reference, removal_scope_or_description, permit_number, permit_date, permit_address, authority_name, before_photo_evidence, after_photo_evidence, wett_inspection_date, wett_inspector_certification_number, wett_inspector_or_company_name, wett_appliance_or_system_reference, site_address, and calculation_standard_reference when available.
+Set rule_result="pass" when the visible source-fuel path is electric and no removal/WETT support is required, or when the visible fossil or wood/solid-fuel path has the required supporting-document evidence tied to the site/system.
+Set rule_result="fail" when the visible source-fuel path is fossil fuel and no fossil_removal_proof or permit_document evidence is supplied.
+Set rule_result="fail" when the visible source-fuel path is wood/solid fuel and neither before/after removal-photo evidence nor WETT report evidence is supplied.
+Set rule_result="warn" when the source-fuel path is unclear, or when required removal/photo/WETT evidence is present but incomplete, visually limited, missing date/address/work-description/certification/conclusion details, or not clearly tied to the site/system.
 rule 4 [rule_key: atw_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
@@ -1179,12 +1186,13 @@ Located fields:
 Rulecheck tasks:
 rule 1 [rule_key: cshp_scope_present]
 Check whether invoice text supports combined space and water heat-pump scope.
-rule 2 [rule_key: cshp_product_reference_present]
-Check whether invoice evidence or configured supporting-document located fields include useful qualifying product-list or make/model evidence.
-Use product_spec_sheet and manufacturer_label_photo located fields such as brand_and_model, model_number, product_list_reference, efficiency_or_capacity_rating, capacity_btu_or_kw, installation_standard_or_guide_reference, equipment_type_or_product_category, certification_or_listing_reference, and label_legibility_concern.
 rule 3 [rule_key: cshp_conversion_context_present]
 Check whether invoice evidence or configured supporting-document located fields identify source-fuel conversion context and any removal/supporting-document references.
-Use fossil_removal_proof, before_after_photo_set, wett_report, f280_heat_load_calculation, and non_integrated_area_preapproval_notice located fields when present, including calculation_standard_reference, wett_inspector_or_company_name, and wett_appliance_or_system_reference when available.
+Use fossil_removal_proof, permit_document, before_after_photo_set, wett_report, f280_heat_load_calculation, and non_integrated_area_preapproval_notice located fields when present, including removed_equipment_type, removal_date_or_permit_reference, removal_scope_or_description, permit_number, permit_date, permit_address, authority_name, before_photo_evidence, after_photo_evidence, wett_inspection_date, wett_inspector_certification_number, wett_inspector_or_company_name, wett_appliance_or_system_reference, site_address, and calculation_standard_reference when available.
+Set rule_result="pass" when the visible source-fuel path is electric and no removal/WETT support is required, or when the visible fossil or wood/solid-fuel path has the required supporting-document evidence tied to the site/system.
+Set rule_result="fail" when the visible source-fuel path is fossil fuel and no fossil_removal_proof or permit_document evidence is supplied.
+Set rule_result="fail" when the visible source-fuel path is wood/solid fuel and neither before/after removal-photo evidence nor WETT report evidence is supplied.
+Set rule_result="warn" when the source-fuel path is unclear, or when required removal/photo/WETT evidence is present but incomplete, visually limited, missing date/address/work-description/certification/conclusion details, or not clearly tied to the site/system.
 rule 4 [rule_key: cshp_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
@@ -1265,7 +1273,8 @@ rule 2 [rule_key: esu_utility_upgrade_evidence_present]
 Check whether the invoice or configured supporting-document located fields contain evidence of a utility service upgrade by BC Hydro/FortisBC or another electrical utility.
 Use utility_bill_or_invoice, utility_upgrade_document, and utility_invoice located fields such as utility_provider, previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
 Set rule_result="pass" when utility-issued or utility-billed service-upgrade evidence is present and tied to the site.
-Set rule_result="warn" if utility service evidence is missing/incomplete but the invoice does not clearly show panel-only work. Admin should verify the utility/service-upgrade documentation.
+Set rule_result="fail" when no utility_bill_or_invoice, utility_invoice, or utility_upgrade_document evidence is supplied, because the electrical service upgrade supporting documentation requires a utility bill or invoice for the 100, 200, or 400 amp service upgrade.
+Set rule_result="warn" if utility service evidence is present but incomplete, ambiguous, not tied to the site, or missing the service size/date/reference needed for review.
 Set rule_result="fail" only if the invoice clearly appears to be panel/sub-panel work or heat-pump panel connection only without utility service upgrade and the supporting documents do not contradict that.
 
 rule 3 [rule_key: esu_heat_pump_conversion_context_present]
@@ -1383,12 +1392,9 @@ rule 7 [rule_key: hs_before_after_photos_present]
 Check whether configured supporting documents include before and after photos of the remediated health/safety issue.
 Use before_after_photo_set located fields such as before_photo_evidence, after_photo_evidence, subject_area_evidence, visual_review_limitation, and photo_pair_completeness_evidence.
 Set rule_result="pass" when the support document fields indicate before and after photos for the remediated issue are present.
-Set rule_result="warn" when photo evidence is missing/incomplete or requires visual review. Admin should verify the specific supporting-document package only.
+Set rule_result="fail" when no before_after_photo_set evidence is supplied, because before and after photos of the remediated health/safety issue are required supporting documentation.
+Set rule_result="warn" when photo evidence is present but incomplete, mismatched, visually limited, or requires visual review. Admin should verify the specific supporting-document package only.
 
-rule 8 [rule_key: hs_income_level_allows_rebate]
-Check whether visible eligibility code indicates ESP1 or ESP2.
-Set rule_result="warn" when eligibility level is missing/ambiguous and admin should verify the eligibility record.
-Set rule_result="fail" for ESP3.
 $health$,
     TIMESTAMP '2026-05-06 00:00:00',
     NOW()
@@ -1449,7 +1455,8 @@ rule 3 [rule_key: hpwh_fossil_removal_evidence_present]
 If fossil fuel water heating evidence is present, check whether invoice evidence or configured supporting-document located fields reference removal/decommissioning of fossil-fuel equipment.
 Use fossil_fuel_removal_proof and permit_document located fields such as removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description, permit_number, permit_date, permit_address, authority_name, permit_scope_or_equipment_reference, and permit_status_or_completion_evidence.
 Set rule_result="pass" if fossil fuel evidence is not present.
-Set rule_result="warn" if fossil-fuel replacement is visible but supporting removal/decommissioning documents are missing, incomplete, ambiguous, or not tied to the site/system. Admin should verify the specific supporting documents.
+Set rule_result="fail" when fossil-fuel water-heater replacement is visible and no fossil_fuel_removal_proof or permit_document evidence is supplied, because gas/fossil water-heater removal proof is conditionally required.
+Set rule_result="warn" if fossil-fuel replacement is visible and supporting removal/decommissioning documents are present but incomplete, ambiguous, or not tied to the site/system. Admin should verify the specific supporting documents.
 
 rule 4 [rule_key: hpwh_secondary_system_flag]
 Check whether the invoice suggests a secondary or additional heat pump water heater rather than replacement of the primary water heater.
@@ -1540,8 +1547,9 @@ rule 4 [rule_key: ins_supporting_document_reference_present]
 Check whether configured supporting documents include before/after photo evidence and, when requested/needed, floor-plan evidence for the insulation area.
 Use before_after_photo_set located fields such as before_photo_evidence, after_photo_evidence, subject_area_evidence, visual_review_limitation, and photo_pair_completeness_evidence.
 Use floor_plan_document located fields such as floor_plan_area_reference, floor_plan_location_or_scope, floor_plan_dimensions_or_square_feet, floor_plan_address_or_project_reference, and floor_plan_legibility_concern.
-Set rule_result="pass" when the supporting-document fields show the expected photo/floor-plan evidence for the insulation scope.
-Set rule_result="warn" when photo evidence is missing/incomplete, visual review is required, or floor-plan evidence is requested/needed but missing or illegible. Admin should verify the specific supporting-document package only.
+Set rule_result="pass" when the supporting-document fields show before/after photos for the insulation scope, or when the invoice clearly identifies wall cavity blown-in insulation where the PDF says photos are not necessary.
+Set rule_result="fail" when no before_after_photo_set evidence is supplied for insulation work that is not clearly wall cavity blown-in insulation, because before/after insulation photos are required supporting documentation except for that stated exception.
+Set rule_result="warn" when photo evidence is present but incomplete, visual review is required, or floor-plan evidence is requested/needed but missing or illegible. Admin should verify the specific supporting-document package only.
 
 rule 5 [rule_key: ins_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of insulation scope, material, location, R-value, area, rebate line, and amount.
@@ -1559,10 +1567,6 @@ rule 7 [rule_key: ins_minimum_r_value_and_boundary_present]
 Check whether the invoice provides enough evidence that the insulation location is eligible, is between conditioned and unconditioned space, and meets the minimum R-value added for that location.
 Set rule_result="warn" when location, boundary, or R-value evidence is missing/ambiguous and admin should verify the calculation inputs.
 
-rule 8 [rule_key: ins_income_level_allows_rebate]
-Check whether visible eligibility code indicates ESP1 or ESP2.
-Set rule_result="warn" when eligibility level is missing/ambiguous and admin should verify the eligibility record.
-Set rule_result="fail" for ESP3.
 $insulation$,
     TIMESTAMP '2026-05-06 00:00:00',
     NOW()
@@ -1642,10 +1646,6 @@ rule 7 [rule_key: vent_not_generic_ductwork_only]
 Check whether the invoice clearly identifies an eligible HRV/ERV or bathroom fan system rather than only generic ductwork, airflow balancing, or HVAC ventilation language.
 Set rule_result="fail" if eligible ventilation equipment is not clearly visible.
 
-rule 8 [rule_key: vent_income_level_allows_rebate]
-Check whether visible eligibility code indicates ESP1 or ESP2.
-Set rule_result="warn" when eligibility level is missing/ambiguous and admin should verify the eligibility record.
-Set rule_result="fail" for ESP3.
 $ventilation$,
     TIMESTAMP '2026-05-06 00:00:00',
     NOW()

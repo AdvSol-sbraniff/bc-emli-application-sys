@@ -4,8 +4,10 @@ module Claims
   module InvoiceVersionRulechecks
     class ApplyUpgradeCodeRulechecks
       SERVICE_CLASSES = [
+        ::Claims::CodeRules::AirWaterHeatPumpProductList::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch,
+        ::Claims::CodeRules::IncomeLevel::ApplyLevelOneOrTwoRequired,
         ::Claims::CodeRules::WindowsDoorsUFactor::ApplyThresholdCheck
       ].freeze
 

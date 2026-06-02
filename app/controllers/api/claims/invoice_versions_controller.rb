@@ -73,7 +73,9 @@ module Api
                      ahri_product_match:
                        serialize_ahri_product_match(invoice_version),
                      neea_product_match:
-                       serialize_neea_product_match(invoice_version)
+                       serialize_neea_product_match(invoice_version),
+                     awhp_product_match:
+                       serialize_awhp_product_match(invoice_version)
                    ),
                  lineitems: lineitems
                }
@@ -392,8 +394,7 @@ module Api
             heat_pump_type: product.heat_pump_type,
             make: product.make,
             outdoor_model: product.outdoor_model,
-            indoor_model_or_air_handler:
-              product.indoor_model_or_air_handler,
+            indoor_model_or_air_handler: product.indoor_model_or_air_handler,
             furnace_model: product.furnace_model,
             rated_capacity_btu_at_minus_5c:
               product.rated_capacity_btu_at_minus_5c,
@@ -402,8 +403,7 @@ module Api
             hspf: product.hspf,
             hspf2: product.hspf2,
             cop: product.cop,
-            capacity_maintenance_percent:
-              product.capacity_maintenance_percent,
+            capacity_maintenance_percent: product.capacity_maintenance_percent,
             cold_climate_rated: product.cold_climate_rated,
             eligibility_notes: product.eligibility_notes
           },
@@ -449,6 +449,38 @@ module Api
           source: {
             neea_import_run_id: import_run&.id,
             neea_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
+      end
+
+      def serialize_awhp_product_match(invoice_version)
+        return nil unless invoice_version
+
+        product = invoice_version.awhp_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.awhp_source
+
+        {
+          product: {
+            id: product.id,
+            brand: product.brand,
+            model_number: product.model_number,
+            model_number_regex: product.model_number_regex,
+            model_components: product.model_components,
+            system_type: product.system_type,
+            eligibility_notes: product.eligibility_notes
+          },
+          source: {
+            awhp_import_run_id: import_run&.id,
+            awhp_source_id: source&.id,
             source_url: source&.source_url,
             source_description: source&.description,
             publishing_notes: import_run&.publishing_notes,

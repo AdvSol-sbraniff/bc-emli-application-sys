@@ -33,6 +33,7 @@ module Api
               OR claims.v_user_eligibilitycodes.role ILIKE :like
               OR claims.v_user_eligibilitycodes.omniauth_provider ILIKE :like
               OR claims.v_user_eligibilitycodes.eligibility_code ILIKE :like
+              OR CAST(claims.v_user_eligibilitycodes.income_level AS text) ILIKE :like
               OR CAST(claims.v_user_eligibilitycodes.users_eligibilitycode_id AS text) ILIKE :like
             SQL
         end
@@ -65,6 +66,7 @@ module Api
                  id: record.id,
                  user_id: record.user_id,
                  eligibility_code: record.eligibility_code,
+                 income_level: record.income_level,
                  applied_at: record.applied_at,
                  approved_at: record.approved_at,
                  expires_at: record.expires_at,
@@ -84,6 +86,7 @@ module Api
                  id: record.id,
                  user_id: record.user_id,
                  eligibility_code: record.eligibility_code,
+                 income_level: record.income_level,
                  applied_at: record.applied_at,
                  approved_at: record.approved_at,
                  expires_at: record.expires_at,
@@ -108,6 +111,7 @@ module Api
                  id: record.id,
                  user_id: record.user_id,
                  eligibility_code: record.eligibility_code,
+                 income_level: record.income_level,
                  applied_at: record.applied_at,
                  approved_at: record.approved_at,
                  expires_at: record.expires_at,
@@ -173,6 +177,8 @@ module Api
             "claims.v_user_eligibilitycodes.user_created_at"
           when "eligibility_code"
             "claims.v_user_eligibilitycodes.eligibility_code"
+          when "income_level"
+            "claims.v_user_eligibilitycodes.income_level"
           when "applied_at"
             "claims.v_user_eligibilitycodes.applied_at"
           when "approved_at"
@@ -214,6 +220,7 @@ module Api
           users_eligibilitycode_id: r.users_eligibilitycode_id,
           eligibilitycode_user_id: r.eligibilitycode_user_id,
           eligibility_code: r.eligibility_code,
+          income_level: r.income_level,
           applied_at: r.applied_at,
           approved_at: r.approved_at,
           expires_at: r.expires_at,

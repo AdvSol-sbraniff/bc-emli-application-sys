@@ -17,13 +17,13 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53001'::uuid,
     'hp_ahri_found_in_product_list',
-    'Checks whether the AHRI reference found on the invoice exists in the current imported BC Hydro heat-pump product lists.',
+    'Checks whether invoice and supporting-document AHRI evidence match each other and exist in the current imported BC Hydro heat-pump product lists.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched AHRI product-list row.',
-    'Ask the contractor to provide the AHRI reference or corrected product evidence if the invoice does not clearly identify it.',
+    'Refresh the heat-pump product-list imports if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',
+    'Ask the contractor for corrected invoice/supporting product evidence when AHRI evidence is missing, conflicting, or not found in the imported product list.',
     NULL,
-    NULL,
-    'The code supplies the detailed evidence and match explanation; these messages are short admin guidance additions only.',
+    'The code supplies the detailed invoice/supporting-document AHRI comparison and product-list match explanation; these messages are short admin guidance additions only.',
     TIMESTAMP '2026-05-14 00:00:00',
     NOW()
   ),
@@ -80,6 +80,19 @@ WITH code_rules_seed (
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53151'::uuid,
+    'hydronic_product_found_in_qualifying_list',
+    'Checks whether invoice and supporting-document air-to-water or combined heat pump product evidence match each other and exist in the current imported Better Homes BC Air-to-Water and Combination Heat Pump Qualifying Product List.',
+    true,
+    'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched Better Homes BC qualifying-list row.',
+    'Refresh the AWHP product-list import if invoice and supporting-document product evidence agree but no current imported list rows are available.',
+    'Ask the contractor for corrected invoice/supporting product evidence when product evidence is missing, conflicting, or not found in the imported qualifying list.',
+    NULL,
+    'The code supplies the detailed invoice/supporting-document product comparison and Better Homes BC qualifying-list match explanation; these messages are short admin guidance additions only.',
+    TIMESTAMP '2026-06-01 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53201'::uuid,
     'source_vintage_applies',
     'Checks whether the invoice date falls under the current 2026-04-01 Energy Savings Program requirements vintage or whether an earlier requirements version may apply.',
@@ -129,6 +142,19 @@ WITH code_rules_seed (
     'This eligibility timing check passed with context worth surfacing to the reviewer.',
     'This rule compares stored eligibility-code dates against the invoice date and is intended to remain admin-configurable like other code rules.',
     TIMESTAMP '2026-05-25 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53205'::uuid,
+    'income_level_1_or_2_required',
+    'Checks whether the matched participant eligibility-code record has stored income_level 1 or 2 for upgrade types that are explicitly limited to Income Level 1 or 2 in the ESP requirements.',
+    true,
+    'No follow-up is required when the participant is registered and approved as Income Level 1 or 2.',
+    'Verify the matched eligibility-code record before deciding whether this income-level requirement is met.',
+    'The participant appears to be Income Level 3, which is not eligible for this upgrade type under the current ESP requirements.',
+    NULL,
+    'Reads claims.users_eligibilitycodes.income_level from code located fields and returns pass for 1/2, fail for 3, warn when missing.',
+    TIMESTAMP '2026-06-01 00:00:00',
     NOW()
   ),
   (
@@ -204,9 +230,17 @@ WITH code_rule_upgrade_type_seed (
   ('first_class_invoice_fields_present', 'common'),
   ('submission_within_six_months', 'common'),
   ('eligibility_code_valid_for_invoice_date', 'common'),
+  ('income_level_1_or_2_required', 'insulation'),
+  ('income_level_1_or_2_required', 'windows_doors'),
+  ('income_level_1_or_2_required', 'air_source_heat_pump_electric'),
+  ('income_level_1_or_2_required', 'air_source_heat_pump_wood'),
+  ('income_level_1_or_2_required', 'health_and_safety_remediation'),
+  ('income_level_1_or_2_required', 'ventilation'),
   ('wd_u_factor_threshold', 'windows_doors'),
   ('hpwh_neea_found_in_product_list', 'heat_pump_water_heater'),
-  ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater')
+  ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater'),
+  ('hydronic_product_found_in_qualifying_list', 'air_to_water_heat_pump'),
+  ('hydronic_product_found_in_qualifying_list', 'combined_space_water_heat_pump')
 )
 INSERT INTO claims.code_rule_upgrade_types (
   code_rule_id,

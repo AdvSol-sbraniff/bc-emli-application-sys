@@ -7,16 +7,24 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 1. `2_create_schema.sql`
 2. `3_insert_ahri_sources.sql`
 3. `3_insert_neea_sources.sql`
-4. `4_insert_invoice_upgrade_types.sql`
-5. `4_insert_supporting_document_types.sql`
-6. `4_insert_supporting_document_type_upgrade_types.sql`
-7. `4_insert_supporting_document_type_located_fields.sql`
-8. `5_insert_code_rules.sql`
-9. `5_insert_code_located_fields.sql`
-10. `5_insert_genai_normalized.sql`
-11. `5_insert_validationgenai_rulesets.sql`
-12. `6_views.sql`
-13. `7_reporting_views.sql`
+4. `3_insert_awhp_sources.sql`
+5. `4_insert_invoice_upgrade_types.sql`
+6. `4_insert_supporting_document_types.sql`
+7. `4_insert_supporting_document_type_upgrade_types.sql`
+8. `4_insert_supporting_document_type_located_fields.sql`
+9. `5_insert_code_rules.sql`
+10. `5_insert_code_located_fields.sql`
+11. `5_insert_genai_normalized.sql`
+12. `5_insert_validationgenai_rulesets.sql`
+13. `6_views.sql`
+14. `7_reporting_views.sql`
+
+## Optional local test data
+
+- `9_insert_testdata.sql`
+  - Run after the active claims-only rebuild path when you want repeatable local test records for real PDF smoke tests.
+  - Currently seeds the participant and eligibility-code record needed for `Invoice 2 - Insulation and Health & Safety.pdf`.
+  - This script may insert/update `public.users` and `public.preferences`, so it is deliberately not part of the default claims-only rebuild list.
 
 ## Active existing-database patches
 
@@ -32,6 +40,9 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 - `8_redo_invoice_package_ingest_documents.sql`
   - Run once against an existing claims schema to make `claims.ingest_documents` a child of `claims.invoices`, add promotion traceability, and add redo-package/case-facts/aggregate step types.
   - A clean rebuild from `2_create_schema.sql` already includes these columns and constraints.
+- `8_create_awhp_product_list.sql`
+  - Run once against an existing claims schema to add Better Homes BC air-to-water / combined heat pump product-list tables and `claims.invoice_versions.awhp_product_id`.
+  - A clean rebuild from `2_create_schema.sql` already includes these tables and columns.
 
 ## Not part of normal claims rebuild
 

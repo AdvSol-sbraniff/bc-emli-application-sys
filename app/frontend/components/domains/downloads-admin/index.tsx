@@ -22,6 +22,12 @@ const downloadTools: DownloadTool[] = [
       'Download, import, and inspect the NEEA heat pump water heater qualified products list used by HPWH code rules.',
     path: '/hpwh-product-list-admin',
   },
+  {
+    title: 'Air-to-water product list config',
+    description:
+      'Download, import, and inspect the Better Homes BC air-to-water and combination heat pump qualifying product list.',
+    path: '/awhp-product-list-admin',
+  },
 ];
 
 export default function DownloadsAdminScreen() {

@@ -9,6 +9,19 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SQL = ROOT / "5_insert_validationgenai_rulesets.sql"
 TARGET_SQL = ROOT / "5_insert_genai_normalized.sql"
 
+RETIRED_GENAI_RULE_KEYS = (
+    "ashp_electric_product_reference_present",
+    "ashp_gas_propane_product_reference_present",
+    "ashp_oil_product_reference_present",
+    "ashp_wood_product_reference_present",
+    "atw_product_reference_present",
+    "cshp_product_reference_present",
+    "hp_product_reference_present",
+    "hydronic_product_reference_present",
+    "income_level_allows_rebate",
+    "wd_income_level_and_vancouver_review",
+)
+
 FIELD_CONFLICT_OVERRIDES = {
     "upgrade_specific_rebate_line_amount": (
         "Locate the CleanBC/Better Homes/ESP rebate amount for this specific upgrade only."
@@ -43,21 +56,6 @@ RULE_CANONICAL_KEYS = {
     ): "hp_description_sufficient_for_review",
     frozenset(
         {
-            "ashp_electric_product_reference_present",
-            "ashp_gas_propane_product_reference_present",
-            "ashp_oil_product_reference_present",
-            "ashp_wood_product_reference_present",
-        }
-    ): "hp_product_reference_present",
-    frozenset(
-        {
-            "hs_income_level_allows_rebate",
-            "ins_income_level_allows_rebate",
-            "vent_income_level_allows_rebate",
-        }
-    ): "income_level_allows_rebate",
-    frozenset(
-        {
             "ashp_gas_propane_backup_not_fossil_primary",
             "ashp_oil_backup_not_fossil_primary",
         }
@@ -80,12 +78,6 @@ RULE_CANONICAL_KEYS = {
             "cshp_no_existing_heat_pump_flag",
         }
     ): "hydronic_no_existing_heat_pump_flag",
-    frozenset(
-        {
-            "atw_product_reference_present",
-            "cshp_product_reference_present",
-        }
-    ): "hydronic_product_reference_present",
 }
 
 FIELD_CANONICAL_KEYS = {
@@ -290,6 +282,15 @@ def build() -> str:
 
     lines: list[str] = []
     lines.append("BEGIN;")
+    lines.append("")
+    lines.append("-- Retired GenAI rules now handled by deterministic code rules or narrower prompts.")
+    lines.append("-- Delete before inserting current mappings so old rule-order slots do not conflict.")
+    lines.append("DELETE FROM claims.genai_rules")
+    lines.append("WHERE genai_rule_key IN (")
+    for idx, rule_key in enumerate(RETIRED_GENAI_RULE_KEYS):
+        comma = "," if idx < len(RETIRED_GENAI_RULE_KEYS) - 1 else ""
+        lines.append(f"  {sql_quote(rule_key)}{comma}")
+    lines.append(");")
     lines.append("")
     lines.append("WITH genai_rules_seed (")
     lines.append("  genai_rule_key,")

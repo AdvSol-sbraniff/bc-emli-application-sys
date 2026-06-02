@@ -382,6 +382,136 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_neea_products_source_row_unique
 
 
 
+-- ============================================================
+-- awhp_sources
+-- PURPOSE: Stable catalogue of Better Homes BC air-to-water /
+-- combined heat pump product-list source definitions. Import runs
+-- are child/history records under these source rows.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.awhp_sources (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  description text NOT NULL,
+  source_url text NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT awhp_sources_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_sources_description
+  ON claims.awhp_sources (description);
+
+
+
+-- ============================================================
+-- awhp_import_runs
+-- PURPOSE: Track refresh attempts for Better Homes BC air-to-water /
+-- combined heat pump product-list PDFs used by code-owned checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.awhp_import_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  awhp_source_id uuid NOT NULL,
+  storage_provider character varying NULL,
+  storage_key text NULL,
+  content_type character varying NULL,
+  byte_size bigint NULL,
+  status text NOT NULL DEFAULT 'queued',
+
+  started_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  completed_at timestamp(6) without time zone NULL,
+
+  records_imported integer NOT NULL DEFAULT 0,
+  publishing_notes text NULL,
+  publishing_date date NULL,
+  file_sha256 text NULL,
+  error_text text NULL,
+  metadata_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT awhp_import_runs_pkey PRIMARY KEY (id),
+
+  CONSTRAINT awhp_import_runs_status_chk
+    CHECK (status IN ('queued','running','succeeded','failed')),
+
+  CONSTRAINT awhp_import_runs_records_imported_chk
+    CHECK (records_imported >= 0),
+
+  CONSTRAINT fk_awhp_import_runs_source
+    FOREIGN KEY (awhp_source_id)
+    REFERENCES claims.awhp_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_import_runs_source_started
+  ON claims.awhp_import_runs (awhp_source_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_import_runs_status
+  ON claims.awhp_import_runs (status);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_import_runs_storage_key
+  ON claims.awhp_import_runs (storage_key);
+
+
+
+-- ============================================================
+-- awhp_products
+-- PURPOSE: Cached Better Homes BC air-to-water / combined heat pump
+-- qualifying-product-list rows used by code-owned hydronic heat
+-- pump product-list checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.awhp_products (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  import_run_id uuid NOT NULL,
+
+  brand text NULL,
+  brand_normalized text NULL,
+
+  model_number text NOT NULL,
+  model_number_normalized text NULL,
+  model_number_regex text NULL,
+  model_components jsonb NULL,
+
+  system_type text NULL,
+  eligibility_notes text NULL,
+  raw_row_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT awhp_products_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_awhp_products_import_run
+    FOREIGN KEY (import_run_id)
+    REFERENCES claims.awhp_import_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_products_import_run
+  ON claims.awhp_products (import_run_id);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_products_brand_normalized
+  ON claims.awhp_products (brand_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_awhp_products_model_number_normalized
+  ON claims.awhp_products (model_number_normalized);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_awhp_products_source_row_unique
+  ON claims.awhp_products (
+    import_run_id,
+    COALESCE(brand_normalized, ''),
+    model_number_normalized,
+    COALESCE(system_type, '')
+  );
+
+
+
   -- 
   -- invoice_versions
   --
@@ -449,6 +579,8 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   ahri_product_id uuid NULL,
   -- code-owned point-in-time NEEA HPWH qualified product-list match
   neea_product_id uuid NULL,
+  -- code-owned point-in-time Better Homes BC AWHP qualifying-list match
+  awhp_product_id uuid NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
@@ -465,6 +597,10 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   CONSTRAINT fk_invoice_versions_neea_product
     FOREIGN KEY (neea_product_id)
     REFERENCES claims.neea_products(id),
+
+  CONSTRAINT fk_invoice_versions_awhp_product
+    FOREIGN KEY (awhp_product_id)
+    REFERENCES claims.awhp_products(id),
 
   CONSTRAINT invoice_versions_invoice_id_versionno_uniq
     UNIQUE (invoice_id, invoice_versionno),
@@ -501,6 +637,9 @@ CREATE INDEX IF NOT EXISTS idx_invoice_versions_ahri_product
 
 CREATE INDEX IF NOT EXISTS idx_invoice_versions_neea_product
   ON claims.invoice_versions (neea_product_id);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_versions_awhp_product
+  ON claims.invoice_versions (awhp_product_id);
 
 
 --
@@ -1975,6 +2114,7 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
   user_id uuid NOT NULL,
 
   eligibility_code character varying NOT NULL,
+  income_level integer NOT NULL,
 
   applied_at timestamp(6) without time zone NOT NULL,
   approved_at timestamp(6) without time zone NOT NULL,
@@ -1997,7 +2137,29 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
     UNIQUE (user_id, eligibility_code),
 
   CONSTRAINT users_eligibilitycodes_dates_chk
-    CHECK (expires_at > applied_at)
+    CHECK (expires_at > applied_at),
+
+  CONSTRAINT users_eligibilitycodes_income_level_chk
+    CHECK (income_level IN (1, 2, 3)),
+
+  CONSTRAINT users_eligibilitycodes_income_level_code_chk
+    CHECK (
+      (
+        (
+          upper(trim(eligibility_code)) LIKE 'ESP1%'
+          OR upper(trim(eligibility_code)) LIKE 'ESPI%'
+        )
+        AND income_level = 1
+      )
+      OR (
+        upper(trim(eligibility_code)) LIKE 'ESP2%'
+        AND income_level = 2
+      )
+      OR (
+        upper(trim(eligibility_code)) LIKE 'ESP3%'
+        AND income_level = 3
+      )
+    )
 );
 
 CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_user_id
@@ -2005,4 +2167,7 @@ CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_user_id
 
 CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_expires_at
   ON claims.users_eligibilitycodes (expires_at);
+
+CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_income_level
+  ON claims.users_eligibilitycodes (income_level);
 

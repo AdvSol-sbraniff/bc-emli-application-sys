@@ -101,6 +101,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/downloads-admin', title: 'Downloads' },
         { href: '/hpwh-product-list-admin', title: 'NEEA HPWH product list config' },
       ],
+      '/awhp-product-list-admin': [
+        { href: '/downloads-admin', title: 'Downloads' },
+        { href: '/awhp-product-list-admin', title: 'Air-to-water product list config' },
+      ],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
       '/users-admin': [{ href: '/users-admin', title: t('home.usersAdminTitle') }],
       '/revision-requests-admin': [

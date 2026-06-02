@@ -205,7 +205,7 @@
 
 ## insulation
 
-### 1. Implemented now (Medium) - key: `income_level_allows_rebate`
+### 1. Implemented now (Medium) - key: `income_level_1_or_2_required`
 
 **Source quote:** Insulation upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
@@ -213,13 +213,13 @@
 
 **Check:** code
 
-**Fields:** none
+**Fields:** users_eligibilitycodes.income_level, users_eligibilitycodes.eligibility_code
 
 **Support docs:** no
 
 **Tests:**
 
-- Rule 1 / `test 001 - income-level-allows-rebate`: Insulation upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2. Expected output: `income_level_allows_rebate` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/insulation/test 001 - income-level-allows-rebate`.
+- Rule 1 / `test 001 - income-level-allows-rebate`: Insulation upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2. Expected output: `income_level_1_or_2_required` returns `pass` for Income Level 1 or 2, `fail` for Income Level 3, and `warn` when the income-level fact is missing. Test folder: `claims_ai_service_documentation/pdf test files/insulation/test 001 - income-level-allows-rebate`.
 
 ### 2. Partial (High) - key: `ins_material_and_location_present`
 
@@ -323,9 +323,25 @@
 
 ## windows_doors
 
-### 1. Implemented now (Medium) - key: `wd_income_level_and_vancouver_review`
+### 1. Implemented now (Medium) - key: `income_level_1_or_2_required`
 
-**Source quote:** Windows and doors upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2... Homes within the City of Vancouver municipal boundary are not eligible...
+**Source quote:** Windows and doors upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2...
+
+**Evidence:** database
+
+**Check:** code
+
+**Fields:** users_eligibilitycodes.income_level, users_eligibilitycodes.eligibility_code
+
+**Support docs:** no
+
+**Tests:**
+
+- Rule 1 / `test 001 - wd-income-level-and-vancouver-review`: Windows and doors upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2. Expected output: `income_level_1_or_2_required` returns `pass` for Income Level 1 or 2, `fail` for Income Level 3, and `warn` when the income-level fact is missing. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 001 - wd-income-level-and-vancouver-review`.
+
+### 2. Implemented now (Medium) - key: `wd_vancouver_municipal_boundary_review`
+
+**Source quote:** Homes within the City of Vancouver municipal boundary are not eligible...
 
 **Evidence:** invoice_pdf, database
 
@@ -337,9 +353,9 @@
 
 **Tests:**
 
-- Rule 1 / `test 001 - wd-income-level-and-vancouver-review`: Windows and doors upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2... Homes within the City of Vancouver municipal bound. Expected output: `wd_income_level_and_vancouver_review` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 001 - wd-income-level-and-vancouver-review`.
+- Rule 2 / `test 001 - wd-income-level-and-vancouver-review`: Homes within the City of Vancouver municipal boundary are not eligible. Expected output: `wd_vancouver_municipal_boundary_review` returns `pass` when evidence points outside Vancouver, `fail` when the home is clearly inside Vancouver, and `warn` when municipality evidence is missing or ambiguous. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 001 - wd-income-level-and-vancouver-review`.
 
-### 2. Partial (High) - key: `wd_quote_preapproval_reference_present`
+### 3. Partial (High) - key: `wd_quote_preapproval_reference_present`
 
 **Source quote:** Pre-approval is required; a quote for windows and doors upgrades must be submitted and approved prior to installation.
 
@@ -353,7 +369,7 @@
 
 **Tests:**
 
-- Rule 2 / `test 002 - wd-quote-preapproval-reference-present`: Pre-approval is required; a quote for windows and doors upgrades must be submitted and approved prior to installation. Expected output: `wd_quote_preapproval_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 002 - wd-quote-preapproval-reference-present`.
+- Rule 3 / `test 002 - wd-quote-preapproval-reference-present`: Pre-approval is required; a quote for windows and doors upgrades must be submitted and approved prior to installation. Expected output: `wd_quote_preapproval_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 002 - wd-quote-preapproval-reference-present`.
 
 **Note:** Treat this as supporting-document classification / presence unless later automation needs approval reference/date extraction.
 
@@ -361,7 +377,7 @@
 
 - Current coverage looks for quote/pre-approval evidence, but there is no persisted system-level workflow validation proving the approval was actually granted.
 
-### 3. Partial (High) - key: `wd_envelope_replacement_evidence_present`
+### 4. Partial (High) - key: `wd_envelope_replacement_evidence_present`
 
 **Source quote:** The new windows and/or doors must replace existing windows and doors in the building envelope... skylights are not eligible... be listed with one of the following certification bodies...
 
@@ -375,7 +391,7 @@
 
 **Tests:**
 
-- Rule 3 / `test 003 - wd-envelope-replacement-evidence-present`: The new windows and/or doors must replace existing windows and doors in the building envelope... skylights are not eligible... be listed with one of the following certifi. Expected output: `wd_envelope_replacement_evidence_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 003 - wd-envelope-replacement-evidence-present`.
+- Rule 4 / `test 003 - wd-envelope-replacement-evidence-present`: The new windows and/or doors must replace existing windows and doors in the building envelope... skylights are not eligible... be listed with one of the following certifi. Expected output: `wd_envelope_replacement_evidence_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 003 - wd-envelope-replacement-evidence-present`.
 
 **Note:** This is one of the clearest cases where true supplement-extracted facts would be useful if we automate certification validation.
 
@@ -386,7 +402,7 @@
 - No persisted check currently proves compliance with the Best Practices for Window and Door Replacement guide.
 - Certification-body validation still relies on review-oriented evidence rather than a structured certification lookup.
 
-### 4. Implemented now (Medium) - key: `wd_rough_opening_evidence_present`
+### 5. Implemented now (Medium) - key: `wd_rough_opening_evidence_present`
 
 **Source quote:** The number of windows and/or doors eligible for rebates is based on the number of Rough Openings...
 
@@ -400,9 +416,9 @@
 
 **Tests:**
 
-- Rule 4 / `test 004 - wd-rough-opening-evidence-present`: Two replacement rough openings are listed. Expected output: `wd_rough_opening_evidence_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 004 - wd-rough-opening-evidence-present`.
+- Rule 5 / `test 004 - wd-rough-opening-evidence-present`: Two replacement rough openings are listed. Expected output: `wd_rough_opening_evidence_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 004 - wd-rough-opening-evidence-present`.
 
-### 5. Partial (Medium) - not keyed yet
+### 6. Partial (Medium) - not keyed yet
 
 **Source quote:** All upgrades must be purchased, supplied and installed by a Registered Contractor who is approved to install windows and doors...
 
@@ -418,7 +434,7 @@
 
 - No persisted claim-layer rulecheck currently traces this windows-and-doors contractor-registration requirement as its own explicit audit result.
 
-### 6. Implemented now (High) - key: `wd_u_factor_threshold`
+### 7. Implemented now (High) - key: `wd_u_factor_threshold`
 
 **Source quote:** Install eligible window/doors with a U-factor of 1.22 (W/m2-K) or less...
 
@@ -432,13 +448,13 @@
 
 **Tests:**
 
-- Rule 6 / `test 005 - wd-u-factor-threshold`: U-factor shown as 1.10 W/m2-K, below 1.22. Expected output: `wd_u_factor_threshold` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 005 - wd-u-factor-threshold`.
+- Rule 7 / `test 005 - wd-u-factor-threshold`: U-factor shown as 1.10 W/m2-K, below 1.22. Expected output: `wd_u_factor_threshold` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 005 - wd-u-factor-threshold`.
 
 **Note:** If U-factor is proven from the supplement rather than the invoice, the value itself is a true extracted supplement field.
 
 **External source note:** Same as the certification requirement above: no single program-owned downloadable window/door qualifying list was identified in this pass. This likely remains supplement evidence first, with any external validation coming from certification-body references rather than a seed file.
 
-### 7. Implemented now (Medium) - key: `wd_per_unit_rebate_math_within_cap`
+### 8. Implemented now (Medium) - key: `wd_per_unit_rebate_math_within_cap`
 
 **Source quote:** 95% or 60% of eligible upgrade costs... $950 per window or door...
 
@@ -452,9 +468,9 @@
 
 **Tests:**
 
-- Rule 7 / `test 006 - wd-per-unit-rebate-math-within-cap`: Per-unit rebate is at or below $950 and total is within the home cap. Expected output: `wd_per_unit_rebate_math_within_cap` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 006 - wd-per-unit-rebate-math-within-cap`.
+- Rule 8 / `test 006 - wd-per-unit-rebate-math-within-cap`: Per-unit rebate is at or below $950 and total is within the home cap. Expected output: `wd_per_unit_rebate_math_within_cap` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 006 - wd-per-unit-rebate-math-within-cap`.
 
-### 8. Partial (High) - key: `wd_label_photo_reference_present`
+### 9. Partial (High) - key: `wd_label_photo_reference_present`
 
 **Source quote:** A photo of a manufacturer label from each installed window/door... The rebate application... must be submitted... within six (6) months of the invoice date.
 
@@ -468,7 +484,7 @@
 
 **Tests:**
 
-- Rule 8 / `test 007 - wd-label-photo-reference-present`: A photo of a manufacturer label from each installed window/door... The rebate application... must be submitted... within six (6) months of the invoice date. Expected output: `wd_label_photo_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 007 - wd-label-photo-reference-present`.
+- Rule 9 / `test 007 - wd-label-photo-reference-present`: A photo of a manufacturer label from each installed window/door... The rebate application... must be submitted... within six (6) months of the invoice date. Expected output: `wd_label_photo_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/windows_doors/test 007 - wd-label-photo-reference-present`.
 
 **Note:** The seed now extracts manufacturer-label facts and label quality concerns from this support-document type.
 
@@ -478,7 +494,7 @@
 
 ## air_source_heat_pump_electric
 
-### 1. Missing now (High) - not keyed yet
+### 1. Implemented now (High) - key: `income_level_1_or_2_required`
 
 **Source quote:** Electric to heat pump upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
@@ -486,13 +502,13 @@
 
 **Check:** code
 
-**Fields:** none
+**Fields:** users_eligibilitycodes.income_level, users_eligibilitycodes.eligibility_code
 
 **Support docs:** no
 
-**Missing now:**
+**Tests:**
 
-- No electric-to-heat-pump-specific persisted income-level validator currently enforces this source sentence.
+- Rule 1 / `test 001 - ashp-electric-existing-heat-context-present`: Electric to heat pump upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2. Expected output: `income_level_1_or_2_required` returns `pass` for Income Level 1 or 2, `fail` for Income Level 3, and `warn` when the income-level fact is missing. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 001 - ashp-electric-existing-heat-context-present`.
 
 ### 2. Implemented now (Medium) - key: `ashp_electric_existing_heat_context_present`
 
@@ -510,7 +526,7 @@
 
 - Rule 2 / `test 001 - ashp-electric-existing-heat-context-present`: The home must primarily be heated by electricity... The new heat pump must replace an existing hard-wired electric heating system... be sized to function as the primary h. Expected output: `ashp_electric_existing_heat_context_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 001 - ashp-electric-existing-heat-context-present`.
 
-### 3. Partial (High) - key: `hp_product_reference_present`
+### 3. Implemented now (High) - key: `hp_ahri_found_in_product_list`
 
 **Source quote:** The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Minimum capacity of 12,000 BTU...
 
@@ -520,11 +536,11 @@
 
 **Fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
 
-**Support docs:** no
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo; extracted fields: ahri_reference, brand_and_model, model_number, product_list_reference, efficiency_or_capacity_rating, certification_or_listing_reference, label_legibility_concern; located-field table: yes
 
 **Tests:**
 
-- Rule 3 / `test 002 - hp-product-reference-present`: The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Mi. Expected output: `hp_product_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 002 - hp-product-reference-present`.
+- Rule 3 / `test 002 - hp-product-reference-present`: The new heat pump must have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List... SEER / HSPF thresholds... Mi. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_electric/test 002 - hp-product-reference-present`.
 
 **External source note:** Existing download path already in place. The current seeded examples are the AHRI source tables in `claims_ai_service_ddl/3_insert_ahri_sources.sql`, which back the implemented `hp_ahri_found_in_product_list` and related heat-pump code rules.
 
@@ -589,7 +605,7 @@
 
 ## air_source_heat_pump_wood
 
-### 1. Missing now (High) - not keyed yet
+### 1. Implemented now (High) - key: `income_level_1_or_2_required`
 
 **Source quote:** Wood to heat pump upgrade rebates are only eligible for participants who are registered and approved as Income Level 1 or 2...
 
@@ -597,13 +613,13 @@
 
 **Check:** code
 
-**Fields:** none
+**Fields:** users_eligibilitycodes.income_level, users_eligibilitycodes.eligibility_code
 
 **Support docs:** no
 
-**Missing now:**
+**Tests:**
 
-- No wood-to-heat-pump-specific persisted income-level validator currently enforces this source sentence.
+- Rule 1 / `test 001 - ashp-wood-existing-heat-context-present`: Wood to heat pump upgrade rebates are only eligible for participants who are registered and approved as Income Level 1 or 2. Expected output: `income_level_1_or_2_required` returns `pass` for Income Level 1 or 2, `fail` for Income Level 3, and `warn` when the income-level fact is missing. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_wood/test 001 - ashp-wood-existing-heat-context-present`.
 
 ### 2. Implemented now (Medium) - key: `ashp_wood_existing_heat_context_present`
 
@@ -621,7 +637,7 @@
 
 - Rule 2 / `test 001 - ashp-wood-existing-heat-context-present`: The home must primarily be heated by a wood or solid fuel heating system... The back-up heating system must be wood or electric. Fossil fuel back-up systems are not eligi. Expected output: `ashp_wood_existing_heat_context_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_wood/test 001 - ashp-wood-existing-heat-context-present`.
 
-### 3. Partial (High) - key: `hp_product_reference_present`
+### 3. Implemented now (High) - key: `hp_ahri_found_in_product_list`
 
 **Source quote:** The new heat pump must be sized... serve a main living area... have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List...
 
@@ -631,11 +647,11 @@
 
 **Fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity, hp_main_living_area_evidence
 
-**Support docs:** no
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo; extracted fields: ahri_reference, brand_and_model, model_number, product_list_reference, efficiency_or_capacity_rating, certification_or_listing_reference, label_legibility_concern; located-field table: yes
 
 **Tests:**
 
-- Rule 3 / `test 002 - hp-product-reference-present`: The new heat pump must be sized... serve a main living area... have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Prod. Expected output: `hp_product_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_wood/test 002 - hp-product-reference-present`.
+- Rule 3 / `test 002 - hp-product-reference-present`: The new heat pump must be sized... serve a main living area... have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Prod. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_wood/test 002 - hp-product-reference-present`.
 
 **Missing now:**
 
@@ -736,21 +752,21 @@
 
 - Rule 1 / `test 001 - ashp-gas-propane-existing-heat-context-present`: The home must be primarily heated by fossil fuel (natural gas or propane). Expected output: `ashp_gas_propane_existing_heat_context_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_gas_propane/test 001 - ashp-gas-propane-existing-heat-context-present`.
 
-### 2. Partial (High) - key: `hp_product_reference_present`
+### 2. Implemented now (High) - key: `hp_ahri_found_in_product_list`
 
 **Source quote:** The new heat pump must be capable of distributing heat throughout all the conditioned space... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Qualified Heat Pump Product List...
 
 **Evidence:** invoice_pdf, supporting_document, external_list
 
-**Check:** genai
+**Check:** code
 
 **Fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
 
-**Support docs:** yes - types: fossil_fuel_removal_proof; extracted fields: removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description; located-field table: yes
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo, fossil_fuel_removal_proof; extracted fields: ahri_reference, brand_and_model, model_number, product_list_reference, efficiency_or_capacity_rating, certification_or_listing_reference, label_legibility_concern, removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description; located-field table: yes
 
 **Tests:**
 
-- Rule 2 / `test 002 - hp-product-reference-present`: The new heat pump must be capable of distributing heat throughout all the conditioned space... replace the existing fossil fuel heating system... have an AHRI certified r. Expected output: `hp_product_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_gas_propane/test 002 - hp-product-reference-present`.
+- Rule 2 / `test 002 - hp-product-reference-present`: The new heat pump must be capable of distributing heat throughout all the conditioned space... replace the existing fossil fuel heating system... have an AHRI certified r. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_gas_propane/test 002 - hp-product-reference-present`.
 
 **Note:** The seed now extracts fossil-fuel removal facts; final removal-proof sufficiency validation is still review-oriented.
 
@@ -853,21 +869,21 @@
 
 - Rule 1 / `test 001 - ashp-oil-existing-heat-context-present`: The home must be primarily heated by oil... The home must meet a minimum oil consumption baseline of 500 Ltrs. annually. Expected output: `ashp_oil_existing_heat_context_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_oil/test 001 - ashp-oil-existing-heat-context-present`.
 
-### 2. Partial (High) - key: `hp_product_reference_present`
+### 2. Implemented now (High) - key: `hp_ahri_found_in_product_list`
 
 **Source quote:** The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Resources Canada Oil to Heat Pump Affordability Qualified Heat Pump Product List...
 
 **Evidence:** invoice_pdf, supporting_document, external_list
 
-**Check:** genai
+**Check:** code
 
 **Fields:** hp_make_model, hp_ahri_reference, hp_product_list_reference, hp_efficiency_and_capacity
 
-**Support docs:** yes - types: oil_removal_proof; extracted fields: removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description; located-field table: yes
+**Support docs:** yes - types: product_spec_sheet, manufacturer_label_photo, oil_removal_proof; extracted fields: ahri_reference, brand_and_model, model_number, product_list_reference, efficiency_or_capacity_rating, certification_or_listing_reference, label_legibility_concern, removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, removal_scope_or_description; located-field table: yes
 
 **Tests:**
 
-- Rule 2 / `test 002 - hp-product-reference-present`: The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Re. Expected output: `hp_product_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_oil/test 002 - hp-product-reference-present`.
+- Rule 2 / `test 002 - hp-product-reference-present`: The new heat pump must... replace the existing fossil fuel heating system... have an AHRI certified reference number... be listed as a qualifying system on the Natural Re. Expected output: `hp_ahri_found_in_product_list` returns `pass` when invoice AHRI and supporting-document AHRI match and are found in the imported AHRI list; `fail` when invoice AHRI is missing, supporting-document AHRI is missing, the two conflict, or the agreed AHRI is not found; related code checks `hp_product_minimum_capacity_at_minus_5c` and `hp_product_efficiency_threshold` evaluate imported product-list metrics after the AHRI match. Test folder: `claims_ai_service_documentation/pdf test files/air_source_heat_pump_oil/test 002 - hp-product-reference-present`.
 
 **Note:** The seed now extracts oil-removal facts; final removal-proof sufficiency validation is still review-oriented.
 
@@ -1096,13 +1112,13 @@
 
 - Rule 1 / `test 001 - atw-scope-present`: The home must be primarily heated by fossil fuel (oil, propane or natural gas), electricity, or wood. Expected output: `atw_scope_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_to_water_heat_pump/test 001 - atw-scope-present`.
 
-### 2. Partial (High) - key: `hydronic_product_reference_present`
+### 2. Implemented now (High) - key: `hydronic_product_found_in_qualifying_list`
 
 **Source quote:** The new air-to-water heat pump must... be listed as an eligible system on the Air-to-Water and Combined Heat Pump Qualifying Product List...
 
 **Evidence:** invoice_pdf, supporting_document, external_list
 
-**Check:** genai
+**Check:** code, using GenAI-located invoice/supporting-document product evidence
 
 **Fields:** atw_product_list_reference
 
@@ -1110,18 +1126,17 @@
 
 **Tests:**
 
-- Rule 2 / `test 002 - hydronic-product-reference-present`: The new air-to-water heat pump must... be listed as an eligible system on the Air-to-Water and Combined Heat Pump Qualifying Product List. Expected output: `hydronic_product_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/air_to_water_heat_pump/test 002 - hydronic-product-reference-present`.
+- Rule 2 / `test 002 - hydronic-product-reference-present`: The new air-to-water heat pump must... be listed as an eligible system on the Air-to-Water and Combined Heat Pump Qualifying Product List. Expected output: `hydronic_product_found_in_qualifying_list` returns `pass` when invoice product evidence and supporting-document product evidence resolve to the same imported Better Homes BC qualifying-list row; `fail` when invoice product evidence is missing, supporting-document product evidence is missing, the two conflict, or the agreed product is not found; `warn` only when the current imported qualifying-list data is unavailable. Test folder: `claims_ai_service_documentation/pdf test files/air_to_water_heat_pump/test 002 - hydronic-product-reference-present`.
 
 **Note:** If the make/model is proved from supplement material rather than invoice text, it is a true extracted supplement field.
 
-**External source note:** This looks like a real new downloadable-list candidate. Better Homes publishes the Air-to-Water and Combination Heat Pump qualified list directly, including a dedicated page and a PDF list. If we expand beyond AHRI/NEEA, this is one of the strongest next seeded-download candidates. See:
+**External source note:** Implemented as the AWHP external-reference family: `claims.awhp_sources`, `claims.awhp_import_runs`, `claims.awhp_products`, `claims.v_current_awhp_products`, and `claims.invoice_versions.awhp_product_id`. Better Homes publishes the Air-to-Water and Combination Heat Pump qualified list directly, including a dedicated page and redirecting PDF source. See:
 
 - https://www.betterhomesbc.ca/qualifyingairtowaterhp/
-- https://betterhomesbc.ca/wp-content/uploads/2026/02/Air-to-Water-Eligibility-List-V10.pdf
+- https://betterhomesbc.ca/qualified-product-list-air-to-water-heat-pumps-PDF
 
 **Missing now:**
 
-- No persisted `code_rule_key` currently validates the air-to-water qualifying product list.
 - No persisted check currently proves installation-guide compliance.
 
 ### 3. Partial (High) - key: `hydronic_conversion_context_present`
@@ -1241,13 +1256,13 @@
 
 - Rule 1 / `test 001 - cshp-scope-present`: The home must be primarily heated by fossil fuel (oil, propane or natural gas), electricity, or wood. Expected output: `cshp_scope_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/combined_space_water_heat_pump/test 001 - cshp-scope-present`.
 
-### 2. Partial (High) - key: `hydronic_product_reference_present`
+### 2. Implemented now (High) - key: `hydronic_product_found_in_qualifying_list`
 
 **Source quote:** Combined space and water heat pump... Must be listed on the air-to-water and combined heat pump qualifying product list.
 
 **Evidence:** invoice_pdf, supporting_document, external_list
 
-**Check:** genai
+**Check:** code, using GenAI-located invoice/supporting-document product evidence
 
 **Fields:** cshp_product_list_reference
 
@@ -1255,18 +1270,18 @@
 
 **Tests:**
 
-- Rule 2 / `test 002 - hydronic-product-reference-present`: Combined space and water heat pump... Must be listed on the air-to-water and combined heat pump qualifying product list. Expected output: `hydronic_product_reference_present` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/combined_space_water_heat_pump/test 002 - hydronic-product-reference-present`.
+- Rule 2 / `test 002 - hydronic-product-reference-present`: Combined space and water heat pump... Must be listed on the air-to-water and combined heat pump qualifying product list. Expected output: `hydronic_product_found_in_qualifying_list` returns `pass` when invoice product evidence and supporting-document product evidence resolve to the same imported Better Homes BC qualifying-list row; `fail` when invoice product evidence is missing, supporting-document product evidence is missing, the two conflict, or the agreed product is not found; `warn` only when the current imported qualifying-list data is unavailable. Test folder: `claims_ai_service_documentation/pdf test files/combined_space_water_heat_pump/test 002 - hydronic-product-reference-present`.
 
 **Note:** Make/model from supplement material is a genuine extracted fact if we automate it.
 
-**External source note:** Same source path as the air-to-water row above. The Better Homes Air-to-Water and Combination Heat Pump qualified list appears to cover both air-to-water-only and combined systems, so this likely points to the same next seeded-download family rather than a separate one. See:
+**External source note:** Same AWHP external-reference family as the air-to-water row above. The Better Homes Air-to-Water and Combination Heat Pump qualified list covers both air-to-water-only and combined systems. See:
 
 - https://www.betterhomesbc.ca/qualifyingairtowaterhp/
-- https://betterhomesbc.ca/wp-content/uploads/2026/02/Air-to-Water-Eligibility-List-V10.pdf
+- https://betterhomesbc.ca/qualified-product-list-air-to-water-heat-pumps-PDF
 
 **Missing now:**
 
-- No persisted `code_rule_key` currently validates the combined-system qualifying product list.
+- None for the qualifying-list lookup.
 
 ### 3. Partial (High) - key: `hydronic_conversion_context_present`
 
@@ -1796,7 +1811,7 @@
 - No persisted claim-layer rulecheck currently traces this ventilation contractor-registration requirement as its own explicit audit result.
 - No persisted licensed-HVAC validator currently enforces these sentences.
 
-### 5. Implemented now (Medium) - key: `income_level_allows_rebate`
+### 5. Implemented now (Medium) - key: `vent_rebate_math_within_cap`
 
 **Source quote:** Ventilation... 95% or 60% of eligible upgrade costs... up to a maximum of $1,600 per home... Invoice... must show the itemized CleanBC rebate... within six (6) months...
 
@@ -1810,4 +1825,4 @@
 
 **Tests:**
 
-- Rule 5 / `test 004 - income-level-allows-rebate`: Ventilation... 95% or 60% of eligible upgrade costs... up to a maximum of $1,600 per home... Invoice... must show the itemized CleanBC rebate... within six (6) months. Expected output: `income_level_allows_rebate` returns `pass`. Test folder: `claims_ai_service_documentation/pdf test files/ventilation/test 004 - income-level-allows-rebate`.
+- Rule 5 / `test 004 - vent-rebate-math-within-cap`: Ventilation rebate uses 95% for ESP1 or 60% for ESP2 and is capped at $1,600 per home. Expected output: `vent_rebate_math_within_cap` returns `pass` when the visible rebate amount is within the applicable cap. Test folder: `claims_ai_service_documentation/pdf test files/ventilation/test 004 - vent-rebate-math-within-cap`.
