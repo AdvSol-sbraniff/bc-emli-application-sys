@@ -671,8 +671,6 @@ Set rule_result="pass" if present with supplement_routing_quality="usable" and t
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".
 
-rule 3 [rule_key: ashp_electric_primary_system_scope_present]
-Check whether the invoice describes a primary heat-pump system rather than a secondary/add-on system.
 rule 4 [rule_key: ashp_electric_description_sufficient_for_review]
 Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade's rebate line.
 
@@ -690,13 +688,17 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.
 
-rule 6 [rule_key: ashp_electric_no_existing_heat_pump_flag]
+rule 6 [rule_key: hp_no_existing_or_secondary_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible; otherwise set rule_result="pass" only when replacement of hard-wired electric heat is clear. Use rule_result="warn" when the replacement context needs admin/application confirmation.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.
 
-rule 7 [rule_key: ashp_electric_main_living_area_or_primary_capacity_present]
-Check whether the invoice provides evidence that the new heat pump serves a main living area or is sized/described as the primary heating system.
-Set rule_result="warn" when this evidence is missing or ambiguous and admin should verify whether the system serves the main living area or primary heating load.
+rule 7 [rule_key: hp_main_living_area_or_primary_capacity_present]
+Check whether invoice evidence or located fields show the heat pump is sized/described as the home's primary heating system or serves a main living area.
+Set rule_result="pass" when primary-heating capacity or main-living-area service is clear.
+Set rule_result="warn" when this evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly contradicts primary-heating or main-living-area eligibility.
 $ashp_electric$,
     TIMESTAMP '2026-05-06 00:00:00',
     NOW()
@@ -766,14 +768,23 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.
 
-rule 6 [rule_key: ashp_wood_no_existing_heat_pump_flag]
+rule 6 [rule_key: hp_no_existing_or_secondary_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible; otherwise set rule_result="pass" only when wood/solid-fuel conversion context is clear. Use rule_result="warn" when the conversion context needs admin/application confirmation.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.
 
-rule 7 [rule_key: ashp_wood_backup_and_primary_capacity_review]
-Check whether the invoice supports primary heating capacity/main living area context and whether any visible backup heat evidence is electric/wood rather than fossil fuel.
-Set rule_result="warn" when primary-capacity evidence is missing or visible backup context is ambiguous. Admin should verify primary sizing and backup fuel.
-Set rule_result="fail" when visible backup context clearly shows fossil-fuel backup remaining as a primary system.
+rule 7 [rule_key: hp_main_living_area_or_primary_capacity_present]
+Check whether invoice evidence or located fields show the heat pump is sized/described as the home's primary heating system or serves a main living area.
+Set rule_result="pass" when primary-heating capacity or main-living-area service is clear.
+Set rule_result="warn" when this evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly contradicts primary-heating or main-living-area eligibility.
+
+rule 8 [rule_key: ashp_wood_backup_heat_not_fossil_present]
+Check whether visible backup heat evidence for this wood-to-heat-pump upgrade appears to be wood or electric rather than fossil fuel.
+Set rule_result="pass" when backup heat is clearly wood/electric or no fossil-backup concern is visible.
+Set rule_result="warn" when backup fuel context is missing or ambiguous.
+Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.
 $ashp_wood$,
     TIMESTAMP '2026-05-06 00:00:00',
     NOW()
@@ -825,10 +836,16 @@ Located fields:
 13 [field_key: hp_non_integrated_area_preapproval_reference] Locate Non-Integrated Area or pre-approval references if present.
 14 [field_key: hp_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
 15 [field_key: hp_fossil_combination_boiler_evidence] Locate fossil combination boiler or domestic-hot-water hydronic space-heating references.
+16 [field_key: hp_conditioned_space_distribution_evidence] Locate evidence that the heat pump distributes heat through the conditioned space formerly served by the primary heating system.
 
 Rulecheck tasks:
 rule 1 [rule_key: ashp_gas_propane_existing_heat_context_present]
 Check whether invoice text supports natural gas or propane primary heating conversion context.
+rule 2 [rule_key: hp_conditioned_space_distribution_present]
+Check whether invoice evidence or located fields show the heat pump can distribute heat through the conditioned space formerly served by the primary heating system.
+Set rule_result="pass" when distribution through the former primary conditioned space is clear.
+Set rule_result="warn" when distribution/coverage evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly limits the system to a secondary, partial, or unrelated area that contradicts this eligibility requirement.
 rule 3 [rule_key: ashp_gas_propane_removal_supporting_document_attached]
 Check whether supporting_document_summary_for_upgrade_type includes fossil_fuel_removal_proof or permit_document.
 Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
@@ -857,9 +874,11 @@ Check whether visible backup heat evidence appears electric or wood, and whether
 Set rule_result="warn" if backup context is missing/ambiguous and admin should verify backup fuel.
 Set rule_result="fail" if the invoice suggests fossil-fuel backup remains as a primary system.
 
-rule 7 [rule_key: ashp_gas_propane_no_existing_heat_pump_flag]
+rule 7 [rule_key: hp_no_existing_or_secondary_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.
 
 rule 8 [rule_key: ashp_gas_propane_non_integrated_area_review]
 If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in the invoice or configured supporting-document located fields.
@@ -918,10 +937,16 @@ Located fields:
 14 [field_key: hp_non_integrated_area_preapproval_reference] Locate Non-Integrated Area or pre-approval references if present.
 15 [field_key: hp_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
 16 [field_key: hp_fossil_combination_boiler_evidence] Locate fossil combination boiler or domestic-hot-water hydronic space-heating references.
+17 [field_key: hp_conditioned_space_distribution_evidence] Locate evidence that the heat pump distributes heat through the conditioned space formerly served by the primary heating system.
 
 Rulecheck tasks:
 rule 1 [rule_key: ashp_oil_existing_heat_context_present]
 Check whether invoice text supports oil primary heating conversion context.
+rule 2 [rule_key: hp_conditioned_space_distribution_present]
+Check whether invoice evidence or located fields show the heat pump can distribute heat through the conditioned space formerly served by the primary heating system.
+Set rule_result="pass" when distribution through the former primary conditioned space is clear.
+Set rule_result="warn" when distribution/coverage evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly limits the system to a secondary, partial, or unrelated area that contradicts this eligibility requirement.
 rule 3 [rule_key: ashp_oil_removal_supporting_document_attached]
 Check whether supporting_document_summary_for_upgrade_type includes oil_removal_proof or permit_document.
 Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
@@ -957,9 +982,11 @@ Check whether visible backup heat evidence appears electric or wood, and whether
 Set rule_result="warn" if backup context is missing/ambiguous and admin should verify backup fuel.
 Set rule_result="fail" if the invoice suggests fossil-fuel backup remains as a primary system.
 
-rule 8 [rule_key: ashp_oil_no_existing_heat_pump_flag]
+rule 8 [rule_key: hp_no_existing_or_secondary_heat_pump_flag]
 Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.
 
 rule 9 [rule_key: ashp_oil_non_integrated_area_review]
 If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
@@ -992,6 +1019,7 @@ Program rebate background for this specific upgrade type:
 - Dual-fuel eligibility is limited to homes primarily heated by tank propane or natural gas provided by Pacific Northern Gas (PNG). Generic FortisBC natural gas is not enough for this specific dual-fuel path unless the evidence also indicates PNG or tank propane.
 - The heat pump must be integrated with propane or natural gas heating equipment, distribute heat through the conditioned space formerly served by the primary system, and use controls set to the region-specific switchover threshold: Lower Mainland/Vancouver Island <=5 C; Southern Interior/Northern B.C. <=2 C.
 - Program-approved heat load calculation is required; rule-of-thumb sizing is not accepted.
+- Replacing, adding to an existing heat pump, or adding a secondary heat pump to a home with an existing heat pump is not eligible.
 - For dual-fuel ducted heat pumps, use these summary-table maximum rebates: PNG natural gas/propane ESP1 $11,500, ESP2 $6,500, ESP3 $6,500; tank propane ESP1 $15,000, ESP2 $10,000, ESP3 $10,000.
 - Northern top-up for program-approved dual-fuel ducted heat pumps may be up to $3,000 for ESP1 or ESP2 only, when the home is north of and including District of 100 Mile House and connected to BC Hydro electric service.
 
@@ -1008,6 +1036,8 @@ Located fields:
 10 [field_key: dfhp_source_fuel_path] Locate whether the visible source/fuel path appears to be PNG natural gas, PNG propane, tank propane, generic natural gas, generic propane, or unclear.
 11 [field_key: dfhp_northern_top_up_evidence] Locate northern top-up evidence if shown.
 12 [field_key: dfhp_registered_contractor_or_permit_evidence] Locate registered contractor, AHJ, permit, inspection, Technical Safety BC, or by-law compliance references.
+13 [field_key: hp_conditioned_space_distribution_evidence] Locate evidence that the heat pump distributes heat through the conditioned space formerly served by the primary heating system.
+14 [field_key: hp_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
 
 Rulecheck tasks:
 rule 1 [rule_key: dfhp_dual_fuel_scope_present]
@@ -1062,6 +1092,18 @@ Check whether supporting_document_summary_for_upgrade_type includes fossil_modif
 Set rule_result="pass" if at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable modification/removal or permit evidence for the site/system.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if both fossil_modification_or_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".
+
+rule 10 [rule_key: hp_conditioned_space_distribution_present]
+Check whether invoice evidence or located fields show the heat pump can distribute heat through the conditioned space formerly served by the primary heating system.
+Set rule_result="pass" when distribution through the former primary conditioned space is clear.
+Set rule_result="warn" when distribution/coverage evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly limits the system to a secondary, partial, or unrelated area that contradicts this eligibility requirement.
+
+rule 11 [rule_key: hp_no_existing_or_secondary_heat_pump_flag]
+Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.
 $dual_fuel$,
     TIMESTAMP '2026-05-06 00:00:00',
     NOW()
@@ -1080,7 +1122,7 @@ Do not use this ruleset for combined space and water heat pumps or heat pump wat
 
 Program rebate background for this specific upgrade type:
 - Maximum one primary space-heating-system rebate per home, regardless of the number of systems installed.
-- Air-to-water heat pumps must provide space heating, be listed as a qualifying system, have sizing/heat-load support, and should not be confused with standalone heat pump water heaters.
+- Air-to-water heat pumps must provide space heating, be sized as the home's primary heating system, serve a main living area, be listed as a qualifying system, have sizing/heat-load support, and should not be confused with standalone heat pump water heaters.
 - If the source fuel is fossil fuel, removal/decommissioning evidence is important. If the source is wood, wood-system removal or WETT/safe-retention evidence is important.
 - Homes in Non-Integrated Areas need pre-approval when fossil fuel is involved, and existing heat-pump/add-on/secondary-heat-pump situations need admin review.
 - For air-to-water heat pumps, use these summary-table maximum rebates:
@@ -1104,10 +1146,16 @@ Located fields:
 11 [field_key: atw_non_integrated_area_preapproval_reference] Locate Non-Integrated Area or pre-approval references if present.
 12 [field_key: atw_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
 13 [field_key: atw_space_heating_only_evidence] Locate evidence that the air-to-water system is for space heating only rather than combined domestic hot water.
+14 [field_key: hp_main_living_area_evidence] Locate evidence that the heat pump serves a main living area or whole-home/primary heating load.
 
 Rulecheck tasks:
 rule 1 [rule_key: atw_scope_present]
 Check whether invoice text supports air-to-water space-heating scope.
+rule 2 [rule_key: hp_main_living_area_or_primary_capacity_present]
+Check whether invoice evidence or located fields show the heat pump is sized/described as the home's primary heating system or serves a main living area.
+Set rule_result="pass" when primary-heating capacity or main-living-area service is clear.
+Set rule_result="warn" when this evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly contradicts primary-heating or main-living-area eligibility.
 rule 3 [rule_key: hydronic_conversion_context_present]
 Check whether invoice evidence or configured supporting-document located fields identify the source-fuel conversion context for this hydronic heat-pump upgrade.
 Use invoice fields and supporting-document located fields as corroboration when present, including removed_equipment_type, removal_scope_or_description, before_photo_evidence, after_photo_evidence, wett_appliance_or_system_reference, site_address, and calculation_standard_reference.
@@ -1136,9 +1184,11 @@ Check whether the invoice supports air-to-water space-heating-only scope and doe
 Set rule_result="warn" if the air-to-water versus combined/HPWH distinction is ambiguous and admin should verify equipment scope.
 Set rule_result="fail" if domestic-hot-water/combined scope is clearly visible in a space-heating-only air-to-water ruleset.
 
-rule 7 [rule_key: atw_no_existing_heat_pump_flag]
+rule 7 [rule_key: hp_no_existing_or_secondary_heat_pump_flag]
 Check whether invoice text suggests replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.
 
 rule 8 [rule_key: hydronic_non_integrated_area_review]
 If fossil-fuel conversion and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
@@ -1200,7 +1250,7 @@ Located fields:
 10 [field_key: cshp_domestic_hot_water_evidence] Locate domestic hot water, potable water, DHW, combination system, or integrated tank evidence.
 11 [field_key: cshp_northern_top_up_evidence] Locate northern top-up evidence if shown.
 12 [field_key: cshp_non_integrated_area_preapproval_reference] Locate Non-Integrated Area or pre-approval references if present.
-13 [field_key: cshp_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
+13 [field_key: hp_existing_heat_pump_flag] Locate evidence of an existing heat pump, add-on heat pump, secondary heat pump, or replacement of an existing heat pump.
 
 Rulecheck tasks:
 rule 1 [rule_key: cshp_scope_present]
@@ -1233,9 +1283,11 @@ Check whether the invoice clearly shows both space-heating and domestic-hot-wate
 Set rule_result="warn" if the combined nature is ambiguous and admin should verify whether this is one combined space/water system.
 Set rule_result="fail" if only space heating is clearly visible or only water heating is clearly visible.
 
-rule 7 [rule_key: cshp_no_existing_heat_pump_flag]
-Check whether invoice text suggests replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.
+rule 7 [rule_key: cshp_no_existing_or_secondary_heat_pump_review]
+Check whether invoice text suggests a combined space/water heat-pump claim is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when existing/add-on/secondary heat-pump wording is visible, because the extracted 2026 combined space/water table does not state the same explicit no-existing-heat-pump sentence found in the air-to-water section.
+Set rule_result="fail" only when supplied program facts or visible invoice evidence clearly contradict combined space/water heat-pump eligibility.
 
 rule 8 [rule_key: hydronic_non_integrated_area_review]
 If fossil-fuel conversion and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.

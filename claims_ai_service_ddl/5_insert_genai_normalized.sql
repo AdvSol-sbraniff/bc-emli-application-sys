@@ -25,7 +25,14 @@ WHERE genai_rule_key IN (
   'ins_supporting_document_reference_present',
   'utility_account_supporting_document_present',
   'wd_label_photo_reference_present',
-  'wd_quote_preapproval_reference_present'
+  'wd_quote_preapproval_reference_present',
+  'ashp_electric_main_living_area_or_primary_capacity_present',
+  'ashp_wood_backup_and_primary_capacity_review',
+  'ashp_electric_no_existing_heat_pump_flag',
+  'ashp_wood_no_existing_heat_pump_flag',
+  'hp_fossil_no_existing_heat_pump_flag',
+  'hydronic_no_existing_heat_pump_flag',
+  'ashp_electric_primary_system_scope_present'
 );
 
 WITH genai_rules_seed (
@@ -45,11 +52,6 @@ Set rule_result="fail" when the prior heating context is missing, points to a di
 Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_electric_main_living_area_or_primary_capacity_present', 'Check whether the invoice provides evidence that the new heat pump serves a main living area or is sized/described as the primary heating system.
-Set rule_result="warn" when this evidence is missing or ambiguous and admin should verify whether the system serves the main living area or primary heating load.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_electric_no_existing_heat_pump_flag', 'Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible; otherwise set rule_result="pass" only when replacement of hard-wired electric heat is clear. Use rule_result="warn" when the replacement context needs admin/application confirmation.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_electric_primary_system_scope_present', 'Check whether the invoice describes a primary heat-pump system rather than a secondary/add-on system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_electric_rebate_math_within_cap', 'Check whether the claimed rebate for this electric-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -115,12 +117,11 @@ In calculation, show the visible category, eligibility code, visible upgrade cos
 Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_wood_backup_and_primary_capacity_review', 'Check whether the invoice supports primary heating capacity/main living area context and whether any visible backup heat evidence is electric/wood rather than fossil fuel.
-Set rule_result="warn" when primary-capacity evidence is missing or visible backup context is ambiguous. Admin should verify primary sizing and backup fuel.
-Set rule_result="fail" when visible backup context clearly shows fossil-fuel backup remaining as a primary system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_wood_backup_heat_not_fossil_present', 'Check whether visible backup heat evidence for this wood-to-heat-pump upgrade appears to be wood or electric rather than fossil fuel.
+Set rule_result="pass" when backup heat is clearly wood/electric or no fossil-backup concern is visible.
+Set rule_result="warn" when backup fuel context is missing or ambiguous.
+Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_existing_heat_context_present', 'Check whether invoice text supports wood/solid-fuel primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_wood_no_existing_heat_pump_flag', 'Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible; otherwise set rule_result="pass" only when wood/solid-fuel conversion context is clear. Use rule_result="warn" when the conversion context needs admin/application confirmation.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_rebate_math_within_cap', 'Check whether the claimed rebate for this wood-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
@@ -268,11 +269,25 @@ If the visible invoice eligibility code conflicts with users_eligibilitycodes.el
 In evidence_text, include the visible invoice homeowner/customer name, visible invoice eligibility code if present, database participant name, and database eligibility code.
 In reason_and_likely_causes, explain whether this is a clear match, harmless formatting variation, missing/ambiguous evidence, or likely wrong-homeowner invoice.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_description_sufficient_for_review', 'Check whether the invoice description is sufficient for admin pre-review of equipment, scope, labour/materials, and this upgrade''s rebate line.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_conditioned_space_distribution_present', 'Check whether invoice evidence or located fields show the heat pump can distribute heat through the conditioned space formerly served by the primary heating system.
+Set rule_result="pass" when distribution through the former primary conditioned space is clear.
+Set rule_result="warn" when distribution/coverage evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly limits the system to a secondary, partial, or unrelated area that contradicts this eligibility requirement.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('cshp_no_existing_or_secondary_heat_pump_review', 'Check whether invoice text suggests a combined space/water heat-pump claim is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when existing/add-on/secondary heat-pump wording is visible, because the extracted 2026 combined space/water table does not state the same explicit no-existing-heat-pump sentence found in the air-to-water section.
+Set rule_result="fail" only when supplied program facts or visible invoice evidence clearly contradict combined space/water heat-pump eligibility.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_fossil_backup_not_fossil_primary', 'Check whether visible backup heat evidence appears electric or wood, and whether any natural-gas/propane fireplace is clearly secondary.
 Set rule_result="warn" if backup context is missing/ambiguous and admin should verify backup fuel.
 Set rule_result="fail" if the invoice suggests fossil-fuel backup remains as a primary system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hp_fossil_no_existing_heat_pump_flag', 'Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_main_living_area_or_primary_capacity_present', 'Check whether invoice evidence or located fields show the heat pump is sized/described as the home''s primary heating system or serves a main living area.
+Set rule_result="pass" when primary-heating capacity or main-living-area service is clear.
+Set rule_result="warn" when this evidence is missing or ambiguous.
+Set rule_result="fail" when visible evidence clearly contradicts primary-heating or main-living-area eligibility.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_no_existing_or_secondary_heat_pump_flag', 'Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
+Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
+Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_description_sufficient_for_review', 'Check whether the invoice description is sufficient for admin pre-review of heat pump water heater work, product reference, labour/materials, rebate line, and amount.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_fossil_removal_evidence_present', 'If fossil fuel water heating evidence is present, check whether invoice evidence references removal/decommissioning of fossil-fuel equipment.
 Set rule_result="pass" if fossil fuel evidence is not present.
@@ -342,8 +357,6 @@ Set rule_result="pass" if wood/solid-fuel source path is not visible or not clai
 Set rule_result="pass" if wood/solid-fuel source path is visible and either required document type is present with supplement_routing_quality="usable" and located_fields contain readable removal-photo or WETT/safe-retention evidence for the site/system.
 Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supplement_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" if wood/solid-fuel source path is visible and both before_after_photo_set and wett_report are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hydronic_no_existing_heat_pump_flag', 'Check whether invoice text suggests replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
-Set rule_result="fail" if existing/add-on/secondary heat-pump wording is visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_non_integrated_area_review', 'If fossil-fuel conversion and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
 Use non_integrated_area_preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no fossil-fuel Non-Integrated Area evidence is visible.
@@ -527,40 +540,43 @@ WITH genai_rule_upgrade_types_seed (
   VALUES
   ('air_source_heat_pump_electric', 'ashp_electric_existing_heat_context_present', 1),
   ('air_source_heat_pump_electric', 'ashp_electric_utility_account_supporting_document_attached', 2),
-  ('air_source_heat_pump_electric', 'ashp_electric_main_living_area_or_primary_capacity_present', 7),
-  ('air_source_heat_pump_electric', 'ashp_electric_no_existing_heat_pump_flag', 6),
-  ('air_source_heat_pump_electric', 'ashp_electric_primary_system_scope_present', 3),
+  ('air_source_heat_pump_electric', 'hp_main_living_area_or_primary_capacity_present', 7),
+  ('air_source_heat_pump_electric', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
   ('air_source_heat_pump_electric', 'ashp_electric_rebate_math_within_cap', 5),
   ('air_source_heat_pump_electric', 'hp_description_sufficient_for_review', 4),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_existing_heat_context_present', 1),
+  ('air_source_heat_pump_gas_propane', 'hp_conditioned_space_distribution_present', 2),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_non_integrated_area_review', 8),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_rebate_math_within_cap', 5),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_removal_supporting_document_attached', 3),
   ('air_source_heat_pump_gas_propane', 'hp_description_sufficient_for_review', 4),
   ('air_source_heat_pump_gas_propane', 'hp_fossil_backup_not_fossil_primary', 6),
-  ('air_source_heat_pump_gas_propane', 'hp_fossil_no_existing_heat_pump_flag', 7),
+  ('air_source_heat_pump_gas_propane', 'hp_no_existing_or_secondary_heat_pump_flag', 7),
   ('air_source_heat_pump_oil', 'ashp_oil_consumption_baseline_reference_present', 6),
   ('air_source_heat_pump_oil', 'ashp_oil_consumption_proof_supporting_document_attached', 10),
   ('air_source_heat_pump_oil', 'ashp_oil_existing_heat_context_present', 1),
+  ('air_source_heat_pump_oil', 'hp_conditioned_space_distribution_present', 2),
   ('air_source_heat_pump_oil', 'ashp_oil_non_integrated_area_review', 9),
   ('air_source_heat_pump_oil', 'ashp_oil_rebate_math_within_cap', 5),
   ('air_source_heat_pump_oil', 'ashp_oil_removal_supporting_document_attached', 3),
   ('air_source_heat_pump_oil', 'hp_description_sufficient_for_review', 4),
   ('air_source_heat_pump_oil', 'hp_fossil_backup_not_fossil_primary', 7),
-  ('air_source_heat_pump_oil', 'hp_fossil_no_existing_heat_pump_flag', 8),
-  ('air_source_heat_pump_wood', 'ashp_wood_backup_and_primary_capacity_review', 7),
+  ('air_source_heat_pump_oil', 'hp_no_existing_or_secondary_heat_pump_flag', 8),
+  ('air_source_heat_pump_wood', 'hp_main_living_area_or_primary_capacity_present', 7),
+  ('air_source_heat_pump_wood', 'ashp_wood_backup_heat_not_fossil_present', 8),
   ('air_source_heat_pump_wood', 'ashp_wood_existing_heat_context_present', 1),
-  ('air_source_heat_pump_wood', 'ashp_wood_no_existing_heat_pump_flag', 6),
+  ('air_source_heat_pump_wood', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
   ('air_source_heat_pump_wood', 'ashp_wood_rebate_math_within_cap', 5),
   ('air_source_heat_pump_wood', 'ashp_wood_removal_or_wett_supporting_document_attached', 3),
   ('air_source_heat_pump_wood', 'hp_description_sufficient_for_review', 4),
   ('air_to_water_heat_pump', 'atw_not_combined_or_hpwh_scope', 6),
+  ('air_to_water_heat_pump', 'hp_main_living_area_or_primary_capacity_present', 2),
   ('air_to_water_heat_pump', 'atw_rebate_math_within_cap', 5),
   ('air_to_water_heat_pump', 'atw_scope_present', 1),
   ('air_to_water_heat_pump', 'hp_description_sufficient_for_review', 4),
   ('air_to_water_heat_pump', 'hydronic_conversion_context_present', 3),
   ('air_to_water_heat_pump', 'hydronic_fossil_removal_supporting_document_attached', 9),
-  ('air_to_water_heat_pump', 'hydronic_no_existing_heat_pump_flag', 7),
+  ('air_to_water_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag', 7),
   ('air_to_water_heat_pump', 'hydronic_non_integrated_area_review', 8),
   ('air_to_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
   ('combined_space_water_heat_pump', 'cshp_combined_space_and_water_scope_present', 6),
@@ -569,7 +585,7 @@ WITH genai_rule_upgrade_types_seed (
   ('combined_space_water_heat_pump', 'hp_description_sufficient_for_review', 4),
   ('combined_space_water_heat_pump', 'hydronic_conversion_context_present', 3),
   ('combined_space_water_heat_pump', 'hydronic_fossil_removal_supporting_document_attached', 9),
-  ('combined_space_water_heat_pump', 'hydronic_no_existing_heat_pump_flag', 7),
+  ('combined_space_water_heat_pump', 'cshp_no_existing_or_secondary_heat_pump_review', 7),
   ('combined_space_water_heat_pump', 'hydronic_non_integrated_area_review', 8),
   ('combined_space_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
   ('common', 'contractor_identity_matches_record', 6),
@@ -590,6 +606,8 @@ WITH genai_rule_upgrade_types_seed (
   ('dual_fuel_ducted_heat_pump', 'dfhp_png_or_tank_propane_path_present', 6),
   ('dual_fuel_ducted_heat_pump', 'dfhp_rebate_math_within_cap', 5),
   ('dual_fuel_ducted_heat_pump', 'dfhp_switchover_setpoint_specific', 7),
+  ('dual_fuel_ducted_heat_pump', 'hp_conditioned_space_distribution_present', 10),
+  ('dual_fuel_ducted_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag', 11),
   ('electrical_service_upgrade', 'esu_contractor_utility_billed_work_on_one_invoice', 9),
   ('electrical_service_upgrade', 'esu_description_sufficient_for_review', 5),
   ('electrical_service_upgrade', 'esu_heat_pump_conversion_context_present', 3),
@@ -725,6 +743,7 @@ Electrical service upgrade', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hardware_per_unit', 'Locate hardware/material price per unit.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_ahri_reference', 'Locate AHRI reference/certificate numbers for outdoor unit, indoor unit(s), and furnace where visible. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_backup_heat_evidence', 'Locate backup heat evidence and note if it appears electric, wood, fossil fuel, or unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_conditioned_space_distribution_evidence', 'Locate evidence that the heat pump distributes heat through the conditioned space formerly served by the primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_efficiency_and_capacity', 'Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_existing_electric_heat_evidence', 'Locate hard-wired electric baseboard, radiant ceiling/floor, electric furnace, electric boiler, or other electric primary heat evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_existing_gas_propane_heat_evidence', 'Locate natural gas, propane, furnace, boiler, tank propane, PNG, FortisBC gas, or similar existing heat evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -872,6 +891,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_source_heat_pump_electric', 'upgrade_specific_rebate_line_amount', 10),
   ('air_source_heat_pump_gas_propane', 'hp_ahri_reference', 4),
   ('air_source_heat_pump_gas_propane', 'hp_backup_heat_evidence', 12),
+  ('air_source_heat_pump_gas_propane', 'hp_conditioned_space_distribution_evidence', 16),
   ('air_source_heat_pump_gas_propane', 'hp_efficiency_and_capacity', 6),
   ('air_source_heat_pump_gas_propane', 'hp_existing_gas_propane_heat_evidence', 2),
   ('air_source_heat_pump_gas_propane', 'hp_existing_heat_pump_flag', 14),
@@ -887,6 +907,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_source_heat_pump_gas_propane', 'upgrade_specific_rebate_line_amount', 11),
   ('air_source_heat_pump_oil', 'hp_ahri_reference', 4),
   ('air_source_heat_pump_oil', 'hp_backup_heat_evidence', 13),
+  ('air_source_heat_pump_oil', 'hp_conditioned_space_distribution_evidence', 17),
   ('air_source_heat_pump_oil', 'hp_efficiency_and_capacity', 6),
   ('air_source_heat_pump_oil', 'hp_existing_heat_pump_flag', 15),
   ('air_source_heat_pump_oil', 'hp_existing_oil_heat_evidence', 2),
@@ -921,6 +942,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_to_water_heat_pump', 'atw_space_heating_only_evidence', 13),
   ('air_to_water_heat_pump', 'hp_existing_heat_pump_flag', 12),
   ('air_to_water_heat_pump', 'hp_heat_load_calc_reference', 7),
+  ('air_to_water_heat_pump', 'hp_main_living_area_evidence', 14),
   ('air_to_water_heat_pump', 'hp_make_model', 3),
   ('air_to_water_heat_pump', 'hp_non_integrated_area_preapproval_reference', 11),
   ('air_to_water_heat_pump', 'hp_northern_top_up_evidence', 10),
@@ -961,6 +983,8 @@ WITH genai_located_field_upgrade_types_seed (
   ('dual_fuel_ducted_heat_pump', 'dfhp_source_fuel_path', 10),
   ('dual_fuel_ducted_heat_pump', 'dfhp_switchover_setpoint_evidence', 5),
   ('dual_fuel_ducted_heat_pump', 'hp_ahri_reference', 4),
+  ('dual_fuel_ducted_heat_pump', 'hp_conditioned_space_distribution_evidence', 13),
+  ('dual_fuel_ducted_heat_pump', 'hp_existing_heat_pump_flag', 14),
   ('dual_fuel_ducted_heat_pump', 'hp_northern_top_up_evidence', 11),
   ('dual_fuel_ducted_heat_pump', 'hp_registered_contractor_or_permit_evidence', 12),
   ('dual_fuel_ducted_heat_pump', 'upgrade_specific_rebate_line_amount', 9),
