@@ -10,6 +10,7 @@ module Claims
         case_facts
         genai_common
         genai_upgrade
+        product_lookup_enrichment
         code_common
         code_upgrade
         aggregate_advice

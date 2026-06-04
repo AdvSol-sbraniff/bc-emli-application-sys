@@ -43,7 +43,6 @@ type IngestStepRow = {
   step_type?: string | null;
   status?: string | null;
   error_text?: string | null;
-  validationgenai_ruleset_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -509,7 +508,6 @@ export default function RedoInvoicePackageScreen() {
                   <Th>type</Th>
                   <Th>state</Th>
                   <Th>invoice_version_id</Th>
-                  <Th>ruleset</Th>
                   <Th>error</Th>
                 </Tr>
               </Thead>
@@ -542,9 +540,6 @@ export default function RedoInvoicePackageScreen() {
                     <Td fontFamily="mono" fontSize="xs">
                       {s.invoice_version_id ?? ''}
                     </Td>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {s.validationgenai_ruleset_id ?? ''}
-                    </Td>
                     <Td fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap">
                       {s.error_text ?? ''}
                     </Td>
@@ -553,7 +548,7 @@ export default function RedoInvoicePackageScreen() {
 
                 {!stepsLoading && steps.length === 0 && (
                   <Tr>
-                    <Td colSpan={8}>
+                    <Td colSpan={7}>
                       <Text as="div" fontSize="sm" opacity={0.7}>
                         No steps found.
                       </Text>

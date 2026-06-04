@@ -37,18 +37,13 @@ module Claims
           end
         end
 
-      def self.call(invoice_id:, files:, validationgenai_ruleset_id: nil)
-        new(
-          invoice_id: invoice_id,
-          files: files,
-          validationgenai_ruleset_id: validationgenai_ruleset_id
-        ).call
+      def self.call(invoice_id:, files:)
+        new(invoice_id: invoice_id, files: files).call
       end
 
-      def initialize(invoice_id:, files:, validationgenai_ruleset_id:)
+      def initialize(invoice_id:, files:)
         @invoice_id = invoice_id.to_s
         @files = Array(files).flatten.compact
-        @validationgenai_ruleset_id = validationgenai_ruleset_id.presence
       end
 
       def call
@@ -196,11 +191,7 @@ module Claims
         end
 
         job_id =
-          ::Claims::RunOcrJob.perform_async(
-            invoice_version.id,
-            ingest_run.id,
-            @validationgenai_ruleset_id
-          )
+          ::Claims::RunOcrJob.perform_async(invoice_version.id, ingest_run.id)
 
         ::Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload

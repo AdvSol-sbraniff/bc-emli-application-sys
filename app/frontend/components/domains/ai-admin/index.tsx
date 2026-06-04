@@ -37,7 +37,6 @@ type IngestStepRow = {
   step_type?: string | null;
   status?: string | null;
   error_text?: string | null;
-  validationgenai_ruleset_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -287,8 +286,8 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                 Autodetect Flow
               </Text>
               <Text as="div" fontSize="sm" opacity={0.8}>
-                This screen no longer asks you to choose a ruleset. Full GenAI reruns validation from the stored triage
-                classifier output and does not run classifier again.
+                Full GenAI reruns validation from the stored triage classifier output and compiles current normalized
+                rules at runtime. It does not run classifier again.
               </Text>
 
               {ctxError && (
@@ -447,7 +446,7 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                   Full GenAI behavior
                 </Text>
                 <Text as="div" fontSize="sm">
-                  Server side full GenAI now auto-resolves the current default/common ruleset instead of requiring a
+                  Server side full GenAI builds the prompt from current normalized rule mappings instead of requiring a
                   manual ruleset selection on this screen.
                 </Text>
               </Box>
@@ -534,7 +533,6 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                       <Th>type</Th>
                       <Th>state</Th>
                       <Th>invoice_version_id</Th>
-                      <Th>ruleset</Th>
                       <Th>error</Th>
                     </Tr>
                   </Thead>
@@ -567,9 +565,6 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                         <Td fontFamily="mono" fontSize="xs">
                           {s.invoice_version_id ?? ''}
                         </Td>
-                        <Td fontFamily="mono" fontSize="xs">
-                          {s.validationgenai_ruleset_id ?? ''}
-                        </Td>
                         <Td fontFamily="mono" fontSize="xs" whiteSpace="pre-wrap">
                           {s.error_text ?? ''}
                         </Td>
@@ -578,7 +573,7 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
 
                     {!stepsLoading && steps.length === 0 && (
                       <Tr>
-                        <Td colSpan={7}>
+                        <Td colSpan={6}>
                           <Text as="div" fontSize="sm" opacity={0.7}>
                             No steps found.
                           </Text>
@@ -615,12 +610,12 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                   Autodetect Flow
                 </Heading>
                 <Text as="div" fontSize="sm">
-                  This screen is now aligned with the newer autodetect direction, so the old manual ruleset chooser has
-                  been removed.
+                  This screen is aligned with the normalized-rule runtime, so the old manual ruleset chooser has been
+                  removed.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  For the current bridge behavior, full GenAI auto-resolves the current default/common ruleset on the
-                  server rather than asking the admin to pick one here.
+                  Full GenAI now compiles the current common and upgrade-type prompts on the server rather than asking
+                  the admin to pick one here.
                 </Text>
               </Box>
 
@@ -649,8 +644,7 @@ export const AIAdminScreen = observer(function AIAdminScreen() {
                   step ended with an error.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  The ruleset column is still useful for seeing what the backend recorded on full GenAI runs, even
-                  though admins no longer choose that value from this screen.
+                  For GenAI audit detail, open the step row data and use the persisted context window JSON.
                 </Text>
               </Box>
             </Flex>

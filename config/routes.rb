@@ -213,10 +213,8 @@ Rails.application.routes.draw do
       get "admin/validation_rules", to: "validation_rules_admin#index"
       get "admin/validation_rules/upgrade_types",
           to: "validation_rules_admin#upgrade_types"
-      get "admin/validationgenai_config",
-          to: "validationgenai_rulesets#config_show"
-      patch "admin/validationgenai_config",
-            to: "validationgenai_rulesets#config_update"
+      get "admin/validationgenai_config", to: "validationgenai_config#show"
+      patch "admin/validationgenai_config", to: "validationgenai_config#update"
       get "admin/supporting_document_types",
           to: "supporting_document_types_admin#index"
       get "admin/supporting_document_types/:id",

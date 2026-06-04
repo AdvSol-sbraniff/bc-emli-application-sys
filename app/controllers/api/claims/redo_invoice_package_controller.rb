@@ -109,14 +109,9 @@ module Api
 
       def redo
         invoice = ::Claims::Invoice.find(params[:invoice_id])
-        validationgenai_ruleset_id =
-          params[:validationgenai_ruleset_id].to_s.strip.presence
 
         result =
-          ::Claims::Ingest::RedoInvoicePackage.call(
-            invoice_id: invoice.id,
-            validationgenai_ruleset_id: validationgenai_ruleset_id
-          )
+          ::Claims::Ingest::RedoInvoicePackage.call(invoice_id: invoice.id)
         render json: result, status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: {

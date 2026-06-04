@@ -556,7 +556,6 @@ module Api
               confidence
               result
               admin_advice
-              validationgenai_ruleset_id
               raw_json
               created_at
               updated_at

@@ -165,14 +165,6 @@ module Api
                 step_type: r.step_type,
                 status: r.status,
                 error_text: r.error_text,
-                validationgenai_ruleset_id:
-                  (
-                    if r.respond_to?(:validationgenai_ruleset_id)
-                      r.validationgenai_ruleset_id
-                    else
-                      nil
-                    end
-                  ),
                 created_at: r.created_at,
                 updated_at: r.updated_at
               }
@@ -223,14 +215,6 @@ module Api
                 step_type: r.step_type,
                 status: r.status,
                 error_text: r.error_text,
-                validationgenai_ruleset_id:
-                  (
-                    if r.respond_to?(:validationgenai_ruleset_id)
-                      r.validationgenai_ruleset_id
-                    else
-                      nil
-                    end
-                  ),
                 created_at: r.created_at,
                 updated_at: r.updated_at
               }
@@ -309,16 +293,11 @@ module Api
             Array(params[:files]) + Array(params[:file])
 
         files = files.flatten.compact
-        validationgenai_ruleset_id =
-          params[:validationgenai_ruleset_id].to_s.strip
-        validationgenai_ruleset_id =
-          resolve_default_ruleset_id_for_run_genai! if validationgenai_ruleset_id.empty?
 
         result =
           ::Claims::Ingest::UploadFixPdf.call(
             invoice_id: invoice_id,
-            files: files,
-            validationgenai_ruleset_id: validationgenai_ruleset_id
+            files: files
           )
 
         render json: result.to_h, status: :ok
@@ -349,24 +328,15 @@ module Api
         ingest_run_id = params[:ingest_run_id].to_s.strip
         ingest_run_id = nil if ingest_run_id.empty?
 
-        validationgenai_ruleset_id =
-          params[:validationgenai_ruleset_id].to_s.strip
-        validationgenai_ruleset_id = nil if validationgenai_ruleset_id.empty?
-
         jid =
-          ::Claims::RunOcrJob.perform_async(
-            invoice_version_id,
-            ingest_run_id,
-            validationgenai_ruleset_id
-          )
+          ::Claims::RunOcrJob.perform_async(invoice_version_id, ingest_run_id)
 
         render json: {
                  ok: true,
                  enqueued: true,
                  job_id: jid,
                  invoice_version_id: invoice_version_id,
-                 ingest_run_id: ingest_run_id,
-                 validationgenai_ruleset_id: validationgenai_ruleset_id
+                 ingest_run_id: ingest_run_id
                },
                status: :ok
       rescue => e
@@ -383,7 +353,7 @@ module Api
       # ============================================================
       # SECTION 02.20 — ACTION: run_genai
       # ROUTE: POST /api/claims/ingest/run_genai
-      # BODY: { session_id: "uuid", invoice_version_id: "uuid", validationgenai_ruleset_id?: "uuid", ingest_run_id?: "uuid" }
+      # BODY: { session_id: "uuid", invoice_version_id: "uuid", ingest_run_id?: "uuid" }
       # PURPOSE (milestone 1):
       # - enqueue validation GenAI only
       # - reuse the stored triage classifier result from the ingest pipeline
@@ -431,10 +401,6 @@ module Api
           raise "This invoice has #{pending_count} unprocessed package PDF#{"s" unless pending_count == 1}. Use Redo Entire Package before running GenAI."
         end
 
-        validationgenai_ruleset_id =
-          params[:validationgenai_ruleset_id].to_s.strip
-        validationgenai_ruleset_id = nil if validationgenai_ruleset_id.empty?
-
         requested_mode = params[:mode].to_s.strip
         if requested_mode == "classifier_only"
           raise "Classifier-only GenAI rerun has been removed. Run OCR to refresh triage classification."
@@ -444,15 +410,10 @@ module Api
         ingest_run_id = params[:ingest_run_id].to_s.strip
         ingest_run_id = nil if ingest_run_id.empty?
 
-        if validationgenai_ruleset_id.nil?
-          validationgenai_ruleset_id = resolve_default_ruleset_id_for_run_genai!
-        end
-
         jid =
           ::Claims::RunGenaiJob.perform_async(
             session_id,
             invoice_version_id,
-            validationgenai_ruleset_id,
             ingest_run_id,
             mode
           )
@@ -463,7 +424,6 @@ module Api
                  job_id: jid,
                  session_id: session_id,
                  invoice_version_id: invoice_version_id,
-                 validationgenai_ruleset_id: validationgenai_ruleset_id,
                  mode: mode,
                  ingest_run_id: ingest_run_id
                },
@@ -589,10 +549,6 @@ module Api
       # ============================================================
       def admin_submit_batch
         contractor_id = params[:contractor_id].to_s.strip
-        validationgenai_ruleset_id =
-          params[:validationgenai_ruleset_id].to_s.strip
-        validationgenai_ruleset_id =
-          resolve_default_ruleset_id_for_run_genai! if validationgenai_ruleset_id.empty?
 
         raise "Missing contractor_id" if contractor_id.empty?
 
@@ -609,7 +565,6 @@ module Api
           ::Claims::Ingest::CreateDraftBatch.call(
             contractor_id: contractor_id,
             files: files,
-            validationgenai_ruleset_id: validationgenai_ruleset_id,
             log_prefix: "admin_submit_batch"
           )
 
@@ -651,31 +606,6 @@ module Api
                  error: "Invoice upload-fix access denied."
                },
                status: :forbidden
-      end
-
-      def resolve_default_ruleset_id_for_run_genai!
-        row =
-          ::Claims::ValidationgenaiRuleset
-            .joins(
-              "JOIN claims.invoice_upgrade_types iut ON iut.id = claims.validationgenai_rulesets.invoice_upgrade_type_id"
-            )
-            .where(
-              "iut.upgrade_type_key = ? OR claims.validationgenai_rulesets.ruleset_shortname = ?",
-              "common",
-              "common"
-            )
-            .order(
-              Arel.sql(
-                "claims.validationgenai_rulesets.updated_at DESC, claims.validationgenai_rulesets.created_at DESC, claims.validationgenai_rulesets.id DESC"
-              )
-            )
-            .first
-
-        if row.nil?
-          raise "No default/common validationgenai_ruleset found for full GenAI run."
-        end
-
-        row.id
       end
 
       def ingest_run_invoice_rows(ingest_run_id:)
@@ -821,7 +751,6 @@ module Api
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,
-              validationgenai_ruleset_id: step.validationgenai_ruleset_id,
               created_at: step.created_at,
               updated_at: step.updated_at
             }
@@ -843,7 +772,6 @@ module Api
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,
-              validationgenai_ruleset_id: step.validationgenai_ruleset_id,
               created_at: step.created_at,
               updated_at: step.updated_at
             }
@@ -867,7 +795,6 @@ module Api
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,
-              validationgenai_ruleset_id: step.validationgenai_ruleset_id,
               created_at: step.created_at,
               updated_at: step.updated_at
             }

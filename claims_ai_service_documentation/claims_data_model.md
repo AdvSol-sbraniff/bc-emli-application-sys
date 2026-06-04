@@ -69,7 +69,7 @@ Table names are written with their schema-qualified names, such as `claims.invoi
 
 Column names are written in code formatting, such as `invoice_id`, `invoice_version_id`, `source_engine`, or `rule_result`.
 
-Rule keys, upgrade type keys, supporting document type keys, and located field keys are also written in code formatting, such as `air_source_heat_pump_electric`, `utility_bill_or_account_document`, `hp_ahri_reference`, or `ashp_electric_existing_heat_context_present`.
+Rule keys, upgrade type keys, supporting document type keys, and located field keys are also written in code formatting, such as `air_source_heat_pump_electric`, `utility_bill`, `hp_ahri_reference`, or `ashp_electric_existing_heat_context_present`.
 
 The word invoice can mean different things depending on context. In this document:
 

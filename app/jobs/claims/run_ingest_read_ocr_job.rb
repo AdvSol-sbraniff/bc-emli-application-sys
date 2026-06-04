@@ -8,7 +8,7 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_ocr, retry: 5
 
-    def perform(ingest_document_id, ingest_run_id = nil, validationgenai_ruleset_id = nil)
+    def perform(ingest_document_id, ingest_run_id = nil)
       document = ::Claims::IngestDocument.find(ingest_document_id)
 
       step =
@@ -17,11 +17,22 @@ module Claims
           document: document,
           step_type: "ocr_read"
         )
-      step.update!(status: "in_progress", error_text: nil, updated_at: Time.current)
+      step.update!(
+        status: "in_progress",
+        error_text: nil,
+        updated_at: Time.current
+      )
 
-      payload = call_node_ocr!(storage_key: document.storage_key, model_id: "prebuilt-read")
+      payload =
+        call_node_ocr!(
+          storage_key: document.storage_key,
+          model_id: "prebuilt-read"
+        )
 
-      document.update!(di_read_raw_json: payload.fetch("di_raw_json"), updated_at: Time.current)
+      document.update!(
+        di_read_raw_json: payload.fetch("di_raw_json"),
+        updated_at: Time.current
+      )
       step.update!(
         status: "succeeded",
         di_results_json: payload,
@@ -29,20 +40,14 @@ module Claims
         updated_at: Time.current
       )
 
-      advance_run!(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+      advance_run!(ingest_run_id: ingest_run_id)
     rescue => e
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
         updated_at: Time.current
       )
-      advance_run!(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+      advance_run!(ingest_run_id: ingest_run_id)
       raise
     end
 
@@ -97,13 +102,10 @@ module Claims
       JSON.parse(resp.body)
     end
 
-    def advance_run!(ingest_run_id:, validationgenai_ruleset_id:)
+    def advance_run!(ingest_run_id:)
       return if ingest_run_id.blank?
 
-      ::Claims::Ingest::AdvanceBundleRun.call(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+      ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
     rescue StandardError
       nil
     end

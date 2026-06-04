@@ -222,14 +222,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
       <Container maxW="container.2xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex justify="space-between" align={{ base: 'start', lg: 'center' }} gap={3} mb={5}>
-            <Box>
-              <Text fontSize="lg" fontWeight="bold">
-                All validation rules
-              </Text>
-              <Text fontSize="sm" opacity={0.72}>
-                Code and GenAI rules in alphabetic key order, with mapped upgrade types shown across the grid.
-              </Text>
-            </Box>
+            <Box />
             <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-admin')}>
               Portal by Upgrade Type
             </Button>
@@ -287,7 +280,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
               <Table size="sm" width="max-content">
                 <Thead bg="gray.50">
                   <Tr>
-                    <Th position="sticky" left={0} zIndex={1} bg="gray.50" minW="460px" w="460px" maxW="460px">
+                    <Th position="sticky" left={0} zIndex={1} bg="gray.50" minW="480px" w="480px" maxW="480px">
                       Rule key
                     </Th>
                     <Th minW="56px" w="56px" maxW="56px" px={1}>
@@ -348,7 +341,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                           borderColor="gray.100"
                           py={0.5}
                           minW="460px"
-                          w="460px"
+                          w="480px"
                           maxW="460px"
                         >
                           <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">

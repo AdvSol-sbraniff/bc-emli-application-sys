@@ -15,8 +15,8 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 9. `4_insert_supporting_document_type_located_fields.sql`
 10. `5_insert_code_rules.sql`
 11. `5_insert_code_located_fields.sql`
-12. `5_insert_genai_normalized.sql`
-13. `5_insert_validationgenai_rulesets.sql`
+12. `5_insert_validationgenai_config.sql`
+13. `5_insert_genai_normalized.sql`
 14. `6_views.sql`
 15. `7_reporting_views.sql`
 

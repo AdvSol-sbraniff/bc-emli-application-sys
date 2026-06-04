@@ -408,7 +408,7 @@ export const InvoiceVersionShowScreen = () => {
   // PURPOSE: invoiceIds + readData + pdf viewer state + highlight state
   // ============================================================
 
-  const [showPdf, setShowPdf] = useState<boolean>(true);
+  const [showPdf, setShowPdf] = useState<boolean>(false);
 
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
   const [readData, setReadData] = useState<any>(null);
@@ -1167,11 +1167,11 @@ export const InvoiceVersionShowScreen = () => {
       SECTION 07.05.01 - FIELDS ACCORDION
       PURPOSE: Collapsible container for the DI header fields list
       NOTES:
-      ? allowToggle lets user collapse the open section
-      ? defaultIndex={[0]} keeps it open by default
+      ? allowMultiple lets admins open only the sections they need
+      ? no defaultIndex keeps all sections closed on first load
       ============================================================ */}
 
-                <Accordion allowMultiple defaultIndex={[0]}>
+                <Accordion allowMultiple>
                   {/* ============================================================
       SECTION 07.05.10 - ACCORDION ITEM: INVOICE HEADER FIELDS
       PURPOSE: Existing DI header FieldRows (clickable for polygon)
@@ -1202,7 +1202,14 @@ export const InvoiceVersionShowScreen = () => {
                               value={display}
                               active={activeHighlightKey === f.key}
                               disabled={!clickable}
-                              onClick={clickable ? () => setActiveHighlightKey(f.key) : undefined}
+                              onClick={
+                                clickable
+                                  ? () => {
+                                      setShowPdf(true);
+                                      setActiveHighlightKey(f.key);
+                                    }
+                                  : undefined
+                              }
                             />
                           );
                         })}
@@ -1216,9 +1223,6 @@ export const InvoiceVersionShowScreen = () => {
                         <Box flex="1" textAlign="left">
                           <Text size="sm" fontWeight="bold">
                             Line items
-                          </Text>
-                          <Text fontSize="xs" opacity={0.65}>
-                            OCR line rows from the invoice, with classifier-assigned likely upgrade type.
                           </Text>
                         </Box>
                         <AccordionIcon />
@@ -1324,6 +1328,7 @@ export const InvoiceVersionShowScreen = () => {
                                                   pageNumber: Number(row.page),
                                                   polygon: row.polygon,
                                                 });
+                                                setShowPdf(true);
                                                 setActiveHighlightKey(highlightKey);
                                               }
                                             : undefined
@@ -1345,11 +1350,7 @@ export const InvoiceVersionShowScreen = () => {
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
                           <Text size="sm" fontWeight="bold">
-                            Supplement docs
-                          </Text>
-                          <Text fontSize="xs" opacity={0.65}>
-                            Configured supplement types for the detected upgrade types, plus the actual uploaded
-                            supporting documents attached to this invoice.
+                            Supporting docs
                           </Text>
                         </Box>
                         <AccordionIcon />
@@ -1364,7 +1365,7 @@ export const InvoiceVersionShowScreen = () => {
                           </Text>
                           {supportingDocumentTypeGroups.length === 0 ? (
                             <Text fontSize="sm" opacity={0.7}>
-                              No supplement-type mappings are configured for the detected upgrade types.
+                              No supporting-document type mappings are configured for the detected upgrade types.
                             </Text>
                           ) : (
                             <Box display="flex" flexDirection="column" gap="10px">
@@ -1402,7 +1403,7 @@ export const InvoiceVersionShowScreen = () => {
 
                                     {types.length === 0 ? (
                                       <Text fontSize="sm" opacity={0.7}>
-                                        No supplement document types mapped to this upgrade type.
+                                        No supporting document types mapped to this upgrade type.
                                       </Text>
                                     ) : (
                                       <Flex gap="6px" wrap="wrap">
@@ -1531,9 +1532,6 @@ export const InvoiceVersionShowScreen = () => {
                           <Text size="sm" fontWeight="bold">
                             Overall advice
                           </Text>
-                          <Text fontSize="xs" opacity={0.65}>
-                            Combined GenAI admin advice for this invoice version.
-                          </Text>
                         </Box>
                         <AccordionIcon />
                       </AccordionButton>
@@ -1564,9 +1562,6 @@ export const InvoiceVersionShowScreen = () => {
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
                               AHRI product-list match
-                            </Text>
-                            <Text fontSize="xs" opacity={0.65}>
-                              Code-owned match to the imported BC Hydro heat-pump product list.
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -1670,9 +1665,6 @@ export const InvoiceVersionShowScreen = () => {
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
                               NEEA HPWH product-list match
-                            </Text>
-                            <Text fontSize="xs" opacity={0.65}>
-                              Code-owned match to the imported Residential HPWH Qualified Products List.
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -1781,9 +1773,6 @@ export const InvoiceVersionShowScreen = () => {
                             <Text size="sm" fontWeight="bold">
                               Air-to-water product-list match
                             </Text>
-                            <Text fontSize="xs" opacity={0.65}>
-                              Code-owned match to the imported Better Homes BC qualifying product list.
-                            </Text>
                           </Box>
                           <AccordionIcon />
                         </AccordionButton>
@@ -1877,9 +1866,6 @@ export const InvoiceVersionShowScreen = () => {
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
                               OHPA BC product-list match
-                            </Text>
-                            <Text fontSize="xs" opacity={0.65}>
-                              Code-owned match to the imported NRCan Oil to Heat Pump Affordability BC product list.
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -1981,9 +1967,6 @@ export const InvoiceVersionShowScreen = () => {
                           <Text size="sm" fontWeight="bold">
                             Information on record
                           </Text>
-                          <Text fontSize="xs" opacity={0.65}>
-                            Local case facts used by the rules, separate from PDF evidence found by GenAI.
-                          </Text>
                         </Box>
                         <AccordionIcon />
                       </AccordionButton>
@@ -2052,8 +2035,6 @@ export const InvoiceVersionShowScreen = () => {
                   ) : (
                     upgradeTypeGroups.map((group) => {
                       const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
-                      const foundFieldCount = group.fields.length;
-                      const rulecheckCount = group.rulechecks.length;
                       const classifierResults = group.results.filter((r: any) => r.source_engine === 'classifier');
 
                       return (
@@ -2069,9 +2050,6 @@ export const InvoiceVersionShowScreen = () => {
                                 <Box minW={0}>
                                   <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
                                     {meta.label}
-                                  </Text>
-                                  <Text fontSize="xs" opacity={0.65}>
-                                    {foundFieldCount} fields - {rulecheckCount} rules
                                   </Text>
                                 </Box>
                               </Flex>
@@ -2171,6 +2149,7 @@ export const InvoiceVersionShowScreen = () => {
                                                   pageNumber: Number(r.page),
                                                   polygon: r.polygon ?? null,
                                                 });
+                                                setShowPdf(true);
                                                 setActiveHighlightKey(highlightKey);
                                               }
                                             : undefined
@@ -2339,6 +2318,7 @@ export const InvoiceVersionShowScreen = () => {
                                               pageNumber: Number(opts.page),
                                               polygon: opts.polygon,
                                             });
+                                            setShowPdf(true);
                                             setActiveHighlightKey(`lineitem_${seq}_${opts.subKey}`);
                                           }
                                         : undefined
@@ -2467,6 +2447,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
+                                    setShowPdf(true);
                                   }}
                                 >
                                   <Text fontSize="xs" opacity={0.7}>
@@ -2550,6 +2531,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
+                                    setShowPdf(true);
                                   }}
                                 >
                                   <Text fontSize="xs" opacity={0.7}>

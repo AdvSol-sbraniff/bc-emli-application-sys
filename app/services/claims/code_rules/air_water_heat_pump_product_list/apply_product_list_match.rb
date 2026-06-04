@@ -65,10 +65,7 @@ module Claims
               enabled_rules: enabled_rules
             )
 
-          ::Claims::InvoiceVersion.transaction do
-            @invoice_version.update!(awhp_product_id: product&.id)
-            replace_rulechecks!(rule_rows)
-          end
+          replace_rulechecks!(rule_rows)
 
           {
             ok: true,

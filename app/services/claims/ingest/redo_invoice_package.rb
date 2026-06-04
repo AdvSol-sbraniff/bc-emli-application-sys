@@ -24,16 +24,12 @@ module Claims
           end
         end
 
-      def self.call(invoice_id:, validationgenai_ruleset_id: nil)
-        new(
-          invoice_id: invoice_id,
-          validationgenai_ruleset_id: validationgenai_ruleset_id
-        ).call
+      def self.call(invoice_id:)
+        new(invoice_id: invoice_id).call
       end
 
-      def initialize(invoice_id:, validationgenai_ruleset_id:)
+      def initialize(invoice_id:)
         @invoice_id = invoice_id.to_s.strip
-        @validationgenai_ruleset_id = validationgenai_ruleset_id.to_s.strip
       end
 
       def call
@@ -45,8 +41,6 @@ module Claims
           raise "Invoice is missing contractor_id."
         end
 
-        ruleset_id =
-          @validationgenai_ruleset_id.presence || resolve_default_ruleset_id!
         sources = source_documents(invoice: invoice)
         if sources.empty?
           raise "No source PDFs are available for invoice_id=#{invoice.id}."
@@ -81,8 +75,7 @@ module Claims
               invoice: invoice,
               ingest_run: ingest_run,
               source: source,
-              index: index,
-              ruleset_id: ruleset_id
+              index: index
             )
           end
         mark_superseded_source_documents!(
@@ -106,10 +99,7 @@ module Claims
           updated_at: Time.current
         )
 
-        ::Claims::Ingest::AdvanceBundleRun.call(
-          ingest_run_id: ingest_run.id,
-          validationgenai_ruleset_id: ruleset_id
-        )
+        ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run.id)
 
         Result.new(true, ingest_run.id, invoice.id, rows.size, rows, []).to_h
       rescue => e
@@ -236,13 +226,7 @@ module Claims
           )
       end
 
-      def create_fresh_ingest_document!(
-        invoice:,
-        ingest_run:,
-        source:,
-        index:,
-        ruleset_id:
-      )
+      def create_fresh_ingest_document!(invoice:, ingest_run:, source:, index:)
         document =
           ::Claims::IngestDocument.create!(
             ingest_run_id: ingest_run.id,
@@ -277,8 +261,7 @@ module Claims
         jid =
           ::Claims::RunIngestReadOcrJob.perform_async(
             document.id,
-            ingest_run.id,
-            ruleset_id
+            ingest_run.id
           )
 
         {
@@ -290,27 +273,6 @@ module Claims
           status: "queued_ocr",
           job_id: jid
         }
-      end
-
-      def resolve_default_ruleset_id!
-        common =
-          ::Claims::InvoiceUpgradeType.find_by(upgrade_type_key: "common")
-        row =
-          ::Claims::ValidationgenaiRuleset
-            .where(invoice_upgrade_type_id: common&.id)
-            .where(enabled: true)
-            .order(Arel.sql("updated_at DESC, created_at DESC, id DESC"))
-            .first ||
-            ::Claims::ValidationgenaiRuleset
-              .where(invoice_upgrade_type_id: common&.id)
-              .order(Arel.sql("updated_at DESC, created_at DESC, id DESC"))
-              .first
-
-        if row.nil?
-          raise "No default/common validationgenai_ruleset found for full GenAI run."
-        end
-
-        row.id
       end
     end
   end

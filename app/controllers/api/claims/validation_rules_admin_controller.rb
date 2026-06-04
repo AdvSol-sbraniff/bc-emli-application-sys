@@ -11,10 +11,7 @@ module Api
         genai_rule
         genai_located_field
       ].freeze
-      CREATEABLE_RECORD_TYPES = %w[
-        genai_rule
-        genai_located_field
-      ].freeze
+      CREATEABLE_RECORD_TYPES = %w[genai_rule genai_located_field].freeze
 
       skip_after_action :verify_authorized,
                         only: %i[index create update history upgrade_types]
@@ -27,7 +24,9 @@ module Api
         genai_rule_counts =
           ::Claims::GenaiRuleUpgradeType.group(:invoice_upgrade_type_id).count
         genai_field_counts =
-          ::Claims::GenaiLocatedFieldUpgradeType.group(:invoice_upgrade_type_id).count
+          ::Claims::GenaiLocatedFieldUpgradeType.group(
+            :invoice_upgrade_type_id
+          ).count
         code_field_count = ::Claims::CodeLocatedField.count
 
         rows =
@@ -60,15 +59,28 @@ module Api
         type_filter = params[:record_type].to_s.strip.presence
 
         rows = []
-        rows.concat serialized_code_rules(invoice_upgrade_type_id, q, type_filter)
+        rows.concat serialized_code_rules(
+                      invoice_upgrade_type_id,
+                      q,
+                      type_filter
+                    )
         rows.concat serialized_code_located_fields(q, type_filter)
-        rows.concat serialized_genai_rules(invoice_upgrade_type_id, q, type_filter)
-        rows.concat serialized_genai_located_fields(invoice_upgrade_type_id, q, type_filter)
+        rows.concat serialized_genai_rules(
+                      invoice_upgrade_type_id,
+                      q,
+                      type_filter
+                    )
+        rows.concat serialized_genai_located_fields(
+                      invoice_upgrade_type_id,
+                      q,
+                      type_filter
+                    )
 
         render json: {
-                 rows: rows.sort_by do |row|
-                   [type_rank(row[:record_type]), row[:record_key].to_s]
-                 end
+                 rows:
+                   rows.sort_by do |row|
+                     [type_rank(row[:record_type]), row[:record_key].to_s]
+                   end
                },
                status: :ok
       end
@@ -76,7 +88,9 @@ module Api
       def create
         type = record_type_param
         unless CREATEABLE_RECORD_TYPES.include?(type)
-          render json: { error: "Creation is not allowed for #{type}." },
+          render json: {
+                   error: "Creation is not allowed for #{type}."
+                 },
                  status: :unprocessable_entity
           return
         end
@@ -91,7 +105,9 @@ module Api
 
         render json: serialize_row(row, type), status: :created
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") },
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
                status: :unprocessable_entity
       rescue ActiveRecord::RecordNotUnique => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -114,7 +130,9 @@ module Api
 
         render json: serialize_row(row, type), status: :ok
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: e.record.errors.full_messages.join(", ") },
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
                status: :unprocessable_entity
       rescue ActiveRecord::RecordNotUnique => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -131,7 +149,9 @@ module Api
 
       def record_type_param
         type = params[:record_type].to_s.strip
-        raise ActionController::BadRequest, "Unsupported record_type" unless RECORD_TYPES.include?(type)
+        unless RECORD_TYPES.include?(type)
+          raise ActionController::BadRequest, "Unsupported record_type"
+        end
 
         type
       end
@@ -165,12 +185,10 @@ module Api
 
         if invoice_upgrade_type_id.present?
           scope =
-            scope
-              .joins(:code_rule_upgrade_types)
-              .where(
-                "claims.code_rule_upgrade_types.invoice_upgrade_type_id = ?",
-                invoice_upgrade_type_id
-              )
+            scope.joins(:code_rule_upgrade_types).where(
+              "claims.code_rule_upgrade_types.invoice_upgrade_type_id = ?",
+              invoice_upgrade_type_id
+            )
         end
 
         if like
@@ -181,9 +199,10 @@ module Api
             )
         end
 
-        scope.order(:code_rule_key).distinct.map do |row|
-          serialize_row(row, "code_rule")
-        end
+        scope
+          .order(:code_rule_key)
+          .distinct
+          .map { |row| serialize_row(row, "code_rule") }
       end
 
       def serialized_code_located_fields(q, type_filter)
@@ -200,25 +219,27 @@ module Api
             )
         end
 
-        scope.order(:code_field_key).map do |row|
-          serialize_row(row, "code_located_field")
-        end
+        scope
+          .order(:code_field_key)
+          .map { |row| serialize_row(row, "code_located_field") }
       end
 
       def serialized_genai_rules(invoice_upgrade_type_id, q, type_filter)
         return [] if type_filter.present? && type_filter != "genai_rule"
 
-        scope = ::Claims::GenaiRule.includes(:invoice_upgrade_types, :genai_rule_upgrade_types)
+        scope =
+          ::Claims::GenaiRule.includes(
+            :invoice_upgrade_types,
+            :genai_rule_upgrade_types
+          )
         like = maybe_like(q)
 
         if invoice_upgrade_type_id.present?
           scope =
-            scope
-              .joins(:genai_rule_upgrade_types)
-              .where(
-                "claims.genai_rule_upgrade_types.invoice_upgrade_type_id = ?",
-                invoice_upgrade_type_id
-              )
+            scope.joins(:genai_rule_upgrade_types).where(
+              "claims.genai_rule_upgrade_types.invoice_upgrade_type_id = ?",
+              invoice_upgrade_type_id
+            )
         end
 
         if like
@@ -229,13 +250,20 @@ module Api
             )
         end
 
-        scope.order(:genai_rule_key).distinct.map do |row|
-          serialize_row(row, "genai_rule")
-        end
+        scope
+          .order(:genai_rule_key)
+          .distinct
+          .map { |row| serialize_row(row, "genai_rule") }
       end
 
-      def serialized_genai_located_fields(invoice_upgrade_type_id, q, type_filter)
-        return [] if type_filter.present? && type_filter != "genai_located_field"
+      def serialized_genai_located_fields(
+        invoice_upgrade_type_id,
+        q,
+        type_filter
+      )
+        if type_filter.present? && type_filter != "genai_located_field"
+          return []
+        end
 
         scope =
           ::Claims::GenaiLocatedField.includes(
@@ -246,12 +274,10 @@ module Api
 
         if invoice_upgrade_type_id.present?
           scope =
-            scope
-              .joins(:genai_located_field_upgrade_types)
-              .where(
-                "claims.genai_located_field_upgrade_types.invoice_upgrade_type_id = ?",
-                invoice_upgrade_type_id
-              )
+            scope.joins(:genai_located_field_upgrade_types).where(
+              "claims.genai_located_field_upgrade_types.invoice_upgrade_type_id = ?",
+              invoice_upgrade_type_id
+            )
         end
 
         if like
@@ -262,9 +288,10 @@ module Api
             )
         end
 
-        scope.order(:genai_field_key).distinct.map do |row|
-          serialize_row(row, "genai_located_field")
-        end
+        scope
+          .order(:genai_field_key)
+          .distinct
+          .map { |row| serialize_row(row, "genai_located_field") }
       end
 
       def create_code_rule!
@@ -302,7 +329,6 @@ module Api
         ::Claims::GenaiRule.transaction do
           row = ::Claims::GenaiRule.create!(genai_rule_params)
           sync_genai_rule_mappings!(row)
-          publish_genai_rulesets_for!(row.genai_rule_upgrade_types.pluck(:invoice_upgrade_type_id))
           row.reload
         end
       end
@@ -310,12 +336,8 @@ module Api
       def update_genai_rule!
         ::Claims::GenaiRule.transaction do
           row = ::Claims::GenaiRule.lock.find(params[:id])
-          prior_upgrade_type_ids = row.genai_rule_upgrade_types.pluck(:invoice_upgrade_type_id)
           row.update!(genai_rule_params)
           sync_genai_rule_mappings!(row)
-          publish_genai_rulesets_for!(
-            prior_upgrade_type_ids + row.genai_rule_upgrade_types.pluck(:invoice_upgrade_type_id)
-          )
           row.reload
         end
       end
@@ -324,9 +346,6 @@ module Api
         ::Claims::GenaiLocatedField.transaction do
           row = ::Claims::GenaiLocatedField.create!(genai_located_field_params)
           sync_genai_located_field_mappings!(row)
-          publish_genai_rulesets_for!(
-            row.genai_located_field_upgrade_types.pluck(:invoice_upgrade_type_id)
-          )
           row.reload
         end
       end
@@ -334,14 +353,8 @@ module Api
       def update_genai_located_field!
         ::Claims::GenaiLocatedField.transaction do
           row = ::Claims::GenaiLocatedField.lock.find(params[:id])
-          prior_upgrade_type_ids =
-            row.genai_located_field_upgrade_types.pluck(:invoice_upgrade_type_id)
           row.update!(genai_located_field_params)
           sync_genai_located_field_mappings!(row)
-          publish_genai_rulesets_for!(
-            prior_upgrade_type_ids +
-              row.genai_located_field_upgrade_types.pluck(:invoice_upgrade_type_id)
-          )
           row.reload
         end
       end
@@ -350,7 +363,10 @@ module Api
         mappings = normalized_mappings(params[:mappings], nil)
         ensure_mappings_present!(row, mappings)
 
-        existing = row.code_rule_upgrade_types.index_by { |item| item.invoice_upgrade_type_id.to_s }
+        existing =
+          row.code_rule_upgrade_types.index_by do |item|
+            item.invoice_upgrade_type_id.to_s
+          end
         keep_ids = mappings.map { |item| item[:invoice_upgrade_type_id] }
 
         existing.each_value do |mapping|
@@ -372,7 +388,10 @@ module Api
         mappings = normalized_mappings(params[:mappings], nil)
         ensure_mappings_present!(row, mappings)
 
-        existing = row.genai_rule_upgrade_types.index_by { |item| item.invoice_upgrade_type_id.to_s }
+        existing =
+          row.genai_rule_upgrade_types.index_by do |item|
+            item.invoice_upgrade_type_id.to_s
+          end
         keep_ids = mappings.map { |item| item[:invoice_upgrade_type_id] }
 
         existing.each_value do |mapping|
@@ -381,12 +400,16 @@ module Api
           mapping.destroy!
         end
 
-        next_rule_number = existing.values
-          .select { |mapping| keep_ids.include?(mapping.invoice_upgrade_type_id.to_s) }
-          .map(&:rule_number)
-          .compact
-          .max
-          .to_i
+        next_rule_number =
+          existing
+            .values
+            .select do |mapping|
+              keep_ids.include?(mapping.invoice_upgrade_type_id.to_s)
+            end
+            .map(&:rule_number)
+            .compact
+            .max
+            .to_i
 
         mappings.each do |item|
           mapping = existing[item[:invoice_upgrade_type_id]]
@@ -404,7 +427,10 @@ module Api
         mappings = normalized_mappings(params[:mappings], nil)
         ensure_mappings_present!(row, mappings)
 
-        existing = row.genai_located_field_upgrade_types.index_by { |item| item.invoice_upgrade_type_id.to_s }
+        existing =
+          row.genai_located_field_upgrade_types.index_by do |item|
+            item.invoice_upgrade_type_id.to_s
+          end
         keep_ids = mappings.map { |item| item[:invoice_upgrade_type_id] }
 
         existing.each_value do |mapping|
@@ -413,12 +439,16 @@ module Api
           mapping.destroy!
         end
 
-        next_field_number = existing.values
-          .select { |mapping| keep_ids.include?(mapping.invoice_upgrade_type_id.to_s) }
-          .map(&:field_number)
-          .compact
-          .max
-          .to_i
+        next_field_number =
+          existing
+            .values
+            .select do |mapping|
+              keep_ids.include?(mapping.invoice_upgrade_type_id.to_s)
+            end
+            .map(&:field_number)
+            .compact
+            .max
+            .to_i
 
         mappings.each do |item|
           mapping = existing[item[:invoice_upgrade_type_id]]
@@ -433,28 +463,28 @@ module Api
       end
 
       def normalized_mappings(raw_value, order_key)
-        Array.wrap(raw_value).filter_map do |entry|
-          hash =
-            case entry
-            when ActionController::Parameters
-              entry.to_unsafe_h
-            when Hash
-              entry
-            else
-              nil
-            end
+        Array
+          .wrap(raw_value)
+          .filter_map do |entry|
+            hash =
+              case entry
+              when ActionController::Parameters
+                entry.to_unsafe_h
+              when Hash
+                entry
+              else
+                nil
+              end
 
-          next if hash.blank?
+            next if hash.blank?
 
-          invoice_upgrade_type_id = hash["invoice_upgrade_type_id"].to_s.strip
-          next if invoice_upgrade_type_id.blank?
+            invoice_upgrade_type_id = hash["invoice_upgrade_type_id"].to_s.strip
+            next if invoice_upgrade_type_id.blank?
 
-          row = { invoice_upgrade_type_id: invoice_upgrade_type_id }
-          if order_key
-            row[order_key] = [hash[order_key.to_s].to_i, 1].max
+            row = { invoice_upgrade_type_id: invoice_upgrade_type_id }
+            row[order_key] = [hash[order_key.to_s].to_i, 1].max if order_key
+            row
           end
-          row
-        end
       end
 
       def ensure_mappings_present!(row, mappings)
@@ -462,12 +492,6 @@ module Api
 
         row.errors.add(:base, "At least one upgrade type mapping is required.")
         raise ActiveRecord::RecordInvalid, row
-      end
-
-      def publish_genai_rulesets_for!(invoice_upgrade_type_ids)
-        ::Claims::GenaiRulesetPublisher::Publish.call(
-          invoice_upgrade_type_ids: invoice_upgrade_type_ids
-        )
       end
 
       def code_rule_params
@@ -496,13 +520,15 @@ module Api
       end
 
       def serialize_upgrade_types(upgrade_types)
-        upgrade_types.sort_by(&:upgrade_type_key).map do |item|
-          {
-            id: item.id,
-            upgrade_type_key: item.upgrade_type_key,
-            description: item.description
-          }
-        end
+        upgrade_types
+          .sort_by(&:upgrade_type_key)
+          .map do |item|
+            {
+              id: item.id,
+              upgrade_type_key: item.upgrade_type_key,
+              description: item.description
+            }
+          end
       end
 
       def serialize_row(row, record_type)

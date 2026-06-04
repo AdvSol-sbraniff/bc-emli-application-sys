@@ -57,6 +57,7 @@ ALTER TABLE claims.ingest_step_runs
       'classifier',
       'genai',
       'case_facts',
+      'product_lookup_enrichment',
       'genai_common',
       'genai_upgrade',
       'code_common',

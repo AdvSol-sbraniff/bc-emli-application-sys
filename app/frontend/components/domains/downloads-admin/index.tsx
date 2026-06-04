@@ -50,10 +50,6 @@ export default function DownloadsAdminScreen() {
           <Text fontSize="lg" fontWeight="bold" mb={1}>
             External reference downloads
           </Text>
-          <Text fontSize="sm" opacity={0.75} maxW="760px" mb={5}>
-            This page collects admin tools that download or refresh external reference data used by code-owned checks.
-            More download tools can be added here as new reference sources are automated.
-          </Text>
 
           <Flex gap={4} wrap="wrap">
             {downloadTools.map((tool) => (

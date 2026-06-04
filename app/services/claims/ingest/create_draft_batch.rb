@@ -7,29 +7,17 @@ require "securerandom"
 module Claims
   module Ingest
     class CreateDraftBatch
-      def self.call(
-        contractor_id:,
-        files:,
-        validationgenai_ruleset_id: nil,
-        log_prefix: "draft_batch"
-      )
+      def self.call(contractor_id:, files:, log_prefix: "draft_batch")
         new(
           contractor_id: contractor_id,
           files: files,
-          validationgenai_ruleset_id: validationgenai_ruleset_id,
           log_prefix: log_prefix
         ).call
       end
 
-      def initialize(
-        contractor_id:,
-        files:,
-        validationgenai_ruleset_id:,
-        log_prefix:
-      )
+      def initialize(contractor_id:, files:, log_prefix:)
         @contractor_id = contractor_id.to_s.strip
         @files = Array(files).flatten.compact
-        @validationgenai_ruleset_id = validationgenai_ruleset_id.to_s.strip
         @log_prefix = log_prefix
       end
 
@@ -39,8 +27,6 @@ module Claims
           raise "No files received. Expected multipart field pdfs[] (or pdfs)."
         end
 
-        ruleset_id =
-          validationgenai_ruleset_id.presence || resolve_default_ruleset_id!
         session_result =
           ::Claims::Sessions::Create.call(contractor_id: contractor_id)
         session_id = session_result.session.id
@@ -82,14 +68,7 @@ module Claims
 
         results =
           files.each_with_index.map do |file, index|
-            process_file(
-              file,
-              index,
-              session_id,
-              ingest_run,
-              ruleset_id,
-              shell_invoice.id
-            )
+            process_file(file, index, session_id, ingest_run, shell_invoice.id)
           end
 
         failed_results = results.select { |row| row[:status].to_s == "failed" }
@@ -114,10 +93,7 @@ module Claims
           updated_at: Time.current
         )
 
-        ::Claims::Ingest::AdvanceBundleRun.call(
-          ingest_run_id: ingest_run.id,
-          validationgenai_ruleset_id: ruleset_id
-        )
+        ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload
         mark_orphaned_ingest_failures!(ingest_run: ingest_run, results: results)
         ingest_run.reload
@@ -138,19 +114,9 @@ module Claims
 
       private
 
-      attr_reader :contractor_id,
-                  :files,
-                  :validationgenai_ruleset_id,
-                  :log_prefix
+      attr_reader :contractor_id, :files, :log_prefix
 
-      def process_file(
-        file,
-        index,
-        session_id,
-        ingest_run,
-        ruleset_id,
-        shell_invoice_id
-      )
+      def process_file(file, index, session_id, ingest_run, shell_invoice_id)
         name = file_safe_call(file, :original_filename) || "unknown.pdf"
         content_type = file_safe_call(file, :content_type) || "application/pdf"
         size = file_safe_call(file, :size)
@@ -217,8 +183,7 @@ module Claims
           jid =
             ::Claims::RunIngestReadOcrJob.perform_async(
               ingest_document.id,
-              ingest_run.id,
-              ruleset_id
+              ingest_run.id
             )
 
           {
@@ -265,31 +230,6 @@ module Claims
         )
       rescue StandardError
         nil
-      end
-
-      def resolve_default_ruleset_id!
-        row =
-          ::Claims::ValidationgenaiRuleset
-            .joins(
-              "JOIN claims.invoice_upgrade_types iut ON iut.id = claims.validationgenai_rulesets.invoice_upgrade_type_id"
-            )
-            .where(
-              "iut.upgrade_type_key = ? OR claims.validationgenai_rulesets.ruleset_shortname = ?",
-              "common",
-              "common"
-            )
-            .order(
-              Arel.sql(
-                "claims.validationgenai_rulesets.updated_at DESC, claims.validationgenai_rulesets.created_at DESC, claims.validationgenai_rulesets.id DESC"
-              )
-            )
-            .first
-
-        if row.nil?
-          raise "No default/common validationgenai_ruleset found for full GenAI run."
-        end
-
-        row.id
       end
 
       def file_safe_call(obj, method_name)

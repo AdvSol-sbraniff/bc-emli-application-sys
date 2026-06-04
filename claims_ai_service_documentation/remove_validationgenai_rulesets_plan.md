@@ -1,5 +1,15 @@
 # Remove `validationgenai_rulesets` Runtime Dependency Plan
 
+## Status
+
+Implemented locally on 2026-06-03.
+
+- Runtime now compiles GenAI prompt text directly from normalized rule and located-field mappings.
+- `claims.validationgenai_rulesets` and its seed file were removed from the active local rebuild path.
+- `validationgenai_ruleset_id` was removed from active runtime plumbing, API payloads, and local schema.
+- The upgrade GenAI context window now separates case facts, raw DI invoice JSON, and the final ask into distinct user records.
+- Gold was not updated as part of this plan.
+
 ## 1. Purpose
 
 Remove `claims.validationgenai_rulesets` from the active GenAI validation architecture.

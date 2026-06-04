@@ -659,9 +659,7 @@ export default function ValidationRulesAdminScreen() {
         <Container maxW="container.xl" pb={4} flex="1" pt={6}>
           <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
             <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4}>
-              <Text fontSize="lg" fontWeight="bold">
-                Upgrade type portal
-              </Text>
+              <Box />
               <HStack spacing={3} flexWrap="wrap" justify="end">
                 <Button
                   colorScheme="blue"
@@ -669,16 +667,6 @@ export default function ValidationRulesAdminScreen() {
                   onClick={() => navigate('/validation-rules-alphabetic-admin')}
                 >
                   Alphabetic Portal
-                </Button>
-                <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-config')}>
-                  Validation Prompt Config
-                </Button>
-                <Button
-                  colorScheme="blue"
-                  variant="outline"
-                  onClick={() => navigate('/supporting-document-types-admin')}
-                >
-                  Supporting Document Types
                 </Button>
               </HStack>
             </Flex>

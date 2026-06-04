@@ -76,7 +76,6 @@ type StepRow = {
   step_type?: string | null;
   status?: string | null;
   error_text?: string | null;
-  validationgenai_ruleset_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -272,57 +271,63 @@ export default function SubmissionSimulatorAdminScreen() {
     }
   }, []);
 
-  const loadRunInvoices = useCallback(async (id: string) => {
-    if (!id) return;
-    setRowsLoading(true);
-    setRowsError('');
-    try {
-      const res = await fetch(`/api/claims/ingest/runs/${encodeURIComponent(id)}/invoices`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-      const rows = Array.isArray(data?.rows) ? data.rows : [];
-      setInvoiceRows(rows);
-      if (!selectedInvoiceId && rows[0]?.invoice_id) setSelectedInvoiceId(String(rows[0].invoice_id));
-    } catch (e: any) {
-      setRowsError(e?.message || 'Failed to load run invoices.');
-      setInvoiceRows([]);
-    } finally {
-      setRowsLoading(false);
-    }
-  }, [selectedInvoiceId]);
-
-  const loadInvoiceSteps = useCallback(async (invoiceId: string) => {
-    if (!invoiceId) return;
-    setStepsLoading(true);
-    setStepsError('');
-    try {
-      const params = new URLSearchParams({ limit: '500' });
-      if (runId) params.set('ingest_run_id', runId);
-
-      const res = await fetch(
-        `/api/claims/ingest/invoices/${encodeURIComponent(invoiceId)}/steps?${params.toString()}`,
-        {
+  const loadRunInvoices = useCallback(
+    async (id: string) => {
+      if (!id) return;
+      setRowsLoading(true);
+      setRowsError('');
+      try {
+        const res = await fetch(`/api/claims/ingest/runs/${encodeURIComponent(id)}/invoices`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
           credentials: 'include',
-        },
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-      setSteps(Array.isArray(data?.rows) ? data.rows : []);
-      setClassifierResults(Array.isArray(data?.classifier_results) ? data.classifier_results : []);
-    } catch (e: any) {
-      setStepsError(e?.message || 'Failed to load step history.');
-      setSteps([]);
-      setClassifierResults([]);
-    } finally {
-      setStepsLoading(false);
-    }
-  }, [runId]);
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+        const rows = Array.isArray(data?.rows) ? data.rows : [];
+        setInvoiceRows(rows);
+        if (!selectedInvoiceId && rows[0]?.invoice_id) setSelectedInvoiceId(String(rows[0].invoice_id));
+      } catch (e: any) {
+        setRowsError(e?.message || 'Failed to load run invoices.');
+        setInvoiceRows([]);
+      } finally {
+        setRowsLoading(false);
+      }
+    },
+    [selectedInvoiceId],
+  );
+
+  const loadInvoiceSteps = useCallback(
+    async (invoiceId: string) => {
+      if (!invoiceId) return;
+      setStepsLoading(true);
+      setStepsError('');
+      try {
+        const params = new URLSearchParams({ limit: '500' });
+        if (runId) params.set('ingest_run_id', runId);
+
+        const res = await fetch(
+          `/api/claims/ingest/invoices/${encodeURIComponent(invoiceId)}/steps?${params.toString()}`,
+          {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            credentials: 'include',
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+        setSteps(Array.isArray(data?.rows) ? data.rows : []);
+        setClassifierResults(Array.isArray(data?.classifier_results) ? data.classifier_results : []);
+      } catch (e: any) {
+        setStepsError(e?.message || 'Failed to load step history.');
+        setSteps([]);
+        setClassifierResults([]);
+      } finally {
+        setStepsLoading(false);
+      }
+    },
+    [runId],
+  );
 
   const refreshAll = useCallback(async () => {
     if (!runId) return;
@@ -774,12 +779,11 @@ export default function SubmissionSimulatorAdminScreen() {
                 </Box>
 
                 <Box borderWidth="1px" borderRadius="md" overflow="auto">
-                  <Table size="sm" minW="1000px">
+                  <Table size="sm" minW="850px">
                     <Thead bg="gray.50">
                       <Tr>
                         <Th>created</Th>
                         <Th>document</Th>
-                        <Th>run</Th>
                         <Th>step</Th>
                         <Th>state</Th>
                         <Th>error</Th>
@@ -793,9 +797,6 @@ export default function SubmissionSimulatorAdminScreen() {
                             <Text>{s.original_filename || 'â€”'}</Text>
                             <Text opacity={0.7}>{s.document_kind || 'â€”'}</Text>
                           </Td>
-                          <Td fontFamily="mono" fontSize="xs">
-                            {s.ingest_run_id || '—'}
-                          </Td>
                           <Td fontSize="xs">{s.step_type || '—'}</Td>
                           <Td fontSize="xs">{renderStepState(s)}</Td>
                           <Td fontSize="xs">{s.error_text || '—'}</Td>
@@ -804,7 +805,7 @@ export default function SubmissionSimulatorAdminScreen() {
 
                       {!stepsLoading && steps.length === 0 && (
                         <Tr>
-                          <Td colSpan={6}>
+                          <Td colSpan={5}>
                             <Text fontSize="sm" opacity={0.7}>
                               No step rows for current selection.
                             </Text>
@@ -848,7 +849,8 @@ export default function SubmissionSimulatorAdminScreen() {
                   Overall tab
                 </Text>
                 <Text fontSize="sm">
-                  One row per ingest bundle shell invoice in the selected run. Click it to inspect both staged-file and resolved invoice step history.
+                  One row per ingest bundle shell invoice in the selected run. Click it to inspect both staged-file and
+                  resolved invoice step history.
                 </Text>
                 <Text fontSize="sm" mt={1}>
                   Progress indicator: spinner means active, green means complete, red means failed.

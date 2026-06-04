@@ -12,7 +12,6 @@ module Claims
     # args:
     # - invoice_version_id (required)
     # - ingest_run_id (optional)  => link to batch run
-    # - validationgenai_ruleset_id (optional) => enqueue GenAI after OCR success
     # - model_id (optional) => DI model, default prebuilt-invoice
     # - enqueue_genai_after (optional) => whether to queue RunGenaiJob after OCR
     # - genai_mode (optional) => classifier payload handling when enqueueing GenAI
@@ -20,7 +19,6 @@ module Claims
     def perform(
       invoice_version_id,
       ingest_run_id = nil,
-      validationgenai_ruleset_id = nil,
       model_id = "prebuilt-invoice",
       enqueue_genai_after = true,
       genai_mode = "use_existing_classifier",
@@ -149,13 +147,12 @@ module Claims
       )
       inv.update!(status: "ocr_complete", status_updated_at: Time.current)
 
-      if validationgenai_ruleset_id.present? && enqueue_genai_after
+      if enqueue_genai_after
         inv.update!(status: "genai_queued", status_updated_at: Time.current)
 
         Claims::RunGenaiJob.perform_async(
           sess.id,
           iv.id,
-          validationgenai_ruleset_id,
           ingest_run_id,
           genai_mode
         )
@@ -163,10 +160,7 @@ module Claims
 
       if ingest_run_id.present?
         if %w[ocr_read ocr_invoice].include?(step_type)
-          Claims::Ingest::AdvanceBundleRun.call(
-            ingest_run_id: ingest_run_id,
-            validationgenai_ruleset_id: validationgenai_ruleset_id
-          )
+          Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
         else
           Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
         end
@@ -192,10 +186,7 @@ module Claims
       begin
         if ingest_run_id.present?
           if %w[ocr_read ocr_invoice].include?(step_type)
-            Claims::Ingest::AdvanceBundleRun.call(
-              ingest_run_id: ingest_run_id,
-              validationgenai_ruleset_id: validationgenai_ruleset_id
-            )
+            Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
           else
             Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
           end

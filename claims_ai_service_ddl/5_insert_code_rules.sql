@@ -17,7 +17,7 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53001'::uuid,
     'hp_ahri_found_in_product_list',
-    'Checks whether invoice and supporting-document AHRI evidence match each other and exist in the current imported BC Hydro heat-pump product lists.',
+    'Checks whether the invoice AHRI reference matches AHRI evidence from a product_spec_sheet or manufacturer_label_photo, and exists in the current imported BC Hydro heat-pump product lists.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched AHRI product-list row.',
     'Refresh the heat-pump product-list imports if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',
@@ -95,7 +95,7 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53181'::uuid,
     'ashp_oil_ohpa_bc_product_found_in_list',
-    'Checks whether invoice and supporting-document AHRI evidence match each other and exist in the current imported NRCan Oil to Heat Pump Affordability BC qualified product list.',
+    'Checks whether the invoice AHRI reference matches AHRI evidence from a product_spec_sheet or manufacturer_label_photo, and exists in the current imported NRCan Oil to Heat Pump Affordability BC qualified product list.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched NRCan OHPA BC product-list row.',
     'Refresh the OHPA product-list import if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',

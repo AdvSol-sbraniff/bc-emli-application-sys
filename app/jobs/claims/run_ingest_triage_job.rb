@@ -8,11 +8,7 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_genai, retry: 0
 
-    def perform(
-      ingest_document_id,
-      ingest_run_id = nil,
-      validationgenai_ruleset_id = nil
-    )
+    def perform(ingest_document_id, ingest_run_id = nil)
       document = ::Claims::IngestDocument.find(ingest_document_id)
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
@@ -52,20 +48,14 @@ module Claims
         updated_at: Time.current
       )
 
-      advance_run!(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+      advance_run!(ingest_run_id: ingest_run_id)
     rescue => e
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
         updated_at: Time.current
       )
-      advance_run!(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+      advance_run!(ingest_run_id: ingest_run_id)
       raise
     end
 
@@ -155,13 +145,10 @@ module Claims
       JSON.parse(resp.body)
     end
 
-    def advance_run!(ingest_run_id:, validationgenai_ruleset_id:)
+    def advance_run!(ingest_run_id:)
       return if ingest_run_id.blank?
 
-      ::Claims::Ingest::AdvanceBundleRun.call(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+      ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
     rescue StandardError
       nil
     end

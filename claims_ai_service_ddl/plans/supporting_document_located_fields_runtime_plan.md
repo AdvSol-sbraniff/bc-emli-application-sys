@@ -35,13 +35,13 @@ Start with fields that the 2026 ESP tracker identifies as true supplement-extrac
 - `fossil_removal_proof`
 - `utility_invoice`
 - `utility_upgrade_document`
-- `energy_performance_label`
+- `fenestration_energy_performance_label`
 - `certification_sheet`
 - `manufacturer_label_photo`
 - `product_spec_sheet`
 - `energy_star_label`
 - `f280_heat_load_calculation`
-- `commissioning_or_control_document`
+- `dual_fuel_control_document`
 - `permit_document`
 - `before_after_photo_set`
 

@@ -15,12 +15,11 @@ module Claims
     def perform(
       session_id,
       invoice_version_id,
-      validationgenai_ruleset_id,
       ingest_run_id = nil,
       mode = "use_existing_classifier"
     )
       Rails.logger.info(
-        "[CLAIMS][RUN_GENAI_JOB] START session_id=#{session_id} invoice_version_id=#{invoice_version_id} ruleset_id=#{validationgenai_ruleset_id} mode=#{mode}"
+        "[CLAIMS][RUN_GENAI_JOB] START session_id=#{session_id} invoice_version_id=#{invoice_version_id} mode=#{mode}"
       )
 
       requested_mode = mode.to_s.presence
@@ -72,10 +71,11 @@ module Claims
           classifier_payload: classifier_payload
         )
       case_facts = case_facts_result.fetch(:case_facts)
+      upgrade_types = detected_upgrade_types(classifier_payload)
 
       common_upgrade_type = upgrade_type_by_key!("common")
-      common_ruleset = ruleset_for_upgrade_type!(common_upgrade_type)
-      upgrade_types = detected_upgrade_types(classifier_payload)
+      common_user_record1 =
+        compiled_user_record1_for_upgrade_type!(common_upgrade_type)
       ruleset_results = []
 
       ruleset_results << run_genai_ruleset!(
@@ -84,7 +84,7 @@ module Claims
         invoice_version_id: iv.id,
         step_type: "genai_common",
         upgrade_type: common_upgrade_type,
-        ruleset: common_ruleset,
+        compiled_user_record1: common_user_record1,
         case_facts: case_facts,
         di_raw_json: iv.di_raw_json
       )
@@ -102,11 +102,19 @@ module Claims
           invoice_version_id: iv.id,
           step_type: "genai_upgrade",
           upgrade_type: upgrade_type,
-          ruleset: ruleset_for_upgrade_type!(upgrade_type),
+          compiled_user_record1:
+            compiled_user_record1_for_upgrade_type!(upgrade_type),
           case_facts: upgrade_type_case_facts,
           di_raw_json: iv.di_raw_json
         )
       end
+
+      run_product_lookup_enrichment_step!(
+        ingest_run_id: ingest_run_id,
+        session_id: sess.id,
+        invoice_version: iv,
+        invoice_upgrade_types: upgrade_types
+      )
 
       if code_rules_enabled_for_upgrade_type?(common_upgrade_type)
         run_code_ruleset!(
@@ -153,12 +161,7 @@ module Claims
 
       inv.update!(status: "genai_complete", status_updated_at: Time.current)
 
-      if ingest_run_id.present?
-        advance_run!(
-          ingest_run_id: ingest_run_id,
-          validationgenai_ruleset_id: validationgenai_ruleset_id
-        )
-      end
+      advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
     rescue => e
       # mark failed (best-effort)
       begin
@@ -178,12 +181,7 @@ module Claims
       end
 
       begin
-        if ingest_run_id.present?
-          advance_run!(
-            ingest_run_id: ingest_run_id,
-            validationgenai_ruleset_id: validationgenai_ruleset_id
-          )
-        end
+        advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
       rescue StandardError
         # ignore
       end
@@ -258,6 +256,55 @@ module Claims
       raise
     end
 
+    def run_product_lookup_enrichment_step!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version:,
+      invoice_upgrade_types:
+    )
+      step =
+        find_or_create_step!(
+          ingest_run_id: ingest_run_id,
+          session_id: session_id,
+          invoice_version_id: invoice_version.id,
+          step_type: "product_lookup_enrichment"
+        )
+      step.update!(
+        status: "in_progress",
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      result =
+        ::Claims::ProductLookupEnrichment::Apply.call(
+          invoice_version_id: invoice_version.id,
+          invoice_upgrade_types: invoice_upgrade_types
+        )
+      unless result[:ok]
+        raise "Product lookup enrichment failed: #{result.inspect}"
+      end
+
+      step.update!(
+        status: "succeeded",
+        genai_results_json: result,
+        error_text: nil,
+        updated_at: Time.current
+      )
+
+      result
+    rescue => e
+      begin
+        step&.update!(
+          status: "failed",
+          error_text: "#{e.class}: #{e.message}",
+          updated_at: Time.current
+        )
+      rescue StandardError
+        nil
+      end
+      raise
+    end
+
     def run_aggregate_advice_step!(
       ingest_run_id:,
       session_id:,
@@ -303,11 +350,8 @@ module Claims
       raise
     end
 
-    def advance_run!(ingest_run_id:, validationgenai_ruleset_id:)
-      Claims::Ingest::AdvanceBundleRun.call(
-        ingest_run_id: ingest_run_id,
-        validationgenai_ruleset_id: validationgenai_ruleset_id
-      )
+    def advance_run!(ingest_run_id:)
+      Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
     end
 
     def existing_classifier_payload_for(invoice_version_id:)
@@ -348,7 +392,6 @@ module Claims
       session_id:,
       invoice_version_id:,
       step_type:,
-      validationgenai_ruleset_id: nil,
       invoice_upgrade_type_id: nil
     )
       step = nil
@@ -360,10 +403,6 @@ module Claims
             invoice_version_id: invoice_version_id,
             step_type: step_type
           ).where(status: %w[queued in_progress])
-        scope =
-          scope.where(
-            validationgenai_ruleset_id: validationgenai_ruleset_id
-          ) if validationgenai_ruleset_id.present?
         scope =
           scope.where(
             invoice_upgrade_type_id: invoice_upgrade_type_id
@@ -380,7 +419,6 @@ module Claims
           step_type: step_type,
           status: "queued",
           error_text: nil,
-          validationgenai_ruleset_id: validationgenai_ruleset_id,
           invoice_upgrade_type_id: invoice_upgrade_type_id,
           created_at: Time.current,
           updated_at: Time.current
@@ -415,17 +453,17 @@ module Claims
       invoice_version_id:,
       step_type:,
       upgrade_type:,
-      ruleset:,
+      compiled_user_record1:,
       case_facts:,
       di_raw_json:
     )
+      contextwindowjson = nil
       step =
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
           session_id: session_id,
           invoice_version_id: invoice_version_id,
           step_type: step_type,
-          validationgenai_ruleset_id: ruleset.id,
           invoice_upgrade_type_id: upgrade_type.id
         )
       step.update!(
@@ -437,13 +475,12 @@ module Claims
       upsert_genai_manifest!(
         invoice_version_id: invoice_version_id,
         upgrade_type: upgrade_type,
-        ruleset: ruleset,
         call_status: "in_progress"
       )
 
       contextwindowjson =
         build_contextwindowjson(
-          ruleset: ruleset,
+          compiled_user_record1: compiled_user_record1,
           case_facts: case_facts,
           di_raw_json: di_raw_json
         )
@@ -475,7 +512,6 @@ module Claims
       upsert_genai_manifest!(
         invoice_version_id: invoice_version_id,
         upgrade_type: upgrade_type,
-        ruleset: ruleset,
         call_status: "succeeded",
         payload: payload
       )
@@ -488,13 +524,12 @@ module Claims
         updated_at: Time.current
       )
 
-      { upgrade_type: upgrade_type, ruleset: ruleset, payload: payload }
+      { upgrade_type: upgrade_type, payload: payload }
     rescue => e
       begin
         upsert_genai_manifest!(
           invoice_version_id: invoice_version_id,
           upgrade_type: upgrade_type,
-          ruleset: ruleset,
           call_status: "failed"
         )
       rescue StandardError
@@ -503,6 +538,7 @@ module Claims
       begin
         step&.update!(
           status: "failed",
+          context_window_json: contextwindowjson,
           error_text: "#{e.class}: #{e.message}",
           updated_at: Time.current
         )
@@ -560,7 +596,6 @@ module Claims
     def upsert_genai_manifest!(
       invoice_version_id:,
       upgrade_type:,
-      ruleset:,
       call_status:,
       payload: nil
     )
@@ -584,7 +619,6 @@ module Claims
           coerce_confidence(
             overall["overall_confidence"] || overall[:overall_confidence]
           ),
-        validationgenai_ruleset_id: ruleset.id,
         raw_json: payload,
         admin_advice:
           payload ? advice_from_rulechecks(payload) : row.admin_advice,
@@ -638,14 +672,17 @@ module Claims
       Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: key)
     end
 
-    def ruleset_for_upgrade_type!(upgrade_type)
-      Claims::ValidationgenaiRuleset
-        .where(invoice_upgrade_type_id: upgrade_type.id)
-        .order(Arel.sql("updated_at DESC, created_at DESC, id DESC"))
-        .first ||
-        raise(
-          "No validationgenai_ruleset found for upgrade_type_key=#{upgrade_type.upgrade_type_key}"
-        )
+    def compiled_user_record1_for_upgrade_type!(upgrade_type)
+      text =
+        Claims::GenaiRulesetCompiler::Compile.call(
+          invoice_upgrade_type: upgrade_type
+        ).to_s
+
+      return text if text.strip.present?
+
+      raise(
+        "Compiled GenAI prompt is empty for upgrade_type_key=#{upgrade_type.upgrade_type_key}"
+      )
     end
 
     def apply_combined_overall!(
@@ -685,7 +722,6 @@ module Claims
             ruleset_results.map do |result|
               {
                 upgrade_type_key: result[:upgrade_type].upgrade_type_key,
-                validationgenai_ruleset_id: result[:ruleset].id,
                 payload: result[:payload]
               }
             end
@@ -939,21 +975,24 @@ module Claims
     # - Ensure model sees:
     #   1) system_record (schema + constraints)
     #   2) user_record0 (shared DI/OCR reading guidance)
-    #   3) user_record1 (ruleset-specific tasks)
-    #   4) user_record2 (case facts + DI raw json)
-    #   5) user_record3 (actual ask)
+    #   3) user_record1 (compiled normalized located-field + rule tasks)
+    #   4) user_record2 (case facts only)
+    #   5) user_record3 (raw DI invoice JSON only)
+    #   6) user_record4 (actual ask)
     # ============================================================
-    def build_contextwindowjson(ruleset:, case_facts:, di_raw_json:)
+    def build_contextwindowjson(
+      compiled_user_record1:,
+      case_facts:,
+      di_raw_json:
+    )
       config = Claims::ValidationgenaiConfig.order(:created_at).first
       sys = config&.system_record.to_s
       user0 = config&.user_record0.to_s
-      gt = ruleset.user_record1.to_s
+      gt = compiled_user_record1.to_s
 
       raise "validationgenai_config.system_record is empty" if sys.strip.empty?
 
-      if gt.strip.empty?
-        raise "validationgenai_rulesets.user_record1 is empty for ruleset_id=#{ruleset.id}"
-      end
+      raise "compiled GenAI user_record1 is empty" if gt.strip.empty?
 
       messages = [
         { role: "system", content: [{ type: "input_text", text: sys }] }
@@ -970,15 +1009,16 @@ module Claims
         [
           { role: "user", content: [{ type: "input_text", text: gt }] },
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 2 (the case)
-Esp database values:
+            User record 2 (case facts)
+ESP database values:
 #{case_facts.to_json}
-
-Document intelligence raw json:
+          TEXT
+          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+            User record 3 (raw DI invoice JSON)
 #{di_raw_json.to_json}
           TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
-            User record 3 (Actual Ask)
+            User record 4 (Actual Ask)
             Please perform the location tasks and rulecheck tasks.
             Reply must be using the strict JSON output schema defined in the system record.
           TEXT

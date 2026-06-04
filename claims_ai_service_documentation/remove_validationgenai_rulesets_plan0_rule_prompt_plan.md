@@ -118,9 +118,15 @@ Also verify that an admin save/publish path cannot produce a confusing prompt fo
 - if `validationgenai_rulesets` still exists during this interim period, newly compiled rows may still be created
 - those rows should no longer be logically broken because the normalized rule prompt itself now contains the needed cap/category/top-up text
 
-## Seed Artifact Cleanup
+## Interim Publish And Seed Artifact Cleanup
 
 After the normalized prompts are self-contained:
+
+- publish fresh compiled rows from the normalized prompts while `claims.validationgenai_rulesets` is still the runtime source
+- verify the latest compiled rows no longer depend on invisible cap/category/top-up/formula text
+- do not remove `claims_ai_service_ddl/5_insert_validationgenai_rulesets.sql` from the rebuild flow if Plan 0 is run by itself, because current runtime still needs compiled ruleset rows until Plan 1 is complete
+
+During Plan 1, after runtime no longer queries `claims.validationgenai_rulesets`:
 
 - remove `claims_ai_service_ddl/5_insert_validationgenai_rulesets.sql` from the rebuild flow, or reduce/rename/split it so it no longer appears to be a source of business rule prompt content
 - update `claims_ai_service_ddl/README_REBUILD_ORDER.txt` so rebuild does not rely on compiled prompt seed data

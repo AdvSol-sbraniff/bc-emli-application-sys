@@ -32,7 +32,15 @@ WHERE genai_rule_key IN (
   'ashp_wood_no_existing_heat_pump_flag',
   'hp_fossil_no_existing_heat_pump_flag',
   'hydronic_no_existing_heat_pump_flag',
-  'ashp_electric_primary_system_scope_present'
+  'ashp_electric_primary_system_scope_present',
+  'dfhp_fossil_modification_or_removal_supporting_document_attached',
+  'hydronic_fossil_removal_supporting_document_attached'
+);
+
+-- Retired GenAI located fields replaced by clearer field keys.
+DELETE FROM claims.genai_located_fields
+WHERE genai_field_key IN (
+  'esu_utility_bill_or_invoice_reference'
 );
 
 WITH genai_rules_seed (
@@ -48,33 +56,42 @@ Use invoice evidence first, and treat utility-account supporting-document facts 
 Set rule_result="pass" when electric primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
 Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_electric_utility_account_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes a utility_bill_or_account_document.
+  ('ashp_electric_utility_account_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill or utility_account_document.
 Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_electric_rebate_math_within_cap', 'Check whether the claimed rebate for this electric-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
+Use these electric-source maximum rebate amounts for ESP1/ESP2: central ducted or 3-head multi-split $5,000/$4,000; 2-head multi-split or 2 single-head mini-splits $5,000/$4,000; single-head mini-split $5,000/$4,000. ESP3 has no rebate for this electric-to-heat-pump path.
+Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
 Evaluate this rule in this order:
 1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category-mapping notes above when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable cap from the summary-table values above using the visible eligibility code.
+2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
+3. Determine the applicable cap from the explicit cap values in this rule using the visible eligibility code.
 4. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
 Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
 Set rule_result="warn" when the eligibility code, rebate category, rebate amount, or visible upgrade cost is missing/ambiguous but no visible value clearly exceeds the cap.
 Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost or applicable cap.
 In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_gas_propane_existing_heat_context_present', 'Check whether invoice text supports natural gas or propane primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_gas_propane_existing_heat_context_present', 'Check whether the invoice or configured supporting-document located fields support that the home was primarily heated by natural gas or propane and that the new air-source heat pump replaces that system.
+Use invoice evidence first, including furnace, boiler, natural gas, propane, FortisBC gas, PNG, tank propane, or fossil-fuel conversion wording; use supporting-document facts only as corroborating context.
+Set rule_result="pass" when natural-gas/propane primary heat replacement is clear.
+Set rule_result="warn" when the conversion context is plausible but incomplete.
+Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_gas_propane_non_integrated_area_review', 'If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in the invoice or configured supporting-document located fields.
-Use non_integrated_area_preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
+Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_gas_propane_rebate_math_within_cap', 'Check whether the claimed rebate for this natural-gas-or-propane-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
+Use these gas/propane-source base maximum rebate amounts: central ducted or 3-head multi-split ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; 2-head multi-split or 2 single-head mini-splits ESP1 $14,000, ESP2 $10,500, ESP3 $8,000; single-head mini-split ESP1 $7,500, ESP2 $5,500, ESP3 $4,000.
+Northern top-up caps, when separately visible and eligible, are ESP1/ESP2 only: up to $3,000 for central ducted, multi-split, 2 single-head, air-to-water, or combined space/water systems; up to $1,500 for single-head mini-split systems. ESP3 has no northern top-up.
+Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
 Evaluate this rule in this order:
 1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category-mapping notes above when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable base cap from the summary-table values above using the visible eligibility code.
+2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
+3. Determine the applicable base cap from the explicit cap values in this rule using the visible eligibility code.
 4. Compare the claimed rebate to both the visible upgrade cost and the applicable base cap.
 5. If the invoice also shows a clearly separate northern top-up amount, state whether the visible top-up appears within the published top-up cap for that visible equipment category and eligibility code. Do not add a top-up amount into the main rebate comparison unless the invoice clearly bundles it into the same claimed rebate line.
 Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable base cap.
@@ -87,25 +104,28 @@ Set rule_result="pass" if an acceptable document is present with supplement_rout
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_consumption_baseline_reference_present', 'Check whether visible evidence supports the 500 L annual oil-consumption baseline for this oil-to-heat-pump claim.
-Use supporting-document located fields when supplied, especially utility_bill_or_account_document fields such as utility_service_type_or_fuel_evidence, utility_provider, account_or_bill_date, account_number_or_reference, and fuel_consumption_quantity_or_period.
+Use supporting-document located fields when supplied, especially utility_bill or utility_account_document fields such as utility_service_type_or_fuel_evidence, utility_provider, account_or_bill_date, account_number_or_reference, and fuel_consumption_quantity_or_period.
 Set rule_result="pass" when the invoice or supporting-document fields show at least 500 L of oil consumption within the relevant 12-month application period, or enough fuel-bill/receipt evidence for admin to confirm that threshold.
 Set rule_result="warn" when oil-consumption proof is present but the quantity, bill/receipt date, service period, or participant/home tie is incomplete or ambiguous.
 Set rule_result="fail" only when supplied evidence clearly contradicts the 500 L baseline, such as visible consumption below 500 L for the relevant period. Do not fail this rule solely because the proof document is missing; ashp_oil_consumption_proof_supporting_document_attached owns the attachment check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_oil_consumption_proof_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill_or_account_document or equivalent oil-consumption proof for this oil-to-heat-pump claim.
+  ('ashp_oil_consumption_proof_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill, utility_account_document, or equivalent oil-consumption proof for this oil-to-heat-pump claim.
 Set rule_result="pass" if present with supplement_routing_quality="usable" and located_fields include readable oil/fuel consumption evidence, such as utility_service_type_or_fuel_evidence or fuel_consumption_quantity_or_period.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_existing_heat_context_present', 'Check whether invoice text supports oil primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_non_integrated_area_review', 'If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
-Use non_integrated_area_preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
+Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_rebate_math_within_cap', 'Check whether the claimed rebate for this oil-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
+Use these oil-source base maximum rebate amounts: central ducted or 3-head multi-split ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; 2-head multi-split or 2 single-head mini-splits ESP1 $14,000, ESP2 $10,500, ESP3 $10,000; single-head mini-split ESP1 $10,000, ESP2 $10,000, ESP3 $10,000.
+Northern top-up caps, when separately visible and eligible, are ESP1/ESP2 only: up to $3,000 for central ducted, multi-split, 2 single-head, air-to-water, or combined space/water systems; up to $1,500 for single-head mini-split systems. ESP3 has no northern top-up.
+Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
 Evaluate this rule in this order:
 1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category-mapping notes above when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable base cap from the summary-table values above using the visible eligibility code.
+2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
+3. Determine the applicable base cap from the explicit cap values in this rule using the visible eligibility code.
 4. Compare the claimed rebate to both the visible upgrade cost and the applicable base cap.
 5. If the invoice also shows a clearly separate northern top-up amount, state whether the visible top-up appears within the published top-up cap for that visible equipment category and eligibility code. Do not add a top-up amount into the main rebate comparison unless the invoice clearly bundles it into the same claimed rebate line.
 Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable base cap.
@@ -124,10 +144,12 @@ Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as
   ('ashp_wood_existing_heat_context_present', 'Check whether invoice text supports wood/solid-fuel primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_rebate_math_within_cap', 'Check whether the claimed rebate for this wood-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
+Use these wood/solid-fuel-source maximum rebate amounts for ESP1/ESP2: central ducted or 3-head multi-split $5,000/$4,000; 2-head multi-split or 2 single-head mini-splits $5,000/$4,000; single-head mini-split $5,000/$4,000. ESP3 has no rebate for this wood-to-heat-pump path.
+Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
 Evaluate this rule in this order:
 1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category-mapping notes above when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable cap from the summary-table values above using the visible eligibility code.
+2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
+3. Determine the applicable cap from the explicit cap values in this rule using the visible eligibility code.
 4. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
 Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
 Set rule_result="warn" when the eligibility code, rebate category, rebate amount, or visible upgrade cost is missing/ambiguous but no visible value clearly exceeds the cap.
@@ -143,9 +165,10 @@ Set rule_result="warn" if the air-to-water versus combined/HPWH distinction is a
 Set rule_result="fail" if domestic-hot-water/combined scope is clearly visible in a space-heating-only air-to-water ruleset.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_rebate_math_within_cap', 'Check whether the claimed rebate for this air-to-water heat pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible source-fuel conversion context.
 Use the visible atw_conversion_source_fuel_evidence, atw_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
+Use these air-to-water maximum rebate amounts: if the home was heated with oil, natural gas, or propane, ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; if the home was heated with electricity or wood, ESP1 $5,000, ESP2 $5,000, ESP3 no rebate. A separately visible northern top-up may be up to $3,000 for ESP1 or ESP2 only; ESP3 has no northern top-up.
 Evaluate this rule in this order:
 1. Determine whether the visible source-fuel path is fossil fuel or electricity/wood.
-2. Determine the applicable cap from the summary-table values above using the visible source-fuel path and eligibility code.
+2. Determine the applicable cap from the explicit cap values in this rule using the visible source-fuel path and eligibility code.
 3. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
 4. If the invoice also shows a clearly separate northern top-up amount, state whether the visible top-up appears within the published $3,000 top-up cap for ESP1 or ESP2. Do not add a top-up amount into the main rebate comparison unless the invoice clearly bundles it into the same claimed rebate line.
 Set rule_result="pass" only when the invoice clearly shows the source-fuel path, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
@@ -168,9 +191,10 @@ Set rule_result="warn" if the combined nature is ambiguous and admin should veri
 Set rule_result="fail" if only space heating is clearly visible or only water heating is clearly visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('cshp_rebate_math_within_cap', 'Check whether the claimed rebate for this combined space-and-water heat pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible source-fuel conversion context.
 Use the visible cshp_conversion_source_fuel_evidence, cshp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
+Use these combined space-and-water heat pump maximum rebate amounts: if the home was heated with oil, natural gas, or propane, ESP1 $19,500, ESP2 $16,500, ESP3 $14,000; if the home was heated with electricity or wood, ESP1 $8,500, ESP2 $8,500, ESP3 no rebate. A separately visible northern top-up may be up to $3,000 for ESP1 or ESP2 only; ESP3 has no northern top-up.
 Evaluate this rule in this order:
 1. Determine whether the visible source-fuel path is fossil fuel or electricity/wood.
-2. Determine the applicable cap from the summary-table values above using the visible source-fuel path and eligibility code.
+2. Determine the applicable cap from the explicit cap values in this rule using the visible source-fuel path and eligibility code.
 3. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
 4. If the invoice also shows a clearly separate northern top-up amount, state whether the visible top-up appears within the published $3,000 top-up cap for ESP1 or ESP2. Do not add a top-up amount into the main rebate comparison unless the invoice clearly bundles it into the same claimed rebate line.
 Set rule_result="pass" only when the invoice clearly shows the source-fuel path, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
@@ -180,34 +204,35 @@ In reason_and_likely_causes, state which source-fuel rebate path the invoice app
 In calculation, show the visible source-fuel context, eligibility code, visible upgrade cost, claimed rebate, cap comparison, and any separate northern-top-up check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('cshp_scope_present', 'Check whether invoice text supports combined space and water heat-pump scope.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_controls_reference_present', 'Check whether invoice evidence or configured supporting-document located fields reference switchover controls or dual-fuel control setup.
-Use commissioning_or_control_document located fields such as commissioning_date, equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, and region_or_temperature_threshold_evidence.
+Use dual_fuel_control_document located fields such as control_setup_date, equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, and region_or_temperature_threshold_evidence.
 Set rule_result="pass" when control/setup evidence is present and tied to the dual-fuel equipment.
-Set rule_result="warn" when control evidence is missing, lacks a setpoint/equipment reference, or requires admin review of the commissioning/control document.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="warn" when control evidence is missing, lacks a setpoint/equipment reference, or requires admin review of the dual-fuel control document.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_description_sufficient_for_review', 'Check whether the invoice description is sufficient for admin pre-review of equipment, fossil-backup integration, labour/materials, and this upgrade''s rebate line.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_dual_fuel_scope_present', 'Check whether invoice evidence or configured supporting-document located fields support dual-fuel ducted heat-pump scope with fossil backup.
-Use invoice fields and commissioning_or_control_document located fields when present, including equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, and region_or_temperature_threshold_evidence.
+Use invoice fields and dual_fuel_control_document located fields when present, including equipment_reference, switchover_setpoint, backup_fuel_or_integration_evidence, and region_or_temperature_threshold_evidence.
 Set rule_result="pass" when the invoice/supporting-document evidence supports dual-fuel ducted heat-pump scope with fossil backup or integration.
 Set rule_result="warn" when dual-fuel scope, fossil backup, controls, or integration context is incomplete or ambiguous.
-Set rule_result="fail" when the evidence clearly shows a normal full fuel-switch heat pump, non-ducted/non-dual-fuel system, or another scope that contradicts dual-fuel ducted heat-pump eligibility. Do not fail this rule solely because fossil modification/removal proof is missing; dfhp_fossil_modification_or_removal_supporting_document_attached owns that attachment check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('dfhp_fossil_modification_or_removal_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes fossil_modification_or_removal_proof or permit_document for this dual-fuel ducted heat-pump upgrade.
-Set rule_result="pass" if at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable modification/removal or permit evidence for the site/system.
+Set rule_result="fail" when the evidence clearly shows a normal full fuel-switch heat pump, non-ducted/non-dual-fuel system, or another scope that contradicts dual-fuel ducted heat-pump eligibility. Do not fail this rule solely because fossil backup system documentation is missing; dfhp_fossil_backup_system_supporting_document_attached owns that attachment check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('dfhp_fossil_backup_system_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes fossil_backup_system_document or permit_document for this dual-fuel ducted heat-pump upgrade.
+Set rule_result="pass" if at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable retained/limited fossil backup system or permit evidence for the site/system.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if both fossil_modification_or_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('dfhp_heat_load_calc_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes approved_heat_load_calculation.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="fail" if both fossil_backup_system_document and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('dfhp_heat_load_calc_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes f280_heat_load_calculation for this dual-fuel ducted heat-pump upgrade.
+Set rule_result="pass" if present with supplement_routing_quality="usable" and located_fields include readable heat-load sizing evidence plus approval/program-acceptance evidence.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_non_integrated_area_review', 'If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
-Use non_integrated_area_preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
+Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_png_or_tank_propane_path_present', 'Check whether visible evidence supports PNG natural gas/propane or tank propane as the primary heating fuel.
 Set rule_result="fail" when the invoice only says generic natural gas or generic propane without PNG/tank-propane evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_rebate_math_within_cap', 'Check whether the claimed rebate for this dual-fuel ducted heat pump upgrade appears to stay within the visible upgrade cost and the program maximum for the participant''s eligibility level.
 Use the visible dfhp_source_fuel_path, dfhp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
+Use these dual-fuel ducted heat pump base maximum rebate amounts: PNG natural gas/propane ESP1 $11,500, ESP2 $6,500, ESP3 $6,500; tank propane ESP1 $15,000, ESP2 $10,000, ESP3 $10,000. A separately visible northern top-up may be up to $3,000 for ESP1 or ESP2 only; ESP3 has no northern top-up.
 Evaluate this rule in this order:
 1. Determine whether the visible source-fuel path is PNG natural gas/propane, tank propane, or unclear/generic.
-2. Determine the applicable cap from the summary-table values above using the visible source-fuel path and eligibility code.
+2. Determine the applicable cap from the explicit cap values in this rule using the visible source-fuel path and eligibility code.
 3. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
 4. If the invoice also shows a clearly separate northern top-up amount, state whether the visible top-up appears within the published $3,000 top-up cap for ESP1 or ESP2. Do not add a top-up amount into the main rebate comparison unless the invoice clearly bundles it into the same claimed rebate line.
 Set rule_result="pass" only when the invoice clearly shows the rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
@@ -215,10 +240,10 @@ Set rule_result="warn" when the source-fuel path, eligibility code, rebate amoun
 Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost or applicable cap.
 In calculation, show the source-fuel path, eligibility code, visible upgrade cost, claimed rebate, cap comparison, and any separate northern-top-up check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_switchover_setpoint_specific', 'Check whether visible control evidence includes a switchover setpoint and whether it appears at or below the correct regional threshold if the region is visible.
-Use commissioning_or_control_document located fields switchover_setpoint and region_or_temperature_threshold_evidence when present.
+Use dual_fuel_control_document located fields switchover_setpoint and region_or_temperature_threshold_evidence when present.
 Set rule_result="fail" when controls are referenced without a setpoint or when the visible setpoint appears too high.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_contractor_utility_billed_work_on_one_invoice', 'Check whether contractor-managed utility line-upgrade work appears to be documented on the same invoice when the contractor is being billed by the utility for the line upgrade.
-Use esu_contractor_utility_management_evidence and esu_utility_bill_or_invoice_reference from the invoice, and utility_invoice or utility_bill_or_invoice supporting-document located fields such as utility_provider, previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
+Use esu_contractor_utility_management_evidence and esu_utility_billing_reference from the invoice, and utility_bill or electrical_utility_upgrade_document supporting-document located fields such as utility_provider, previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
 Set rule_result="pass" when contractor-managed utility billing evidence is visible and the invoice itself includes both contractor work and utility line/service-upgrade charges or references clearly enough to treat them as one invoice package.
 Set rule_result="info" when no contractor-billed-by-utility scenario is visible; the one-invoice condition does not appear triggered from the supplied evidence.
 Set rule_result="warn" when contractor utility-management evidence is visible but the utility charges appear only in a separate supporting document, or the invoice/supporting-document relationship is too ambiguous to confirm one-invoice treatment.
@@ -245,7 +270,7 @@ Set rule_result="warn" when the eligibility code, rebate amount, or visible elig
 Set rule_result="fail" when the rebate clearly exceeds the visible eligible cost or applicable cap.
 In calculation, show the eligibility code, visible eligible cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_service_size_present', 'Check whether the invoice or configured supporting-document located fields clearly reference a 100, 200, or 400 amp electrical service upgrade.
-Use utility_bill_or_invoice, utility_upgrade_document, and utility_invoice located fields such as previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
+Use utility_bill and electrical_utility_upgrade_document located fields such as previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
 Set rule_result="warn" if electrical work is visible but service size is missing or ambiguous after checking the utility supporting documents.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_timing_within_six_months_evidence', 'Check whether visible invoice dates and configured supporting-document located fields provide enough evidence to compare service upgrade timing against heat pump installation timing.
 Pass this rule when either:
@@ -254,7 +279,7 @@ Pass this rule when either:
 Set rule_result="fail" when visible dates clearly place the service upgrade outside the allowed timing window.
 Set rule_result="fail" when the service upgrade appears on a separate invoice and no associated heat pump / heat pump water heater install date or associated invoice date is visible.
 If same-invoice evidence is used, explain in reason_and_likely_causes that the invoice-level date is being used as the shared timing proxy.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('esu_utility_upgrade_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill_or_invoice, utility_invoice, or utility_upgrade_document.
+  ('esu_utility_upgrade_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill or electrical_utility_upgrade_document.
 Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -302,7 +327,7 @@ Set rule_result="fail" if fossil-fuel water-heater replacement is visible and bo
   ('hpwh_no_existing_or_secondary_hpwh_flag', 'Check whether invoice text suggests an existing heat pump water heater, replacement of an existing heat pump water heater, or a secondary/additional heat pump water heater.
 Set rule_result="fail" if existing/secondary/additional HPWH wording is visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_non_integrated_area_review', 'If fossil-fuel water-heater replacement and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
-Use non_integrated_area_preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
+Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_primary_replacement_context_present', 'Check whether the invoice provides evidence that the heat pump water heater replaces the home''s primary water heater.
@@ -314,7 +339,7 @@ This is not final product-list validation.', true, TIMESTAMP '2026-05-26 00:00:0
 Use the visible hpwh_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Evaluate this rule in this order:
 1. Determine whether the visible existing fuel path appears to be fossil fuel, electric, wood, or unclear.
-2. Use the source-fuel and eligibility-code cap above: fossil fuel ESP1/2/3 $3,500; electric/wood ESP1 $3,500, ESP2 $2,800, ESP3 no rebate.
+2. Use these source-fuel and eligibility-code caps: fossil fuel ESP1/2/3 $3,500; electric/wood ESP1 $3,500, ESP2 $2,800, ESP3 no rebate.
 3. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
 Set rule_result="pass" only when the invoice clearly shows the rebate amount, visible upgrade cost, source-fuel path, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
 Set rule_result="warn" when source-fuel path, eligibility code, rebate amount, or visible upgrade cost is missing/ambiguous but no visible value clearly exceeds the cap.
@@ -337,7 +362,7 @@ Set rule_result="fail" only if it clearly appears standalone without an associat
 Set rule_result="warn" if not visible. Admin should verify pre-confirmation in application/supporting records; absence from invoice OCR is not a material failure by itself.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_rebate_math_within_cap', 'Check whether the claimed rebate for this health and safety remediation upgrade appears to stay within the visible remediation cost and the program maximum for the participant''s eligibility level.
 Use the visible hs_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
-Use these maximum rebate amounts: ESP1 up to 95% of eligible upgrade costs, capped at $800 per home; ESP2 up to 60% of eligible upgrade costs, capped at $800 per home.
+Use these maximum rebate amounts: ESP1 up to 95% of eligible upgrade costs, capped at $800 per home; ESP2 up to 60% of eligible upgrade costs, capped at $800 per home; ESP3 has no health and safety remediation rebate.
 Set rule_result="pass" only when the invoice clearly shows the rebate amount, visible remediation cost, and eligibility code, and the claimed rebate is less than or equal to both the visible remediation cost and the applicable cap.
 Set rule_result="warn" when the eligibility code, rebate amount, or visible remediation cost is missing/ambiguous but no visible value clearly exceeds the cap.
 Set rule_result="fail" when the rebate clearly exceeds the visible remediation cost or applicable cap.
@@ -346,19 +371,19 @@ In calculation, show the eligibility code, visible remediation cost, claimed reb
 Use invoice fields and supporting-document located fields as corroboration when present, including removed_equipment_type, removal_scope_or_description, before_photo_evidence, after_photo_evidence, wett_appliance_or_system_reference, site_address, and calculation_standard_reference.
 Set rule_result="pass" when the visible source-fuel path is electric, fossil fuel, or wood/solid fuel and the conversion context is understandable for the claimed hydronic upgrade.
 Set rule_result="warn" when the source-fuel path or conversion context is unclear, incomplete, or needs application/supporting-document confirmation.
-Set rule_result="fail" when the visible source-fuel path or conversion story contradicts hydronic heat-pump eligibility. Do not fail this rule solely because removal/photo/WETT supporting documents are missing; hydronic_fossil_removal_supporting_document_attached and hydronic_wood_removal_or_wett_supporting_document_attached own those conditional attachment checks.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hydronic_fossil_removal_supporting_document_attached', 'If the visible source-fuel path is fossil fuel, check whether supporting_document_summary_for_upgrade_type includes fossil_removal_proof or permit_document.
+Set rule_result="fail" when the visible source-fuel path or conversion story contradicts hydronic heat-pump eligibility. Do not fail this rule solely because removal/photo/WETT supporting documents are missing; hydronic_fossil_fuel_removal_supporting_document_attached and hydronic_wood_removal_or_wett_supporting_document_attached own those conditional attachment checks.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hydronic_fossil_fuel_removal_supporting_document_attached', 'If the visible source-fuel path is fossil fuel, check whether supporting_document_summary_for_upgrade_type includes fossil_fuel_removal_proof or permit_document.
 Set rule_result="pass" if fossil-fuel source path is not visible or not claimed.
 Set rule_result="pass" if fossil-fuel source path is visible and at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable fossil-removal/decommissioning or permit evidence for the site/system.
 Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supplement_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if fossil-fuel source path is visible and both fossil_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" if fossil-fuel source path is visible and both fossil_fuel_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_wood_removal_or_wett_supporting_document_attached', 'If the visible source-fuel path is wood or solid fuel, check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set or wett_report.
 Set rule_result="pass" if wood/solid-fuel source path is not visible or not claimed.
 Set rule_result="pass" if wood/solid-fuel source path is visible and either required document type is present with supplement_routing_quality="usable" and located_fields contain readable removal-photo or WETT/safe-retention evidence for the site/system.
 Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supplement_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" if wood/solid-fuel source path is visible and both before_after_photo_set and wett_report are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_non_integrated_area_review', 'If fossil-fuel conversion and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
-Use non_integrated_area_preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
+Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no fossil-fuel Non-Integrated Area evidence is visible.
 Set rule_result="warn" when fossil-fuel Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('income_verification_supporting_documents_attached', 'Check whether supporting_document_summary includes income_verification_document.
@@ -375,7 +400,9 @@ Set rule_result="warn" when location, boundary, or R-value evidence is missing/a
 Set rule_result="warn" if one or both values are missing or ambiguous and admin should verify the insulation calculation inputs.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ins_rebate_math_within_cap', 'Check whether the claimed rebate for this insulation upgrade appears to stay within the visible insulation cost and the program maximum.
 Use the visible ins_line_amount, upgrade_specific_rebate_line_amount, ins_upgrade_location, and eligibility code.
-Use these maximum rebate rules: ESP1/ESP2 only; the total insulation rebate is capped at $5,500 per home; a clearly isolated single upgrade location should not visibly exceed the $2,000 location-specific maximum; and when R-value added and area are visible, apply the location-specific formula/rate from the background section.
+Use these maximum rebate rules: ESP1/ESP2 only; ESP3 has no insulation rebate; the total insulation rebate is capped at $5,500 per home; a clearly isolated single upgrade location should not visibly exceed the $2,000 location-specific maximum.
+When R-value added and area are visible, apply these location-specific formula/rates: attic = R-value added times square feet times $0.05 for ESP1 or $0.04 for ESP2; exterior wall cavity/sheathing and basement/crawlspace = R-value added times square feet times $0.20 for ESP1 or $0.16 for ESP2; exposed floor, floor over crawlspace, or basement header = R-value added times square feet times $0.125 for ESP1 or $0.10 for ESP2.
+Minimum new R-value added by location: attic R12; exterior wall cavity R12; exterior wall sheathing R3.8; basement/crawlspace R10; exposed floor, floor over crawlspace, or basement header R20.
 Set rule_result="pass" only when the invoice clearly shows the rebate amount, visible insulation cost, and enough location context, and the claimed rebate is less than or equal to the visible insulation cost and does not clearly exceed the visible program cap.
 Set rule_result="warn" when the rebate amount or visible insulation cost is missing/ambiguous but no visible value clearly exceeds the cap/formula.
 Set rule_result="fail" when the rebate clearly exceeds the visible insulation cost, clearly exceeds $5,500 overall, clearly exceeds the visible single-location cap/formula, or is claimed for ESP3.
@@ -412,7 +439,7 @@ When split rebate lines are visible, show the summed rebate calculation in calcu
 Set rule_result="pass" if the invoice clearly describes the claimed upgrade domain.
 Set rule_result="warn" if the invoice uses broad wording such as HVAC, service upgrade, insulation work, or remediation without enough detail to confirm the precise subtype but does not contradict the claimed domain. Admin should verify the exact upgrade subtype only.
 Set rule_result="fail" if the claimed upgrade domain is clearly absent or contradicted by the invoice.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('utility_account_supporting_document_attached', 'Check whether supporting_document_summary includes utility_bill_or_account_document.
+  ('utility_account_supporting_document_attached', 'Check whether supporting_document_summary includes utility_bill or utility_account_document.
 Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
 Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if missing or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -429,7 +456,7 @@ Set rule_result="warn" when an eligible ventilation subtype is visible but produ
 Set rule_result="fail" only when the supplied evidence clearly contradicts the eligible HRV/ERV or bathroom-fan requirements.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_rebate_math_within_cap', 'Check whether the claimed rebate for this ventilation upgrade appears to stay within the visible ventilation cost and the program maximum for the participant''s eligibility level.
 Use the visible vent_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
-Use these maximum rebate amounts: ESP1 up to 95% of eligible upgrade costs, capped at $1,600 per home; ESP2 up to 60% of eligible upgrade costs, capped at $1,600 per home.
+Use these maximum rebate amounts: ESP1 up to 95% of eligible upgrade costs, capped at $1,600 per home; ESP2 up to 60% of eligible upgrade costs, capped at $1,600 per home; ESP3 has no ventilation rebate.
 Set rule_result="pass" only when the invoice clearly shows the rebate amount, visible ventilation cost, and eligibility code, and the claimed rebate is less than or equal to both the visible ventilation cost and the applicable cap.
 Set rule_result="warn" when the eligibility code, rebate amount, or visible ventilation cost is missing/ambiguous but no visible value clearly exceeds the cap.
 Set rule_result="fail" when the rebate clearly exceeds the visible ventilation cost or applicable cap.
@@ -445,7 +472,7 @@ Set rule_result="pass" when the invoice merely lists ordinary warranty terms, su
 Do not fail solely because warranty coverage language is visible.
 In reason_and_likely_causes, distinguish standard post-installation warranty terms from warranty-paid or warranty-credited invoice costs.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('wd_certification_reference_present', 'Check whether the invoice or configured supporting documents contain any product/certification reference that would help an admin verify the accepted certification body requirement.
-Look specifically in certification_sheet, energy_performance_label, manufacturer_label_photo, and their located fields for CSA, Intertek, Labtest/LC, QAI, Keystone/KC, NAMI, NFRC, CPD, NRCan/ENERGY STAR fenestration numbers, metric_u_factor, brand/model, label legibility, installed-unit coverage, or similar product-rating identifiers.
+Look specifically in certification_sheet, fenestration_energy_performance_label, manufacturer_label_photo, and their located fields for CSA, Intertek, Labtest/LC, QAI, Keystone/KC, NAMI, NFRC, CPD, NRCan/ENERGY STAR fenestration numbers, metric_u_factor, brand/model, label legibility, installed-unit coverage, or similar product-rating identifiers.
 Set rule_result="pass" if at least one useful certification/rating reference is clearly visible.
 Set rule_result="warn" if supporting documents are present but the product/certification fields are unreadable or incomplete.
 Set rule_result="fail" if there is no visible certification/rating reference in either invoice evidence or configured supporting-document located fields.
@@ -477,6 +504,7 @@ Set rule_result="pass" if there is no clear skylight evidence.', true, TIMESTAMP
 Use the original v1 calculation reference:
 1. Add the rebate_per_unit values for all eligible windows/doors across the invoice.
 2. The total invoice/home rebate is capped at $9,500.
+Windows/doors rebates are ESP1/ESP2 only; ESP3 has no windows/doors rebate.
 Set rule_result="pass" only when visible invoice values clearly show the total claimed rebate is at or below $9,500.
 Set rule_result="fail" only when the visible claimed rebate clearly exceeds $9,500.
 Set rule_result="warn" when eligible unit count, per-unit rebate values, or total claimed rebate are missing/ambiguous but no visible total clearly exceeds the cap.
@@ -487,7 +515,7 @@ Use the original v1 calculation reference:
 1. full_unit_subtotal = hardware price per unit + labour price per unit.
 2. If labour per unit is not shown, it may be estimated as labour total divided by quantity of units, but only when those values are clearly visible.
 3. full_unit_after_tax_subtotal = full_unit_subtotal * 1.05.
-4. rebate_percentage is 95% for ESP1 and 60% for ESP2. If the eligibility code/income level is missing or unclear, set rule_result="warn" and explain that admin should verify the eligibility record before accepting the math.
+4. rebate_percentage is 95% for ESP1 and 60% for ESP2. ESP3 has no windows/doors rebate. If the eligibility code/income level is missing or unclear, set rule_result="warn" and explain that admin should verify the eligibility record before accepting the math.
 5. rebate_per_unit = full_unit_after_tax_subtotal * rebate_percentage.
 6. Each rebate_per_unit is capped at $950 per window or door.
 For this rule, calculation must explicitly show the lower-of comparison: eligible cost after tax multiplied by the rebate percentage, eligible unit count multiplied by the $950 per-unit cap, the lower of those two values, and the comparison to the claimed windows/doors rebate.
@@ -575,7 +603,7 @@ WITH genai_rule_upgrade_types_seed (
   ('air_to_water_heat_pump', 'atw_scope_present', 1),
   ('air_to_water_heat_pump', 'hp_description_sufficient_for_review', 4),
   ('air_to_water_heat_pump', 'hydronic_conversion_context_present', 3),
-  ('air_to_water_heat_pump', 'hydronic_fossil_removal_supporting_document_attached', 9),
+  ('air_to_water_heat_pump', 'hydronic_fossil_fuel_removal_supporting_document_attached', 9),
   ('air_to_water_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag', 7),
   ('air_to_water_heat_pump', 'hydronic_non_integrated_area_review', 8),
   ('air_to_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
@@ -584,7 +612,7 @@ WITH genai_rule_upgrade_types_seed (
   ('combined_space_water_heat_pump', 'cshp_scope_present', 1),
   ('combined_space_water_heat_pump', 'hp_description_sufficient_for_review', 4),
   ('combined_space_water_heat_pump', 'hydronic_conversion_context_present', 3),
-  ('combined_space_water_heat_pump', 'hydronic_fossil_removal_supporting_document_attached', 9),
+  ('combined_space_water_heat_pump', 'hydronic_fossil_fuel_removal_supporting_document_attached', 9),
   ('combined_space_water_heat_pump', 'cshp_no_existing_or_secondary_heat_pump_review', 7),
   ('combined_space_water_heat_pump', 'hydronic_non_integrated_area_review', 8),
   ('combined_space_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
@@ -600,7 +628,7 @@ WITH genai_rule_upgrade_types_seed (
   ('dual_fuel_ducted_heat_pump', 'dfhp_controls_reference_present', 2),
   ('dual_fuel_ducted_heat_pump', 'dfhp_description_sufficient_for_review', 4),
   ('dual_fuel_ducted_heat_pump', 'dfhp_dual_fuel_scope_present', 1),
-  ('dual_fuel_ducted_heat_pump', 'dfhp_fossil_modification_or_removal_supporting_document_attached', 9),
+  ('dual_fuel_ducted_heat_pump', 'dfhp_fossil_backup_system_supporting_document_attached', 9),
   ('dual_fuel_ducted_heat_pump', 'dfhp_heat_load_calc_supporting_document_attached', 3),
   ('dual_fuel_ducted_heat_pump', 'dfhp_non_integrated_area_review', 8),
   ('dual_fuel_ducted_heat_pump', 'dfhp_png_or_tank_propane_path_present', 6),
@@ -738,7 +766,7 @@ Electrical service upgrade', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_permit_or_ahj_reference', 'Locate permit, inspection, Technical Safety BC, Authority Having Jurisdiction, or by-law compliance references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_previous_service_size', 'Locate previous service size if visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_service_size', 'Locate upgraded electrical service size, such as 100 amp, 200 amp, or 400 amp service.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('esu_utility_bill_or_invoice_reference', 'Locate utility bill/invoice evidence for the line/service upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('esu_utility_billing_reference', 'Locate utility billing evidence for the line/service upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_reference', 'Locate BC Hydro, FortisBC, utility connection, line upgrade, or utility bill/invoice references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hardware_per_unit', 'Locate hardware/material price per unit.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_ahri_reference', 'Locate AHRI reference/certificate numbers for outdoor unit, indoor unit(s), and furnace where visible. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -999,7 +1027,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('electrical_service_upgrade', 'esu_permit_or_ahj_reference', 8),
   ('electrical_service_upgrade', 'esu_previous_service_size', 11),
   ('electrical_service_upgrade', 'esu_service_size', 1),
-  ('electrical_service_upgrade', 'esu_utility_bill_or_invoice_reference', 13),
+  ('electrical_service_upgrade', 'esu_utility_billing_reference', 13),
   ('electrical_service_upgrade', 'esu_utility_reference', 2),
   ('electrical_service_upgrade', 'upgrade_specific_rebate_line_amount', 10),
   ('health_and_safety_remediation', 'before_after_photo_reference', 5),

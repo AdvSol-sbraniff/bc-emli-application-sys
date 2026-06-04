@@ -144,10 +144,6 @@ WHERE ut.upgrade_type_key NOT IN (
   'health_and_safety_remediation'
 )
 AND NOT EXISTS (
-  SELECT 1 FROM claims.validationgenai_rulesets r
-  WHERE r.invoice_upgrade_type_id = ut.id
-)
-AND NOT EXISTS (
   SELECT 1 FROM claims.invoice_version_upgrade_types ivut
   WHERE ivut.invoice_upgrade_type_id = ut.id
 )

@@ -1570,40 +1570,6 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
 );
 
 
---
--- Validationgenai_rulesets
---
-CREATE TABLE IF NOT EXISTS claims.validationgenai_rulesets (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-
-  invoice_upgrade_type_id uuid NOT NULL,
-  ruleset_shortname character varying NOT NULL,
-  user_record1 character varying NULL,
-
-  created_at timestamp(6) without time zone NOT NULL,
-  updated_at timestamp(6) without time zone NOT NULL,
-
-  CONSTRAINT validationgenai_rulesets_pkey PRIMARY KEY (id),
-
-  CONSTRAINT fk_validationgenai_rulesets_upgrade_type
-    FOREIGN KEY (invoice_upgrade_type_id)
-    REFERENCES claims.invoice_upgrade_types(id),
-
-  -- lets you have multiple versions over time under the same shortname
-  CONSTRAINT validationgenai_rulesets_shortname_created_uniq
-    UNIQUE (ruleset_shortname, created_at)
-);
-
-CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_shortname
-  ON claims.validationgenai_rulesets (ruleset_shortname);
-
-CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_upgrade_type_id
-  ON claims.validationgenai_rulesets (invoice_upgrade_type_id);
-
-CREATE INDEX IF NOT EXISTS index_validationgenai_rulesets_on_created_at
-  ON claims.validationgenai_rulesets (created_at);
-
-
 -- ============================================================
 -- code_rule_history
 -- PURPOSE: Pre-change audit snapshots for claims.code_rules.
@@ -1867,7 +1833,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   confidence smallint NOT NULL DEFAULT 0,
   result text NULL,
   admin_advice text NULL,
-  validationgenai_ruleset_id uuid NULL,
   raw_json jsonb NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1883,10 +1848,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   CONSTRAINT fk_invoice_version_upgrade_types_upgrade_type
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id),
-
-  CONSTRAINT fk_invoice_version_upgrade_types_ruleset
-    FOREIGN KEY (validationgenai_ruleset_id)
-    REFERENCES claims.validationgenai_rulesets(id),
 
   CONSTRAINT invoice_version_upgrade_types_source_engine_chk
     CHECK (source_engine IN ('classifier','genai')),
@@ -1909,9 +1870,6 @@ CREATE INDEX IF NOT EXISTS idx_ivut_invoice_version
 
 CREATE INDEX IF NOT EXISTS idx_ivut_upgrade_type
   ON claims.invoice_version_upgrade_types (invoice_upgrade_type_id);
-
-CREATE INDEX IF NOT EXISTS idx_ivut_ruleset
-  ON claims.invoice_version_upgrade_types (validationgenai_ruleset_id);
 
 CREATE INDEX IF NOT EXISTS idx_ivut_invoice_upgrade_status
   ON claims.invoice_version_upgrade_types (invoice_version_id, invoice_upgrade_type_id, call_status);
@@ -2121,7 +2079,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   invoice_upgrade_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | upload_package_stage | reprocess_package_stage | ocr | classifier | genai | case_facts | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | supporting_document_extraction | ocr_invoice
+  step_type text NOT NULL,  -- upload | upload_package_stage | reprocess_package_stage | ocr | classifier | genai | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | supporting_document_extraction | ocr_invoice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -2130,9 +2088,6 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   -- unlike invoice_versions this is a per run record which can be multiple
   di_results_json  jsonb NULL,
-
-  -- GENAI RUN FIELDS (kept from former validation_runs; now nullable)
-  validationgenai_ruleset_id uuid NULL,
 
   -- unlike invoice_versions table this is a per run genAI artifacts (retention indefinite for now)
   genai_results_json  jsonb NULL,
@@ -2168,7 +2123,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     REFERENCES claims.invoice_upgrade_types(id),
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','upload_package_stage','reprocess_package_stage','ocr','classifier','genai','case_facts','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
+    CHECK (step_type IN ('upload','upload_package_stage','reprocess_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -2181,14 +2136,6 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       (status = 'succeeded' AND error_text IS NULL)
       OR
       (status = 'failed' AND error_text IS NOT NULL)
-    ),
-
-  -- Only require ruleset_id when the step is a GenAI validation call.
-  CONSTRAINT ingest_step_runs_ruleset_required_for_genai_chk
-    CHECK (
-      (step_type NOT IN ('genai','genai_common','genai_upgrade'))
-      OR
-      (validationgenai_ruleset_id IS NOT NULL)
     ),
 
   -- Only require upgrade type for the new typed GenAI calls.
@@ -2229,9 +2176,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       )
     ),
 
-  CONSTRAINT fk_ingest_step_runs_ruleset
-    FOREIGN KEY (validationgenai_ruleset_id)
-    REFERENCES claims.validationgenai_rulesets(id)
+  CONSTRAINT ingest_step_runs_context_window_json_type_chk
+    CHECK (context_window_json IS NULL OR jsonb_typeof(context_window_json) = 'array')
 );
 
 -- Batch run drill-down
@@ -2254,10 +2200,6 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_document_id
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_document_step
   ON claims.ingest_step_runs (ingest_document_id, step_type, created_at DESC);
-
--- GenAI filtering
-CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ruleset_id
-  ON claims.ingest_step_runs (validationgenai_ruleset_id);
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_upgrade_type_id
   ON claims.ingest_step_runs (invoice_upgrade_type_id);

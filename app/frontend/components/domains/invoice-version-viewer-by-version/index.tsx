@@ -91,7 +91,6 @@ type UpgradeTypeResult = {
   upgrade_type_key?: string | null;
   confidence?: number | null;
   raw_json?: unknown;
-  validationgenai_ruleset_id?: string | null;
   result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
 };
 
@@ -247,6 +246,7 @@ export const InvoiceVersionByVersionScreen = () => {
 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfUrlError, setPdfUrlError] = useState('');
+  const [showPdf, setShowPdf] = useState(false);
   const [numPages, setNumPages] = useState<number>(0);
   const [activePageNumber, setActivePageNumber] = useState<number>(1);
   const [activeHighlight, setActiveHighlight] = useState<ActiveHighlight | null>(null);
@@ -259,6 +259,7 @@ export const InvoiceVersionByVersionScreen = () => {
       setError('');
       setPdfUrlError('');
       setPdfUrl(null);
+      setShowPdf(false);
       setNumPages(0);
       setActivePageNumber(1);
       setActiveHighlight(null);
@@ -414,6 +415,7 @@ export const InvoiceVersionByVersionScreen = () => {
     if (!pageNumber) return;
 
     setActivePageNumber(pageNumber);
+    setShowPdf(true);
     setActiveHighlight({
       id: row.id,
       fieldKey: row.field_key || 'field',
@@ -482,7 +484,7 @@ export const InvoiceVersionByVersionScreen = () => {
               w="520px"
               flexShrink={0}
             >
-              <Accordion allowMultiple defaultIndex={[0, 1, 2]}>
+              <Accordion allowMultiple>
                 <AccordionItem border="none">
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
@@ -511,9 +513,6 @@ export const InvoiceVersionByVersionScreen = () => {
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text size="sm">Information on record</Text>
-                        <Text fontSize="xs" opacity={0.65}>
-                          Local case facts used by the rules, separate from PDF evidence found by GenAI.
-                        </Text>
                       </Box>
                       <AccordionIcon />
                     </AccordionButton>
@@ -583,10 +582,6 @@ export const InvoiceVersionByVersionScreen = () => {
                               <Box minW={0}>
                                 <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
                                   {meta.label}
-                                </Text>
-                                <Text fontSize="xs" opacity={0.65}>
-                                  {group.results.length} calls | {group.fields.length} fields |{' '}
-                                  {group.rulechecks.length} rules | {group.lineitems.length} line items
                                 </Text>
                               </Box>
                             </Flex>
@@ -927,10 +922,13 @@ export const InvoiceVersionByVersionScreen = () => {
                 bg="white"
               >
                 <Box display="flex" alignItems="center" gap="8px">
+                  <Button size="sm" variant="outline" onClick={() => setShowPdf((value) => !value)}>
+                    {showPdf ? 'Hide PDF' : 'Show PDF'}
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() => setActivePageNumber((p) => Math.max(1, p - 1))}
-                    isDisabled={activePageNumber <= 1}
+                    isDisabled={!showPdf || activePageNumber <= 1}
                   >
                     Prev
                   </Button>
@@ -940,7 +938,7 @@ export const InvoiceVersionByVersionScreen = () => {
                   <Button
                     size="sm"
                     onClick={() => setActivePageNumber((p) => Math.min(numPages || p + 1, p + 1))}
-                    isDisabled={!!numPages && activePageNumber >= numPages}
+                    isDisabled={!showPdf || (!!numPages && activePageNumber >= numPages)}
                   >
                     Next
                   </Button>
@@ -966,7 +964,13 @@ export const InvoiceVersionByVersionScreen = () => {
                 </Text>
               )}
 
-              {pdfUrl && (
+              {pdfUrl && !showPdf && !loading && (
+                <Text fontSize="sm" opacity={0.7} mb="8px">
+                  PDF hidden. Use Show PDF when you want to inspect the document image.
+                </Text>
+              )}
+
+              {pdfUrl && showPdf && (
                 <Document
                   key={pdfUrl}
                   file={pdfUrl}
@@ -996,9 +1000,11 @@ export const InvoiceVersionByVersionScreen = () => {
                   </Box>
                 </Document>
               )}
-              <Text fontSize="xs" opacity={0.6} mt="8px">
-                Active PDF evidence: {activeHighlight?.fieldKey || '-'} | page {activePageNumber} / {numPages || '-'}
-              </Text>
+              {showPdf && (
+                <Text fontSize="xs" opacity={0.6} mt="8px">
+                  Active PDF evidence: {activeHighlight?.fieldKey || '-'} | page {activePageNumber} / {numPages || '-'}
+                </Text>
+              )}
             </Box>
           </Box>
         </Box>
@@ -1058,13 +1064,13 @@ export const InvoiceVersionByVersionScreen = () => {
 
               <Box>
                 <Heading size="sm" mb={2}>
-                  How Sections Relate To Rulesets
+                  How Sections Relate To Validation
                 </Heading>
                 <Text as="div" fontSize="sm">
                   Invoice and Line Items are OCR-driven values from document reading.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  GenAI Located Fields and GenAI Rulechecks are affected by ruleset design and ruleset changes.
+                  GenAI Located Fields and GenAI Rulechecks are affected by normalized rule and field mappings.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
                   Pre-existing info on file is known case data used during checking.

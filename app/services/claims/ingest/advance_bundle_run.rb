@@ -7,16 +7,12 @@ module Claims
       BUNDLE_UNKNOWN_ERROR_CODE = "invoice_bundle_unknown_documents"
       SUPPLEMENTS_ATTACHED_INFO_CODE = "supplements_attached"
 
-      def self.call(ingest_run_id:, validationgenai_ruleset_id:)
-        new(
-          ingest_run_id: ingest_run_id,
-          validationgenai_ruleset_id: validationgenai_ruleset_id
-        ).call
+      def self.call(ingest_run_id:)
+        new(ingest_run_id: ingest_run_id).call
       end
 
-      def initialize(ingest_run_id:, validationgenai_ruleset_id:)
+      def initialize(ingest_run_id:)
         @ingest_run_id = ingest_run_id
-        @validationgenai_ruleset_id = validationgenai_ruleset_id
       end
 
       def call
@@ -438,6 +434,7 @@ module Claims
             case_facts
             genai_common
             genai_upgrade
+            product_lookup_enrichment
             code_common
             code_upgrade
             aggregate_advice
@@ -461,8 +458,7 @@ module Claims
 
           ::Claims::RunIngestTriageJob.perform_async(
             document.id,
-            @ingest_run_id,
-            @validationgenai_ruleset_id
+            @ingest_run_id
           )
         end
       end
@@ -483,8 +479,7 @@ module Claims
 
           ::Claims::RunSupportingDocumentExtractionJob.perform_async(
             document.id,
-            @ingest_run_id,
-            @validationgenai_ruleset_id
+            @ingest_run_id
           )
         end
       end
@@ -611,7 +606,6 @@ module Claims
         ::Claims::RunOcrJob.perform_async(
           invoice_version_id,
           @ingest_run_id,
-          @validationgenai_ruleset_id,
           "prebuilt-invoice",
           true,
           "use_existing_classifier",
