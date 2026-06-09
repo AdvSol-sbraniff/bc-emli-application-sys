@@ -131,7 +131,7 @@ const locatedFieldDisplayFields = [
 ];
 
 const ruleDisplayFields = [
-  { key: 'rule_name', label: 'Rule name' },
+  { key: 'rule_key', label: 'Rule key' },
   { key: 'pass', label: 'Pass' },
   { key: 'confidence', label: 'Confidence' },
   { key: 'expected', label: 'Expected' },
@@ -317,7 +317,7 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
     a.rulechecks.map((r) => [
       ruleKey(r),
       {
-        rule_name: r?.rule_name ?? null,
+        rule_key: r?.rule_key ?? null,
         result: r?.rule_result ?? null,
         confidence: r?.confidence ?? null,
         expected: r?.expected_text ?? null,
@@ -330,7 +330,7 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
     b.rulechecks.map((r) => [
       ruleKey(r),
       {
-        rule_name: r?.rule_name ?? null,
+        rule_key: r?.rule_key ?? null,
         result: r?.rule_result ?? null,
         confidence: r?.confidence ?? null,
         expected: r?.expected_text ?? null,
@@ -423,8 +423,8 @@ function locatedFieldDiffSections(diff: AiDiff): SimpleDiffSection[] {
 }
 
 function ruleSectionTitle(ruleNumber: string, record?: any): string {
-  const name = String(record?.rule_name ?? '').trim();
-  return name ? `Rule ${ruleNumber} — ${name}` : `Rule ${ruleNumber}`;
+  const key = String(record?.rule_key ?? '').trim();
+  return key || `rule_${ruleNumber}`;
 }
 
 function ruleDiffSections(diff: AiDiff): SimpleDiffSection[] {

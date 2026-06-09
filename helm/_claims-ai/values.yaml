@@ -11,6 +11,7 @@ fullnameOverride: hesp-claims-ai
 
 podAnnotations: {}
 podLabels: {}
+hostAliases: []
 
 podSecurityContext: {}
 securityContext: {}

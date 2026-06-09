@@ -830,12 +830,13 @@ module Claims
 
           rule_number = row["rule_number"] || row[:rule_number]
           rule_key = (row["rule_key"] || row[:rule_key]).to_s.strip
-          rule_name = (row["rule_name"] || row[:rule_name]).to_s.strip
 
           label_parts = []
           label_parts << "Rule #{rule_number}" if rule_number.present?
           label_parts << "(#{rule_key})" if rule_key.present?
-          label_parts << rule_name if label_parts.empty? && rule_name.present?
+          if label_parts.empty? && rule_number.present?
+            label_parts << "rule_#{rule_number}"
+          end
 
           result_label =
             case result

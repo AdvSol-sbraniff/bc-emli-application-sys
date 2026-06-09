@@ -17,13 +17,13 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53001'::uuid,
     'hp_ahri_found_in_product_list',
-    'Checks whether the invoice AHRI reference matches AHRI evidence from a product_spec_sheet or manufacturer_label_photo, and exists in the current imported BC Hydro heat-pump product lists.',
+    'Checks whether the invoice AHRI reference exists in the current imported BC Hydro heat-pump product lists; supporting-document AHRI evidence corroborates the match when present and must not conflict.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched AHRI product-list row.',
-    'Refresh the heat-pump product-list imports if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',
-    'Ask the contractor for corrected invoice/supporting product evidence when AHRI evidence is missing, conflicting, or not found in the imported product list.',
+    'Review the AHRI match when supporting-document AHRI evidence is missing, when invoice AHRI is missing, or when no current imported list rows are available.',
+    'Ask the contractor for corrected product evidence when the invoice AHRI conflicts with supporting-document AHRI evidence or is not found in the imported product list.',
     NULL,
-    'The code supplies the detailed invoice/supporting-document AHRI comparison and product-list match explanation; these messages are short admin guidance additions only.',
+    'The code supplies the detailed invoice AHRI product-list lookup and any supporting-document AHRI corroboration/conflict explanation; these messages are short admin guidance additions only.',
     TIMESTAMP '2026-05-14 00:00:00',
     NOW()
   ),
@@ -158,6 +158,19 @@ WITH code_rules_seed (
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53206'::uuid,
+    'eligibility_code_found_in_database',
+    'Checks whether the classifier-located eligibility code resolved to a populated claims.users_eligibilitycodes record in the code-located-field snapshot.',
+    true,
+    'No follow-up is required when the matched database eligibility code is populated.',
+    'Review the invoice-visible eligibility code and eligibility table if the matched database eligibility field is missing.',
+    'Create or correct the eligibility-code record before approving if the invoice-visible eligibility code cannot be resolved to a database record.',
+    NULL,
+    'Reads claims.invoice_version_located_fields where source_engine=code and field_key=users_eligibilitycodes.eligibility_code; pass when populated, fail when missing.',
+    TIMESTAMP '2026-06-04 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53205'::uuid,
     'income_level_1_or_2_required',
     'Checks whether the matched participant eligibility-code record has stored income_level 1 or 2 for upgrade types that are explicitly limited to Income Level 1 or 2 in the ESP requirements.',
@@ -258,6 +271,7 @@ WITH code_rule_upgrade_type_seed (
   ('first_class_invoice_fields_present', 'common'),
   ('submission_within_six_months', 'common'),
   ('eligibility_code_valid_for_invoice_date', 'common'),
+  ('eligibility_code_found_in_database', 'common'),
   ('income_level_1_or_2_required', 'insulation'),
   ('income_level_1_or_2_required', 'windows_doors'),
   ('income_level_1_or_2_required', 'air_source_heat_pump_electric'),

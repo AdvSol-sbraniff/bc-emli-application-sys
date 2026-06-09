@@ -1,3 +1,7 @@
+DROP VIEW IF EXISTS claims.v_reporting_invoice_business;
+DROP VIEW IF EXISTS claims.v_invoice_grid;
+DROP VIEW IF EXISTS claims.v_current_invoice_versions;
+
 CREATE OR REPLACE VIEW claims.v_current_invoice_versions AS
 SELECT DISTINCT ON (iv.invoice_id)
   i.session_id,
@@ -50,7 +54,6 @@ SELECT DISTINCT ON (iv.invoice_id)
   iv.ahri_product_id,
   iv.created_at,
   iv.updated_at,
-  i.upgrade_type_id,
   iv.neea_product_id,
   iv.awhp_product_id,
   iv.ohpa_product_id
@@ -294,13 +297,6 @@ SELECT
   civ.genai_result  AS latest_genai_result,
   civ.genai_overall_confidence        AS latest_genai_overall_confidence,
 
-  -- -------------------------
-  -- upgrade type / domain
-  -- -------------------------
-  i.upgrade_type_id   AS upgrade_type_id,
-  ut.code             AS upgrade_type_code,
-  ut.name             AS upgrade_type_name,
-
   civut.latest_detected_upgrade_type_keys AS latest_detected_upgrade_type_keys,
   civut.latest_detected_upgrade_types_json AS latest_detected_upgrade_types_json,
 
@@ -311,8 +307,6 @@ JOIN claims.sessions s
   ON s.id = i.session_id
 JOIN public.contractors c
   ON c.id = i.contractor_id
-LEFT JOIN public.permit_classifications ut
-  ON ut.id = i.upgrade_type_id
 LEFT JOIN public.users cu
   ON cu.id = c.contact_id
 LEFT JOIN public.users u
@@ -348,6 +342,8 @@ LEFT JOIN LATERAL (
 ) civut
   ON TRUE;
 
+DROP VIEW IF EXISTS claims.v_user_eligibilitycodes;
+
 CREATE OR REPLACE VIEW claims.v_user_eligibilitycodes AS
 SELECT
   -- ============================================================
@@ -366,7 +362,7 @@ SELECT
   u.confirmation_sent_at                 AS confirmation_sent_at,
   u.created_at                           AS user_created_at,
   u.updated_at                           AS user_updated_at,
-  u.role                                 AS role,
+  u.role::text                           AS role,
   u.first_name                           AS first_name,
   u.last_name                            AS last_name,
   u.invitation_token                     AS invitation_token,

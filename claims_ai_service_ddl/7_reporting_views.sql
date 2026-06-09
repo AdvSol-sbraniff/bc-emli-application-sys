@@ -1,5 +1,7 @@
 -- Reporting read models for business-facing invoice analytics
 
+DROP VIEW IF EXISTS claims.v_reporting_invoice_business;
+
 CREATE OR REPLACE VIEW claims.v_reporting_invoice_business AS
 SELECT
   ig.invoice_id,
@@ -16,9 +18,8 @@ SELECT
   ig.latest_invoice_versionno,
   ig.latest_original_filename,
   ig.latest_di_ocr_invoice_total::numeric(12,2) AS invoice_total_cad,
-  ig.upgrade_type_id,
-  ig.upgrade_type_code,
-  ig.upgrade_type_name
+  ig.latest_detected_upgrade_type_keys,
+  ig.latest_detected_upgrade_types_json
 FROM claims.v_invoice_grid ig
 WHERE ig.invoice_id IS NOT NULL;
 

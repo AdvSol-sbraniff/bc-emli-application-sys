@@ -4,12 +4,7 @@ module Claims
   module CodeRules
     module IncomeLevel
       class ApplyLevelOneOrTwoRequired
-        RULE = {
-          number: 90,
-          key: "income_level_1_or_2_required",
-          name: "Income Level 1 Or 2 Required",
-          source_requirement_id: "ESP-2026-INCOME-L1-L2-001"
-        }.freeze
+        RULE = { number: 90, key: "income_level_1_or_2_required" }.freeze
 
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
         ELIGIBILITY_CODE_FIELD_KEY = "users_eligibilitycodes.eligibility_code"
@@ -73,9 +68,6 @@ module Claims
             source_engine: "code",
             rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
-            source_requirement_id: RULE.fetch(:source_requirement_id),
-            evidence_source: "database",
-            rule_name: RULE.fetch(:name),
             rule_result: rule_result,
             confidence: confidence,
             expected_text:

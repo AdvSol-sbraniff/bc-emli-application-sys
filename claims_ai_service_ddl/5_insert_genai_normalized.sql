@@ -14,6 +14,7 @@ WHERE genai_rule_key IN (
   'hydronic_product_reference_present',
   'income_level_allows_rebate',
   'wd_income_level_and_vancouver_review',
+  'ashp_electric_utility_account_supporting_document_attached',
   'ashp_electric_utility_account_supporting_document_present',
   'ashp_gas_propane_removal_reference_present',
   'ashp_oil_removal_reference_present',
@@ -52,14 +53,11 @@ WITH genai_rules_seed (
 ) AS (
   VALUES
   ('ashp_electric_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by hard-wired electric space heating and that the new air-source heat pump is replacing that system.
-Use invoice evidence first, and treat utility-account supporting-document facts only as corroborating context.
+A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C.
+Use invoice evidence first, and treat supporting-document facts only as corroborating context.
 Set rule_result="pass" when electric primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
 Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_electric_utility_account_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill or utility_account_document.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_electric_rebate_math_within_cap', 'Check whether the claimed rebate for this electric-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
 Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Use these electric-source maximum rebate amounts for ESP1/ESP2: central ducted or 3-head multi-split $5,000/$4,000; 2-head multi-split or 2 single-head mini-splits $5,000/$4,000; single-head mini-split $5,000/$4,000. ESP3 has no rebate for this electric-to-heat-pump path.
@@ -567,7 +565,6 @@ WITH genai_rule_upgrade_types_seed (
 ) AS (
   VALUES
   ('air_source_heat_pump_electric', 'ashp_electric_existing_heat_context_present', 1),
-  ('air_source_heat_pump_electric', 'ashp_electric_utility_account_supporting_document_attached', 2),
   ('air_source_heat_pump_electric', 'hp_main_living_area_or_primary_capacity_present', 7),
   ('air_source_heat_pump_electric', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
   ('air_source_heat_pump_electric', 'ashp_electric_rebate_math_within_cap', 5),

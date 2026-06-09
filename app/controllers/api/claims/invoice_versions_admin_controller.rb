@@ -12,10 +12,12 @@ module Api
                            read_current_by_invoice
                            read_genai_current_by_invoice
                            pdf_url_current_by_invoice
+                           pdf_current_by_invoice
                            show
                            read_by_version
                            read_genai_by_version
                            pdf_url_by_version
+                           pdf_by_version
                          ]
       skip_before_action :require_confirmation,
                          only: %i[
@@ -23,10 +25,12 @@ module Api
                            read_current_by_invoice
                            read_genai_current_by_invoice
                            pdf_url_current_by_invoice
+                           pdf_current_by_invoice
                            show
                            read_by_version
                            read_genai_by_version
                            pdf_url_by_version
+                           pdf_by_version
                          ]
       skip_after_action :verify_authorized,
                         only: %i[
@@ -34,20 +38,24 @@ module Api
                           read_current_by_invoice
                           read_genai_current_by_invoice
                           pdf_url_current_by_invoice
+                          pdf_current_by_invoice
                           show
                           read_by_version
                           read_genai_by_version
                           pdf_url_by_version
+                          pdf_by_version
                         ]
       skip_forgery_protection only: %i[
                                 index_by_invoice
                                 read_current_by_invoice
                                 read_genai_current_by_invoice
                                 pdf_url_current_by_invoice
+                                pdf_current_by_invoice
                                 show
                                 read_by_version
                                 read_genai_by_version
                                 pdf_url_by_version
+                                pdf_by_version
                               ]
 
       def index_by_invoice
@@ -235,15 +243,37 @@ module Api
           return
         end
 
-        node_resp =
-          node_mint_sas!(
-            storage_key: iv.storage_key,
-            container: ENV["AZURE_BLOB_CONTAINER"]
-          )
-        render json: { sas_url: node_resp["sas_url"] }, status: :ok
+        render json: {
+                 sas_url:
+                   "/api/claims/admin/invoices/#{invoice_id}/current_version/pdf"
+               },
+               status: :ok
       rescue => e
         Rails.logger.error(
           "[claims][invoice_versions_admin][pdf_url_current_by_invoice] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/claims/admin/invoices/:invoice_id/current_version/pdf
+      def pdf_current_by_invoice
+        invoice_id = params[:invoice_id].to_s.strip
+        raise "Missing invoice_id" if invoice_id.empty?
+
+        iv = current_invoice_version_for(invoice_id)
+        if iv.nil?
+          render json: {
+                   error: "Current invoice version not found",
+                   invoice_id: invoice_id
+                 },
+                 status: :not_found
+          return
+        end
+
+        stream_blob_pdf!(storage_key: iv.storage_key)
+      rescue => e
+        Rails.logger.error(
+          "[claims][invoice_versions_admin][pdf_current_by_invoice] ERROR: #{e.class}: #{e.message}"
         )
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -375,12 +405,10 @@ module Api
           return
         end
 
-        node_resp =
-          node_mint_sas!(
-            storage_key: iv.storage_key,
-            container: ENV["AZURE_BLOB_CONTAINER"]
-          )
-        render json: { sas_url: node_resp["sas_url"] }, status: :ok
+        render json: {
+                 sas_url: "/api/claims/admin/invoice_versions/#{id}/pdf"
+               },
+               status: :ok
       rescue => e
         Rails.logger.error(
           "[claims][invoice_versions_admin][pdf_url_by_version] ERROR: #{e.class}: #{e.message}"
@@ -388,7 +416,64 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # GET /api/claims/admin/invoice_versions/:id/pdf
+      def pdf_by_version
+        id = params[:id].to_s.strip
+        raise "Missing id" if id.empty?
+
+        iv = ::Claims::InvoiceVersion.find_by(id: id)
+        if iv.nil?
+          render json: { error: "Not found", id: id }, status: :not_found
+          return
+        end
+
+        stream_blob_pdf!(storage_key: iv.storage_key)
+      rescue => e
+        Rails.logger.error(
+          "[claims][invoice_versions_admin][pdf_by_version] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
+
+      def stream_blob_pdf!(storage_key:, container: ENV["AZURE_BLOB_CONTAINER"])
+        res =
+          node_download_blob!(storage_key: storage_key, container: container)
+        send_data res.body,
+                  type: res["content-type"].presence || "application/pdf",
+                  disposition: "inline",
+                  filename:
+                    File.basename(storage_key.to_s.presence || "document.pdf")
+      end
+
+      def node_download_blob!(storage_key:, container: nil)
+        base = ENV["INV_NODE_BASE_URL"].to_s.strip
+        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
+        base = base.sub(%r{/\z}, "")
+
+        uri = URI("#{base}/inv/download-blob")
+        req = Net::HTTP::Post.new(uri)
+        req["Content-Type"] = "application/json"
+        req.body = {
+          storageKey: storage_key,
+          container: container
+        }.compact.to_json
+
+        res =
+          Net::HTTP.start(
+            uri.host,
+            uri.port,
+            use_ssl: (uri.scheme == "https"),
+            read_timeout: 60
+          ) { |http| http.request(req) }
+
+        unless res.is_a?(Net::HTTPSuccess)
+          raise "Node download-blob failed HTTP=#{res.code} body=#{res.body}"
+        end
+
+        res
+      end
 
       def current_invoice_version_for(invoice_id)
         ::Claims::InvoiceVersion
@@ -523,10 +608,7 @@ module Api
               invoice_upgrade_type_id
               source_engine
               rule_key
-              source_requirement_id
-              evidence_source
               rule_number
-              rule_name
               rule_result
               confidence
               expected_text

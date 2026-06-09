@@ -131,14 +131,11 @@ const StatusDot = ({ result }: { result: unknown }) => (
 );
 
 const ruleDisplayTitle = (rulecheck: any) => {
-  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
-  const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
-  const prefix =
-    sourceEngine === 'code'
-      ? `Code Rule ${num ?? ''}`.trim()
-      : `${num != null ? `Rule ${num}` : 'Rule'}`;
+  const ruleKey = String(rulecheck.rule_key ?? '').trim();
+  if (ruleKey) return ruleKey;
 
-  return `${prefix} - ${String(rulecheck.rule_name ?? '')}`.trim();
+  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
+  return num != null ? `rule_${num}` : 'rule';
 };
 
 const ruleSourceLabel = (rulecheck: any) => {
@@ -935,7 +932,6 @@ export default function ContractorInvoiceReviewScreen() {
                                 {group.rulechecks.map((row: any) => {
                                   const title = ruleDisplayTitle(row);
                                   const sourceLabel = ruleSourceLabel(row);
-                                  const sourceRequirement = row.source_requirement_id ?? '';
                                   const expected = row.expected_text ?? row.expected ?? '';
                                   const calc = row.calculation ?? '';
                                   const reason = row.reason_and_likely_causes ?? '';
@@ -943,7 +939,7 @@ export default function ContractorInvoiceReviewScreen() {
 
                                   return (
                                     <Box
-                                      key={row.id ?? `${row.rule_number}-${row.rule_name}`}
+                                      key={row.id ?? `${row.rule_number}-${row.rule_key}`}
                                       px="10px"
                                       py="8px"
                                       borderRadius="md"
@@ -962,11 +958,6 @@ export default function ContractorInvoiceReviewScreen() {
                                           </Badge>
                                         )}
                                       </Flex>
-                                      {sourceRequirement && (
-                                        <Text fontSize="xs" opacity={0.65} mb="6px">
-                                          {sourceRequirement}
-                                        </Text>
-                                      )}
                                       {expected && (
                                         <Text fontSize="xs" whiteSpace="pre-wrap">
                                           <Box as="span" opacity={0.65}>
@@ -1267,17 +1258,16 @@ export default function ContractorInvoiceReviewScreen() {
                 </Text>
                 <Flex direction="column" gap={3}>
                   {failingRulechecks.slice(0, 6).map((row: any) => {
-                    const num = row.rule_number != null ? Number(row.rule_number) : null;
-                    const name = String(row.rule_name || 'Invoice review check');
+                    const name = String(row.rule_key || 'invoice_review_check');
                     const groupName = String(row.upgrade_type_description || row.upgrade_type_key || 'Invoice');
                     const reason = row.reason_and_likely_causes || row.observed_text || row.evidence_text || '';
 
                     return (
-                      <Box key={row.id ?? `${row.rule_number}-${row.rule_name}`} bg="white" borderRadius="md" p={3}>
+                      <Box key={row.id ?? `${row.rule_number}-${row.rule_key}`} bg="white" borderRadius="md" p={3}>
                         <Flex align="center" gap={2} mb={1}>
                           <StatusDot result="fail" />
                           <Text fontSize="sm" fontWeight="semibold">
-                            {num != null ? `Rule ${num} - ${name}` : name}
+                            {name}
                           </Text>
                         </Flex>
                         <Text fontSize="xs" opacity={0.7} mb={reason ? 1 : 0}>

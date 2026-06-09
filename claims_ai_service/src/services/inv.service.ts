@@ -203,10 +203,10 @@ export class InvService {
   }
 
   // ============================================================
-  // SECTION 30 - Azure Blob SAS helpers (NO SAS INPUT FROM CLIENT)
+  // SECTION 30 - Azure Blob helpers (NO SAS INPUT FROM CLIENT)
   // PURPOSE:
   // - Mint a short-lived read-only SAS URL for a blob
-  // - Used by Document Intelligence urlSource
+  // - Download blob bytes for Document Intelligence
   // ============================================================
 
   // ============================================================
@@ -304,6 +304,29 @@ export class InvService {
     return { di_raw_json };
   }
 
+  private async runDiAnalyzeFromBytes(pdfBuffer: Buffer, modelId: string) {
+    const initialResponse = await this.client
+      .path('/documentModels/{modelId}:analyze', modelId)
+      .post({
+        body: pdfBuffer as any,
+        contentType: 'application/pdf',
+      });
+
+    if (isUnexpected(initialResponse)) {
+      throw new Error(
+        `Document Intelligence error: ${JSON.stringify(initialResponse.body)}`,
+      );
+    }
+
+    const poller = getLongRunningPoller(this.client, initialResponse);
+    const finalResponse = await poller.pollUntilDone();
+
+    const di_raw_json =
+      (finalResponse as any)?.body?.analyzeResult ??
+      (finalResponse as any)?.body;
+    return { di_raw_json };
+  }
+
   async ocrByBlob(args: {
     container?: string;
     storageKey: string;
@@ -319,11 +342,13 @@ export class InvService {
     const storageKey = (args.storageKey ?? '').trim();
     if (!storageKey) throw new Error('Missing storageKey');
 
-    const sasUrl = await this.buildBlobSasUrl(container, storageKey);
+    const containerClient = this.blobSvc.getContainerClient(container);
+    const blobClient = containerClient.getBlockBlobClient(storageKey);
+    const pdfBuffer = await blobClient.downloadToBuffer();
 
-    // just call DI and return raw
-    const { di_raw_json } = await this.runDiAnalyzeFromUrl(
-      sasUrl,
+    // Send bytes directly so private-only storage does not need to be reachable by DI.
+    const { di_raw_json } = await this.runDiAnalyzeFromBytes(
+      pdfBuffer,
       args.modelId,
     );
 
@@ -356,10 +381,100 @@ export class InvService {
     };
   }
 
+  async downloadBlob(args: { container?: string; storageKey: string }) {
+    const container = (
+      args.container ??
+      process.env.AZURE_BLOB_CONTAINER ??
+      this.defaultContainer ??
+      'inv-pdfs-dev'
+    ).trim();
+
+    const storageKey = (args.storageKey ?? '').trim();
+    if (!storageKey) throw new Error('Missing storageKey');
+
+    const containerClient = this.blobSvc.getContainerClient(container);
+    const blobClient = containerClient.getBlockBlobClient(storageKey);
+    const [properties, buffer] = await Promise.all([
+      blobClient.getProperties(),
+      blobClient.downloadToBuffer(),
+    ]);
+
+    return {
+      container,
+      storage_key: storageKey,
+      content_type: properties.contentType || 'application/pdf',
+      byte_size: buffer.length,
+      filename: storageKey.split('/').pop() || 'document.pdf',
+      buffer,
+    };
+  }
+
   // start HelloWorld
   async HelloWorld(): Promise<{ message: string }> {
     console.log('service.HelloWorld: exiting');
     return { message: 'hello from InvService' };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private retryAfterMs(error: any): number | undefined {
+    const retryAfter =
+      error?.headers?.get?.('retry-after') ??
+      error?.headers?.['retry-after'] ??
+      error?.response?.headers?.['retry-after'];
+
+    if (!retryAfter) return undefined;
+
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+
+    const dateMs = Date.parse(String(retryAfter));
+    if (Number.isFinite(dateMs)) return Math.max(0, dateMs - Date.now());
+
+    return undefined;
+  }
+
+  private isRetryableGenAiError(error: any): boolean {
+    const status = error?.status ?? error?.response?.status;
+    return (
+      status === 429 ||
+      status === 500 ||
+      status === 502 ||
+      status === 503 ||
+      status === 504
+    );
+  }
+
+  private async withGenAiRetries<T>(operation: () => Promise<T>): Promise<T> {
+    const maxAttempts = Number(process.env.GENAI_MAX_ATTEMPTS || 6);
+    const baseDelayMs = Number(process.env.GENAI_RETRY_BASE_MS || 5000);
+    const maxDelayMs = Number(process.env.GENAI_RETRY_MAX_MS || 60000);
+
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        if (attempt >= maxAttempts || !this.isRetryableGenAiError(error)) {
+          throw error;
+        }
+
+        const retryAfterMs = this.retryAfterMs(error);
+        const backoffMs = Math.min(
+          maxDelayMs,
+          baseDelayMs * Math.pow(2, attempt - 1),
+        );
+        const jitterMs = Math.floor(Math.random() * 1000);
+        const delayMs = retryAfterMs ?? backoffMs + jitterMs;
+        const status = error?.status ?? error?.response?.status ?? 'unknown';
+
+        console.warn(
+          `GenAI request failed with status ${status}; retrying attempt ${attempt + 1}/${maxAttempts} in ${delayMs}ms`,
+        );
+        await this.sleep(delayMs);
+      }
+    }
   }
 
   // called from curl for troubleshooting
@@ -386,25 +501,29 @@ export class InvService {
     let message = '';
 
     if (this.genaiApiStyle === 'responses') {
-      const resp = await this.genaiClient.responses.create({
-        model: this.genaiDeployment,
-        input: arrConversation,
-      });
+      const resp = await this.withGenAiRetries(() =>
+        this.genaiClient.responses.create({
+          model: this.genaiDeployment,
+          input: arrConversation,
+        }),
+      );
       message = resp.output_text ?? '';
     } else {
-      const resp = await this.genaiClient.chat.completions.create({
-        model: this.genaiDeployment,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant. Keep it short.',
-          },
-          {
-            role: 'user',
-            content: 'Say hello to Stephen.',
-          },
-        ],
-      });
+      const resp = await this.withGenAiRetries(() =>
+        this.genaiClient.chat.completions.create({
+          model: this.genaiDeployment,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a helpful assistant. Keep it short.',
+            },
+            {
+              role: 'user',
+              content: 'Say hello to Stephen.',
+            },
+          ],
+        }),
+      );
       message = extractChatCompletionText(resp);
     }
     console.log('genaiDeployment was', this.genaiDeployment);
@@ -417,17 +536,21 @@ export class InvService {
 
     if (this.genaiApiStyle === 'responses') {
       const responsesPrompt = toResponsesPrompt(contextwindowjson);
-      const resp = await this.genaiClient.responses.create({
-        model: this.genaiDeployment,
-        instructions: responsesPrompt.instructions,
-        input: responsesPrompt.input,
-      });
+      const resp = await this.withGenAiRetries(() =>
+        this.genaiClient.responses.create({
+          model: this.genaiDeployment,
+          instructions: responsesPrompt.instructions,
+          input: responsesPrompt.input,
+        }),
+      );
       raw = resp.output_text ?? '';
     } else {
-      const resp = await this.genaiClient.chat.completions.create({
-        model: this.genaiDeployment,
-        messages: toChatMessages(contextwindowjson),
-      });
+      const resp = await this.withGenAiRetries(() =>
+        this.genaiClient.chat.completions.create({
+          model: this.genaiDeployment,
+          messages: toChatMessages(contextwindowjson),
+        }),
+      );
       raw = extractChatCompletionText(resp);
     }
 

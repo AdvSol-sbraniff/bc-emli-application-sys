@@ -1,12 +1,28 @@
-import { Controller, Post, Req, Body, BadRequestException, UsePipes, ValidationPipe } from '@nestjs/common';
-import { IsOptional, IsString, IsUrl, IsObject, IsArray,  IsInt, Min   } from 'class-validator';
+import {
+  Controller,
+  Post,
+  Req,
+  Body,
+  BadRequestException,
+  UsePipes,
+  ValidationPipe,
+  Res,
+} from '@nestjs/common';
+import {
+  IsOptional,
+  IsString,
+  IsUrl,
+  IsObject,
+  IsArray,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { Request, Response } from 'express';
 import { InvService } from '../services/inv.service';
 
 import { UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Type } from 'class-transformer';
-
 
 // start of Dtos
 
@@ -50,7 +66,6 @@ class DeleteBlobDto {
   container?: string;
 }
 
-
 class UploadPdfDto {
   // sessions/<session_uuid>/pdfs/<invoice_version_uuid>/original.PDF
   @IsString()
@@ -87,7 +102,6 @@ class UploadSupportingPdfDto {
   filename?: string;
 }
 
-
 class OcrByBlobDto {
   @IsString()
   storageKey!: string;
@@ -109,22 +123,39 @@ export class InvController {
   constructor(private readonly invService: InvService) {}
 
   @Post('mint-sas')
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-async mintSas(@Body() dto: MintSasDto): Promise<any> {
-  return this.invService.mintSasUrl({
-    container: dto.container,
-    storageKey: dto.storageKey,
-  });
-}
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async mintSas(@Body() dto: MintSasDto): Promise<any> {
+    return this.invService.mintSasUrl({
+      container: dto.container,
+      storageKey: dto.storageKey,
+    });
+  }
 
-@Post('delete-blob')
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-async deleteBlob(@Body() dto: DeleteBlobDto): Promise<any> {
-  return this.invService.deleteBlob({
-    container: dto.container,
-    storageKey: dto.storageKey,
-  });
-}
+  @Post('download-blob')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async downloadBlob(@Body() dto: MintSasDto, @Res() res: Response) {
+    const blob = await this.invService.downloadBlob({
+      container: dto.container,
+      storageKey: dto.storageKey,
+    });
+
+    res.setHeader('Content-Type', blob.content_type);
+    res.setHeader('Content-Length', String(blob.byte_size));
+    res.setHeader(
+      'Content-Disposition',
+      'inline; filename="' + blob.filename.replace(/"/g, '') + '"',
+    );
+    res.send(blob.buffer);
+  }
+
+  @Post('delete-blob')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async deleteBlob(@Body() dto: DeleteBlobDto): Promise<any> {
+    return this.invService.deleteBlob({
+      container: dto.container,
+      storageKey: dto.storageKey,
+    });
+  }
 
   // for test only
   @Post('HelloWorld')
@@ -133,85 +164,81 @@ async deleteBlob(@Body() dto: DeleteBlobDto): Promise<any> {
   }
 
   // for test only
-    @Post('genaiHelloWorld')
+  @Post('genaiHelloWorld')
   async genaiHelloWorld(): Promise<{ message: string }> {
     return await this.invService.genaiHelloWorld();
   }
 
-
-// ============================================================
-// SECTION 20 — Controller: POST /inv/ocr
-// ============================================================
-@Post('ocr')
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-async ocr(@Body() dto: OcrByBlobDto): Promise<any> {
-  const modelId = dto.modelId ?? 'prebuilt-invoice';
-  return this.invService.ocrByBlob({
-    container: dto.container,
-    storageKey: dto.storageKey,
-    modelId,
-  });
-}
-
-@Post('genai')
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-async genai(@Body() dto: GenAiDto): Promise<any> {
-  // returns a real JSON object to Ruby
-  return this.invService.genai(dto.contextwindowjson);
-}
-
-@Post('upload-pdf')
-@UseInterceptors(FileInterceptor('file'))
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-async uploadPdf(
-  @UploadedFile() file: Express.Multer.File,
-  @Body() dto: UploadPdfDto,
-) {
-  if (!file) {
-    throw new BadRequestException("Missing multipart file field 'file'.");
+  // ============================================================
+  // SECTION 20 ï¿½ Controller: POST /inv/ocr
+  // ============================================================
+  @Post('ocr')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async ocr(@Body() dto: OcrByBlobDto): Promise<any> {
+    const modelId = dto.modelId ?? 'prebuilt-invoice';
+    return this.invService.ocrByBlob({
+      container: dto.container,
+      storageKey: dto.storageKey,
+      modelId,
+    });
   }
 
-return this.invService.uploadPdfToBlob({
-  sessionId: dto.sessionId,
-  invoiceVersionId: dto.invoiceVersionId,
-  container: dto.container,
-  filename: dto.filename,
-  buffer: file.buffer,
-  contentType: file.mimetype || 'application/pdf',
-  originalName: file.originalname,
-});
-
-}
-
-@Post('upload-supporting-pdf')
-@UseInterceptors(FileInterceptor('file'))
-@UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-async uploadSupportingPdf(
-  @UploadedFile() file: Express.Multer.File,
-  @Body() dto: UploadSupportingPdfDto,
-) {
-  if (!file) {
-    throw new BadRequestException("Missing multipart file field 'file'.");
+  @Post('genai')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async genai(@Body() dto: GenAiDto): Promise<any> {
+    // returns a real JSON object to Ruby
+    return this.invService.genai(dto.contextwindowjson);
   }
 
-  return this.invService.uploadSupportingPdfToBlob({
-    sessionId: dto.sessionId,
-    invoiceId: dto.invoiceId,
-    supportingDocumentId: dto.supportingDocumentId,
-    container: dto.container,
-    filename: dto.filename,
-    buffer: file.buffer,
-    contentType: file.mimetype || 'application/pdf',
-    originalName: file.originalname,
-  });
-}
+  @Post('upload-pdf')
+  @UseInterceptors(FileInterceptor('file'))
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async uploadPdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: UploadPdfDto,
+  ) {
+    if (!file) {
+      throw new BadRequestException("Missing multipart file field 'file'.");
+    }
 
+    return this.invService.uploadPdfToBlob({
+      sessionId: dto.sessionId,
+      invoiceVersionId: dto.invoiceVersionId,
+      container: dto.container,
+      filename: dto.filename,
+      buffer: file.buffer,
+      contentType: file.mimetype || 'application/pdf',
+      originalName: file.originalname,
+    });
+  }
 
-// sample parsing checks
-//    if (!dto.sasUrl.includes('blob.core.windows.net')) {
-//      throw new BadRequestException('sasUrl must be an Azure Blob SAS URL.');
-//    }
+  @Post('upload-supporting-pdf')
+  @UseInterceptors(FileInterceptor('file'))
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async uploadSupportingPdf(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: UploadSupportingPdfDto,
+  ) {
+    if (!file) {
+      throw new BadRequestException("Missing multipart file field 'file'.");
+    }
 
+    return this.invService.uploadSupportingPdfToBlob({
+      sessionId: dto.sessionId,
+      invoiceId: dto.invoiceId,
+      supportingDocumentId: dto.supportingDocumentId,
+      container: dto.container,
+      filename: dto.filename,
+      buffer: file.buffer,
+      contentType: file.mimetype || 'application/pdf',
+      originalName: file.originalname,
+    });
+  }
 
-// END of controller 'inv'
+  // sample parsing checks
+  //    if (!dto.sasUrl.includes('blob.core.windows.net')) {
+  //      throw new BadRequestException('sasUrl must be an Azure Blob SAS URL.');
+  //    }
+
+  // END of controller 'inv'
 }

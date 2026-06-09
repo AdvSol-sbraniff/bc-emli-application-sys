@@ -98,11 +98,11 @@ const FieldRow = ({ label, value, active, disabled, onClick }: FieldRowProps) =>
 };
 
 const ruleDisplayTitle = (rulecheck: any) => {
-  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
-  const sourceEngine = String(rulecheck.source_engine ?? '').toLowerCase();
-  const prefix = sourceEngine === 'code' ? `Code Rule ${num ?? ''}`.trim() : `${num != null ? `Rule ${num}` : 'Rule'}`;
+  const ruleKey = String(rulecheck.rule_key ?? '').trim();
+  if (ruleKey) return ruleKey;
 
-  return `${prefix} - ${String(rulecheck.rule_name ?? '')}`.trim();
+  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
+  return num != null ? `rule_${num}` : 'rule';
 };
 
 const ruleSourceLabel = (rulecheck: any) => {
@@ -2183,11 +2183,10 @@ export const InvoiceVersionShowScreen = () => {
                                     const calc = r.calculation ?? '';
                                     const reason = r.reason_and_likely_causes ?? '';
                                     const evText = r.evidence_text ?? '';
-                                    const sourceRequirement = r.source_requirement_id ?? '';
 
                                     return (
                                       <Box
-                                        key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_name}`}
+                                        key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_key}`}
                                         px="10px"
                                         py="8px"
                                         borderRadius="md"
@@ -2206,11 +2205,6 @@ export const InvoiceVersionShowScreen = () => {
                                             </Badge>
                                           )}
                                         </Flex>
-                                        {sourceRequirement && (
-                                          <Text fontSize="xs" opacity={0.65} mb="6px">
-                                            {sourceRequirement}
-                                          </Text>
-                                        )}
                                         {expected && (
                                           <Text fontSize="xs" whiteSpace="pre-wrap">
                                             <Box as="span" opacity={0.65}>
@@ -2647,11 +2641,10 @@ export const InvoiceVersionShowScreen = () => {
                             const calc = r.calculation ?? '';
                             const reason = r.reason_and_likely_causes ?? '';
                             const evText = r.evidence_text ?? '';
-                            const sourceRequirement = r.source_requirement_id ?? '';
 
                             return (
                               <Box
-                                key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_name}`}
+                                key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_key}`}
                                 px="10px"
                                 py="8px"
                                 mb="8px"
@@ -2675,12 +2668,6 @@ export const InvoiceVersionShowScreen = () => {
                                 {meta && (
                                   <Text fontSize="xs" opacity={0.6} mb="6px">
                                     {meta}
-                                  </Text>
-                                )}
-
-                                {sourceRequirement && (
-                                  <Text fontSize="xs" opacity={0.65} mb="6px">
-                                    {sourceRequirement}
                                   </Text>
                                 )}
 

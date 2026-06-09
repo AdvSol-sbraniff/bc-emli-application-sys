@@ -43,7 +43,6 @@ Output-json-schema:
     {
       "rule_number": 0,
       "rule_key": "string",
-      "evidence_source": "invoice_pdf|supporting_document|database|external_list|admin_review",
       "rule_result": "pass|info|warn|fail",
       "confidence": 0,
       "expected_text": null,
@@ -80,7 +79,7 @@ Rules:
 - For every located_fields[] item based on visible invoice evidence, set page and polygon when Document Intelligence provides a reliable location. Use polygon=null only for inferred/database-derived values or when no reliable DI location exists.
 - For every non-common upgrade-specific ruleset call, include a located_fields[] item with field_key="upgrade_specific_rebate_line_amount" for the CleanBC / Better Homes / Energy Savings Program rebate amount attributable to that specific upgrade type. Use value=null when the invoice does not clearly allocate a rebate to this upgrade type.
 - Supporting-document evidence is supplied in case_facts.supporting_document_summary and case_facts.supporting_document_summary_for_upgrade_type. When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, income/utility-account documents, landlord consent, or other attachments, inspect the configured supporting documents and their located_fields before warning or failing for missing evidence.
-- If supporting-document located fields satisfy a document-present or fact-present requirement, set evidence_source="supporting_document" and cite the supporting_document type_key plus the exact field_key/value/evidence_text used.
+- If supporting-document located fields satisfy a document-present or fact-present requirement, cite the supporting_document type_key plus the exact field_key/value/evidence_text used in evidence_text.
 - If a supporting document is present but the located fields show visual-review, cutoff, blur, missing-page, or legibility limitations, use rule_result="warn" for targeted admin review unless the visible evidence clearly contradicts the requirement.
 
 Rule result examples:

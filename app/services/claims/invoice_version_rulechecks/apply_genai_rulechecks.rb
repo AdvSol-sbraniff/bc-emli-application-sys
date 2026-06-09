@@ -62,10 +62,6 @@ module Claims
         return nil if rule_number.nil?
 
         rule_key = (r["rule_key"] || r[:rule_key]).to_s.strip
-        rule_name = (r["rule_name"] || r[:rule_name]).to_s.strip
-        rule_name = rule_key.tr("_", " ").split.map(&:capitalize).join(" ") if rule_name.empty? && rule_key.present?
-        rule_name = "rule_#{rule_number}" if rule_name.empty?
-
         rule_result = coerce_rule_result(r)
         confidence = coerce_confidence(r["confidence"] || r[:confidence])
 
@@ -80,7 +76,6 @@ module Claims
           invoice_upgrade_type_id: @invoice_upgrade_type_id,
           source_engine: "genai",
           rule_number: rule_number,
-          rule_name: rule_name,
           rule_result: rule_result,
           confidence: confidence,
           expected_text: expected_text,
@@ -92,12 +87,7 @@ module Claims
           updated_at: now
         }
 
-        optional_metadata = {
-          rule_key: rule_key.presence,
-          source_requirement_id:
-            r["source_requirement_id"] || r[:source_requirement_id],
-          evidence_source: r["evidence_source"] || r[:evidence_source]
-        }
+        optional_metadata = { rule_key: rule_key.presence }
 
         optional_metadata.each do |key, value|
           attrs[

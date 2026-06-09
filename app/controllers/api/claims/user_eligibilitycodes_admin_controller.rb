@@ -30,7 +30,7 @@ module Api
               OR claims.v_user_eligibilitycodes.email ILIKE :like
               OR claims.v_user_eligibilitycodes.first_name ILIKE :like
               OR claims.v_user_eligibilitycodes.last_name ILIKE :like
-              OR claims.v_user_eligibilitycodes.role ILIKE :like
+              OR CAST(claims.v_user_eligibilitycodes.role AS text) ILIKE :like
               OR claims.v_user_eligibilitycodes.omniauth_provider ILIKE :like
               OR claims.v_user_eligibilitycodes.eligibility_code ILIKE :like
               OR CAST(claims.v_user_eligibilitycodes.income_level AS text) ILIKE :like

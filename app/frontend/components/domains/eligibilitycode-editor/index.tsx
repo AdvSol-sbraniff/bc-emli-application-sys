@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Container, Flex, Heading, Input, Spinner, Text } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  Container,
+  Flex,
+  FormControl,
+  FormErrorMessage,
+  FormLabel,
+  Heading,
+  Input,
+  Spinner,
+  Text,
+} from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 
@@ -15,6 +27,8 @@ type EligibilityRecordDto = {
   updated_at?: string;
 };
 
+type FieldErrors = Partial<Record<'userId' | 'eligibilityCode' | 'appliedAt' | 'approvedAt' | 'expiresAt', string>>;
+
 function useQueryParam(name: string): string | null {
   const { search } = useLocation();
   return useMemo(() => new URLSearchParams(search).get(name), [search, name]);
@@ -26,6 +40,11 @@ function deriveIncomeLevel(value: string): number | null {
   if (token.startsWith('ESP2')) return 2;
   if (token.startsWith('ESP3')) return 3;
   return null;
+}
+
+function toDateInputValue(value?: string | null): string {
+  if (!value) return '';
+  return String(value).slice(0, 10);
 }
 
 export default function EligibilitycodeEditorScreen() {
@@ -41,6 +60,7 @@ export default function EligibilitycodeEditorScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const [record, setRecord] = useState<EligibilityRecordDto | null>(null);
 
@@ -66,11 +86,42 @@ export default function EligibilitycodeEditorScreen() {
     expiresAt !== initialValues.expiresAt;
   const incomeLevel = deriveIncomeLevel(eligibilityCode) ?? record?.income_level ?? null;
 
+  function updateField<K extends keyof FieldErrors>(key: K, value: string, setter: (next: string) => void) {
+    setter(value);
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function validateForm(): boolean {
+    const next: FieldErrors = {};
+
+    if (isCreateMode && !userId.trim()) next.userId = 'user_id is required.';
+    if (!eligibilityCode.trim()) {
+      next.eligibilityCode = 'eligibility_code is required.';
+    } else if (deriveIncomeLevel(eligibilityCode) === null) {
+      next.eligibilityCode = 'eligibility_code must start with ESP1, ESPI, ESP2, or ESP3.';
+    }
+    if (!appliedAt.trim()) next.appliedAt = 'applied_at is required.';
+    if (!approvedAt.trim()) next.approvedAt = 'approved_at is required.';
+    if (!expiresAt.trim()) next.expiresAt = 'expires_at is required.';
+    if (appliedAt && expiresAt && expiresAt <= appliedAt) {
+      next.expiresAt = 'expires_at must be after applied_at.';
+    }
+
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
   async function load() {
     setIsLoading(true);
     setError(null);
 
     try {
+      setFieldErrors({});
       if (isCreateMode) {
         const nextUserId = userIdFromQuery || '';
         setRecord(null);
@@ -79,6 +130,7 @@ export default function EligibilitycodeEditorScreen() {
         setAppliedAt('');
         setApprovedAt('');
         setExpiresAt('');
+        setFieldErrors({});
         setInitialValues({
           userId: nextUserId,
           eligibilityCode: '',
@@ -106,18 +158,19 @@ export default function EligibilitycodeEditorScreen() {
       }
 
       const data: EligibilityRecordDto = await resp.json();
+      setFieldErrors({});
       setRecord(data);
       setUserId(data.user_id || '');
       setEligibilityCode(data.eligibility_code || '');
-      setAppliedAt(data.applied_at || '');
-      setApprovedAt(data.approved_at || '');
-      setExpiresAt(data.expires_at || '');
+      setAppliedAt(toDateInputValue(data.applied_at));
+      setApprovedAt(toDateInputValue(data.approved_at));
+      setExpiresAt(toDateInputValue(data.expires_at));
       setInitialValues({
         userId: data.user_id || '',
         eligibilityCode: data.eligibility_code || '',
-        appliedAt: data.applied_at || '',
-        approvedAt: data.approved_at || '',
-        expiresAt: data.expires_at || '',
+        appliedAt: toDateInputValue(data.applied_at),
+        approvedAt: toDateInputValue(data.approved_at),
+        expiresAt: toDateInputValue(data.expires_at),
       });
     } catch (e: any) {
       setError(e?.message || 'Load failed');
@@ -128,6 +181,7 @@ export default function EligibilitycodeEditorScreen() {
 
   async function save() {
     if (!isCreateMode && !id) return;
+    if (!validateForm()) return;
 
     setIsSaving(true);
     setError(null);
@@ -166,18 +220,19 @@ export default function EligibilitycodeEditorScreen() {
       }
 
       const data: EligibilityRecordDto = await resp.json();
+      setFieldErrors({});
       setRecord(data);
       setUserId(data.user_id || '');
       setEligibilityCode(data.eligibility_code || '');
-      setAppliedAt(data.applied_at || '');
-      setApprovedAt(data.approved_at || '');
-      setExpiresAt(data.expires_at || '');
+      setAppliedAt(toDateInputValue(data.applied_at));
+      setApprovedAt(toDateInputValue(data.approved_at));
+      setExpiresAt(toDateInputValue(data.expires_at));
       setInitialValues({
         userId: data.user_id || '',
         eligibilityCode: data.eligibility_code || '',
-        appliedAt: data.applied_at || '',
-        approvedAt: data.approved_at || '',
-        expiresAt: data.expires_at || '',
+        appliedAt: toDateInputValue(data.applied_at),
+        approvedAt: toDateInputValue(data.approved_at),
+        expiresAt: toDateInputValue(data.expires_at),
       });
 
       if (isCreateMode) {
@@ -249,23 +304,30 @@ export default function EligibilitycodeEditorScreen() {
 
             {!isLoading && !error && (
               <Flex direction="column" gap={4}>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                <FormControl isRequired isInvalid={Boolean(fieldErrors.userId)}>
+                  <FormLabel fontSize="xs" opacity={0.7} mb={1}>
                     user_id
-                  </Text>
+                  </FormLabel>
                   <Input
                     value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
+                    onChange={(e) => updateField('userId', e.target.value, setUserId)}
                     isDisabled={!isCreateMode}
                     fontFamily="mono"
+                    required
                   />
-                </Box>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                  <FormErrorMessage>{fieldErrors.userId}</FormErrorMessage>
+                </FormControl>
+                <FormControl isRequired isInvalid={Boolean(fieldErrors.eligibilityCode)}>
+                  <FormLabel fontSize="xs" opacity={0.7} mb={1}>
                     eligibility_code
-                  </Text>
-                  <Input value={eligibilityCode} onChange={(e) => setEligibilityCode(e.target.value)} />
-                </Box>
+                  </FormLabel>
+                  <Input
+                    value={eligibilityCode}
+                    onChange={(e) => updateField('eligibilityCode', e.target.value, setEligibilityCode)}
+                    required
+                  />
+                  <FormErrorMessage>{fieldErrors.eligibilityCode}</FormErrorMessage>
+                </FormControl>
                 <Box>
                   <Text fontSize="xs" opacity={0.7} mb={1}>
                     income_level
@@ -275,36 +337,42 @@ export default function EligibilitycodeEditorScreen() {
                     Stored from the eligibility code prefix on save.
                   </Text>
                 </Box>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                <FormControl isRequired isInvalid={Boolean(fieldErrors.appliedAt)}>
+                  <FormLabel fontSize="xs" opacity={0.7} mb={1}>
                     applied_at
-                  </Text>
+                  </FormLabel>
                   <Input
+                    type="date"
                     value={appliedAt}
-                    onChange={(e) => setAppliedAt(e.target.value)}
-                    placeholder="YYYY-MM-DD or timestamp"
+                    onChange={(e) => updateField('appliedAt', e.target.value, setAppliedAt)}
+                    required
                   />
-                </Box>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                  <FormErrorMessage>{fieldErrors.appliedAt}</FormErrorMessage>
+                </FormControl>
+                <FormControl isRequired isInvalid={Boolean(fieldErrors.approvedAt)}>
+                  <FormLabel fontSize="xs" opacity={0.7} mb={1}>
                     approved_at
-                  </Text>
+                  </FormLabel>
                   <Input
+                    type="date"
                     value={approvedAt}
-                    onChange={(e) => setApprovedAt(e.target.value)}
-                    placeholder="YYYY-MM-DD or timestamp"
+                    onChange={(e) => updateField('approvedAt', e.target.value, setApprovedAt)}
+                    required
                   />
-                </Box>
-                <Box>
-                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                  <FormErrorMessage>{fieldErrors.approvedAt}</FormErrorMessage>
+                </FormControl>
+                <FormControl isRequired isInvalid={Boolean(fieldErrors.expiresAt)}>
+                  <FormLabel fontSize="xs" opacity={0.7} mb={1}>
                     expires_at
-                  </Text>
+                  </FormLabel>
                   <Input
+                    type="date"
                     value={expiresAt}
-                    onChange={(e) => setExpiresAt(e.target.value)}
-                    placeholder="YYYY-MM-DD or timestamp"
+                    onChange={(e) => updateField('expiresAt', e.target.value, setExpiresAt)}
+                    required
                   />
-                </Box>
+                  <FormErrorMessage>{fieldErrors.expiresAt}</FormErrorMessage>
+                </FormControl>
 
                 <Text fontSize="sm" opacity={0.8}>
                   {isDirty ? 'Unsaved changes' : 'Saved'}

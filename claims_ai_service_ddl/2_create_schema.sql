@@ -26,9 +26,6 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
   session_id     uuid NOT NULL,
   contractor_id  uuid NOT NULL,
   submitter_id   uuid NULL,
-  -- Legacy upgrade/domain choice. Points at public.permit_classifications
-  -- rows where type='SubmissionVariant' under the Invoice submission type.
-  upgrade_type_id uuid NULL,
 
   system_help_notes text NULL,
 
@@ -70,10 +67,7 @@ CHECK (status IN (
     FOREIGN KEY (contractor_id) REFERENCES public.contractors(id),
 
   CONSTRAINT fk_claims_invoices_submitter
-    FOREIGN KEY (submitter_id) REFERENCES public.users(id),
-
-  CONSTRAINT fk_claims_invoices_upgrade_type
-    FOREIGN KEY (upgrade_type_id) REFERENCES public.permit_classifications(id)
+    FOREIGN KEY (submitter_id) REFERENCES public.users(id)
 
 );
 
@@ -91,9 +85,6 @@ CREATE INDEX IF NOT EXISTS index_claims_invoices_on_contractor_id
 
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitter_id
   ON claims.invoices (submitter_id);
-
-CREATE INDEX IF NOT EXISTS index_claims_invoices_on_upgrade_type_id
-  ON claims.invoices (upgrade_type_id);
 
 
 
@@ -806,7 +797,7 @@ CREATE INDEX IF NOT EXISTS idx_invoice_versions_ohpa_product
 
 --
 -- invoice_upgrade_types
--- Catalogue of AI invoice upgrade domains, separate from legacy public.permit_classifications.
+-- Catalogue of AI invoice upgrade domains.
 --
 CREATE TABLE IF NOT EXISTS claims.invoice_upgrade_types (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1156,9 +1147,6 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
 
   rule_number integer NOT NULL,
   rule_key text NULL,
-  source_requirement_id text NULL,
-  evidence_source text NULL,     -- invoice_pdf|supporting_document|database|external_list|admin_review, or pipe/comma combo
-  rule_name   text NOT NULL,
 
   rule_result text NOT NULL DEFAULT 'fail',
   confidence smallint NOT NULL DEFAULT 0,  -- 0..100
@@ -1211,10 +1199,6 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_i
 
 CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
   ON claims.invoice_version_rulechecks (rule_key);
-
-CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_source_requirement_id
-  ON claims.invoice_version_rulechecks (source_requirement_id);
-
 
 
   -- 

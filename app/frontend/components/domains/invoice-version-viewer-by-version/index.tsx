@@ -71,10 +71,7 @@ type Rulecheck = {
   upgrade_type_key?: string | null;
   source_engine?: string | null;
   rule_key?: string | null;
-  source_requirement_id?: string | null;
-  evidence_source?: string | null;
   rule_number?: number | null;
-  rule_name?: string | null;
   rule_result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
   confidence?: number | null;
   expected_text?: string | null;
@@ -690,14 +687,9 @@ export const InvoiceVersionByVersionScreen = () => {
                                     <Flex align="center" gap="8px" mb="4px">
                                       <StatusDot result={r.rule_result} />
                                       <Text fontSize="sm" fontWeight="bold">
-                                        Rule {r.rule_number ?? '-'}: {r.rule_name || ''}
+                                        {r.rule_key || `rule_${r.rule_number ?? '-'}`}
                                       </Text>
                                     </Flex>
-                                    {r.source_requirement_id && (
-                                      <Text fontSize="xs" opacity={0.7}>
-                                        {r.source_requirement_id}
-                                      </Text>
-                                    )}
                                     <Text fontSize="xs" opacity={0.8}>
                                       confidence: {r.confidence ?? '-'}
                                     </Text>
@@ -878,14 +870,9 @@ export const InvoiceVersionByVersionScreen = () => {
                                 <Flex align="center" gap="8px" mb="4px">
                                   <StatusDot result={r.rule_result} />
                                   <Text fontSize="sm" fontWeight="bold">
-                                    Rule {r.rule_number ?? '-'}: {r.rule_name || ''}
+                                    {r.rule_key || `rule_${r.rule_number ?? '-'}`}
                                   </Text>
                                 </Flex>
-                                {r.source_requirement_id && (
-                                  <Text fontSize="xs" opacity={0.7}>
-                                    {r.source_requirement_id}
-                                  </Text>
-                                )}
                                 <Text fontSize="xs" opacity={0.8}>
                                   confidence: {r.confidence ?? '-'}
                                 </Text>

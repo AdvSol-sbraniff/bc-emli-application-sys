@@ -148,7 +148,19 @@ claimsAi:
   enabled: true
   image:
     repository: ghcr.io/advsol-sbraniff/hesp-claims-ai
+    tag: main
     pullPolicy: Always
+
+  hostAliases:
+    - ip: '10.46.78.4'
+      hostnames:
+        - 'aoai-esp-dev.openai.azure.com'
+    - ip: '10.46.78.6'
+      hostnames:
+        - 'docintel-esp-dev.cognitiveservices.azure.com'
+    - ip: '10.46.78.5'
+      hostnames:
+        - 'cbdb71espclaimsdev.blob.core.windows.net'
 
   resources:
     requests:

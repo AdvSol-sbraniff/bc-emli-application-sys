@@ -9,11 +9,19 @@ param privateEndpointName string
 @description('Subnet resource id for the private endpoint.')
 param subnetId string
 
-@description('Azure OpenAI account resource id.')
+@description('Resource id of the Azure service that the private endpoint connects to.')
 param privateLinkServiceId string
 
-@description('Private DNS zone id for Azure OpenAI.')
+@description('Private Link group ids for the target service, such as account for Cognitive Services/OpenAI or blob for Storage.')
+param groupIds array = [
+  'account'
+]
+
+@description('Private DNS zone id for the target service. Leave blank when DNS is managed elsewhere or hostAliases are used temporarily.')
 param privateDnsZoneId string = ''
+
+@description('Name to use for the private DNS zone config when privateDnsZoneId is provided.')
+param privateDnsZoneConfigName string = 'default'
 
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
   name: privateEndpointName
@@ -27,9 +35,7 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = {
         name: '${privateEndpointName}-connection'
         properties: {
           privateLinkServiceId: privateLinkServiceId
-          groupIds: [
-            'account'
-          ]
+          groupIds: groupIds
         }
       }
     ]
@@ -42,7 +48,7 @@ resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2
   properties: {
     privateDnsZoneConfigs: [
       {
-        name: 'openai'
+        name: privateDnsZoneConfigName
         properties: {
           privateDnsZoneId: privateDnsZoneId
         }

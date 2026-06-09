@@ -26,9 +26,7 @@ module Claims
         RULES = {
           product_list_match: {
             number: 1,
-            key: "hydronic_product_found_in_qualifying_list",
-            name: "Hydronic Heat Pump Found In Qualifying Product List",
-            source_requirement_id: "ESP-2026-HYDRONIC-AWHP-LIST-001"
+            key: "hydronic_product_found_in_qualifying_list"
           }
         }.freeze
 
@@ -82,7 +80,7 @@ module Claims
         attr_reader :invoice_version, :upgrade_type
 
         def enabled_rules_for_upgrade_type
-          RULES.select do |_rule_name, rule|
+          RULES.select do |_rule_type, rule|
             ::Claims::CodeRules::Registry.enabled_for?(
               code_rule_key: rule.fetch(:key),
               invoice_upgrade_type_id: upgrade_type.id,
@@ -381,9 +379,6 @@ module Claims
             source_engine: "code",
             rule_number: rule.fetch(:number),
             rule_key: rule.fetch(:key),
-            source_requirement_id: rule.fetch(:source_requirement_id),
-            evidence_source: "invoice_pdf|supporting_document|external_list",
-            rule_name: rule.fetch(:name),
             rule_result: rule_result,
             confidence: confidence,
             expected_text: expected_text,

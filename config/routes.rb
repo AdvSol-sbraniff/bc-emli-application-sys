@@ -92,6 +92,8 @@ Rails.application.routes.draw do
 
       get "sessions/:session_id/invoices/:invoice_id/pdf_url",
           to: "invoice_versions#pdf_url"
+      get "sessions/:session_id/invoices/:invoice_id/pdf",
+          to: "invoice_versions#pdf"
 
       # ============================================================
       # SECTION 12 — ADMIN GRID (POC)
@@ -111,6 +113,8 @@ Rails.application.routes.draw do
              to: "invoice_supporting_documents#destroy"
       get "admin/supporting_documents/:id/pdf_url",
           to: "invoice_supporting_documents#pdf_url"
+      get "admin/supporting_documents/:id/pdf",
+          to: "invoice_supporting_documents#pdf"
       get "admin/invoices/:invoice_id/redo_package/context",
           to: "redo_invoice_package#context"
       get "admin/invoices/:invoice_id/redo_package/documents",
@@ -123,6 +127,7 @@ Rails.application.routes.draw do
              to: "redo_invoice_package#destroy"
       get "admin/redo_package/documents/:id/pdf_url",
           to: "redo_invoice_package#pdf_url"
+      get "admin/redo_package/documents/:id/pdf", to: "redo_invoice_package#pdf"
 
       get "admin/reports/volume_value/summary",
           to: "reports_volume_value#summary"
@@ -176,6 +181,8 @@ Rails.application.routes.draw do
           to: "invoice_versions_admin#read_genai_current_by_invoice"
       get "admin/invoices/:invoice_id/current_version/pdf_url",
           to: "invoice_versions_admin#pdf_url_current_by_invoice"
+      get "admin/invoices/:invoice_id/current_version/pdf",
+          to: "invoice_versions_admin#pdf_current_by_invoice"
 
       # Screen B: fetch raw JSON blobs for one invoice_version (tabs)
       get "admin/invoice_versions/:id", to: "invoice_versions_admin#show"
@@ -185,6 +192,8 @@ Rails.application.routes.draw do
           to: "invoice_versions_admin#read_genai_by_version"
       get "admin/invoice_versions/:id/pdf_url",
           to: "invoice_versions_admin#pdf_url_by_version"
+      get "admin/invoice_versions/:id/pdf",
+          to: "invoice_versions_admin#pdf_by_version"
 
       # ============================================================
       # SECTION 60 — RULESET EDITOR (admin)

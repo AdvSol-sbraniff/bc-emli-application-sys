@@ -9,11 +9,26 @@ param networkingResourceGroupName string
 @description('Azure region for the Azure OpenAI account.')
 param openAiLocation string
 
+@description('Azure region for the Document Intelligence account.')
+param docIntelLocation string
+
+@description('Azure region for the Storage account.')
+param storageLocation string
+
 @description('Azure region for private endpoint and networking resources.')
 param networkingLocation string
 
 @description('Globally unique Azure OpenAI account name.')
 param openAiAccountName string
+
+@description('Azure Document Intelligence account name.')
+param docIntelAccountName string
+
+@description('Azure Storage account name for Claims AI PDFs.')
+param storageAccountName string
+
+@description('Blob container name for Claims AI PDFs.')
+param storageBlobContainerName string = 'inv-pdfs-dev'
 
 @description('Existing VNet name for the private endpoint subnet.')
 param vnetName string
@@ -29,6 +44,12 @@ param nsgName string
 
 @description('Private endpoint resource name.')
 param privateEndpointName string
+
+@description('Document Intelligence private endpoint resource name.')
+param docIntelPrivateEndpointName string
+
+@description('Storage blob private endpoint resource name.')
+param storagePrivateEndpointName string
 
 @description('Private DNS zone used by Azure OpenAI private endpoints.')
 param privateDnsZoneName string = 'privatelink.openai.azure.com'
@@ -74,6 +95,25 @@ module openAi 'modules/azure-openai.bicep' = {
   }
 }
 
+module docIntel 'modules/document-intelligence.bicep' = {
+  name: 'docintel-${uniqueString(deployment().name, docIntelAccountName)}'
+  scope: serviceRg
+  params: {
+    accountName: docIntelAccountName
+    location: docIntelLocation
+  }
+}
+
+module storage 'modules/storage-account.bicep' = {
+  name: 'storage-${uniqueString(deployment().name, storageAccountName)}'
+  scope: serviceRg
+  params: {
+    accountName: storageAccountName
+    location: storageLocation
+    blobContainerName: storageBlobContainerName
+  }
+}
+
 module subnet 'modules/subnet-nsg.bicep' = {
   name: 'subnet-nsg-${uniqueString(deployment().name, subnetName)}'
   scope: networkingRg
@@ -105,7 +145,43 @@ module privateEndpoint 'modules/private-endpoint.bicep' = {
     privateEndpointName: privateEndpointName
     subnetId: subnet.outputs.subnetId
     privateLinkServiceId: openAi.outputs.accountId
+    groupIds: [
+      'account'
+    ]
     privateDnsZoneId: privateDnsZoneId
+    privateDnsZoneConfigName: 'openai'
+  }
+}
+
+module docIntelPrivateEndpoint 'modules/private-endpoint.bicep' = {
+  name: 'private-endpoint-${uniqueString(deployment().name, docIntelPrivateEndpointName)}'
+  scope: networkingRg
+  params: {
+    location: networkingLocation
+    privateEndpointName: docIntelPrivateEndpointName
+    subnetId: subnet.outputs.subnetId
+    privateLinkServiceId: docIntel.outputs.accountId
+    groupIds: [
+      'account'
+    ]
+    privateDnsZoneId: ''
+    privateDnsZoneConfigName: 'cognitiveservices'
+  }
+}
+
+module storagePrivateEndpoint 'modules/private-endpoint.bicep' = {
+  name: 'private-endpoint-${uniqueString(deployment().name, storagePrivateEndpointName)}'
+  scope: networkingRg
+  params: {
+    location: networkingLocation
+    privateEndpointName: storagePrivateEndpointName
+    subnetId: subnet.outputs.subnetId
+    privateLinkServiceId: storage.outputs.accountId
+    groupIds: [
+      'blob'
+    ]
+    privateDnsZoneId: ''
+    privateDnsZoneConfigName: 'blob'
   }
 }
 
@@ -129,4 +205,11 @@ output openAiAccountId string = openAi.outputs.accountId
 output openAiEndpoint string = openAi.outputs.endpoint
 output openAiBaseUrlForEnv string = '${openAi.outputs.endpoint}openai/v1/'
 output privateEndpointId string = privateEndpoint.outputs.privateEndpointId
+output docIntelAccountId string = docIntel.outputs.accountId
+output docIntelEndpoint string = docIntel.outputs.endpoint
+output docIntelPrivateEndpointId string = docIntelPrivateEndpoint.outputs.privateEndpointId
+output storageAccountId string = storage.outputs.accountId
+output storageBlobEndpoint string = storage.outputs.blobEndpoint
+output storageBlobContainerName string = storage.outputs.containerName
+output storagePrivateEndpointId string = storagePrivateEndpoint.outputs.privateEndpointId
 output subnetId string = subnet.outputs.subnetId

@@ -11,9 +11,7 @@ module Claims
         RULES = {
           product_list_match: {
             number: 1,
-            key: "ashp_oil_ohpa_bc_product_found_in_list",
-            name: "Oil Heat Pump Found In NRCan OHPA BC Product List",
-            source_requirement_id: "ESP-2026-ASHP-OIL-OHPA-001"
+            key: "ashp_oil_ohpa_bc_product_found_in_list"
           }
         }.freeze
 
@@ -67,7 +65,7 @@ module Claims
         attr_reader :invoice_version, :upgrade_type
 
         def enabled_rules_for_upgrade_type
-          RULES.select do |_rule_name, rule|
+          RULES.select do |_rule_type, rule|
             ::Claims::CodeRules::Registry.enabled_for?(
               code_rule_key: rule.fetch(:key),
               invoice_upgrade_type_id: upgrade_type.id,
@@ -226,9 +224,6 @@ module Claims
             source_engine: "code",
             rule_number: rule.fetch(:number),
             rule_key: rule.fetch(:key),
-            source_requirement_id: rule.fetch(:source_requirement_id),
-            evidence_source: "invoice_pdf|supporting_document|external_list",
-            rule_name: rule.fetch(:name),
             rule_result: rule_result,
             confidence: confidence,
             expected_text: expected_text,

@@ -7,13 +7,13 @@ module Api
       include Api::Claims::Concerns::AdminAuthorization
 
       skip_before_action :authenticate_user!,
-                         only: %i[context index destroy pdf_url]
+                         only: %i[context index destroy pdf_url pdf]
       skip_before_action :require_confirmation,
-                         only: %i[context index destroy pdf_url]
+                         only: %i[context index destroy pdf_url pdf]
       skip_after_action :verify_authorized,
-                        only: %i[context index destroy pdf_url]
+                        only: %i[context index destroy pdf_url pdf]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[context index destroy pdf_url]
+      skip_forgery_protection only: %i[context index destroy pdf_url pdf]
 
       def context
         invoice = ::Claims::Invoice.find(params[:invoice_id])
@@ -99,12 +99,10 @@ module Api
 
       def pdf_url
         doc = ::Claims::SupportingDocument.find(params[:id])
-        node_resp =
-          node_mint_sas!(
-            storage_key: doc.storage_key,
-            container: ENV["AZURE_BLOB_CONTAINER"]
-          )
-        render json: { sas_url: node_resp["sas_url"] }, status: :ok
+        render json: {
+                 sas_url: "/api/claims/admin/supporting_documents/#{doc.id}/pdf"
+               },
+               status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: {
                  error: "Supporting document not found"
@@ -117,7 +115,32 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      def pdf
+        doc = ::Claims::SupportingDocument.find(params[:id])
+        stream_blob_pdf!(storage_key: doc.storage_key)
+      rescue ActiveRecord::RecordNotFound
+        render json: {
+                 error: "Supporting document not found"
+               },
+               status: :not_found
+      rescue => e
+        Rails.logger.error(
+          "[claims][invoice_supporting_documents][pdf] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
+
+      def stream_blob_pdf!(storage_key:, container: ENV["AZURE_BLOB_CONTAINER"])
+        res =
+          node_download_blob!(storage_key: storage_key, container: container)
+        send_data res.body,
+                  type: res["content-type"].presence || "application/pdf",
+                  disposition: "inline",
+                  filename:
+                    File.basename(storage_key.to_s.presence || "document.pdf")
+      end
 
       def serialize_supporting_document(row)
         display_type =
@@ -208,6 +231,33 @@ module Api
         end
 
         JSON.parse(body)
+      end
+
+      def node_download_blob!(storage_key:, container: nil)
+        base = ENV["INV_NODE_BASE_URL"].to_s.strip
+        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
+
+        uri = URI("#{base.sub(%r{/\z}, "")}/inv/download-blob")
+        req = Net::HTTP::Post.new(uri)
+        req["Content-Type"] = "application/json"
+        req.body = {
+          storageKey: storage_key,
+          container: container
+        }.compact.to_json
+
+        res =
+          Net::HTTP.start(
+            uri.host,
+            uri.port,
+            use_ssl: (uri.scheme == "https"),
+            read_timeout: 60
+          ) { |http| http.request(req) }
+
+        unless res.is_a?(Net::HTTPSuccess)
+          raise "Node download-blob failed HTTP=#{res.code} body=#{res.body}"
+        end
+
+        res
       end
 
       def node_delete_blob!(storage_key:, container: nil)

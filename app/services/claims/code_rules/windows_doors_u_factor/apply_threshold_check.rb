@@ -8,12 +8,7 @@ module Claims
         U_FACTOR_FIELD_KEY = "metric_u_factor"
         MAX_U_FACTOR = BigDecimal("1.22")
 
-        RULE = {
-          number: 1,
-          key: "wd_u_factor_threshold",
-          name: "Windows/Doors U-Factor Within Threshold",
-          source_requirement_id: "ESP-2026-WD-008"
-        }.freeze
+        RULE = { number: 1, key: "wd_u_factor_threshold" }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
@@ -120,9 +115,6 @@ module Claims
             source_engine: "code",
             rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
-            source_requirement_id: RULE.fetch(:source_requirement_id),
-            evidence_source: "invoice_pdf|supporting_document",
-            rule_name: RULE.fetch(:name),
             rule_result: rule_result,
             confidence: confidence,
             expected_text:

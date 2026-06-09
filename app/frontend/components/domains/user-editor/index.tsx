@@ -54,6 +54,10 @@ const ROLE_OPTIONS = [
 ];
 
 const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '--');
+const blankToNull = (value: string) => {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
 
 function useQueryParam(name: string): string | null {
   const { search } = useLocation();
@@ -218,17 +222,17 @@ export default function UserEditorScreen() {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          email: email.trim(),
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          organization: organization.trim(),
+          email: blankToNull(email),
+          first_name: blankToNull(firstName),
+          last_name: blankToNull(lastName),
+          organization: blankToNull(organization),
           role,
           reviewed,
           certified,
-          omniauth_provider: omniauthProvider.trim(),
-          omniauth_uid: omniauthUid.trim(),
-          omniauth_email: omniauthEmail.trim(),
-          omniauth_username: omniauthUsername.trim(),
+          omniauth_provider: blankToNull(omniauthProvider),
+          omniauth_uid: blankToNull(omniauthUid),
+          omniauth_email: blankToNull(omniauthEmail),
+          omniauth_username: blankToNull(omniauthUsername),
         }),
       });
 

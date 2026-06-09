@@ -5,9 +5,9 @@ module Api
       # For the POC: don’t require login + don’t require policy checks
 
       before_action :require_claims_invoice_reader!,
-                    only: %i[current_invoices read read_genai pdf_url]
+                    only: %i[current_invoices read read_genai pdf_url pdf]
       skip_after_action :verify_authorized,
-                        only: %i[current_invoices read read_genai pdf_url]
+                        only: %i[current_invoices read read_genai pdf_url pdf]
 
       # ============================================================
       # GET /api/claims/sessions/:session_id/current_invoices
@@ -126,12 +126,26 @@ module Api
           return
         end
 
-        node_resp =
-          node_mint_sas!(
-            storage_key: civ.storage_key,
-            container: ENV["AZURE_BLOB_CONTAINER"]
+        render json: {
+                 sas_url:
+                   "/api/claims/sessions/#{params[:session_id]}/invoices/#{params[:invoice_id]}/pdf"
+               }
+      end
+
+      # GET /api/claims/sessions/:session_id/invoices/:invoice_id/pdf
+      def pdf
+        civ =
+          ::Claims::CurrentInvoiceVersion.find_by(
+            session_id: params[:session_id],
+            invoice_id: params[:invoice_id]
           )
-        render json: { sas_url: node_resp["sas_url"] }
+
+        if civ.nil?
+          render json: { error: "Not found" }, status: :not_found
+          return
+        end
+
+        stream_blob_pdf!(storage_key: civ.storage_key)
       end
 
       # ============================================================
@@ -175,6 +189,44 @@ module Api
       end
 
       private
+
+      def stream_blob_pdf!(storage_key:, container: ENV["AZURE_BLOB_CONTAINER"])
+        res =
+          node_download_blob!(storage_key: storage_key, container: container)
+        send_data res.body,
+                  type: res["content-type"].presence || "application/pdf",
+                  disposition: "inline",
+                  filename:
+                    File.basename(storage_key.to_s.presence || "document.pdf")
+      end
+
+      def node_download_blob!(storage_key:, container: nil)
+        base = ENV["INV_NODE_BASE_URL"].to_s.strip
+        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
+        base = base.sub(%r{/\z}, "")
+
+        uri = URI("#{base}/inv/download-blob")
+        req = Net::HTTP::Post.new(uri)
+        req["Content-Type"] = "application/json"
+        req.body = {
+          storageKey: storage_key,
+          container: container
+        }.compact.to_json
+
+        res =
+          Net::HTTP.start(
+            uri.host,
+            uri.port,
+            use_ssl: (uri.scheme == "https"),
+            read_timeout: 60
+          ) { |http| http.request(req) }
+
+        unless res.is_a?(Net::HTTPSuccess)
+          raise "Node download-blob failed HTTP=#{res.code} body=#{res.body}"
+        end
+
+        res
+      end
 
       def require_claims_invoice_reader!
         if current_user&.admin? || current_user&.admin_manager? ||
@@ -334,10 +386,7 @@ module Api
               invoice_upgrade_type_id
               source_engine
               rule_key
-              source_requirement_id
-              evidence_source
               rule_number
-              rule_name
               rule_result
               confidence
               expected_text

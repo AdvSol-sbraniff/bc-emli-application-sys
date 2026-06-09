@@ -10,6 +10,7 @@ module Claims
         first_class_invoice_fields_present
         submission_within_six_months
         eligibility_code_valid_for_invoice_date
+        eligibility_code_found_in_database
       ].freeze
       COMMON_RULE_BUILDERS = {
         "source_vintage_applies" => :source_vintage_applies,
@@ -17,7 +18,9 @@ module Claims
           :first_class_invoice_fields_present,
         "submission_within_six_months" => :submission_within_six_months,
         "eligibility_code_valid_for_invoice_date" =>
-          :eligibility_code_valid_for_invoice_date
+          :eligibility_code_valid_for_invoice_date,
+        "eligibility_code_found_in_database" =>
+          :eligibility_code_found_in_database
       }.freeze
 
       def self.call(invoice_version_id:)
@@ -72,8 +75,6 @@ module Claims
             warn_row(
               rule_number: 1,
               rule_key: "source_vintage_applies",
-              source_requirement_id: "ESP-2026-COM-001",
-              rule_name: "Source vintage applies",
               expected_text:
                 "Invoice date determines which RER vintage applies.",
               detail_text:
@@ -88,8 +89,6 @@ module Claims
         row(
           rule_number: 1,
           rule_key: "source_vintage_applies",
-          source_requirement_id: "ESP-2026-COM-001",
-          rule_name: "Source vintage applies",
           rule_result: result,
           confidence: 100,
           expected_text:
@@ -125,8 +124,6 @@ module Claims
         row(
           rule_number: 2,
           rule_key: "first_class_invoice_fields_present",
-          source_requirement_id: "ESP-2026-COM-015",
-          rule_name: "Required invoice fields present",
           rule_result: pass ? "pass" : "warn",
           confidence: 100,
           expected_text: "OCR first-class invoice fields are present.",
@@ -165,8 +162,6 @@ module Claims
             warn_row(
               rule_number: 3,
               rule_key: "submission_within_six_months",
-              source_requirement_id: "ESP-2026-COM-017",
-              rule_name: "Submission within six months",
               expected_text:
                 "invoices.submitted_at <= invoice_date + 6 months.",
               detail_text: "Missing #{missing.join(" and ")}."
@@ -181,8 +176,6 @@ module Claims
         row(
           rule_number: 3,
           rule_key: "submission_within_six_months",
-          source_requirement_id: "ESP-2026-COM-017",
-          rule_name: "Submission within six months",
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
           expected_text: "invoices.submitted_at <= invoice_date + 6 months.",
@@ -220,8 +213,6 @@ module Claims
             warn_row(
               rule_number: 4,
               rule_key: "eligibility_code_valid_for_invoice_date",
-              source_requirement_id: "ESP-2026-COM-008",
-              rule_name: "Eligibility code valid for invoice date",
               expected_text:
                 "Invoice date is within the eligibility-code validity window.",
               detail_text: "Missing #{missing.join(" and ")}."
@@ -237,8 +228,6 @@ module Claims
         row(
           rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
-          source_requirement_id: "ESP-2026-COM-008",
-          rule_name: "Eligibility code valid for invoice date",
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
           expected_text:
@@ -254,11 +243,57 @@ module Claims
         warn_row(
           rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
-          source_requirement_id: "ESP-2026-COM-008",
-          rule_name: "Eligibility code valid for invoice date",
           expected_text:
             "Eligibility approval/expiry dates are parseable dates.",
           detail_text: "Could not parse eligibility-code dates."
+        )
+      end
+
+      def eligibility_code_found_in_database
+        unless enabled_common_rule?("eligibility_code_found_in_database")
+          return nil
+        end
+
+        db_code =
+          first_field_value(
+            code_fields,
+            "users_eligibilitycodes.eligibility_code"
+          ).to_s.strip
+
+        if db_code.present?
+          return(
+            row(
+              rule_number: 5,
+              rule_key: "eligibility_code_found_in_database",
+              rule_result: "pass",
+              confidence: 100,
+              expected_text:
+                "The classifier-located eligibility code resolves to a populated claims.users_eligibilitycodes record.",
+              detail_text:
+                "Code-located users_eligibilitycodes.eligibility_code=#{db_code}.",
+              calculation:
+                "claims.invoice_version_located_fields[source_engine=code, field_key=users_eligibilitycodes.eligibility_code] is populated => true",
+              evidence_text:
+                "claims.invoice_version_located_fields source_engine=code field_key=users_eligibilitycodes.eligibility_code"
+            )
+          )
+        end
+
+        row(
+          rule_number: 5,
+          rule_key: "eligibility_code_found_in_database",
+          rule_result: "fail",
+          confidence: 100,
+          expected_text:
+            "The classifier-located eligibility code resolves to a populated claims.users_eligibilitycodes record.",
+          detail_text:
+            "No code-located users_eligibilitycodes.eligibility_code value was populated for this invoice version.",
+          calculation:
+            "claims.invoice_version_located_fields[source_engine=code, field_key=users_eligibilitycodes.eligibility_code] is populated => false",
+          evidence_text:
+            "claims.invoice_version_located_fields source_engine=code field_key=users_eligibilitycodes.eligibility_code",
+          reason_and_likely_causes:
+            "The case-facts build did not populate the matched database eligibility code, so the classifier-located eligibility code did not resolve to a usable users_eligibilitycodes record."
         )
       end
 
@@ -335,19 +370,10 @@ module Claims
         [reason_text, message].join(" ")
       end
 
-      def warn_row(
-        rule_number:,
-        rule_key:,
-        source_requirement_id:,
-        rule_name:,
-        expected_text:,
-        detail_text:
-      )
+      def warn_row(rule_number:, rule_key:, expected_text:, detail_text:)
         row(
           rule_number: rule_number,
           rule_key: rule_key,
-          source_requirement_id: source_requirement_id,
-          rule_name: rule_name,
           rule_result: "warn",
           confidence: 0,
           expected_text: expected_text,
@@ -361,8 +387,6 @@ module Claims
       def row(
         rule_number:,
         rule_key:,
-        source_requirement_id:,
-        rule_name:,
         rule_result:,
         confidence:,
         expected_text:,
@@ -378,7 +402,6 @@ module Claims
           invoice_upgrade_type_id: common_upgrade_type_id,
           source_engine: "code",
           rule_number: rule_number,
-          rule_name: "#{rule_key}: #{rule_name}",
           rule_result: rule_result,
           confidence: confidence,
           expected_text: expected_text,
@@ -394,11 +417,7 @@ module Claims
           updated_at: now
         }
 
-        optional_metadata = {
-          rule_key: rule_key,
-          source_requirement_id: source_requirement_id,
-          evidence_source: "invoice_pdf|database"
-        }
+        optional_metadata = { rule_key: rule_key }
 
         optional_metadata.each do |key, value|
           attrs[

@@ -149,9 +149,7 @@ module Api
             :omniauth_username
           )
 
-        permitted[:role] = permitted[:role].to_s.strip if permitted.key?(:role)
-
-        permitted
+        normalize_user_params(permitted)
       end
 
       def update_params
@@ -170,9 +168,20 @@ module Api
             :omniauth_username
           )
 
-        permitted[:role] = permitted[:role].to_s.strip if permitted.key?(:role)
+        normalize_user_params(permitted)
+      end
 
-        permitted
+      def normalize_user_params(permitted)
+        attrs = permitted.to_h
+
+        attrs.transform_values! do |value|
+          value.is_a?(String) && value.strip.blank? ? nil : value
+        end
+
+        attrs["role"] = attrs["role"].to_s.strip if attrs.key?("role") &&
+          attrs["role"].present?
+
+        attrs
       end
 
       def serialize_user(user)
