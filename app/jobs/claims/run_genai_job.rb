@@ -73,7 +73,25 @@ module Claims
       case_facts = case_facts_result.fetch(:case_facts)
       upgrade_types = detected_upgrade_types(classifier_payload)
 
+      product_lookup_result =
+        run_product_lookup_enrichment_step!(
+          ingest_run_id: ingest_run_id,
+          session_id: sess.id,
+          invoice_version: iv,
+          invoice_upgrade_types: upgrade_types
+        )
+      product_context =
+        product_enrichment_context(
+          invoice_version: iv.reload,
+          lookup_result: product_lookup_result
+        )
+
       common_upgrade_type = upgrade_type_by_key!("common")
+      common_case_facts =
+        Claims::GenaiCaseFacts::Build.case_facts_for_upgrade_type(
+          case_facts: case_facts,
+          invoice_upgrade_type: common_upgrade_type
+        )
       common_user_record1 =
         compiled_user_record1_for_upgrade_type!(common_upgrade_type)
       ruleset_results = []
@@ -85,7 +103,9 @@ module Claims
         step_type: "genai_common",
         upgrade_type: common_upgrade_type,
         compiled_user_record1: common_user_record1,
-        case_facts: case_facts,
+        case_facts: common_case_facts,
+        classifier_payload: classifier_payload,
+        product_context: product_context,
         di_raw_json: iv.di_raw_json
       )
 
@@ -105,16 +125,11 @@ module Claims
           compiled_user_record1:
             compiled_user_record1_for_upgrade_type!(upgrade_type),
           case_facts: upgrade_type_case_facts,
+          classifier_payload: classifier_payload,
+          product_context: product_context,
           di_raw_json: iv.di_raw_json
         )
       end
-
-      run_product_lookup_enrichment_step!(
-        ingest_run_id: ingest_run_id,
-        session_id: sess.id,
-        invoice_version: iv,
-        invoice_upgrade_types: upgrade_types
-      )
 
       if code_rules_enabled_for_upgrade_type?(common_upgrade_type)
         run_code_ruleset!(
@@ -227,6 +242,11 @@ module Claims
         case_facts: case_facts,
         classifier_eligibility_code:
           shared_context[:classifier_eligibility_code]
+      )
+
+      Claims::GenaiCaseFacts::Build.persist_classifier_located_fields!(
+        invoice_version_id: invoice_version.id,
+        classifier_payload: classifier_payload
       )
 
       payload = {
@@ -455,6 +475,8 @@ module Claims
       upgrade_type:,
       compiled_user_record1:,
       case_facts:,
+      classifier_payload:,
+      product_context:,
       di_raw_json:
     )
       contextwindowjson = nil
@@ -482,6 +504,8 @@ module Claims
         build_contextwindowjson(
           compiled_user_record1: compiled_user_record1,
           case_facts: case_facts,
+          classifier_payload: classifier_payload,
+          product_context: product_context,
           di_raw_json: di_raw_json
         )
       payload = call_node_genai!(contextwindowjson: contextwindowjson)
@@ -730,11 +754,6 @@ module Claims
         genai_result: combined_result(result_values + code_result_values),
         genai_admin_advice: advice
       )
-
-      maybe_upsert_revision_request!(
-        invoice_version: invoice_version,
-        advice: advice
-      )
     end
 
     def combined_admin_advice(config:, invoice_version_id:, extra_sections: [])
@@ -812,6 +831,75 @@ module Claims
         .where(invoice_version_id: invoice_version_id, source_engine: "code")
         .pluck(:rule_result)
         .filter_map { |result| coerce_rule_result(result) }
+    end
+
+    def product_enrichment_context(invoice_version:, lookup_result:)
+      lookups = lookup_result[:lookups] || lookup_result["lookups"] || {}
+      matches =
+        lookups.map do |family, lookup|
+          lookup = lookup.with_indifferent_access
+          product_id = lookup[:product_id]
+
+          {
+            source: family.to_s.upcase,
+            product_family: lookup[:product_family],
+            evidence_kind: lookup[:evidence_kind],
+            evidence_value: lookup[:evidence_value],
+            evidence_field_id: lookup[:evidence_field_id],
+            evidence_field_key: lookup[:evidence_field_key],
+            evidence_text: lookup[:evidence_text],
+            product_rows_available: lookup[:product_rows_available],
+            matched: lookup[:matched],
+            product_id: product_id,
+            product_reference: lookup[:product_reference],
+            selected_comparison_fields:
+              selected_product_fields(family.to_s, product_id)
+          }.compact
+        end
+
+      {
+        record_name: "download_product_enrichment",
+        available: matches.any? { |row| row[:matched] },
+        invoice_version_product_ids: {
+          ahri_product_id: invoice_version.ahri_product_id,
+          neea_product_id: invoice_version.neea_product_id,
+          awhp_product_id: invoice_version.awhp_product_id,
+          ohpa_product_id: invoice_version.ohpa_product_id
+        }.compact,
+        matches: matches,
+        reason:
+          (
+            if matches.empty?
+              "No product lookup was required for the detected upgrade types."
+            elsif matches.none? { |row| row[:matched] }
+              "No product enrichment match was available for this run."
+            end
+          )
+      }.compact
+    end
+
+    def selected_product_fields(family, product_id)
+      return nil if product_id.blank?
+
+      product =
+        case family.to_s
+        when "ahri"
+          Claims::AhriProduct.find_by(id: product_id)
+        when "neea"
+          Claims::NeeaProduct.find_by(id: product_id)
+        when "awhp"
+          Claims::AwhpProduct.find_by(id: product_id)
+        when "ohpa"
+          Claims::OhpaProduct.find_by(id: product_id)
+        end
+      return nil unless product
+
+      product
+        .attributes
+        .except("id", "import_run_id", "created_at", "updated_at", "raw_json")
+        .compact
+        .first(20)
+        .to_h
     end
 
     def advice_from_rulechecks(payload)
@@ -897,38 +985,6 @@ module Claims
       end
     end
 
-    def maybe_upsert_revision_request!(invoice_version:, advice:)
-      requester_id = ENV["CLAIMS_GENAI_REVISION_REQUESTER_ID"].to_s.strip
-      return if requester_id.empty? || advice.to_s.strip.empty?
-
-      record =
-        Claims::AdminRevisionRequest
-          .where(
-            invoice_version_id: invoice_version.id,
-            requester_id: requester_id,
-            message_type: "admin_revision_request"
-          )
-          .order(updated_at: :desc)
-          .first
-
-      if record
-        record.update!(request_text: advice)
-      else
-        Claims::AdminRevisionRequest.create!(
-          invoice_version_id: invoice_version.id,
-          requester_id: requester_id,
-          message_type: "admin_revision_request",
-          request_text: advice,
-          created_at: Time.current,
-          updated_at: Time.current
-        )
-      end
-    rescue => e
-      Rails.logger.warn(
-        "[CLAIMS][RUN_GENAI_JOB] Revision request sync skipped: #{e.class}: #{e.message}"
-      )
-    end
-
     def coerce_confidence(value)
       n =
         begin
@@ -984,6 +1040,8 @@ module Claims
     def build_contextwindowjson(
       compiled_user_record1:,
       case_facts:,
+      classifier_payload:,
+      product_context:,
       di_raw_json:
     )
       config = Claims::ValidationgenaiConfig.order(:created_at).first
@@ -1008,23 +1066,114 @@ module Claims
 
       messages.concat(
         [
-          { role: "user", content: [{ type: "input_text", text: gt }] },
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 2 (case facts)
-ESP database values:
-#{case_facts.to_json}
+                  User record 1 (fields to locate and rules to evaluate)
+                  #{gt}
+                TEXT
+          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+            User record 2 (supporting documents possible)
+#{supporting_documents_possible_record(case_facts).to_json}
           TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 3 (raw DI invoice JSON)
+            User record 3 (supporting documents actually attached)
+#{supporting_documents_attached_record(case_facts).to_json}
+          TEXT
+          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+            User record 4 (pre-existing database values)
+#{pre_existing_database_values_record(case_facts).to_json}
+          TEXT
+          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+            User record 5 (classifier-located key fields)
+#{classifier_located_key_fields_record(classifier_payload).to_json}
+          TEXT
+          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+            User record 6 (download product enrichment)
+#{product_context.to_json}
+          TEXT
+          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+            User record 7 (raw DI invoice JSON)
 #{di_raw_json.to_json}
           TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
-            User record 4 (Actual Ask)
+            User record 8 (one-line actual ask)
             Please perform the location tasks and rulecheck tasks.
             Reply must be using the strict JSON output schema defined in the system record.
           TEXT
         ]
       )
+    end
+
+    def supporting_documents_possible_record(case_facts)
+      summary =
+        case_facts[:supporting_document_summary_for_upgrade_type] ||
+          case_facts["supporting_document_summary_for_upgrade_type"] || {}
+
+      {
+        record_name: "supporting_documents_possible",
+        upgrade_type_key:
+          summary[:upgrade_type_key] || summary["upgrade_type_key"],
+        upgrade_type_description:
+          summary[:upgrade_type_description] ||
+            summary["upgrade_type_description"],
+        configured_type_keys:
+          summary[:configured_type_keys] || summary["configured_type_keys"] ||
+            [],
+        configured_types:
+          summary[:configured_types] || summary["configured_types"] || [],
+        missing_configured_type_keys:
+          summary[:missing_configured_type_keys] ||
+            summary["missing_configured_type_keys"] || []
+      }
+    end
+
+    def supporting_documents_attached_record(case_facts)
+      summary =
+        case_facts[:supporting_document_summary_for_upgrade_type] ||
+          case_facts["supporting_document_summary_for_upgrade_type"] || {}
+
+      {
+        record_name: "supporting_documents_attached",
+        upgrade_type_key:
+          summary[:upgrade_type_key] || summary["upgrade_type_key"],
+        present_configured_type_keys:
+          summary[:present_configured_type_keys] ||
+            summary["present_configured_type_keys"] || [],
+        present_configured_type_counts:
+          summary[:present_configured_type_counts] ||
+            summary["present_configured_type_counts"] || {},
+        documents:
+          summary[:configured_documents] || summary["configured_documents"] ||
+            []
+      }
+    end
+
+    def pre_existing_database_values_record(case_facts)
+      {
+        record_name: "pre_existing_database_values",
+        values:
+          case_facts[:esp_database_values] ||
+            case_facts["esp_database_values"] || {}
+      }
+    end
+
+    def classifier_located_key_fields_record(classifier_payload)
+      payload = classifier_payload.is_a?(Hash) ? classifier_payload : {}
+      refs = payload["product_references"] || payload[:product_references] || {}
+      refs = {} unless refs.is_a?(Hash)
+
+      {
+        record_name: "classifier_located_key_fields",
+        document_kind: payload["document_kind"] || payload[:document_kind],
+        document_kind_confidence:
+          payload["document_kind_confidence"] ||
+            payload[:document_kind_confidence],
+        eligibility_code:
+          payload["eligibility_code"] || payload[:eligibility_code],
+        detected_upgrade_types:
+          payload["detected_upgrade_types"] ||
+            payload[:detected_upgrade_types] || [],
+        product_references: refs
+      }
     end
   end
 end

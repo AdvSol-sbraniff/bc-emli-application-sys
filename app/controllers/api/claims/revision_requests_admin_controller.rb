@@ -96,23 +96,19 @@ module Api
 
       # POST /api/claims/admin/revision_requests
       def create
-        invoice_version =
-          ::Claims::InvoiceVersion.includes(:invoice).find(
-            create_params[:invoice_version_id]
-          )
-        unless revision_request_create_status?(invoice_version.invoice&.status)
-          render json: {
-                   error:
-                     "Admin messages can only be created while invoice status is admin_review_inbox, in_review, or contractor_revision_inbox."
-                 },
-                 status: :unprocessable_entity
-          return
+        attrs = create_params.to_h
+        if attrs["invoice_id"].blank? && attrs["invoice_version_id"].present?
+          attrs["invoice_id"] = ::Claims::InvoiceVersion.find(
+            attrs["invoice_version_id"]
+          ).invoice_id
+        elsif attrs["invoice_id"].present?
+          ::Claims::Invoice.find(attrs["invoice_id"])
         end
 
         attempts = 0
 
         begin
-          record = ::Claims::AdminRevisionRequest.new(create_params)
+          record = ::Claims::AdminRevisionRequest.new(attrs)
           record.save!
         rescue ActiveRecord::RecordNotUnique => e
           attempts += 1
@@ -157,6 +153,7 @@ module Api
 
       def create_params
         params.permit(
+          :invoice_id,
           :invoice_version_id,
           :requester_id,
           :message_type,
@@ -168,15 +165,10 @@ module Api
         params.permit(:message_type, :request_text)
       end
 
-      def revision_request_create_status?(status)
-        %w[admin_review_inbox in_review contractor_revision_inbox].include?(
-          status.to_s
-        )
-      end
-
       def serialize_record(record)
         {
           id: record.id,
+          invoice_id: record.invoice_id,
           invoice_version_id: record.invoice_version_id,
           revreq_seqno: record.revreq_seqno,
           requester_id: record.requester_id,

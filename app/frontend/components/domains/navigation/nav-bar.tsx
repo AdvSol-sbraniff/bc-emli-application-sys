@@ -459,8 +459,8 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
         <NavMenuItem label={'Hello AI'} to={'/hello-ai-admin'} />
         <NavMenuItem label={'Reports'} to={'/reports-volume-value'} />
         <NavMenuItem label={'Contractor Draft Simulator'} to={'/submission-simulator-admin'} />
-        <NavMenuItem label={'Validation Rules Portal by Upgrade Type'} to={'/validation-rules-admin'} />
-        <NavMenuItem label={'Validation Rules Portal Alphabetic'} to={'/validation-rules-alphabetic-admin'} />
+        <NavMenuItem label={'Rules and Fields Editor'} to={'/validation-rules-admin'} />
+        <NavMenuItem label={'Rules at a Glance'} to={'/validation-rules-alphabetic-admin'} />
         <NavMenuItem label={'Validation Prompt Config'} to={'/validation-rules-config'} />
         <NavMenuItem label={'Supporting Document Types'} to={'/supporting-document-types-admin'} />
         <NavMenuItem label={'Downloads'} to={'/downloads-admin'} />

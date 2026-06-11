@@ -204,6 +204,7 @@ module Api
 
         located_rows = located_fields_for(iv.id, "genai")
         code_located_rows = located_fields_for(iv.id, "code")
+        classifier_located_rows = located_fields_for(iv.id, "classifier")
         rule_rows = rulechecks_for(iv.id, "genai")
         code_rule_rows = rulechecks_for(iv.id, "code")
         upgrade_type_results = upgrade_type_results_for(iv.id)
@@ -217,6 +218,8 @@ module Api
                  located_fields: serialize_located_fields(located_rows),
                  code_located_fields:
                    serialize_located_fields(code_located_rows),
+                 classifier_located_fields:
+                   serialize_located_fields(classifier_located_rows),
                  rulechecks: serialize_rulechecks(rule_rows),
                  code_rulechecks: serialize_rulechecks(code_rule_rows)
                },
@@ -368,6 +371,7 @@ module Api
 
         located_rows = located_fields_for(iv.id, "genai")
         code_located_rows = located_fields_for(iv.id, "code")
+        classifier_located_rows = located_fields_for(iv.id, "classifier")
         rule_rows = rulechecks_for(iv.id, "genai")
         code_rule_rows = rulechecks_for(iv.id, "code")
         upgrade_type_results = upgrade_type_results_for(iv.id)
@@ -382,6 +386,8 @@ module Api
                  located_fields: serialize_located_fields(located_rows),
                  code_located_fields:
                    serialize_located_fields(code_located_rows),
+                 classifier_located_fields:
+                   serialize_located_fields(classifier_located_rows),
                  rulechecks: serialize_rulechecks(rule_rows),
                  code_rulechecks: serialize_rulechecks(code_rule_rows)
                },
@@ -487,7 +493,7 @@ module Api
           "#{table_name}.*",
           "iut.upgrade_type_key AS upgrade_type_key",
           "iut.description AS upgrade_type_description"
-        ]
+        ].join(", ")
       end
 
       def serialize_lineitems(invoice_version_id)
@@ -496,7 +502,7 @@ module Api
             "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.lineitems.invoice_upgrade_type_id"
           )
           .where(invoice_version_id: invoice_version_id)
-          .select(*upgrade_type_select_sql("claims.lineitems"))
+          .select(upgrade_type_select_sql("claims.lineitems"))
           .order(:lineitem_seqno)
           .map do |row|
             row.as_json(
@@ -538,7 +544,7 @@ module Api
             source_engine: source_engine
           )
           .select(
-            *upgrade_type_select_sql("claims.invoice_version_located_fields")
+            upgrade_type_select_sql("claims.invoice_version_located_fields")
           )
           .order(:field_key, :created_at)
       end
@@ -552,7 +558,7 @@ module Api
             invoice_version_id: invoice_version_id,
             source_engine: source_engine
           )
-          .select(*upgrade_type_select_sql("claims.invoice_version_rulechecks"))
+          .select(upgrade_type_select_sql("claims.invoice_version_rulechecks"))
           .order(:rule_number, :created_at)
       end
 
@@ -563,7 +569,7 @@ module Api
           )
           .where(invoice_version_id: invoice_version_id)
           .select(
-            *upgrade_type_select_sql("claims.invoice_version_upgrade_types")
+            upgrade_type_select_sql("claims.invoice_version_upgrade_types")
           )
           .order(
             Arel.sql(
@@ -707,7 +713,10 @@ module Api
       def serialize_uploaded_supporting_documents(invoice_id)
         ::Claims::SupportingDocument
           .where(invoice_id: invoice_id)
-          .includes(:supporting_document_type)
+          .includes(
+            :supporting_document_type,
+            :supporting_document_visual_findings
+          )
           .order(created_at: :desc, id: :desc)
           .map do |row|
             display_type =
@@ -729,6 +738,8 @@ module Api
               supplement_routing_quality_reason:
                 row.supplement_routing_quality_reason,
               located_fields: serialize_supporting_document_located_fields(row),
+              visual_findings:
+                serialize_supporting_document_visual_findings(row),
               classified_at: row.classified_at,
               original_filename: row.original_filename,
               content_type: display_type,
@@ -737,6 +748,31 @@ module Api
               created_at: row.created_at,
               updated_at: row.updated_at
             }
+          end
+      end
+
+      def serialize_supporting_document_visual_findings(row)
+        row
+          .supporting_document_visual_findings
+          .order(:finding_seqno, :created_at)
+          .map do |finding|
+            finding.as_json(
+              only: %i[
+                id
+                supporting_document_id
+                finding_seqno
+                source_engine
+                finding_type
+                page
+                summary
+                legibility
+                relevant_text_seen
+                confidence
+                raw_json
+                created_at
+                updated_at
+              ]
+            )
           end
       end
 

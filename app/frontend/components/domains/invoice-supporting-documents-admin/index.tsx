@@ -21,6 +21,7 @@ import {
   Thead,
   Tooltip,
   Tr,
+  VStack,
 } from '@chakra-ui/react';
 import { FilePdf, Info } from '@phosphor-icons/react';
 import { useLocation } from 'react-router-dom';
@@ -48,6 +49,18 @@ type SupportingDocumentLocatedField = {
   prompt_text?: string | null;
 };
 
+type SupportingDocumentVisualFinding = {
+  id?: string;
+  finding_seqno?: number | null;
+  source_engine?: string | null;
+  finding_type?: string | null;
+  page?: number | null;
+  summary?: string | null;
+  legibility?: string | null;
+  relevant_text_seen?: string[] | null;
+  confidence?: number | null;
+};
+
 type SupportingDocumentRow = {
   id: string;
   invoice_id: string;
@@ -60,6 +73,7 @@ type SupportingDocumentRow = {
   supplement_routing_quality?: string | null;
   supplement_routing_quality_reason?: string | null;
   located_fields?: SupportingDocumentLocatedField[];
+  visual_findings?: SupportingDocumentVisualFinding[];
   storage_provider?: string | null;
   storage_key?: string | null;
   original_filename?: string | null;
@@ -79,18 +93,15 @@ function fmtTs(s?: string | null) {
   return s ? String(s).replace('T', ' ').replace('Z', '') : '—';
 }
 
-function fmtDateOnly(s?: string | null) {
-  if (!s) return '-';
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleDateString('en-CA');
-}
-
 function fmtBytes(n?: number | null) {
   if (n === null || n === undefined) return '—';
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function evidenceCountLabel(count: number, singular: string) {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
 }
 
 function fmtLocatedFieldValue(field: SupportingDocumentLocatedField) {
@@ -189,23 +200,11 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
             <Spinner size="sm" />
           ) : (
             <Flex wrap="wrap" gap={6}>
-              <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7}>
-                  session_created_at
-                </Text>
-                <Text fontSize="sm">{fmtDateOnly(context?.session_created_at)}</Text>
-              </Box>
               <Box minW="240px">
                 <Text fontSize="xs" opacity={0.7}>
                   contractor
                 </Text>
                 <Text fontSize="sm">{context?.contractor_business_name || '—'}</Text>
-              </Box>
-              <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7}>
-                  invoice_created_at
-                </Text>
-                <Text fontSize="sm">{fmtTs(context?.invoice_created_at)}</Text>
               </Box>
               <Box minW="220px">
                 <Text fontSize="xs" opacity={0.7}>
@@ -217,19 +216,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
           )}
         </Box>
 
-        <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white" mb={5}>
-          <Flex justify="space-between" align="center" gap={4} wrap="wrap">
-            <Box>
-              <Text fontSize="sm" fontWeight="bold" mb={1}>
-                Processed Supporting Documents
-              </Text>
-              <Text fontSize="sm" opacity={0.78}>
-                This screen is read-only for documents that have already been classified and promoted.
-              </Text>
-            </Box>
-          </Flex>
-        </Box>
-
         {error && (
           <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
             <Text fontSize="sm" color="red.700">
@@ -239,20 +225,19 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
         )}
 
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Flex justify="space-between" align="center" mb={3}>
-            <Text fontSize="sm" fontWeight="bold">
-              Supporting Documents For This Invoice
-            </Text>
-            {loading && <Spinner size="sm" />}
-          </Flex>
+          {loading && (
+            <Flex justify="flex-end" mb={3}>
+              <Spinner size="sm" />
+            </Flex>
+          )}
 
           <Table size="sm">
             <Thead bg="gray.50">
               <Tr>
-                <Th>created_at</Th>
                 <Th>filename</Th>
                 <Th>type</Th>
                 <Th>routing</Th>
+                <Th>evidence</Th>
                 <Th isNumeric>size</Th>
                 <Th>actions</Th>
               </Tr>
@@ -260,9 +245,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
             <Tbody>
               {rows.map((row) => (
                 <Tr key={row.id}>
-                  <Td fontSize="xs" whiteSpace="nowrap">
-                    {fmtTs(row.created_at)}
-                  </Td>
                   <Td fontSize="sm">{row.original_filename || '—'}</Td>
                   <Td fontSize="xs" maxW="220px">
                     <Text fontSize="xs">
@@ -289,6 +271,10 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                         {row.supplement_routing_quality_reason}
                       </Text>
                     )}
+                  </Td>
+                  <Td fontSize="xs" whiteSpace="nowrap">
+                    <Text>{evidenceCountLabel(row.located_fields?.length || 0, 'field')}</Text>
+                    <Text opacity={0.68}>{evidenceCountLabel(row.visual_findings?.length || 0, 'visual finding')}</Text>
                   </Td>
                   <Td isNumeric fontSize="xs">
                     {fmtBytes(row.byte_size)}
@@ -395,6 +381,47 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                     <Text fontSize="sm">{selectedInfoRow.supplement_routing_quality_reason}</Text>
                   </Box>
                 )}
+
+                <Box>
+                  <Heading size="sm" mb={2}>
+                    Visual Findings
+                  </Heading>
+
+                  {Array.isArray(selectedInfoRow.visual_findings) && selectedInfoRow.visual_findings.length > 0 ? (
+                    <VStack align="stretch" spacing={3}>
+                      {selectedInfoRow.visual_findings.map((finding, index) => (
+                        <Box
+                          key={finding.id || `${selectedInfoRow.id}:visual:${index}`}
+                          borderWidth="1px"
+                          borderColor="orange.200"
+                          bg="orange.50"
+                          borderRadius="md"
+                          p={3}
+                        >
+                          <Flex justify="space-between" align="start" gap={3} wrap="wrap" mb={1}>
+                            <Text fontSize="xs" fontWeight="bold">
+                              {finding.finding_type || `visual_finding_${finding.finding_seqno || index + 1}`}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.72}>
+                              page {finding.page ?? '—'} | conf {finding.confidence ?? 0} |{' '}
+                              {finding.legibility || 'not_applicable'}
+                            </Text>
+                          </Flex>
+                          <Text fontSize="sm">{finding.summary || '—'}</Text>
+                          {Array.isArray(finding.relevant_text_seen) && finding.relevant_text_seen.length > 0 && (
+                            <Text fontSize="xs" mt={2} opacity={0.72}>
+                              Text seen: {finding.relevant_text_seen.join('; ')}
+                            </Text>
+                          )}
+                        </Box>
+                      ))}
+                    </VStack>
+                  ) : (
+                    <Text fontSize="sm" opacity={0.7}>
+                      No visual findings were stored for this supporting document.
+                    </Text>
+                  )}
+                </Box>
 
                 <Box>
                   <Heading size="sm" mb={2}>

@@ -1068,7 +1068,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
   invoice_version_id uuid NOT NULL,
   invoice_upgrade_type_id uuid NOT NULL DEFAULT 'd5eaa9f3-342f-4f30-b444-d54ca0c142f2',
 
-  source_engine text NOT NULL,   -- 'code' | 'genai'
+  source_engine text NOT NULL,   -- 'classifier' | 'code' | 'genai'
   field_key     text NOT NULL,
 
   value_type text NOT NULL,      -- 'text' | 'currency' | 'number' | 'date' | 'bool' | 'json'
@@ -1097,7 +1097,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_located_fields (
     REFERENCES claims.invoice_upgrade_types(id),
 
   CONSTRAINT invoice_version_located_fields_source_engine_chk
-    CHECK (source_engine IN ('code','genai')),
+    CHECK (source_engine IN ('classifier','code','genai')),
 
 
   CONSTRAINT invoice_version_located_fields_confidence_chk
@@ -1485,6 +1485,94 @@ CREATE INDEX IF NOT EXISTS idx_sdlf_engine
   ON claims.supporting_document_located_fields (supporting_document_id, source_engine);
 
 
+-- ============================================================
+-- supporting_document_visual_findings
+-- PURPOSE: Runtime visual observations found inside one uploaded
+-- supporting document PDF. These are one row per useful visual
+-- finding, not one row per embedded PDF image object.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.supporting_document_visual_findings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  supporting_document_id uuid NOT NULL,
+
+  finding_seqno integer NOT NULL,
+  source_engine text NOT NULL DEFAULT 'genai',
+  finding_type text NOT NULL,
+
+  page integer NULL,
+  summary text NOT NULL,
+  legibility text NOT NULL DEFAULT 'not_applicable',
+  relevant_text_seen jsonb NULL,
+  confidence smallint NOT NULL DEFAULT 0,
+  raw_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_visual_findings_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_supporting_document_visual_findings_document
+    FOREIGN KEY (supporting_document_id)
+    REFERENCES claims.supporting_documents(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT supporting_document_visual_findings_seqno_chk
+    CHECK (finding_seqno >= 1),
+
+  CONSTRAINT supporting_document_visual_findings_source_engine_chk
+    CHECK (source_engine IN ('genai','vision','manual')),
+
+  CONSTRAINT supporting_document_visual_findings_confidence_chk
+    CHECK (confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT supporting_document_visual_findings_legibility_chk
+    CHECK (legibility IN ('legible','partially_legible','illegible','not_applicable')),
+
+  CONSTRAINT supporting_document_visual_findings_seqno_uniq
+    UNIQUE (supporting_document_id, source_engine, finding_seqno)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sdvf_document
+  ON claims.supporting_document_visual_findings (supporting_document_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdvf_lookup
+  ON claims.supporting_document_visual_findings (supporting_document_id, finding_type);
+
+
+--
+-- internal_notes
+--
+CREATE TABLE IF NOT EXISTS claims.internal_notes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_id uuid NOT NULL,
+  admin_user_id uuid NOT NULL,
+  note_text text NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL,
+  updated_at timestamp(6) without time zone NOT NULL,
+
+  CONSTRAINT internal_notes_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_internal_notes_invoice
+    FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
+
+  CONSTRAINT fk_internal_notes_admin_user
+    FOREIGN KEY (admin_user_id) REFERENCES public.users(id),
+
+  CONSTRAINT internal_notes_text_present_chk
+    CHECK (length(btrim(note_text)) > 0)
+);
+
+CREATE INDEX IF NOT EXISTS index_claims_internal_notes_on_invoice_id
+  ON claims.internal_notes (invoice_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS index_claims_internal_notes_on_admin_user_id
+  ON claims.internal_notes (admin_user_id);
+
+
 
 -- 
 -- revision_requests
@@ -1492,7 +1580,8 @@ CREATE INDEX IF NOT EXISTS idx_sdlf_engine
 CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
-  invoice_version_id uuid NOT NULL,
+  invoice_id uuid NOT NULL,
+  invoice_version_id uuid NULL,
   revreq_seqno       integer NOT NULL,
 
   requester_id uuid NOT NULL,   -- message author (public.users.id)
@@ -1504,6 +1593,9 @@ CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
   updated_at timestamp(6) without time zone NOT NULL,
 
   CONSTRAINT revision_requests_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_revision_requests_invoice
+    FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
 
   CONSTRAINT fk_revision_requests_invoice_version
     FOREIGN KEY (invoice_version_id) REFERENCES claims.invoice_versions(id),
@@ -1517,9 +1609,12 @@ CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
   CONSTRAINT revision_requests_seqno_chk
     CHECK (revreq_seqno >= 1),
 
-  CONSTRAINT revision_requests_version_seqno_uniq
-    UNIQUE (invoice_version_id, revreq_seqno)
+  CONSTRAINT revision_requests_invoice_seqno_uniq
+    UNIQUE (invoice_id, revreq_seqno)
 );
+
+CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_invoice_id
+  ON claims.admin_revision_requests (invoice_id);
 
 CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_invoice_version_id
   ON claims.admin_revision_requests (invoice_version_id);

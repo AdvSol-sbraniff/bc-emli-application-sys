@@ -485,6 +485,7 @@ SELECT
   -- admin revision request (LEFT JOIN)
   -- =========================================================
   rr.id            AS revision_request_id,
+  rr.invoice_id    AS revision_request_invoice_id,
   rr.invoice_version_id AS revision_request_invoice_version_id,
   rr.revreq_seqno  AS revision_request_seqno,
   rr.requester_id  AS revision_request_requester_id,
@@ -493,13 +494,13 @@ SELECT
   rr.created_at    AS revision_request_created_at,
   rr.updated_at    AS revision_request_updated_at
 
-FROM claims.invoice_versions iv
+FROM claims.admin_revision_requests rr
 JOIN claims.invoices i
-  ON i.id = iv.invoice_id
+  ON i.id = rr.invoice_id
 JOIN claims.sessions s
   ON s.id = i.session_id
-LEFT JOIN claims.admin_revision_requests rr
-  ON rr.invoice_version_id = iv.id;  
+LEFT JOIN claims.invoice_versions iv
+  ON iv.id = rr.invoice_version_id;  
 
 
   

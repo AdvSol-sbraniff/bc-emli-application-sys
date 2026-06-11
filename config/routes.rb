@@ -274,6 +274,8 @@ Rails.application.routes.draw do
       patch "admin/revision_requests/:id", to: "revision_requests_admin#update"
       delete "admin/revision_requests/:id",
              to: "revision_requests_admin#destroy"
+      get "admin/internal_notes", to: "internal_notes_admin#index"
+      post "admin/internal_notes", to: "internal_notes_admin#create"
     end
     # end sbra
 

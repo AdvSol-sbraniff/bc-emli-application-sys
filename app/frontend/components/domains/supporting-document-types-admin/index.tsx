@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -14,6 +14,7 @@ import {
   IconButton,
   Input,
   Spinner,
+  Switch,
   Tab,
   TabList,
   TabPanel,
@@ -64,10 +65,24 @@ type MappingEditorRow = {
   checked: boolean;
 };
 
+type ListViewMode = 'description' | 'upgrade_type';
+
 const fmtDate = (value?: string | null) => {
   if (!value) return '';
   const str = String(value);
   return str.includes('T') ? str.split('T')[0] : str.slice(0, 10);
+};
+
+const compactUpgradeLabel = (upgradeType: UpgradeTypeRow) => {
+  if (upgradeType.upgrade_type_key === 'common') return 'common';
+
+  return upgradeType.upgrade_type_key
+    .replace(/^air_source_heat_pump_/, 'ashp_')
+    .replace(/heat_pump/g, 'hp')
+    .replace(/electrical_service_upgrade/, 'esu')
+    .replace(/health_and_safety_remediation/, 'h&s')
+    .replace(/windows_doors/, 'win_door')
+    .replace(/_/g, ' ');
 };
 
 const buildSearchParams = (obj: Record<string, string | undefined>) => {
@@ -93,6 +108,7 @@ export default function SupportingDocumentTypesAdminScreen() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [listViewMode, setListViewMode] = useState<ListViewMode>('description');
 
   const buildMappings = useCallback(
     (selectedIds: string[] = []) =>
@@ -294,6 +310,11 @@ export default function SupportingDocumentTypesAdminScreen() {
     );
   };
 
+  const mappedUpgradeTypeIdsByRowId = useMemo(
+    () => new Map(rows.map((row) => [row.id, new Set((row.upgrade_types || []).map((upgradeType) => upgradeType.id))])),
+    [rows],
+  );
+
   if (isEditorScreen) {
     return (
       <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
@@ -420,6 +441,27 @@ export default function SupportingDocumentTypesAdminScreen() {
             </Button>
           </Flex>
 
+          <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4} flexWrap="wrap">
+            <HStack spacing={3}>
+              <Text fontSize="sm" fontWeight={listViewMode === 'description' ? 'bold' : 'normal'}>
+                Description
+              </Text>
+              <Switch
+                colorScheme="blue"
+                isChecked={listViewMode === 'upgrade_type'}
+                onChange={(event) => setListViewMode(event.target.checked ? 'upgrade_type' : 'description')}
+              />
+              <Text fontSize="sm" fontWeight={listViewMode === 'upgrade_type' ? 'bold' : 'normal'}>
+                Upgrade Type Applicability
+              </Text>
+            </HStack>
+            {listViewMode === 'upgrade_type' ? (
+              <Text fontSize="sm" opacity={0.75}>
+                X = applicable/relevant. Requiredness is handled by validation rules, not this table.
+              </Text>
+            ) : null}
+          </Flex>
+
           {error ? (
             <Box mb={4} borderWidth="1px" borderColor="red.200" bg="red.50" color="red.700" borderRadius="md" p={3}>
               {error}
@@ -432,57 +474,192 @@ export default function SupportingDocumentTypesAdminScreen() {
             </Flex>
           ) : (
             <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflowX="auto">
-              <Table size="sm">
-                <Thead bg="gray.50">
-                  <Tr>
-                    <Th>Key</Th>
-                    <Th>Description</Th>
-                    <Th>Enabled</Th>
-                    <Th>Updated</Th>
-                    <Th textAlign="right">Actions</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {rows.map((row) => (
-                    <Tr key={row.id}>
-                      <Td>
-                        <Text fontWeight="semibold">{row.type_key}</Text>
-                      </Td>
-                      <Td>{row.description || ''}</Td>
-                      <Td>
-                        <Badge colorScheme={row.enabled ? 'green' : 'red'} variant="subtle">
-                          {row.enabled ? 'Enabled' : 'Disabled'}
-                        </Badge>
-                      </Td>
-                      <Td>{fmtDate(row.updated_at)}</Td>
-                      <Td>
-                        <HStack justify="end" spacing={2}>
-                          <Tooltip label="Manage fields">
-                            <IconButton
-                              aria-label="Manage supporting document fields"
-                              icon={<ListChecks size={18} />}
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openFields(row)}
-                            />
-                          </Tooltip>
-                          <Tooltip label="Edit type">
-                            <Button
-                              aria-label="Edit type"
-                              variant="outline"
-                              size="sm"
-                              leftIcon={<PencilSimple size={16} />}
-                              onClick={() => openEdit(row)}
-                            >
-                              Edit
-                            </Button>
-                          </Tooltip>
-                        </HStack>
-                      </Td>
+              {listViewMode === 'description' ? (
+                <Table size="sm">
+                  <Thead bg="gray.50">
+                    <Tr>
+                      <Th>Supporting document type</Th>
+                      <Th>Description</Th>
+                      <Th>Enabled</Th>
+                      <Th>Updated</Th>
+                      <Th textAlign="right">Actions</Th>
                     </Tr>
-                  ))}
-                </Tbody>
-              </Table>
+                  </Thead>
+                  <Tbody>
+                    {rows.map((row) => (
+                      <Tr key={row.id}>
+                        <Td py={0.5}>
+                          <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                            {row.type_key}
+                          </Text>
+                        </Td>
+                        <Td py={0.5}>
+                          <Text fontSize="sm" lineHeight="short">
+                            {row.description || ''}
+                          </Text>
+                        </Td>
+                        <Td py={0.5}>
+                          <Badge colorScheme={row.enabled ? 'green' : 'red'} variant="subtle" fontSize="2xs">
+                            {row.enabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                        </Td>
+                        <Td py={0.5}>
+                          <Text fontSize="sm" lineHeight="short">
+                            {fmtDate(row.updated_at)}
+                          </Text>
+                        </Td>
+                        <Td py={0.5}>
+                          <HStack justify="end" spacing={1}>
+                            <Tooltip label="Manage fields">
+                              <IconButton
+                                aria-label="Manage supporting document fields"
+                                icon={<ListChecks size={18} />}
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => openFields(row)}
+                              />
+                            </Tooltip>
+                            <Tooltip label="Edit type">
+                              <IconButton
+                                aria-label="Edit type"
+                                icon={<PencilSimple size={18} />}
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => openEdit(row)}
+                              />
+                            </Tooltip>
+                          </HStack>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              ) : (
+                <Table size="sm" width="max-content">
+                  <Thead bg="gray.50">
+                    <Tr>
+                      <Th position="sticky" left={0} zIndex={1} bg="gray.50" minW="300px" w="300px" maxW="300px">
+                        Supporting document type
+                      </Th>
+                      <Th minW="46px" w="46px" maxW="46px" px={1}>
+                        On
+                      </Th>
+                      {upgradeTypes.map((upgradeType) => (
+                        <Th
+                          key={upgradeType.id}
+                          textAlign="center"
+                          minW="42px"
+                          w="42px"
+                          maxW="42px"
+                          px={1}
+                          py={2}
+                          verticalAlign="bottom"
+                          borderLeftWidth="1px"
+                          borderLeftColor="gray.100"
+                        >
+                          <Tooltip label={upgradeType.description || upgradeType.upgrade_type_key}>
+                            <Flex h="220px" align="center" justify="center">
+                              <Text
+                                fontSize="xs"
+                                lineHeight="shorter"
+                                whiteSpace="nowrap"
+                                transform="rotate(-90deg)"
+                                transformOrigin="center"
+                                w="210px"
+                                textAlign="center"
+                              >
+                                {compactUpgradeLabel(upgradeType)}
+                              </Text>
+                            </Flex>
+                          </Tooltip>
+                        </Th>
+                      ))}
+                      <Th textAlign="right" minW="96px">
+                        Actions
+                      </Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {rows.map((row) => {
+                      const mappedIds = mappedUpgradeTypeIdsByRowId.get(row.id) || new Set<string>();
+                      return (
+                        <Tr key={row.id}>
+                          <Td
+                            position="sticky"
+                            left={0}
+                            zIndex={1}
+                            bg="white"
+                            borderRightWidth="1px"
+                            borderColor="gray.100"
+                            py={0.5}
+                            minW="300px"
+                            w="300px"
+                            maxW="300px"
+                          >
+                            <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                              {row.type_key}
+                            </Text>
+                          </Td>
+                          <Td py={0.5} px={1} minW="46px" w="46px" maxW="46px">
+                            <Badge colorScheme={row.enabled ? 'green' : 'gray'} fontSize="2xs">
+                              {row.enabled ? 'Y' : 'N'}
+                            </Badge>
+                          </Td>
+                          {upgradeTypes.map((upgradeType) => (
+                            <Td
+                              key={upgradeType.id}
+                              textAlign="center"
+                              color={mappedIds.has(upgradeType.id) ? 'blue.700' : 'gray.300'}
+                              fontWeight="bold"
+                              borderLeftWidth="1px"
+                              borderLeftColor="gray.100"
+                              minW="42px"
+                              w="42px"
+                              maxW="42px"
+                              px={1}
+                              py={0.5}
+                              lineHeight="short"
+                            >
+                              <Tooltip
+                                label={`${row.type_key} ${mappedIds.has(upgradeType.id) ? 'is applicable to' : 'is not mapped to'} ${
+                                  upgradeType.description || upgradeType.upgrade_type_key
+                                }`}
+                                hasArrow
+                              >
+                                <Text as="span" display="inline-block" minW="18px">
+                                  {mappedIds.has(upgradeType.id) ? 'X' : ''}
+                                </Text>
+                              </Tooltip>
+                            </Td>
+                          ))}
+                          <Td textAlign="right" py={0.5}>
+                            <HStack justify="end" spacing={1}>
+                              <Tooltip label="Manage fields">
+                                <IconButton
+                                  aria-label="Manage supporting document fields"
+                                  icon={<ListChecks size={18} />}
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => openFields(row)}
+                                />
+                              </Tooltip>
+                              <Tooltip label="Edit type">
+                                <IconButton
+                                  aria-label="Edit type"
+                                  icon={<PencilSimple size={18} />}
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => openEdit(row)}
+                                />
+                              </Tooltip>
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              )}
             </Box>
           )}
         </Box>

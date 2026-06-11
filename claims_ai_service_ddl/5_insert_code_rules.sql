@@ -147,7 +147,17 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53204'::uuid,
     'eligibility_code_valid_for_invoice_date',
-    'Checks whether the invoice date falls within the approval and expiry window of the participant eligibility code.',
+    'Checks whether the invoice date is inside the eligibility-code completion window. The invoice date is currently used as the system proxy for upgrade completed date.
+
+Pseudo-code:
+if invoice_date is missing or approved_at is missing:
+  warn
+else:
+  deadline = expires_at if present, otherwise approved_at + 6 months
+  if approved_at <= invoice_date <= deadline:
+    pass
+  else:
+    fail',
     true,
     'No follow-up is required when the invoice date clearly falls within the eligibility-code validity window.',
     'Verify the eligibility-code dates and invoice date before deciding whether the claim falls inside the valid approval window.',

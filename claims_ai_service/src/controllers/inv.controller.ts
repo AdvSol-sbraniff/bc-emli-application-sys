@@ -46,6 +46,10 @@ class RetryOcrWithSasUrlDto {
 class GenAiDto {
   @IsArray()
   contextwindowjson!: any[];
+
+  @IsOptional()
+  @IsArray()
+  attachments?: any[];
 }
 
 class MintSasDto {
@@ -187,7 +191,7 @@ export class InvController {
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async genai(@Body() dto: GenAiDto): Promise<any> {
     // returns a real JSON object to Ruby
-    return this.invService.genai(dto.contextwindowjson);
+    return this.invService.genai(dto.contextwindowjson, dto.attachments || []);
   }
 
   @Post('upload-pdf')

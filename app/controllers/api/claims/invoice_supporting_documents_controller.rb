@@ -49,7 +49,11 @@ module Api
         rows =
           invoice
             .supporting_documents
-            .includes(:supporting_document_type)
+            .includes(
+              :supporting_document_type,
+              :supporting_document_located_fields,
+              :supporting_document_visual_findings
+            )
             .order(created_at: :desc, id: :desc)
             .map { |row| serialize_supporting_document(row) }
 
@@ -161,6 +165,7 @@ module Api
           supplement_routing_quality_reason:
             row.supplement_routing_quality_reason,
           located_fields: serialize_located_fields(row),
+          visual_findings: serialize_visual_findings(row),
           classified_at: row.classified_at,
           storage_provider: row.storage_provider,
           storage_key: row.storage_key,
@@ -201,6 +206,31 @@ module Api
             ).merge(
               "field_number" => definition&.field_number,
               "prompt_text" => definition&.prompt_text
+            )
+          end
+      end
+
+      def serialize_visual_findings(row)
+        row
+          .supporting_document_visual_findings
+          .order(:finding_seqno, :created_at)
+          .map do |finding|
+            finding.as_json(
+              only: %i[
+                id
+                supporting_document_id
+                finding_seqno
+                source_engine
+                finding_type
+                page
+                summary
+                legibility
+                relevant_text_seen
+                confidence
+                raw_json
+                created_at
+                updated_at
+              ]
             )
           end
       end

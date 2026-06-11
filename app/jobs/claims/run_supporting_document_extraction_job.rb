@@ -33,7 +33,12 @@ module Claims
       )
 
       contextwindowjson = build_contextwindowjson(document: document)
-      payload = call_node_genai!(contextwindowjson: contextwindowjson)
+      attachments = build_attachments(document: document)
+      payload =
+        call_node_genai!(
+          contextwindowjson: contextwindowjson,
+          attachments: attachments
+        )
 
       step.update!(
         status: "succeeded",
@@ -116,19 +121,38 @@ module Claims
                 #{document.di_read_raw_json.to_json}
 
                 Actual ask:
-                Extract the configured supporting_document_located_fields for supporting_document_type_key=#{type.type_key}.
+                Extract the configured supporting_document_located_fields and relevant visual_findings for supporting_document_type_key=#{type.type_key}.
+                The original supporting-document PDF is attached as an input_file. Use both the DI-read text and the attached PDF page visuals.
                 Reply must be strict JSON using the supporting-document extraction schema from the system record.
               TEXT
       ]
     end
 
-    def call_node_genai!(contextwindowjson:)
+    def build_attachments(document:)
+      return [] if document.storage_key.blank?
+
+      [
+        {
+          type: "input_file",
+          storageKey: document.storage_key,
+          container: ENV["AZURE_BLOB_CONTAINER"].presence,
+          filename:
+            document.original_filename.presence || "supporting_document.pdf"
+        }.compact
+      ]
+    end
+
+    def call_node_genai!(contextwindowjson:, attachments: [])
       base = ENV.fetch("INV_NODE_BASE_URL")
       uri = URI("#{base}/inv/genai")
 
       req = Net::HTTP::Post.new(uri)
       req["Content-Type"] = "application/json"
-      req.body = JSON.generate(contextwindowjson: contextwindowjson)
+      req.body =
+        JSON.generate(
+          contextwindowjson: contextwindowjson,
+          attachments: attachments
+        )
 
       http = Net::HTTP.new(uri.host, uri.port)
       http.open_timeout = 10

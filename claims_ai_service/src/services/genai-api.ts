@@ -66,6 +66,68 @@ export function toResponsesPrompt(conversation: any[]): {
   };
 }
 
+export function toResponsesInputAndInstructions(conversation: any[]): {
+  instructions?: string;
+  input: any[];
+} {
+  if (!Array.isArray(conversation)) return { input: [] };
+
+  const instructions = conversation
+    .filter((entry: any) => entry?.role === 'system')
+    .map((entry: any) => flattenGenAiContent(entry?.content))
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+
+  const input = conversation
+    .filter((entry: any) => entry?.role !== 'system')
+    .map((entry: any) => {
+      const role = entry?.role === 'assistant' ? 'assistant' : 'user';
+      const content = normalizeResponsesMessageContent(entry?.content);
+      return { type: 'message', role, content };
+    })
+    .filter((entry) => Array.isArray(entry.content) && entry.content.length);
+
+  return {
+    instructions: instructions || undefined,
+    input,
+  };
+}
+
+function normalizeResponsesMessageContent(content: unknown): any[] {
+  const parts = Array.isArray(content) ? content : [content];
+
+  return parts
+    .map((part: any) => {
+      if (typeof part === 'string') {
+        return { type: 'input_text', text: part };
+      }
+
+      if (!part || typeof part !== 'object') {
+        const text = flattenGenAiContent(part);
+        return text ? { type: 'input_text', text } : null;
+      }
+
+      if (part.type === 'input_file') return part;
+
+      if (part.type === 'input_text' && typeof part.text === 'string') {
+        return { type: 'input_text', text: part.text };
+      }
+
+      if (part.type === 'text' && typeof part.text === 'string') {
+        return { type: 'input_text', text: part.text };
+      }
+
+      if (typeof part.text === 'string') {
+        return { type: 'input_text', text: part.text };
+      }
+
+      const text = flattenGenAiContent(part);
+      return text ? { type: 'input_text', text } : null;
+    })
+    .filter((part) => part?.type);
+}
+
 export function extractChatCompletionText(resp: any): string {
   const messageContent = resp?.choices?.[0]?.message?.content;
   return flattenGenAiContent(messageContent);

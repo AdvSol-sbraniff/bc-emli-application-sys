@@ -211,6 +211,91 @@ module Claims
         end
       end
 
+      def self.persist_classifier_located_fields!(
+        invoice_version_id:,
+        classifier_payload:
+      )
+        return unless classifier_payload.is_a?(Hash)
+
+        invoice_version = Claims::InvoiceVersion.find(invoice_version_id)
+        common_type =
+          Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common")
+        upgrade_types =
+          classifier_detected_upgrade_types(
+            classifier_payload
+          ).filter_map do |key|
+            Claims::InvoiceUpgradeType.find_by(upgrade_type_key: key)
+          end
+        upgrade_types = [common_type] if upgrade_types.empty?
+
+        now = Time.current
+        rows = []
+
+        eligibility_code =
+          classifier_payload["eligibility_code"] ||
+            classifier_payload[:eligibility_code]
+        add_classifier_row(
+          rows,
+          invoice_version_id: invoice_version.id,
+          invoice_upgrade_type_id: common_type.id,
+          field_key: "classifier.eligibility_code",
+          value_type: "text",
+          value: eligibility_code,
+          confidence: 100,
+          evidence_text: "Triage classifier",
+          now: now
+        )
+
+        detected_upgrade_types =
+          classifier_detected_upgrade_types(classifier_payload)
+        add_classifier_row(
+          rows,
+          invoice_version_id: invoice_version.id,
+          invoice_upgrade_type_id: common_type.id,
+          field_key: "classifier.detected_upgrade_types",
+          value_type: "json",
+          value: detected_upgrade_types,
+          confidence: detected_upgrade_types.any? ? 100 : 0,
+          evidence_text: "Triage classifier",
+          now: now
+        )
+
+        product_refs = classifier_product_references(classifier_payload)
+        upgrade_types.each do |upgrade_type|
+          {
+            "classifier.ahri_reference" => product_refs[:ahri_reference],
+            "classifier.neea_reference" => product_refs[:neea_reference],
+            "classifier.awhp_reference" => product_refs[:awhp_reference],
+            "classifier.ohpa_reference" => product_refs[:ohpa_reference],
+            "classifier.product_model_number" =>
+              product_refs[:product_model_number],
+            "classifier.product_manufacturer" =>
+              product_refs[:product_manufacturer]
+          }.each do |field_key, value|
+            add_classifier_row(
+              rows,
+              invoice_version_id: invoice_version.id,
+              invoice_upgrade_type_id: upgrade_type.id,
+              field_key: field_key,
+              value_type: "text",
+              value: value,
+              confidence: value.to_s.strip.present? ? 90 : 0,
+              evidence_text: "Triage classifier",
+              now: now
+            )
+          end
+        end
+
+        Claims::InvoiceVersionLocatedField.transaction do
+          Claims::InvoiceVersionLocatedField.where(
+            invoice_version_id: invoice_version.id,
+            source_engine: "classifier"
+          ).delete_all
+
+          Claims::InvoiceVersionLocatedField.insert_all!(rows) if rows.any?
+        end
+      end
+
       # ============================================================
       # INTERNAL HELPERS
       # ============================================================
@@ -301,6 +386,7 @@ module Claims
             .supporting_documents
             .includes(
               :supporting_document_type,
+              :supporting_document_visual_findings,
               supporting_document_located_fields:
                 :supporting_document_type_located_field
             )
@@ -317,7 +403,9 @@ module Claims
                 supplement_routing_quality_reason:
                   doc.supplement_routing_quality_reason,
                 located_fields:
-                  serialize_supporting_document_located_fields(doc)
+                  serialize_supporting_document_located_fields(doc),
+                visual_findings:
+                  serialize_supporting_document_visual_findings(doc)
               }
             end
 
@@ -452,6 +540,93 @@ module Claims
               evidence_text: field.evidence_text
             }
           end
+      end
+
+      def self.serialize_supporting_document_visual_findings(document)
+        document
+          .supporting_document_visual_findings
+          .sort_by { |finding| [finding.finding_seqno || 99_999, finding.id] }
+          .map do |finding|
+            {
+              supporting_document_visual_finding_id: finding.id,
+              finding_seqno: finding.finding_seqno,
+              source_engine: finding.source_engine,
+              finding_type: finding.finding_type,
+              page: finding.page,
+              summary: finding.summary,
+              legibility: finding.legibility,
+              relevant_text_seen: finding.relevant_text_seen,
+              confidence: finding.confidence
+            }
+          end
+      end
+
+      def self.add_classifier_row(
+        rows,
+        invoice_version_id:,
+        invoice_upgrade_type_id:,
+        field_key:,
+        value_type:,
+        value:,
+        confidence:,
+        evidence_text:,
+        now:
+      )
+        value_present =
+          value_type == "json" ? !value.nil? : value.to_s.strip.present?
+
+        rows << {
+          invoice_version_id: invoice_version_id,
+          invoice_upgrade_type_id: invoice_upgrade_type_id,
+          source_engine: "classifier",
+          field_key: field_key,
+          value_type: value_type,
+          value_text:
+            (value_present && value_type != "json" ? value.to_s.strip : nil),
+          value_json: value_type == "json" ? value : nil,
+          confidence: confidence,
+          page: nil,
+          polygon: nil,
+          evidence_text: evidence_text,
+          created_at: now,
+          updated_at: now
+        }
+      end
+
+      def self.classifier_detected_upgrade_types(classifier_payload)
+        rows =
+          classifier_payload["detected_upgrade_types"] ||
+            classifier_payload[:detected_upgrade_types]
+
+        Array(rows)
+          .filter_map do |row|
+            next unless row.is_a?(Hash)
+
+            row["upgrade_type_key"] || row[:upgrade_type_key]
+          end
+          .map { |key| key.to_s.strip }
+          .reject { |key| key.empty? || key == "common" }
+          .uniq
+      end
+
+      def self.classifier_product_references(classifier_payload)
+        refs =
+          classifier_payload["product_references"] ||
+            classifier_payload[:product_references]
+        refs = {} unless refs.is_a?(Hash)
+
+        {
+          ahri_reference: refs["ahri_reference"] || refs[:ahri_reference],
+          neea_reference: refs["neea_reference"] || refs[:neea_reference],
+          awhp_reference: refs["awhp_reference"] || refs[:awhp_reference],
+          ohpa_reference: refs["ohpa_reference"] || refs[:ohpa_reference],
+          product_model_number:
+            refs["product_model_number"] || refs[:product_model_number] ||
+              refs["model_number"] || refs[:model_number],
+          product_manufacturer:
+            refs["product_manufacturer"] || refs[:product_manufacturer] ||
+              refs["manufacturer"] || refs[:manufacturer]
+        }.transform_values { |value| value.to_s.strip.presence }
       end
     end
   end

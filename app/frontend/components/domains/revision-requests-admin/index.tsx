@@ -7,6 +7,11 @@ import {
   Heading,
   IconButton,
   Spinner,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   Text,
   Textarea,
   Tooltip,
@@ -39,6 +44,20 @@ type RevisionRequestGridResponse = {
   meta?: { total?: number; page?: number; per?: number; sort?: string; filters?: any };
 };
 
+type InternalNoteRow = {
+  id: string;
+  invoice_id: string;
+  admin_user_id: string;
+  admin_user_name?: string | null;
+  note_text: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type InternalNotesResponse = {
+  rows: InternalNoteRow[];
+};
+
 function getParam(search: string, key: string): string {
   return new URLSearchParams(search).get(key) ?? '';
 }
@@ -50,7 +69,12 @@ function fmtDate(s?: string | null) {
   return raw.slice(0, 10);
 }
 
-const REVISION_REQUEST_CREATE_STATUSES = ['admin_review_inbox', 'in_review', 'contractor_revision_inbox'];
+function fmtDateTime(s?: string | null) {
+  if (!s) return '-';
+  const raw = String(s);
+  if (!raw.includes('T')) return raw;
+  return raw.replace('T', ' ').slice(0, 16);
+}
 
 function isAdminMessage(type?: string | null) {
   return String(type || '').trim() !== 'contractor_note';
@@ -67,7 +91,6 @@ export default function RevisionRequestsAdminScreen() {
   const currentUserId = (userStore as any)?.currentUser?.id ? String((userStore as any).currentUser.id) : '';
 
   const invoiceId = getParam(location.search, 'invoice_id');
-  const contextSessionCreatedAt = getParam(location.search, 'context_session_created_at');
   const contextInvoiceStatus = getParam(location.search, 'context_invoice_status');
   const contextContractorBusinessName = getParam(location.search, 'context_contractor_business_name');
   const contextDiOcrInvoiceId = getParam(location.search, 'context_di_ocr_invoice_id');
@@ -75,12 +98,17 @@ export default function RevisionRequestsAdminScreen() {
   const latestInvoiceVersionNoFromUrl = getParam(location.search, 'latest_invoice_versionno');
 
   const [gridLoading, setGridLoading] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(false);
   const [gridError, setGridError] = useState('');
+  const [notesError, setNotesError] = useState('');
   const [rows, setRows] = useState<RevisionRequestGridRow[]>([]);
+  const [internalNotes, setInternalNotes] = useState<InternalNoteRow[]>([]);
   const [latestInvoiceVersionId, setLatestInvoiceVersionId] = useState<string>(latestInvoiceVersionIdFromUrl);
   const [latestInvoiceVersionNo, setLatestInvoiceVersionNo] = useState<string>(latestInvoiceVersionNoFromUrl);
   const [messageText, setMessageText] = useState('');
+  const [noteText, setNoteText] = useState('');
   const [savingMessage, setSavingMessage] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
 
   const fetchRows = async () => {
     setGridLoading(true);
@@ -110,8 +138,42 @@ export default function RevisionRequestsAdminScreen() {
     }
   };
 
+  const fetchInternalNotes = async () => {
+    if (!invoiceId.trim()) {
+      setInternalNotes([]);
+      return;
+    }
+
+    setNotesLoading(true);
+    setNotesError('');
+
+    try {
+      const params = new URLSearchParams();
+      params.set('invoice_id', invoiceId.trim());
+
+      const res = await fetch(`/api/claims/admin/internal_notes?${params.toString()}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+
+      const data: InternalNotesResponse = await res.json().catch(() => ({ rows: [] }));
+      if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
+      setInternalNotes(Array.isArray(data?.rows) ? data.rows : []);
+    } catch (e: any) {
+      setNotesError(e?.message || 'Failed to load internal notes.');
+      setInternalNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([fetchRows(), fetchInternalNotes()]);
+  };
+
   useEffect(() => {
-    void fetchRows();
+    void refreshAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
 
@@ -149,24 +211,21 @@ export default function RevisionRequestsAdminScreen() {
   }, [invoiceId, latestInvoiceVersionIdFromUrl]);
 
   const contextRow = rows[0] || null;
-  const displaySessionCreatedAt = contextSessionCreatedAt || contextRow?.session_created_at || null;
   const displayInvoiceStatus = contextInvoiceStatus || contextRow?.invoice_status || '';
   const displayContractorBusinessName = contextContractorBusinessName || contextRow?.contractor_business_name || '';
   const displayDiOcrInvoiceId = contextDiOcrInvoiceId || contextRow?.di_ocr_invoice_id || '';
   const hasInvoiceContext =
-    !!displaySessionCreatedAt ||
-    !!displayInvoiceStatus ||
-    !!displayContractorBusinessName ||
-    !!displayDiOcrInvoiceId ||
-    !!latestInvoiceVersionNo;
+    !!displayInvoiceStatus || !!displayContractorBusinessName || !!displayDiOcrInvoiceId || !!latestInvoiceVersionNo;
 
-  const effectiveInvoiceStatus = String(displayInvoiceStatus || '').trim();
-  const canSendAdminMessage = REVISION_REQUEST_CREATE_STATUSES.includes(effectiveInvoiceStatus);
+  const canSendAdminMessage = !!latestInvoiceVersionId;
   const sendHint = !latestInvoiceVersionId
     ? 'Send is disabled because no latest invoice version is available.'
-    : canSendAdminMessage
-      ? 'Send a new admin message to the contractor. This is available while the invoice status is admin_review_inbox, in_review, or contractor_revision_inbox.'
-      : `Send is disabled because the invoice status is ${effectiveInvoiceStatus || 'unknown'}. Admin messages can only be created from admin_review_inbox, in_review, or contractor_revision_inbox.`;
+    : 'Send a new admin message to the contractor. Admin conversations stay open regardless of invoice status.';
+
+  const canSaveInternalNote = !!invoiceId.trim() && !!currentUserId;
+  const noteHint = !invoiceId.trim()
+    ? 'Save is disabled because no invoice id is available.'
+    : 'Save an internal admin-only note. Contractors do not see these notes.';
 
   const chatRows = useMemo(
     () =>
@@ -194,6 +253,7 @@ export default function RevisionRequestsAdminScreen() {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
+          invoice_id: invoiceId.trim(),
           invoice_version_id: latestInvoiceVersionId,
           requester_id: currentUserId,
           message_type: 'admin_revision_request',
@@ -218,6 +278,45 @@ export default function RevisionRequestsAdminScreen() {
     }
   };
 
+  const saveInternalNote = async () => {
+    const text = noteText.trim();
+    if (!text) {
+      setNotesError('Please enter an internal note before saving.');
+      return;
+    }
+    if (!canSaveInternalNote) return;
+
+    setSavingNote(true);
+    setNotesError('');
+    try {
+      const res = await fetch('/api/claims/admin/internal_notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          invoice_id: invoiceId.trim(),
+          admin_user_id: currentUserId,
+          note_text: text,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `Save failed (${res.status}).`);
+      setNoteText('');
+      toast({
+        title: 'Internal note saved',
+        description: 'The note is stored for admin review only.',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+      await fetchInternalNotes();
+    } catch (e: any) {
+      setNotesError(e?.message || 'Failed to save internal note.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar title="Revision Requests Admin" />
@@ -226,29 +325,21 @@ export default function RevisionRequestsAdminScreen() {
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Flex justify="space-between" align="center" gap={3} mb={5} flexWrap="wrap">
             <Box>
-              <Heading size="md">Messages & Requested Changes</Heading>
+              <Heading size="md">Messages & Internal Notes</Heading>
               <Text fontSize="sm" opacity={0.75} mt={1}>
-                Send clear contractor messages and review the conversation history. Old messages are kept as written.
+                Contractor-facing messages and admin-only notes share the same invoice context, but stay separate.
               </Text>
             </Box>
-            <Tooltip label="Refresh messages">
+            <Tooltip label="Refresh messages and notes">
               <IconButton
-                aria-label="Refresh messages"
+                aria-label="Refresh messages and notes"
                 icon={<ArrowsClockwise size={18} />}
                 variant="outline"
-                onClick={fetchRows}
-                isLoading={gridLoading}
+                onClick={() => void refreshAll()}
+                isLoading={gridLoading || notesLoading}
               />
             </Tooltip>
           </Flex>
-
-          {gridError && (
-            <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-              <Text as="div" fontSize="sm" color="red.700">
-                {gridError}
-              </Text>
-            </Box>
-          )}
 
           {(hasInvoiceContext || gridLoading) && (
             <Box mb={5} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
@@ -262,12 +353,6 @@ export default function RevisionRequestsAdminScreen() {
                     Context (selected invoice)
                   </Text>
                   <Flex wrap="wrap" gap={6}>
-                    <Box>
-                      <Text fontSize="xs" opacity={0.7}>
-                        session_created_at
-                      </Text>
-                      <Text fontSize="sm">{fmtDate(displaySessionCreatedAt)}</Text>
-                    </Box>
                     <Box>
                       <Text fontSize="xs" opacity={0.7}>
                         invoice_status
@@ -298,96 +383,193 @@ export default function RevisionRequestsAdminScreen() {
             </Box>
           )}
 
-          <Text fontWeight="bold" mb={3}>
-            Conversation
-          </Text>
-          {gridLoading ? (
-            <Flex align="center" gap={3} p={4}>
-              <Spinner size="sm" />
-              <Text>Loading messages...</Text>
-            </Flex>
-          ) : chatRows.length === 0 ? (
-            <Box p={6} borderWidth="1px" borderRadius="xl" bg="gray.50" textAlign="center">
-              <Text fontSize="sm" opacity={0.7}>
-                No messages yet. Send the first contractor message below.
-              </Text>
-            </Box>
-          ) : (
-            <Flex
-              direction="column"
-              gap={3}
-              p={4}
-              borderWidth="1px"
-              borderRadius="xl"
-              bg="gray.50"
-              maxH="520px"
-              overflowY="auto"
-            >
-              {chatRows.map((row, index) => {
-                const adminMessage = isAdminMessage(row.revision_request_message_type);
-                return (
-                  <Flex
-                    key={row.revision_request_id || `${row.revision_request_seqno || 'msg'}-${index}`}
-                    direction="column"
-                    align={adminMessage ? 'flex-end' : 'flex-start'}
-                  >
-                    <Text fontSize="xs" color="gray.500" mb={1} px={1}>
-                      {messageAuthor(row.revision_request_message_type)} | Version {row.invoice_versionno ?? '-'} |{' '}
-                      {fmtDate(row.revision_request_updated_at || row.revision_request_created_at)}
-                    </Text>
-                    <Box
-                      maxW={{ base: '92%', md: '72%' }}
-                      px={4}
-                      py={3}
-                      borderRadius="2xl"
-                      borderTopRightRadius={adminMessage ? 'md' : '2xl'}
-                      borderTopLeftRadius={adminMessage ? '2xl' : 'md'}
-                      bg={adminMessage ? 'blue.500' : 'white'}
-                      color={adminMessage ? 'white' : 'gray.800'}
-                      borderWidth={adminMessage ? '0' : '1px'}
-                      borderColor="gray.200"
-                      boxShadow="sm"
-                    >
-                      <Text whiteSpace="pre-wrap" fontSize="sm">
-                        {row.revision_request_text || 'No message text provided.'}
-                      </Text>
-                    </Box>
-                  </Flex>
-                );
-              })}
-            </Flex>
-          )}
+          <Tabs variant="enclosed" colorScheme="blue" isLazy>
+            <TabList>
+              <Tab>Contractor Conversation</Tab>
+              <Tab>Internal Notes</Tab>
+            </TabList>
 
-          <Box mt={5} p={4} borderWidth="1px" borderRadius="xl" bg="white" borderColor="gray.200">
-            <Text fontWeight="bold" mb={1}>
-              Send a message to contractor
-            </Text>
-            <Text fontSize="sm" opacity={0.75} mb={3}>
-              Write the message once and send it. If more context is needed later, send a new message instead of editing
-              history.
-            </Text>
-            <Textarea
-              value={messageText}
-              onChange={(event) => setMessageText(event.target.value)}
-              placeholder="Type the requested change or clarification..."
-              rows={5}
-              bg="gray.50"
-              borderRadius="xl"
-              isDisabled={!canSendAdminMessage || !latestInvoiceVersionId}
-            />
-            <Flex justify="flex-end" mt={3}>
-              <Tooltip label={sendHint} shouldWrapChildren>
-                <Button
-                  colorScheme="blue"
-                  onClick={() => void sendMessage()}
-                  isLoading={savingMessage}
-                  isDisabled={!latestInvoiceVersionId || !canSendAdminMessage}
-                >
-                  Send
-                </Button>
-              </Tooltip>
-            </Flex>
-          </Box>
+            <TabPanels>
+              <TabPanel px={0} pt={5}>
+                {gridError && (
+                  <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                    <Text as="div" fontSize="sm" color="red.700">
+                      {gridError}
+                    </Text>
+                  </Box>
+                )}
+
+                <Text fontWeight="bold" mb={3}>
+                  Conversation
+                </Text>
+                {gridLoading ? (
+                  <Flex align="center" gap={3} p={4}>
+                    <Spinner size="sm" />
+                    <Text>Loading messages...</Text>
+                  </Flex>
+                ) : chatRows.length === 0 ? (
+                  <Box p={6} borderWidth="1px" borderRadius="xl" bg="gray.50" textAlign="center">
+                    <Text fontSize="sm" opacity={0.7}>
+                      No messages yet. Send the first contractor message below.
+                    </Text>
+                  </Box>
+                ) : (
+                  <Flex
+                    direction="column"
+                    gap={3}
+                    p={4}
+                    borderWidth="1px"
+                    borderRadius="xl"
+                    bg="gray.50"
+                    maxH="520px"
+                    overflowY="auto"
+                  >
+                    {chatRows.map((row, index) => {
+                      const adminMessage = isAdminMessage(row.revision_request_message_type);
+                      return (
+                        <Flex
+                          key={row.revision_request_id || `${row.revision_request_seqno || 'msg'}-${index}`}
+                          direction="column"
+                          align={adminMessage ? 'flex-end' : 'flex-start'}
+                        >
+                          <Text fontSize="xs" color="gray.500" mb={1} px={1}>
+                            {messageAuthor(row.revision_request_message_type)} | Version {row.invoice_versionno ?? '-'}{' '}
+                            | {fmtDate(row.revision_request_updated_at || row.revision_request_created_at)}
+                          </Text>
+                          <Box
+                            maxW={{ base: '92%', md: '72%' }}
+                            px={4}
+                            py={3}
+                            borderRadius="2xl"
+                            borderTopRightRadius={adminMessage ? 'md' : '2xl'}
+                            borderTopLeftRadius={adminMessage ? '2xl' : 'md'}
+                            bg={adminMessage ? 'blue.500' : 'white'}
+                            color={adminMessage ? 'white' : 'gray.800'}
+                            borderWidth={adminMessage ? '0' : '1px'}
+                            borderColor="gray.200"
+                            boxShadow="sm"
+                          >
+                            <Text whiteSpace="pre-wrap" fontSize="sm">
+                              {row.revision_request_text || 'No message text provided.'}
+                            </Text>
+                          </Box>
+                        </Flex>
+                      );
+                    })}
+                  </Flex>
+                )}
+
+                <Box mt={5} p={4} borderWidth="1px" borderRadius="xl" bg="white" borderColor="gray.200">
+                  <Text fontWeight="bold" mb={1}>
+                    Send a message to contractor
+                  </Text>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Write the message once and send it. If more context is needed later, send a new message instead of
+                    editing history.
+                  </Text>
+                  <Textarea
+                    value={messageText}
+                    onChange={(event) => setMessageText(event.target.value)}
+                    placeholder="Type the requested change or clarification..."
+                    rows={5}
+                    bg="gray.50"
+                    borderRadius="xl"
+                    isDisabled={!canSendAdminMessage || !latestInvoiceVersionId}
+                  />
+                  <Flex justify="flex-end" mt={3}>
+                    <Tooltip label={sendHint} shouldWrapChildren>
+                      <Button
+                        colorScheme="blue"
+                        onClick={() => void sendMessage()}
+                        isLoading={savingMessage}
+                        isDisabled={!latestInvoiceVersionId || !canSendAdminMessage}
+                      >
+                        Send
+                      </Button>
+                    </Tooltip>
+                  </Flex>
+                </Box>
+              </TabPanel>
+
+              <TabPanel px={0} pt={5}>
+                {notesError && (
+                  <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                    <Text as="div" fontSize="sm" color="red.700">
+                      {notesError}
+                    </Text>
+                  </Box>
+                )}
+
+                <Text fontWeight="bold" mb={1}>
+                  Internal Notes
+                </Text>
+                <Text fontSize="sm" opacity={0.75} mb={3}>
+                  Admin-only notes for documenting review decisions, context, or why an AI warning was accepted.
+                </Text>
+
+                {notesLoading ? (
+                  <Flex align="center" gap={3} p={4}>
+                    <Spinner size="sm" />
+                    <Text>Loading internal notes...</Text>
+                  </Flex>
+                ) : internalNotes.length === 0 ? (
+                  <Box p={6} borderWidth="1px" borderRadius="xl" bg="gray.50" textAlign="center">
+                    <Text fontSize="sm" opacity={0.7}>
+                      No internal notes yet. Add the first admin-only note below.
+                    </Text>
+                  </Box>
+                ) : (
+                  <Flex direction="column" gap={3}>
+                    {internalNotes.map((note) => (
+                      <Box key={note.id} p={4} borderWidth="1px" borderRadius="xl" bg="gray.50" borderColor="gray.200">
+                        <Flex justify="space-between" gap={3} mb={2} flexWrap="wrap">
+                          <Text fontSize="xs" color="gray.500">
+                            Admin user: {note.admin_user_name || note.admin_user_id}
+                          </Text>
+                          <Text fontSize="xs" color="gray.500">
+                            {fmtDateTime(note.created_at)}
+                          </Text>
+                        </Flex>
+                        <Text whiteSpace="pre-wrap" fontSize="sm">
+                          {note.note_text}
+                        </Text>
+                      </Box>
+                    ))}
+                  </Flex>
+                )}
+
+                <Box mt={5} p={4} borderWidth="1px" borderRadius="xl" bg="white" borderColor="gray.200">
+                  <Text fontWeight="bold" mb={1}>
+                    Add internal note
+                  </Text>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    This note is for admins only. It is not shown in the contractor conversation.
+                  </Text>
+                  <Textarea
+                    value={noteText}
+                    onChange={(event) => setNoteText(event.target.value)}
+                    placeholder="Type an internal admin note..."
+                    rows={5}
+                    bg="gray.50"
+                    borderRadius="xl"
+                    isDisabled={!canSaveInternalNote}
+                  />
+                  <Flex justify="flex-end" mt={3}>
+                    <Tooltip label={noteHint} shouldWrapChildren>
+                      <Button
+                        colorScheme="blue"
+                        onClick={() => void saveInternalNote()}
+                        isLoading={savingNote}
+                        isDisabled={!canSaveInternalNote}
+                      >
+                        Save Internal Note
+                      </Button>
+                    </Tooltip>
+                  </Flex>
+                </Box>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         </Box>
       </Container>
     </Flex>

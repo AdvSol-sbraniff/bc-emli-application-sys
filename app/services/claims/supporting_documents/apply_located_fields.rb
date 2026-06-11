@@ -18,7 +18,7 @@ module Claims
       def call
         document = ::Claims::SupportingDocument.find(@supporting_document_id)
         definitions = definitions_for(document)
-        rows =
+        located_field_rows =
           extract_located_fields
             .map do |field_payload|
               build_row(
@@ -29,19 +29,47 @@ module Claims
               )
             end
             .compact
+        visual_finding_rows =
+          extract_visual_findings
+            .each_with_index
+            .map do |finding_payload, index|
+              build_visual_finding_row(
+                finding_payload: finding_payload,
+                document: document,
+                finding_seqno: index + 1,
+                now: Time.current
+              )
+            end
+            .compact
 
         ::Claims::SupportingDocumentLocatedField.transaction do
           ::Claims::SupportingDocumentLocatedField.where(
             supporting_document_id: document.id,
             source_engine: "genai"
           ).delete_all
+          ::Claims::SupportingDocumentVisualFinding.where(
+            supporting_document_id: document.id,
+            source_engine: "genai"
+          ).delete_all
 
-          if rows.any?
-            ::Claims::SupportingDocumentLocatedField.insert_all!(rows)
+          if located_field_rows.any?
+            ::Claims::SupportingDocumentLocatedField.insert_all!(
+              located_field_rows
+            )
+          end
+
+          if visual_finding_rows.any?
+            ::Claims::SupportingDocumentVisualFinding.insert_all!(
+              visual_finding_rows
+            )
           end
         end
 
-        { ok: true, replaced: rows.size }
+        {
+          ok: true,
+          replaced: located_field_rows.size,
+          visual_findings_replaced: visual_finding_rows.size
+        }
       rescue => e
         { ok: false, error: e.message, error_class: e.class.name }
       end
@@ -65,6 +93,15 @@ module Claims
         rows =
           @located_fields_payload["supporting_document_located_fields"] ||
             @located_fields_payload[:supporting_document_located_fields]
+        rows.is_a?(Array) ? rows : []
+      end
+
+      def extract_visual_findings
+        return [] unless @located_fields_payload.is_a?(Hash)
+
+        rows =
+          @located_fields_payload["visual_findings"] ||
+            @located_fields_payload[:visual_findings]
         rows.is_a?(Array) ? rows : []
       end
 
@@ -148,6 +185,88 @@ module Claims
           end
         numeric *= 100 if numeric.positive? && numeric <= 1
         [[numeric.round, 0].max, 100].min
+      end
+
+      def build_visual_finding_row(
+        finding_payload:,
+        document:,
+        finding_seqno:,
+        now:
+      )
+        return nil unless finding_payload.is_a?(Hash)
+
+        summary =
+          (finding_payload["summary"] || finding_payload[:summary]).to_s.strip
+        return nil if summary.blank?
+
+        {
+          supporting_document_id: document.id,
+          finding_seqno: finding_seqno,
+          source_engine: "genai",
+          finding_type:
+            coerce_finding_type(
+              finding_payload["finding_type"] || finding_payload[:finding_type]
+            ),
+          page:
+            coerce_int_or_nil(
+              finding_payload["page"] || finding_payload[:page]
+            ),
+          summary: summary,
+          legibility:
+            coerce_legibility(
+              finding_payload["legibility"] || finding_payload[:legibility]
+            ),
+          relevant_text_seen:
+            coerce_json_array_or_nil(
+              finding_payload["relevant_text_seen"] ||
+                finding_payload[:relevant_text_seen]
+            ),
+          confidence:
+            coerce_confidence(
+              finding_payload["confidence"] || finding_payload[:confidence]
+            ),
+          raw_json: finding_payload,
+          created_at: now,
+          updated_at: now
+        }
+      end
+
+      def coerce_finding_type(value)
+        value = value.to_s.strip
+        value.present? ? value : "other"
+      end
+
+      def coerce_legibility(value)
+        value = value.to_s.strip
+        if %w[legible partially_legible illegible not_applicable].include?(
+             value
+           )
+          return value
+        end
+
+        "not_applicable"
+      end
+
+      def coerce_json_array_or_nil(value)
+        return value if value.is_a?(Array)
+        return nil if value.nil?
+
+        if value.is_a?(String)
+          stripped = value.strip
+          return nil if stripped.empty?
+
+          parsed =
+            begin
+              JSON.parse(stripped)
+            rescue StandardError
+              nil
+            end
+          return parsed if parsed.is_a?(Array)
+
+          return [stripped]
+        end
+
+        [value.to_s]
       end
 
       def polygon_to_flat_float_array(raw)

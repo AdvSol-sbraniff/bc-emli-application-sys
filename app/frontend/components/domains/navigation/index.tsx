@@ -110,9 +110,6 @@ const EligibilitycodeEditorScreen = lazy(() =>
 const RevisionRequestsAdminScreen = lazy(() =>
   import('../revision-requests-admin').then((module) => ({ default: module.default })),
 );
-const RevisionRequestEditorScreen = lazy(() =>
-  import('../revision-request-editor').then((module) => ({ default: module.default })),
-);
 const ReportsVolumeValueScreen = lazy(() =>
   import('../reports-volume-value').then((module) => ({ default: module.default })),
 );
@@ -864,7 +861,6 @@ const AppRoutes = observer(() => {
           <Route path="/user-editor" element={<UserEditorScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
           <Route path="/revision-requests-admin" element={<RevisionRequestsAdminScreen />} />
-          <Route path="/revision-request-editor" element={<RevisionRequestEditorScreen />} />
           <Route path="/reports-volume-value" element={<ReportsVolumeValueScreen />} />
         </Route>
         {/* end sbra20260130 */}

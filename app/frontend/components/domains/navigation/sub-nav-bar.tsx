@@ -78,22 +78,20 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/reports-volume-value', title: 'Reports - Volume and Value' },
       ],
-      '/validation-rules-admin': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
-      ],
+      '/validation-rules-admin': [{ href: '/validation-rules-admin', title: 'Rules and Fields Editor' }],
       '/validation-rules-alphabetic-admin': [
-        { href: '/validation-rules-alphabetic-admin', title: 'Validation Rules Portal Alphabetic' },
+        { href: '/validation-rules-alphabetic-admin', title: 'Rules at a Glance' },
       ],
       '/validation-rules-config': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         { href: '/validation-rules-config', title: 'Validation Prompt Config' },
       ],
       '/supporting-document-types-admin': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
       ],
       '/supporting-document-type-fields-admin': [
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
         { href: '/supporting-document-type-fields-admin', title: 'Located Fields' },
       ],
@@ -164,11 +162,6 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/users-admin', title: t('home.usersAdminTitle') },
         { href: '/user-editor', title: 'User editor' },
       ],
-      '/revision-request-editor': [
-        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: revisionRequestsHref, title: 'Revision Requests Admin' },
-        { href: '/revision-request-editor', title: 'Revision Request Editor' },
-      ],
     };
 
     if (path === '/validation-rules-admin' && validationRulesUpgradeTypeId && validationRulesMode) {
@@ -176,10 +169,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       const recordId = searchParams.get('record_id') || '';
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         {
           href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}`,
-          title: 'Validation Rules Editor',
+          title: 'Rules and Fields Editor',
         },
         {
           href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}&mode=${encodeURIComponent(validationRulesMode)}${recordType ? `&record_type=${encodeURIComponent(recordType)}` : ''}${recordId ? `&record_id=${encodeURIComponent(recordId)}` : ''}`,
@@ -193,7 +186,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       const recordId = searchParams.get('id') || '';
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         {
           href: '/supporting-document-types-admin',
           title: 'Supporting Document Types',
@@ -211,7 +204,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       const recordId = searchParams.get('id') || '';
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
         {
           href: `/supporting-document-type-fields-admin${typeId ? `?type_id=${encodeURIComponent(typeId)}` : ''}`,
@@ -232,10 +225,10 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
     if (path === '/validation-rules-admin' && validationRulesUpgradeTypeId) {
       setIncludeHome(false);
       setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Validation Rules Portal by Upgrade Type' },
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
         {
           href: `/validation-rules-admin?invoice_upgrade_type_id=${encodeURIComponent(validationRulesUpgradeTypeId)}`,
-          title: 'Validation Rules Editor',
+          title: 'Rules and Fields Editor',
         },
       ]);
       return;

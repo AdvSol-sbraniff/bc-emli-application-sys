@@ -194,6 +194,7 @@ module Api
 
         record =
           ::Claims::AdminRevisionRequest.create!(
+            invoice_id: invoice.id,
             invoice_version_id: invoice_version.id,
             requester_id: current_user.id,
             message_type: "contractor_note",
@@ -220,14 +221,14 @@ module Api
         invoice = contractor_invoice!
         record =
           ::Claims::AdminRevisionRequest
-            .includes(:invoice_version)
+            .includes(:invoice)
             .where(
               id: params[:id].to_s,
               message_type: "contractor_note",
               requester_id: current_user.id
             )
             .first!
-        unless record.invoice_version&.invoice_id == invoice.id
+        unless record.invoice_id == invoice.id
           raise ActiveRecord::RecordNotFound
         end
 
@@ -642,6 +643,7 @@ module Api
       def serialize_revision_request(record)
         {
           id: record.id,
+          invoice_id: record.invoice_id,
           invoice_version_id: record.invoice_version_id,
           invoice_versionno: record.invoice_version&.invoice_versionno,
           revreq_seqno: record.revreq_seqno,

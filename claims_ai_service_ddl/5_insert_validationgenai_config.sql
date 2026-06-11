@@ -154,6 +154,14 @@ Output-json-schema:
   "supplement_routing_quality": null,
   "supplement_routing_quality_reason": null,
   "eligibility_code": null,
+  "product_references": {
+    "ahri_reference": null,
+    "neea_reference": null,
+    "awhp_reference": null,
+    "ohpa_reference": null,
+    "product_model_number": null,
+    "product_manufacturer": null
+  },
   "detected_upgrade_types": [
     {
       "upgrade_type_key": "windows_doors",
@@ -198,9 +206,14 @@ Rules:
 - supplement_routing_quality_reason is mandatory when supplement_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
 - Do not return supporting_document_located_fields. Supporting-document extraction is handled by a separate extraction call.
 - If document_kind is supplement or unknown, return eligibility_code=null, detected_upgrade_types=[], lineitem_mappings=[], and not_detected_upgrade_types=[].
+- If document_kind is supplement or unknown, return product_references with all values null.
 - Return only allowed upgrade_type_key values.
 - Return only allowed supplement_type_key values.
 - Set eligibility_code to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
+- Set product_references from exact invoice-visible product-list or product identity evidence when present. Use null for unknown values.
+- For AHRI evidence, put the exact AHRI reference in product_references.ahri_reference.
+- For NEEA, AWHP, or OHPA evidence, use the corresponding product_references key only when the invoice explicitly shows that list/source. Otherwise use product_model_number and product_manufacturer when visible.
+- Do not invent product references from supporting documents in this classifier call. This call only classifies the current staged document OCR text.
 - Include an upgrade type only when direct invoice evidence supports that a Better Homes BC / CleanBC / ESP rebate claim is being made for that exact upgrade type.
 - Do not include every work component on the invoice. Classify rebate-claimed upgrade domains, not incidental construction scope, supporting materials, or labour categories.
 - Strong classification evidence includes an explicit upgrade-specific rebate line, an explicit CleanBC/Better Homes/ESP amount tied to that upgrade, or invoice wording that clearly presents the item as a claimed program upgrade.
@@ -239,6 +252,16 @@ Output-json-schema:
       "polygon": null,
       "evidence_text": null
     }
+  ],
+  "visual_findings": [
+    {
+      "page": 1,
+      "finding_type": "manufacturer_label_photo",
+      "summary": "Short description of a useful visual observation from the attached supporting-document PDF.",
+      "legibility": "legible",
+      "relevant_text_seen": ["visible text from the image, if any"],
+      "confidence": 0
+    }
   ]
 }
 
@@ -249,6 +272,11 @@ Rules:
 - Return one supporting_document_located_fields[] row for each configured field task.
 - Copy each configured field_key exactly.
 - If a configured field value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
+- Also inspect the attached supporting-document PDF when present.
+- Return visual_findings[] for useful visual observations from the PDF pages, such as equipment labels, before/after photos, energy labels, floor plans, fireplace/chimney photos, or unclear visual evidence.
+- visual_findings[] is one row per useful observation, not one row per embedded PDF image object.
+- If there is no useful visual evidence, return visual_findings=[].
+- Use legibility values: legible, partially_legible, illegible, or not_applicable.
 - Use confidence from 0 to 100.
 - Prefer exact short evidence text copied from the OCR/DI content.
 - Do not make final eligibility decisions. Extract document evidence only.

@@ -19,7 +19,7 @@ import {
   getGenAiApiStyleFromEnv,
   stripThinkBlocks,
   toChatMessages,
-  toResponsesPrompt,
+  toResponsesInputAndInstructions,
 } from './genai-api';
 
 import {
@@ -531,16 +531,21 @@ export class InvService {
     return { message: stripThinkBlocks(message).trim() };
   }
 
-  async genai(contextwindowjson: any): Promise<any> {
+  async genai(contextwindowjson: any, attachments: any[] = []): Promise<any> {
     let raw = '';
 
     if (this.genaiApiStyle === 'responses') {
-      const responsesPrompt = toResponsesPrompt(contextwindowjson);
+      const responsesPrompt =
+        toResponsesInputAndInstructions(contextwindowjson);
+      const responsesInput = await this.withInputFileAttachments(
+        responsesPrompt.input,
+        attachments,
+      );
       const resp = await this.withGenAiRetries(() =>
         this.genaiClient.responses.create({
           model: this.genaiDeployment,
           instructions: responsesPrompt.instructions,
-          input: responsesPrompt.input,
+          input: responsesInput,
         }),
       );
       raw = resp.output_text ?? '';
@@ -569,6 +574,51 @@ export class InvService {
         HttpStatus.UNPROCESSABLE_ENTITY, // 422
       );
     }
+  }
+
+  private async withInputFileAttachments(
+    input: any[],
+    attachments: any[],
+  ): Promise<any[]> {
+    if (!Array.isArray(attachments) || attachments.length === 0) return input;
+
+    const attachmentParts = [];
+    for (const attachment of attachments) {
+      if (!attachment || attachment.type !== 'input_file') continue;
+
+      const storageKey = String(attachment.storageKey || '').trim();
+      if (!storageKey) continue;
+
+      const blob = await this.downloadBlob({
+        container: attachment.container,
+        storageKey,
+      });
+      const contentType = blob.content_type || 'application/pdf';
+      const filename =
+        String(attachment.filename || blob.filename || 'document.pdf').trim() ||
+        'document.pdf';
+
+      attachmentParts.push({
+        type: 'input_text',
+        text: `Attached supporting document PDF: ${filename}`,
+      });
+      attachmentParts.push({
+        type: 'input_file',
+        filename,
+        file_data: `data:${contentType};base64,${blob.buffer.toString('base64')}`,
+      });
+    }
+
+    if (attachmentParts.length === 0) return input;
+
+    return [
+      ...input,
+      {
+        type: 'message',
+        role: 'user',
+        content: attachmentParts,
+      },
+    ];
   }
 
   // end service layer class

@@ -16,6 +16,7 @@ import {
   Input,
   Select,
   Spinner,
+  Switch,
   Table,
   Tbody,
   Td,
@@ -63,10 +64,21 @@ const RULE_TYPE_LABELS: Record<RuleRecordType, string> = {
   genai_rule: 'GenAI',
 };
 
+type ListViewMode = 'matrix' | 'description';
+
 const fmtDate = (value?: string | null) => {
   if (!value) return '';
   const str = String(value);
   return str.includes('T') ? str.split('T')[0] : str.slice(0, 10);
+};
+
+const previewText = (value?: string | null, maxLength = 180) => {
+  const normalized = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trim()}...`;
 };
 
 const compactUpgradeLabel = (upgradeType: UpgradeTypeRow) => {
@@ -96,6 +108,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | RuleRecordType>('all');
   const [upgradeFilterId, setUpgradeFilterId] = useState('all');
+  const [listViewMode, setListViewMode] = useState<ListViewMode>('matrix');
 
   const fetchUpgradeTypes = useCallback(async () => {
     setLoadingUpgradeTypes(true);
@@ -218,211 +231,318 @@ export default function ValidationRulesAlphabeticAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Validation Rules Portal Alphabetic" />
+      <ThinBlueTitleBar title="Rules at a Glance" />
       <Container maxW="container.2xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Flex justify="space-between" align={{ base: 'start', lg: 'center' }} gap={3} mb={5}>
-            <Box />
-            <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-admin')}>
-              Portal by Upgrade Type
-            </Button>
-          </Flex>
-
-          <Flex gap={3} mb={4} direction={{ base: 'column', lg: 'row' }}>
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter by rule key, prompt, description, or upgrade type"
-              maxW={{ base: 'full', lg: '520px' }}
-            />
-            <Select
-              value={typeFilter}
-              onChange={(event) => setTypeFilter(event.target.value as 'all' | RuleRecordType)}
-              maxW={{ base: 'full', lg: '180px' }}
-            >
-              <option value="all">All rule types</option>
-              <option value="code_rule">Code rules</option>
-              <option value="genai_rule">GenAI rules</option>
-            </Select>
-            <Select
-              value={upgradeFilterId}
-              onChange={(event) => setUpgradeFilterId(event.target.value)}
-              maxW={{ base: 'full', lg: '280px' }}
-            >
-              <option value="all">All upgrade types</option>
-              {upgradeTypes.map((upgradeType) => (
-                <option key={upgradeType.id} value={upgradeType.id}>
-                  {upgradeType.description || upgradeType.upgrade_type_key}
-                </option>
-              ))}
-            </Select>
-          </Flex>
-
-          {error ? (
-            <Box mb={4} borderWidth="1px" borderColor="red.200" bg="red.50" color="red.700" borderRadius="md" p={3}>
-              {error}
-            </Box>
-          ) : null}
-
-          {loadingRows || loadingUpgradeTypes ? (
-            <Flex py={10} justify="center">
-              <Spinner />
+          <Box w="full" maxW="1320px" mx="auto">
+            <Flex justify="space-between" align={{ base: 'start', lg: 'center' }} gap={4} mb={5} flexWrap="wrap">
+              <Box>
+                <Text fontSize="lg" fontWeight="bold">
+                  Rules at a Glance
+                </Text>
+                <Text fontSize="sm" opacity={0.7}>
+                  Scan all code and GenAI rules alphabetically, then jump back to the upgrade-type portal when needed.
+                </Text>
+              </Box>
+              <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-admin')}>
+                Rules and Fields Editor
+              </Button>
             </Flex>
-          ) : (
-            <Box
-              borderWidth="1px"
-              borderColor="greys.grey20"
-              borderRadius="md"
-              overflowX="auto"
-              display="flex"
-              justifyContent="center"
-            >
-              <Table size="sm" width="max-content">
-                <Thead bg="gray.50">
-                  <Tr>
-                    <Th position="sticky" left={0} zIndex={1} bg="gray.50" minW="480px" w="480px" maxW="480px">
-                      Rule key
-                    </Th>
-                    <Th minW="56px" w="56px" maxW="56px" px={1}>
-                      Type
-                    </Th>
-                    <Th minW="50px" w="50px" maxW="50px" px={1}>
-                      On
-                    </Th>
-                    {upgradeTypes.map((upgradeType) => {
-                      const meta = getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key, upgradeType.description);
-                      return (
-                        <Th
-                          key={upgradeType.id}
-                          textAlign="center"
-                          minW="42px"
-                          w="42px"
-                          maxW="42px"
-                          px={1}
-                          py={2}
-                          verticalAlign="bottom"
-                          borderLeftWidth="1px"
-                          borderLeftColor="gray.100"
-                        >
-                          <Tooltip label={upgradeType.description || meta.label}>
-                            <Flex h="220px" align="center" justify="center">
-                              <Text
-                                fontSize="xs"
-                                lineHeight="shorter"
-                                whiteSpace="nowrap"
-                                transform="rotate(-90deg)"
-                                transformOrigin="center"
-                                w="210px"
-                                textAlign="center"
-                              >
-                                {compactUpgradeLabel(upgradeType)}
-                              </Text>
-                            </Flex>
-                          </Tooltip>
+
+            <Flex gap={3} mb={4} direction={{ base: 'column', lg: 'row' }}>
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Filter by rule key, prompt, description, or upgrade type"
+                maxW={{ base: 'full', lg: '520px' }}
+              />
+              <Select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value as 'all' | RuleRecordType)}
+                maxW={{ base: 'full', lg: '180px' }}
+              >
+                <option value="all">All rule types</option>
+                <option value="code_rule">Code rules</option>
+                <option value="genai_rule">GenAI rules</option>
+              </Select>
+              <Select
+                value={upgradeFilterId}
+                onChange={(event) => setUpgradeFilterId(event.target.value)}
+                maxW={{ base: 'full', lg: '280px' }}
+              >
+                <option value="all">All upgrade types</option>
+                {upgradeTypes.map((upgradeType) => (
+                  <option key={upgradeType.id} value={upgradeType.id}>
+                    {upgradeType.description || upgradeType.upgrade_type_key}
+                  </option>
+                ))}
+              </Select>
+            </Flex>
+
+            <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4} flexWrap="wrap">
+              <HStack spacing={3}>
+                <Text fontSize="sm" fontWeight={listViewMode === 'matrix' ? 'bold' : 'normal'}>
+                  Matrix
+                </Text>
+                <Switch
+                  colorScheme="blue"
+                  isChecked={listViewMode === 'description'}
+                  onChange={(event) => setListViewMode(event.target.checked ? 'description' : 'matrix')}
+                />
+                <Text fontSize="sm" fontWeight={listViewMode === 'description' ? 'bold' : 'normal'}>
+                  Description Preview
+                </Text>
+              </HStack>
+              {listViewMode === 'description' ? (
+                <Text fontSize="sm" opacity={0.75}>
+                  Preview shows the first 180 characters. Use the info icon for the full rule text.
+                </Text>
+              ) : null}
+            </Flex>
+
+            {error ? (
+              <Box mb={4} borderWidth="1px" borderColor="red.200" bg="red.50" color="red.700" borderRadius="md" p={3}>
+                {error}
+              </Box>
+            ) : null}
+
+            {loadingRows || loadingUpgradeTypes ? (
+              <Flex py={10} justify="center">
+                <Spinner />
+              </Flex>
+            ) : (
+              <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflowX="auto">
+                {listViewMode === 'matrix' ? (
+                  <Table size="sm" width="max-content">
+                    <Thead bg="gray.50">
+                      <Tr>
+                        <Th position="sticky" left={0} zIndex={1} bg="gray.50" minW="480px" w="480px" maxW="480px">
+                          Rule key
                         </Th>
-                      );
-                    })}
-                    <Th textAlign="right" minW="100px">
-                      Actions
-                    </Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {filteredRows.map((row) => {
-                    const mappedIds = mappedUpgradeTypeIds(row);
-                    return (
-                      <Tr key={`${row.record_type}-${row.id}`}>
-                        <Td
-                          position="sticky"
-                          left={0}
-                          zIndex={1}
-                          bg="white"
-                          borderRightWidth="1px"
-                          borderColor="gray.100"
-                          py={0.5}
-                          minW="460px"
-                          w="480px"
-                          maxW="460px"
-                        >
-                          <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
-                            {row.record_key}
-                          </Text>
-                        </Td>
-                        <Td py={0.5} px={1} minW="56px" w="56px" maxW="56px">
-                          <Badge colorScheme={row.record_type === 'code_rule' ? 'green' : 'blue'} fontSize="2xs">
-                            {RULE_TYPE_LABELS[row.record_type]}
-                          </Badge>
-                        </Td>
-                        <Td py={0.5} px={1} minW="50px" w="50px" maxW="50px">
-                          <Badge colorScheme={row.enabled ? 'green' : 'gray'} fontSize="2xs">
-                            {row.enabled ? 'Y' : 'N'}
-                          </Badge>
-                        </Td>
-                        {upgradeTypes.map((upgradeType) => (
-                          <Td
-                            key={upgradeType.id}
-                            textAlign="center"
-                            color={mappedIds.has(upgradeType.id) ? 'blue.700' : 'gray.300'}
-                            fontWeight="bold"
-                            borderLeftWidth="1px"
-                            borderLeftColor="gray.100"
-                            minW="42px"
-                            w="42px"
-                            maxW="42px"
-                            px={1}
-                            py={0.5}
-                            lineHeight="short"
-                          >
-                            <Tooltip
-                              label={`${row.record_key} ${mappedIds.has(upgradeType.id) ? 'is mapped to' : 'is not mapped to'} ${
-                                upgradeType.description || upgradeType.upgrade_type_key
-                              }`}
-                              hasArrow
+                        <Th minW="56px" w="56px" maxW="56px" px={1}>
+                          Type
+                        </Th>
+                        <Th minW="50px" w="50px" maxW="50px" px={1}>
+                          On
+                        </Th>
+                        {upgradeTypes.map((upgradeType) => {
+                          const meta = getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key, upgradeType.description);
+                          return (
+                            <Th
+                              key={upgradeType.id}
+                              textAlign="center"
+                              minW="42px"
+                              w="42px"
+                              maxW="42px"
+                              px={1}
+                              py={2}
+                              verticalAlign="bottom"
+                              borderLeftWidth="1px"
+                              borderLeftColor="gray.100"
                             >
-                              <Text as="span" display="inline-block" minW="18px">
-                                {mappedIds.has(upgradeType.id) ? 'X' : ''}
-                              </Text>
-                            </Tooltip>
-                          </Td>
-                        ))}
-                        <Td textAlign="right" py={0.5}>
-                          <HStack justify="end" spacing={1}>
-                            <Tooltip label="Rule details">
-                              <IconButton
-                                aria-label="Rule details"
-                                icon={<Info size={18} />}
-                                size="xs"
-                                variant="ghost"
-                                onClick={() => openInfo(row)}
-                              />
-                            </Tooltip>
-                            <Tooltip label="Edit in portal by upgrade type">
-                              <IconButton
-                                aria-label="Edit rule"
-                                icon={<PencilSimple size={18} />}
-                                size="xs"
-                                variant="ghost"
-                                onClick={() => openEdit(row)}
-                              />
-                            </Tooltip>
-                          </HStack>
-                        </Td>
+                              <Tooltip label={upgradeType.description || meta.label}>
+                                <Flex h="220px" align="center" justify="center">
+                                  <Text
+                                    fontSize="xs"
+                                    lineHeight="shorter"
+                                    whiteSpace="nowrap"
+                                    transform="rotate(-90deg)"
+                                    transformOrigin="center"
+                                    w="210px"
+                                    textAlign="center"
+                                  >
+                                    {compactUpgradeLabel(upgradeType)}
+                                  </Text>
+                                </Flex>
+                              </Tooltip>
+                            </Th>
+                          );
+                        })}
+                        <Th textAlign="right" minW="100px">
+                          Actions
+                        </Th>
                       </Tr>
-                    );
-                  })}
-                  {filteredRows.length === 0 ? (
-                    <Tr>
-                      <Td colSpan={upgradeTypes.length + 4}>
-                        <Text py={6} textAlign="center" opacity={0.7}>
-                          No validation rules found.
-                        </Text>
-                      </Td>
-                    </Tr>
-                  ) : null}
-                </Tbody>
-              </Table>
-            </Box>
-          )}
+                    </Thead>
+                    <Tbody>
+                      {filteredRows.map((row) => {
+                        const mappedIds = mappedUpgradeTypeIds(row);
+                        return (
+                          <Tr key={`${row.record_type}-${row.id}`}>
+                            <Td
+                              position="sticky"
+                              left={0}
+                              zIndex={1}
+                              bg="white"
+                              borderRightWidth="1px"
+                              borderColor="gray.100"
+                              py={0.5}
+                              minW="460px"
+                              w="480px"
+                              maxW="460px"
+                            >
+                              <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                                {row.record_key}
+                              </Text>
+                            </Td>
+                            <Td py={0.5} px={1} minW="56px" w="56px" maxW="56px">
+                              <Badge colorScheme={row.record_type === 'code_rule' ? 'green' : 'blue'} fontSize="2xs">
+                                {RULE_TYPE_LABELS[row.record_type]}
+                              </Badge>
+                            </Td>
+                            <Td py={0.5} px={1} minW="50px" w="50px" maxW="50px">
+                              <Badge colorScheme={row.enabled ? 'green' : 'gray'} fontSize="2xs">
+                                {row.enabled ? 'Y' : 'N'}
+                              </Badge>
+                            </Td>
+                            {upgradeTypes.map((upgradeType) => (
+                              <Td
+                                key={upgradeType.id}
+                                textAlign="center"
+                                color={mappedIds.has(upgradeType.id) ? 'blue.700' : 'gray.300'}
+                                fontWeight="bold"
+                                borderLeftWidth="1px"
+                                borderLeftColor="gray.100"
+                                minW="42px"
+                                w="42px"
+                                maxW="42px"
+                                px={1}
+                                py={0.5}
+                                lineHeight="short"
+                              >
+                                <Tooltip
+                                  label={`${row.record_key} ${mappedIds.has(upgradeType.id) ? 'is mapped to' : 'is not mapped to'} ${
+                                    upgradeType.description || upgradeType.upgrade_type_key
+                                  }`}
+                                  hasArrow
+                                >
+                                  <Text as="span" display="inline-block" minW="18px">
+                                    {mappedIds.has(upgradeType.id) ? 'X' : ''}
+                                  </Text>
+                                </Tooltip>
+                              </Td>
+                            ))}
+                            <Td textAlign="right" py={0.5}>
+                              <HStack justify="end" spacing={1}>
+                                <Tooltip label="Rule details">
+                                  <IconButton
+                                    aria-label="Rule details"
+                                    icon={<Info size={18} />}
+                                    size="xs"
+                                    variant="ghost"
+                                    onClick={() => openInfo(row)}
+                                  />
+                                </Tooltip>
+                                <Tooltip label="Edit in Rules and Fields Editor">
+                                  <IconButton
+                                    aria-label="Edit rule"
+                                    icon={<PencilSimple size={18} />}
+                                    size="xs"
+                                    variant="ghost"
+                                    onClick={() => openEdit(row)}
+                                  />
+                                </Tooltip>
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                      {filteredRows.length === 0 ? (
+                        <Tr>
+                          <Td colSpan={upgradeTypes.length + 4}>
+                            <Text py={6} textAlign="center" opacity={0.7}>
+                              No validation rules found.
+                            </Text>
+                          </Td>
+                        </Tr>
+                      ) : null}
+                    </Tbody>
+                  </Table>
+                ) : (
+                  <Table size="sm">
+                    <Thead bg="gray.50">
+                      <Tr>
+                        <Th>Rule key</Th>
+                        <Th minW="56px" w="56px" maxW="56px" px={1}>
+                          Type
+                        </Th>
+                        <Th minW="50px" w="50px" maxW="50px" px={1}>
+                          On
+                        </Th>
+                        <Th>Upgrade types</Th>
+                        <Th>Description / prompt preview</Th>
+                        <Th textAlign="right" minW="100px">
+                          Actions
+                        </Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {filteredRows.map((row) => (
+                        <Tr key={`${row.record_type}-${row.id}`}>
+                          <Td py={0.5} minW="360px">
+                            <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                              {row.record_key}
+                            </Text>
+                          </Td>
+                          <Td py={0.5} px={1}>
+                            <Badge colorScheme={row.record_type === 'code_rule' ? 'green' : 'blue'} fontSize="2xs">
+                              {RULE_TYPE_LABELS[row.record_type]}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} px={1}>
+                            <Badge colorScheme={row.enabled ? 'green' : 'gray'} fontSize="2xs">
+                              {row.enabled ? 'Y' : 'N'}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} minW="260px">
+                            <Text fontSize="xs" lineHeight="short" opacity={0.8}>
+                              {row.upgrade_types.map((upgradeType) => compactUpgradeLabel(upgradeType)).join(', ') ||
+                                'No mappings'}
+                            </Text>
+                          </Td>
+                          <Td py={0.5} minW="420px">
+                            <Text fontSize="sm" lineHeight="short" noOfLines={2}>
+                              {previewText(row.detail?.description || row.detail?.prompt_text) || 'n/a'}
+                            </Text>
+                          </Td>
+                          <Td textAlign="right" py={0.5}>
+                            <HStack justify="end" spacing={1}>
+                              <Tooltip label="Rule details">
+                                <IconButton
+                                  aria-label="Rule details"
+                                  icon={<Info size={18} />}
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => openInfo(row)}
+                                />
+                              </Tooltip>
+                              <Tooltip label="Edit in Rules and Fields Editor">
+                                <IconButton
+                                  aria-label="Edit rule"
+                                  icon={<PencilSimple size={18} />}
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => openEdit(row)}
+                                />
+                              </Tooltip>
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      ))}
+                      {filteredRows.length === 0 ? (
+                        <Tr>
+                          <Td colSpan={6}>
+                            <Text py={6} textAlign="center" opacity={0.7}>
+                              No validation rules found.
+                            </Text>
+                          </Td>
+                        </Tr>
+                      ) : null}
+                    </Tbody>
+                  </Table>
+                )}
+              </Box>
+            )}
+          </Box>
         </Box>
       </Container>
 
@@ -522,7 +642,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                   </Text>
                 </Box>
                 <Button leftIcon={<PencilSimple size={16} />} onClick={() => openEdit(selectedRow)}>
-                  Edit in Portal by Upgrade Type
+                  Edit in Rules and Fields Editor
                 </Button>
               </VStack>
             ) : null}

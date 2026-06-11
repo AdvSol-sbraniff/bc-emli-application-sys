@@ -14,6 +14,9 @@ module Claims
       HPWH_UPGRADE_TYPE_KEY = "heat_pump_water_heater"
 
       HP_AHRI_FIELD_KEY = "hp_ahri_reference"
+      CLASSIFIER_AHRI_FIELD_KEY = "classifier.ahri_reference"
+      CLASSIFIER_MODEL_NUMBER_FIELD_KEY = "classifier.product_model_number"
+      CLASSIFIER_MANUFACTURER_FIELD_KEY = "classifier.product_manufacturer"
       HPWH_MANUFACTURER_FIELD_KEY = "hpwh_manufacturer"
       HPWH_MODEL_NUMBER_FIELD_KEY = "hpwh_model_number"
       HPWH_MODEL_COMPONENTS_FIELD_KEY = "hpwh_model_components"
@@ -115,7 +118,7 @@ module Claims
       def lookup_ahri_product(upgrade_types)
         field =
           best_invoice_field(
-            field_keys: [HP_AHRI_FIELD_KEY],
+            field_keys: [CLASSIFIER_AHRI_FIELD_KEY, HP_AHRI_FIELD_KEY],
             upgrade_type_ids: upgrade_types.map(&:id)
           )
         ahri = normalized_ahri(field&.value_text)
@@ -140,7 +143,7 @@ module Claims
       def lookup_ohpa_product(upgrade_type)
         field =
           best_invoice_field(
-            field_keys: [HP_AHRI_FIELD_KEY],
+            field_keys: [CLASSIFIER_AHRI_FIELD_KEY, HP_AHRI_FIELD_KEY],
             upgrade_type_ids: [upgrade_type.id]
           )
         ahri = normalized_ahri(field&.value_text)
@@ -166,12 +169,18 @@ module Claims
         fields = {
           manufacturer:
             invoice_fields(
-              field_keys: [HPWH_MANUFACTURER_FIELD_KEY],
+              field_keys: [
+                CLASSIFIER_MANUFACTURER_FIELD_KEY,
+                HPWH_MANUFACTURER_FIELD_KEY
+              ],
               upgrade_type_ids: [upgrade_type.id]
             ),
           model_number:
             invoice_fields(
-              field_keys: [HPWH_MODEL_NUMBER_FIELD_KEY],
+              field_keys: [
+                CLASSIFIER_MODEL_NUMBER_FIELD_KEY,
+                HPWH_MODEL_NUMBER_FIELD_KEY
+              ],
               upgrade_type_ids: [upgrade_type.id]
             ),
           model_components:
@@ -220,7 +229,11 @@ module Claims
           HYDRONIC_INVOICE_FIELD_KEYS.fetch(upgrade_type.upgrade_type_key)
         fields =
           invoice_fields(
-            field_keys: field_keys,
+            field_keys: [
+              CLASSIFIER_MODEL_NUMBER_FIELD_KEY,
+              CLASSIFIER_AHRI_FIELD_KEY,
+              *field_keys
+            ],
             upgrade_type_ids: [upgrade_type.id]
           )
         model_values = model_values_for(fields)
@@ -258,11 +271,15 @@ module Claims
           .where(
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type_ids,
-            source_engine: "genai",
+            source_engine: %w[classifier genai],
             field_key: field_keys
           )
           .where.not(value_text: [nil, ""])
-          .order(confidence: :desc, created_at: :desc)
+          .order(
+            Arel.sql("CASE source_engine WHEN 'classifier' THEN 0 ELSE 1 END"),
+            confidence: :desc,
+            created_at: :desc
+          )
           .to_a
       end
 

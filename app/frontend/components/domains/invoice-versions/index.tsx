@@ -434,6 +434,7 @@ export const InvoiceVersionShowScreen = () => {
   const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
 
   const [codeFields, setCodeFields] = useState<any[]>([]);
+  const [classifierFields, setClassifierFields] = useState<any[]>([]);
 
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
@@ -627,6 +628,8 @@ export const InvoiceVersionShowScreen = () => {
         if (!resp.ok) {
           const txt = await resp.text();
           setGenAiFields([]);
+          setCodeFields([]);
+          setClassifierFields([]);
           setUpgradeTypeResults([]);
           setGenAiError(`read_genai failed (${resp.status}): ${txt}`);
           return;
@@ -639,6 +642,7 @@ export const InvoiceVersionShowScreen = () => {
         // ============================================================
         setGenAiFields(Array.isArray(json?.located_fields) ? json.located_fields : []);
         setCodeFields(Array.isArray(json?.code_located_fields) ? json.code_located_fields : []);
+        setClassifierFields(Array.isArray(json?.classifier_located_fields) ? json.classifier_located_fields : []);
         setUpgradeTypeResults(Array.isArray(json?.upgrade_type_results) ? json.upgrade_type_results : []);
 
         // ============================================================
@@ -653,6 +657,8 @@ export const InvoiceVersionShowScreen = () => {
         }
       } catch (e: any) {
         setGenAiFields([]);
+        setCodeFields([]);
+        setClassifierFields([]);
         setUpgradeTypeResults([]);
         setGenAiError(`read_genai error: ${String(e?.message ?? e)}`);
       }
@@ -1516,6 +1522,56 @@ export const InvoiceVersionShowScreen = () => {
                                       ))}
                                     </Box>
                                   )}
+
+                                  {Array.isArray(doc?.visual_findings) && doc.visual_findings.length > 0 && (
+                                    <Box mt="8px" display="flex" flexDirection="column" gap="6px">
+                                      <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7}>
+                                        Visual findings
+                                      </Text>
+                                      {doc.visual_findings.map((finding: any) => {
+                                        const relevantText = Array.isArray(finding?.relevant_text_seen)
+                                          ? finding.relevant_text_seen.filter(Boolean).join(', ')
+                                          : '';
+
+                                        return (
+                                          <Box
+                                            key={String(finding?.id || finding?.finding_seqno || finding?.summary)}
+                                            borderWidth="1px"
+                                            borderColor="orange.100"
+                                            borderRadius="md"
+                                            bg="orange.50"
+                                            px="8px"
+                                            py="6px"
+                                          >
+                                            <Flex align="center" gap="6px" mb="3px" wrap="wrap">
+                                              <Badge colorScheme="orange" variant="subtle" textTransform="none">
+                                                {String(finding?.finding_type || 'visual finding')}
+                                              </Badge>
+                                              {finding?.page != null && (
+                                                <Text fontSize="xs" opacity={0.7}>
+                                                  page {String(finding.page)}
+                                                </Text>
+                                              )}
+                                              <Text fontSize="xs" opacity={0.7}>
+                                                confidence: {String(finding?.confidence ?? 0)}
+                                              </Text>
+                                              {String(finding?.legibility || '').trim() && (
+                                                <Text fontSize="xs" opacity={0.7}>
+                                                  legibility: {String(finding.legibility)}
+                                                </Text>
+                                              )}
+                                            </Flex>
+                                            <Text fontSize="xs">{String(finding?.summary || '')}</Text>
+                                            {relevantText && (
+                                              <Text fontSize="xs" opacity={0.75} mt="3px">
+                                                text seen: {relevantText}
+                                              </Text>
+                                            )}
+                                          </Box>
+                                        );
+                                      })}
+                                    </Box>
+                                  )}
                                 </Box>
                               ))}
                             </Box>
@@ -1572,7 +1628,7 @@ export const InvoiceVersionShowScreen = () => {
                         <Box borderWidth="1px" borderColor="blue.100" borderRadius="md" p="10px" bg="blue.50">
                           <Flex align="center" gap="8px" mb="8px" wrap="wrap">
                             <StatusDot result="pass" />
-                            <Badge colorScheme="blue">Information on record</Badge>
+                            <Badge colorScheme="blue">Product reference</Badge>
                             {ahriSource?.source_description && (
                               <Badge colorScheme="gray" variant="subtle" textTransform="none">
                                 {String(ahriSource.source_description)}
@@ -1675,7 +1731,7 @@ export const InvoiceVersionShowScreen = () => {
                         <Box borderWidth="1px" borderColor="green.100" borderRadius="md" p="10px" bg="green.50">
                           <Flex align="center" gap="8px" mb="8px" wrap="wrap">
                             <StatusDot result="pass" />
-                            <Badge colorScheme="green">Information on record</Badge>
+                            <Badge colorScheme="green">Product reference</Badge>
                             {neeaSource?.source_description && (
                               <Badge colorScheme="gray" variant="subtle" textTransform="none">
                                 {String(neeaSource.source_description)}
@@ -1782,7 +1838,7 @@ export const InvoiceVersionShowScreen = () => {
                         <Box borderWidth="1px" borderColor="cyan.100" borderRadius="md" p="10px" bg="cyan.50">
                           <Flex align="center" gap="8px" mb="8px" wrap="wrap">
                             <StatusDot result="pass" />
-                            <Badge colorScheme="cyan">Information on record</Badge>
+                            <Badge colorScheme="cyan">Product reference</Badge>
                             {awhpSource?.source_description && (
                               <Badge colorScheme="gray" variant="subtle" textTransform="none">
                                 {String(awhpSource.source_description)}
@@ -1876,7 +1932,7 @@ export const InvoiceVersionShowScreen = () => {
                         <Box borderWidth="1px" borderColor="orange.100" borderRadius="md" p="10px" bg="orange.50">
                           <Flex align="center" gap="8px" mb="8px" wrap="wrap">
                             <StatusDot result="pass" />
-                            <Badge colorScheme="orange">Information on record</Badge>
+                            <Badge colorScheme="orange">Product reference</Badge>
                             {ohpaSource?.source_description && (
                               <Badge colorScheme="gray" variant="subtle" textTransform="none">
                                 {String(ohpaSource.source_description)}
@@ -1965,7 +2021,68 @@ export const InvoiceVersionShowScreen = () => {
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
                           <Text size="sm" fontWeight="bold">
-                            Information on record
+                            Classifier reference found
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+
+                    <AccordionPanel px="0" pt="8px">
+                      {genAiError && (
+                        <Text fontSize="xs" color="red.500" mb="8px">
+                          {genAiError}
+                        </Text>
+                      )}
+
+                      {!genAiError && classifierFields.length === 0 ? (
+                        <Text fontSize="sm" opacity={0.7}>
+                          No classifier references found.
+                        </Text>
+                      ) : (
+                        <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                          {classifierFields.map((r: any) => {
+                            const label = r.field_key || 'field';
+                            const value = displayLocatedFieldValue(r);
+
+                            return (
+                              <Box
+                                key={r.id}
+                                px="10px"
+                                py="8px"
+                                mb="6px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="orange.200"
+                                bg="orange.50"
+                              >
+                                <Flex align="center" gap="6px" mb="2px" wrap="wrap">
+                                  <Text fontSize="xs" opacity={0.75}>
+                                    {label}
+                                  </Text>
+                                  {r.confidence != null && (
+                                    <Badge colorScheme="orange" variant="subtle">
+                                      conf {Number(r.confidence).toFixed(2)}
+                                    </Badge>
+                                  )}
+                                </Flex>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {value}
+                                </Text>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      )}
+                    </AccordionPanel>
+                  </AccordionItem>
+
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Pre-existing case facts
                           </Text>
                         </Box>
                         <AccordionIcon />
@@ -1981,7 +2098,7 @@ export const InvoiceVersionShowScreen = () => {
 
                       {!genAiError && codeFields.length === 0 ? (
                         <Text fontSize="sm" opacity={0.7}>
-                          No local case facts found.
+                          No pre-existing case facts found.
                         </Text>
                       ) : (
                         <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
@@ -2466,7 +2583,67 @@ export const InvoiceVersionShowScreen = () => {
                         <h2>
                           <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                             <Box flex="1" textAlign="left">
-                              <Text size="sm">Pre-existing info on file</Text>
+                              <Text size="sm">Classifier reference found</Text>
+                            </Box>
+                            <AccordionIcon />
+                          </AccordionButton>
+                        </h2>
+
+                        <AccordionPanel px="0" pt="8px">
+                          {genAiError && (
+                            <Text fontSize="xs" color="red.500" mb="8px">
+                              {genAiError}
+                            </Text>
+                          )}
+
+                          {!genAiError && classifierFields.length === 0 && (
+                            <Text fontSize="sm" opacity={0.7}>
+                              No classifier references found.
+                            </Text>
+                          )}
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {classifierFields.map((r: any) => {
+                              const label = r.field_key || 'field';
+                              const value = displayLocatedFieldValue(r);
+                              const meta = [r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null]
+                                .filter(Boolean)
+                                .join(' - ');
+
+                              return (
+                                <Box
+                                  key={r.id}
+                                  px="10px"
+                                  py="8px"
+                                  mb="6px"
+                                  borderRadius="md"
+                                  borderWidth="1px"
+                                  borderColor="orange.200"
+                                  bg="orange.50"
+                                >
+                                  <Text fontSize="xs" opacity={0.7}>
+                                    {label}
+                                  </Text>
+                                  <Text fontSize="sm" noOfLines={3}>
+                                    {value}
+                                  </Text>
+                                  {meta && (
+                                    <Text fontSize="xs" opacity={0.6}>
+                                      {meta}
+                                    </Text>
+                                  )}
+                                </Box>
+                              );
+                            })}
+                          </Box>
+                        </AccordionPanel>
+                      </AccordionItem>
+
+                      <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                        <h2>
+                          <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                            <Box flex="1" textAlign="left">
+                              <Text size="sm">Pre-existing case facts</Text>
                             </Box>
                             <AccordionIcon />
                           </AccordionButton>
@@ -2483,7 +2660,7 @@ export const InvoiceVersionShowScreen = () => {
                           {/* empty */}
                           {!genAiError && codeFields.length === 0 && (
                             <Text fontSize="sm" opacity={0.7}>
-                              No pre-existing fields on file.
+                              No pre-existing case facts found.
                             </Text>
                           )}
 
@@ -3005,7 +3182,10 @@ export const InvoiceVersionShowScreen = () => {
                   GenAI Located Fields: values found by AI with evidence and document location details.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
-                  Pre-existing info on file: known case data already in the system.
+                  Classifier reference found: product references and other invoice keys found during classification.
+                </Text>
+                <Text as="div" fontSize="sm" mt={1}>
+                  Pre-existing case facts: known case data already in the system.
                 </Text>
                 <Text as="div" fontSize="sm" mt={1}>
                   GenAI Rulechecks: rule-by-rule pass or fail, confidence, evidence, and the overall AI summary/advice.
