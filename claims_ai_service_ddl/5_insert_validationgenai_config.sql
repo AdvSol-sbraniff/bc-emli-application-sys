@@ -6,6 +6,7 @@ WITH config_row (
   system_record,
   classifier_system_record,
   supporting_document_extraction_system_record,
+  supporting_document_group_extraction_system_record,
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
@@ -102,7 +103,7 @@ You are not making a final eligibility decision. You are triaging the document s
 
 Allowed document_kind values:
 - invoice
-- supplement
+- supporting_document
 - unknown
 
 Allowed upgrade_type_key values:
@@ -120,7 +121,7 @@ Allowed upgrade_type_key values:
 - insulation
 - ventilation
 
-Allowed supplement_type_key values:
+Allowed supporting_document_type_key values:
 - before_after_photo_set
 - certification_sheet
 - dual_fuel_control_document
@@ -145,14 +146,14 @@ Allowed supplement_type_key values:
 
 Output-json-schema:
 {
-  "document_kind": "invoice|supplement|unknown",
+  "document_kind": "invoice|supporting_document|unknown",
   "document_kind_confidence": 0,
   "document_kind_reason": "2-4 sentences explaining why the document is an invoice, a supporting document, or unknown.",
-  "supplement_type_key": null,
-  "supplement_type_confidence": 0,
-  "supplement_type_reason": null,
-  "supplement_routing_quality": null,
-  "supplement_routing_quality_reason": null,
+  "supporting_document_type_key": null,
+  "supporting_document_type_confidence": 0,
+  "supporting_document_type_reason": null,
+  "supporting_document_routing_quality": null,
+  "supporting_document_routing_quality_reason": null,
   "eligibility_code": null,
   "product_references": {
     "ahri_reference": null,
@@ -170,14 +171,6 @@ Output-json-schema:
       "classification_explanation": "2-4 sentences explaining why this appears to be a rebate-claimed upgrade type, including the exact rebate or claim evidence when available."
     }
   ],
-  "lineitem_mappings": [
-    {
-      "lineitem_seqno": 0,
-      "upgrade_type_key": "windows_doors",
-      "confidence": 0,
-      "evidence_text": "exact short invoice evidence"
-    }
-  ],
   "not_detected_upgrade_types": [
     {
       "upgrade_type_key": "air_source_heat_pump_oil",
@@ -191,24 +184,28 @@ Rules:
 - Do not include markdown outside JSON.
 - Classify document_kind first.
 - Use document_kind="invoice" only when the document appears to be the primary contractor invoice, estimate, sales invoice, or invoice-like claim document containing billed work, pricing, totals, or rebate-claimed work scope.
-- Use document_kind="supplement" for supporting documents such as utility bills, landlord consent, product labels, spec sheets, permits, preapproval notices, WETT reports, photos, and other non-invoice attachments.
-- Use document_kind="unknown" when the OCR does not provide enough evidence to decide between invoice and supplement.
+- Use document_kind="supporting_document" for supporting documents such as utility bills, landlord consent, product labels, spec sheets, permits, preapproval notices, WETT reports, photos, and other non-invoice attachments.
+- Use document_kind="unknown" when the OCR does not provide enough evidence to decide between invoice and supporting document.
+- Treat supported image files such as JPG, JPEG, or PNG as likely supporting documents unless the metadata and OCR clearly indicate they are the primary invoice.
+- If an image file has little OCR text but its filename or visible text suggests before/after evidence, classify it as document_kind="supporting_document", supporting_document_type_key="before_after_photo_set", and supporting_document_routing_quality="requires_visual_review".
+- If an image file has little OCR text but its filename or visible text suggests a product/nameplate/label photo, classify it as document_kind="supporting_document", supporting_document_type_key="manufacturer_label_photo", and supporting_document_routing_quality="requires_visual_review".
+- Do not classify a readable JPG/PNG as unknown merely because DI-read has little text. Use unknown only when neither file metadata nor OCR gives enough safe clue for invoice versus supporting document.
 - document_kind_reason is mandatory.
-- Set supplement_type_key only when document_kind="supplement". Otherwise return null.
-- Set supplement_type_confidence only when document_kind="supplement". Otherwise return 0.
-- Set supplement_type_reason only when document_kind="supplement". Otherwise return null.
-- Set supplement_routing_quality only when document_kind="supplement". Otherwise return null.
-- Allowed supplement_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
-- Use supplement_routing_quality="usable" when the document appears to be the selected supplement type and the text/DI evidence is readable enough for downstream validation.
-- Use supplement_routing_quality="needs_review" when it is probably the selected supplement type but has legibility, completeness, mismatch, redaction, or ambiguity concerns.
-- Use supplement_routing_quality="requires_visual_review" when text/DI is not enough because the evidence depends on image content, such as photos, labels, or visual before/after proof.
-- Use supplement_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
-- supplement_routing_quality_reason is mandatory when supplement_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
+- Set supporting_document_type_key only when document_kind="supporting_document". Otherwise return null.
+- Set supporting_document_type_confidence only when document_kind="supporting_document". Otherwise return 0.
+- Set supporting_document_type_reason only when document_kind="supporting_document". Otherwise return null.
+- Set supporting_document_routing_quality only when document_kind="supporting_document". Otherwise return null.
+- Allowed supporting_document_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
+- Use supporting_document_routing_quality="usable" when the document appears to be the selected supporting-document type and the text/DI evidence is readable enough for downstream validation.
+- Use supporting_document_routing_quality="needs_review" when it is probably the selected supporting-document type but has legibility, completeness, mismatch, redaction, or ambiguity concerns.
+- Use supporting_document_routing_quality="requires_visual_review" when text/DI is not enough because the evidence depends on image content, such as photos, labels, or visual before/after proof.
+- Use supporting_document_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
+- supporting_document_routing_quality_reason is mandatory when supporting_document_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
 - Do not return supporting_document_located_fields. Supporting-document extraction is handled by a separate extraction call.
-- If document_kind is supplement or unknown, return eligibility_code=null, detected_upgrade_types=[], lineitem_mappings=[], and not_detected_upgrade_types=[].
-- If document_kind is supplement or unknown, return product_references with all values null.
+- If document_kind is supporting_document or unknown, return eligibility_code=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
+- If document_kind is supporting_document or unknown, return product_references with all values null.
 - Return only allowed upgrade_type_key values.
-- Return only allowed supplement_type_key values.
+- Return only allowed supporting_document_type_key values.
 - Set eligibility_code to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
 - Set product_references from exact invoice-visible product-list or product identity evidence when present. Use null for unknown values.
 - For AHRI evidence, put the exact AHRI reference in product_references.ahri_reference.
@@ -217,7 +214,6 @@ Rules:
 - Include an upgrade type only when direct invoice evidence supports that a Better Homes BC / CleanBC / ESP rebate claim is being made for that exact upgrade type.
 - Do not include every work component on the invoice. Classify rebate-claimed upgrade domains, not incidental construction scope, supporting materials, or labour categories.
 - Strong classification evidence includes an explicit upgrade-specific rebate line, an explicit CleanBC/Better Homes/ESP amount tied to that upgrade, or invoice wording that clearly presents the item as a claimed program upgrade.
-- Work-scope evidence without rebate/claim evidence may support lineitem_mappings, but it should not create a detected_upgrade_types row unless the work is itself clearly a rebate-claimed upgrade.
 - For each detected_upgrade_types[] row, classification_explanation must be a few concise sentences. Explain why the upgrade is classified, quote the key invoice evidence, and say whether the evidence is a direct rebate line or a direct work-scope claim.
 - Put the single best exact invoice phrase in evidence_text. Do not repeat the same phrase in extra evidence fields.
 - Do not classify from generic program boilerplate, rebate table summaries, sample-invoice instructions, supporting-document checklists, or text that merely lists possible Better Homes BC upgrades.
@@ -230,7 +226,6 @@ Rules:
 - For insulation, windows_doors, and health_and_safety_remediation, require direct invoice evidence that this work is being claimed as an ESP/CleanBC/Better Homes rebate upgrade.
 - For ventilation, require an explicit ventilation rebate claim or direct evidence of an eligible ventilation measure such as HRV, ERV, heat recovery ventilator, energy recovery ventilator, or eligible bathroom fan system. Generic ductwork, airflow, circulation, attic duct insulation, "Duct Work & Ventilation", or ventilation wording bundled inside a heat-pump/HVAC install is not enough by itself.
 - If the invoice shows exact rebate descriptions like "$10,500 for HVAC system" and "$1,500 for Service Upgrade", classify those rebate-claimed upgrade domains and do not infer unrelated upgrade claims from other scope text.
-- Use lineitem_mappings to map visible invoice line items to an allowed upgrade_type_key when the line item evidence is clear. Use an empty array if line-item mapping is unclear.
 - Use confidence from 0 to 100.
 - Prefer exact invoice phrases in evidence_text.
 - Prefer under-classification over over-classification. If the invoice clearly has two upgrade domains, return two, not every related program possibility.
@@ -282,6 +277,34 @@ Rules:
 - Do not make final eligibility decisions. Extract document evidence only.
 - If the DI text is too poor to locate a field, return null for that field rather than guessing.
 $supporting_document_extraction$,
+    $supporting_document_group_extraction$
+purpose-statement:
+You extract configured group-level located fields from a set of related supporting documents for the Better Homes BC Energy Savings Program. The application has already classified each file and created a group. You are not deciding final eligibility.
+
+Output-json-schema:
+{
+  "supporting_document_type_key": "before_after_photo_set",
+  "supporting_document_group_located_fields": [
+    {
+      "field_key": "string",
+      "value": null,
+      "confidence": 0,
+      "evidence_text": null
+    }
+  ]
+}
+
+Rules:
+- Return strict JSON only.
+- Do not include markdown outside JSON.
+- Use only the selected supporting_document_type_key and the group-level field tasks supplied in the user records.
+- Return one supporting_document_group_located_fields[] row for each configured group field task.
+- Copy each configured field_key exactly.
+- If a configured group value cannot be determined, return value=null, confidence=0, and evidence_text=null for that field.
+- Compare the child supporting documents together. Do not answer group completeness from one file alone.
+- Use confidence from 0 to 100.
+- Prefer concise evidence text that names the relevant child filename(s) or visible facts.
+$supporting_document_group_extraction$,
     $user0$
 User record 0 (Document Intelligence / OCR context):
 The user message includes Azure Document Intelligence raw JSON from the invoice OCR result.
@@ -344,6 +367,7 @@ INSERT INTO claims.validationgenai_config (
   system_record,
   classifier_system_record,
   supporting_document_extraction_system_record,
+  supporting_document_group_extraction_system_record,
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
@@ -355,6 +379,7 @@ INSERT INTO claims.validationgenai_config (
     system_record,
     classifier_system_record,
     supporting_document_extraction_system_record,
+    supporting_document_group_extraction_system_record,
     user_record0,
     admin_advice_intro,
     admin_advice_closing,
@@ -365,6 +390,7 @@ INSERT INTO claims.validationgenai_config (
     system_record = EXCLUDED.system_record,
     classifier_system_record = EXCLUDED.classifier_system_record,
     supporting_document_extraction_system_record = EXCLUDED.supporting_document_extraction_system_record,
+    supporting_document_group_extraction_system_record = EXCLUDED.supporting_document_group_extraction_system_record,
     user_record0 = EXCLUDED.user_record0,
     admin_advice_intro = EXCLUDED.admin_advice_intro,
     admin_advice_closing = EXCLUDED.admin_advice_closing,

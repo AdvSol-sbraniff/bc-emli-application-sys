@@ -98,18 +98,18 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit, whether a northern top-up is separately visible, and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, base cap comparison, and any separate northern-top-up check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_gas_propane_removal_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes fossil_fuel_removal_proof or permit_document.
-Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_consumption_baseline_reference_present', 'Check whether visible evidence supports the 500 L annual oil-consumption baseline for this oil-to-heat-pump claim.
 Use supporting-document located fields when supplied, especially utility_bill or utility_account_document fields such as utility_service_type_or_fuel_evidence, utility_provider, account_or_bill_date, account_number_or_reference, and fuel_consumption_quantity_or_period.
 Set rule_result="pass" when the invoice or supporting-document fields show at least 500 L of oil consumption within the relevant 12-month application period, or enough fuel-bill/receipt evidence for admin to confirm that threshold.
 Set rule_result="warn" when oil-consumption proof is present but the quantity, bill/receipt date, service period, or participant/home tie is incomplete or ambiguous.
 Set rule_result="fail" only when supplied evidence clearly contradicts the 500 L baseline, such as visible consumption below 500 L for the relevant period. Do not fail this rule solely because the proof document is missing; ashp_oil_consumption_proof_supporting_document_attached owns the attachment check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_consumption_proof_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill, utility_account_document, or equivalent oil-consumption proof for this oil-to-heat-pump claim.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and located_fields include readable oil/fuel consumption evidence, such as utility_service_type_or_fuel_evidence or fuel_consumption_quantity_or_period.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if present with supporting_document_routing_quality="usable" and located_fields include readable oil/fuel consumption evidence, such as utility_service_type_or_fuel_evidence or fuel_consumption_quantity_or_period.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_existing_heat_context_present', 'Check whether invoice text supports oil primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_non_integrated_area_review', 'If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
 Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
@@ -132,9 +132,9 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit, whether a northern top-up is separately visible, and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, base cap comparison, and any separate northern-top-up check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_removal_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes oil_removal_proof or permit_document.
-Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_backup_heat_not_fossil_present', 'Check whether visible backup heat evidence for this wood-to-heat-pump upgrade appears to be wood or electric rather than fossil fuel.
 Set rule_result="pass" when backup heat is clearly wood/electric or no fossil-backup concern is visible.
 Set rule_result="warn" when backup fuel context is missing or ambiguous.
@@ -155,9 +155,9 @@ Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost 
 In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
 In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_removal_or_wett_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set or wett_report.
-Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_not_combined_or_hpwh_scope', 'Check whether the invoice supports air-to-water space-heating-only scope and does not appear to be a combined space/water system or standalone heat pump water heater.
 Set rule_result="warn" if the air-to-water versus combined/HPWH distinction is ambiguous and admin should verify equipment scope.
 Set rule_result="fail" if domestic-hot-water/combined scope is clearly visible in a space-heating-only air-to-water ruleset.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -212,13 +212,13 @@ Set rule_result="pass" when the invoice/supporting-document evidence supports du
 Set rule_result="warn" when dual-fuel scope, fossil backup, controls, or integration context is incomplete or ambiguous.
 Set rule_result="fail" when the evidence clearly shows a normal full fuel-switch heat pump, non-ducted/non-dual-fuel system, or another scope that contradicts dual-fuel ducted heat-pump eligibility. Do not fail this rule solely because fossil backup system documentation is missing; dfhp_fossil_backup_system_supporting_document_attached owns that attachment check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_fossil_backup_system_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes fossil_backup_system_document or permit_document for this dual-fuel ducted heat-pump upgrade.
-Set rule_result="pass" if at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable retained/limited fossil backup system or permit evidence for the site/system.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if both fossil_backup_system_document and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if at least one required document type is present with supporting_document_routing_quality="usable" and located_fields contain readable retained/limited fossil backup system or permit evidence for the site/system.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if both fossil_backup_system_document and permit_document are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_heat_load_calc_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes f280_heat_load_calculation for this dual-fuel ducted heat-pump upgrade.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and located_fields include readable heat-load sizing evidence plus approval/program-acceptance evidence.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if present with supporting_document_routing_quality="usable" and located_fields include readable heat-load sizing evidence plus approval/program-acceptance evidence.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_non_integrated_area_review', 'If Non-Integrated Area evidence is visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
 Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
@@ -278,9 +278,9 @@ Set rule_result="fail" when visible dates clearly place the service upgrade outs
 Set rule_result="fail" when the service upgrade appears on a separate invoice and no associated heat pump / heat pump water heater install date or associated invoice date is visible.
 If same-invoice evidence is used, explain in reason_and_likely_causes that the invoice-level date is being used as the shared timing proxy.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_upgrade_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes utility_bill or electrical_utility_upgrade_document.
-Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('homeowner_identity_matches_eligibility_record', 'Check whether the homeowner/customer name visible on the invoice appears to match the participant/homeowner associated with the eligibility code on record.
 Use users.participant_name, users_eligibilitycodes.eligibility_code, and classifier.eligibility_code from the supplied database values.
 Use invoice_homeowner_name and eligibility_code from the OCR/DI JSON.
@@ -319,9 +319,9 @@ Set rule_result="warn" when fossil-fuel replacement is visible but removal/decom
 Set rule_result="fail" only when visible evidence contradicts removal/decommissioning, such as retaining the old fossil water heater as an active system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_fossil_removal_supporting_document_attached', 'If fossil-fuel water-heater replacement is visible, check whether supporting_document_summary_for_upgrade_type includes fossil_fuel_removal_proof or permit_document.
 Set rule_result="pass" if fossil fuel evidence is not present.
-Set rule_result="pass" if at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable removal/decommissioning or permit evidence for the site/system.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if fossil-fuel water-heater replacement is visible and both fossil_fuel_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if at least one required document type is present with supporting_document_routing_quality="usable" and located_fields contain readable removal/decommissioning or permit evidence for the site/system.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if fossil-fuel water-heater replacement is visible and both fossil_fuel_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_no_existing_or_secondary_hpwh_flag', 'Check whether invoice text suggests an existing heat pump water heater, replacement of an existing heat pump water heater, or a secondary/additional heat pump water heater.
 Set rule_result="fail" if existing/secondary/additional HPWH wording is visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_non_integrated_area_review', 'If fossil-fuel water-heater replacement and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
@@ -349,9 +349,9 @@ Set rule_result="fail" only if secondary/additional wording is clearly present.'
   ('hs_associated_upgrade_present', 'Check whether the invoice connects remediation to an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade.
 Set rule_result="warn" if association likely requires DB/application context and the invoice does not contradict an associated eligible upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_before_after_photos_attached', 'Check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_description_sufficient_for_review', 'Check whether the invoice description is sufficient for admin pre-review of remediation work, issue type, associated upgrade, rebate line, and amount.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_issue_type_present', 'Check whether the invoice clearly identifies an existing health and safety issue being remediated.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_not_standalone_flag', 'Flag whether the invoice appears to claim health and safety remediation on its own.
@@ -372,22 +372,22 @@ Set rule_result="warn" when the source-fuel path or conversion context is unclea
 Set rule_result="fail" when the visible source-fuel path or conversion story contradicts hydronic heat-pump eligibility. Do not fail this rule solely because removal/photo/WETT supporting documents are missing; hydronic_fossil_fuel_removal_supporting_document_attached and hydronic_wood_removal_or_wett_supporting_document_attached own those conditional attachment checks.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_fossil_fuel_removal_supporting_document_attached', 'If the visible source-fuel path is fossil fuel, check whether supporting_document_summary_for_upgrade_type includes fossil_fuel_removal_proof or permit_document.
 Set rule_result="pass" if fossil-fuel source path is not visible or not claimed.
-Set rule_result="pass" if fossil-fuel source path is visible and at least one required document type is present with supplement_routing_quality="usable" and located_fields contain readable fossil-removal/decommissioning or permit evidence for the site/system.
-Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supplement_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if fossil-fuel source path is visible and both fossil_fuel_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if fossil-fuel source path is visible and at least one required document type is present with supporting_document_routing_quality="usable" and located_fields contain readable fossil-removal/decommissioning or permit evidence for the site/system.
+Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if fossil-fuel source path is visible and both fossil_fuel_removal_proof and permit_document are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_wood_removal_or_wett_supporting_document_attached', 'If the visible source-fuel path is wood or solid fuel, check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set or wett_report.
 Set rule_result="pass" if wood/solid-fuel source path is not visible or not claimed.
-Set rule_result="pass" if wood/solid-fuel source path is visible and either required document type is present with supplement_routing_quality="usable" and located_fields contain readable removal-photo or WETT/safe-retention evidence for the site/system.
-Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supplement_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
-Set rule_result="fail" if wood/solid-fuel source path is visible and both before_after_photo_set and wett_report are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if wood/solid-fuel source path is visible and either required document type is present with supporting_document_routing_quality="usable" and located_fields contain readable removal-photo or WETT/safe-retention evidence for the site/system.
+Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
+Set rule_result="fail" if wood/solid-fuel source path is visible and both before_after_photo_set and wett_report are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_non_integrated_area_review', 'If fossil-fuel conversion and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
 Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no fossil-fuel Non-Integrated Area evidence is visible.
 Set rule_result="warn" when fossil-fuel Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('income_verification_supporting_documents_attached', 'Check whether supporting_document_summary includes income_verification_document.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if missing or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ins_description_sufficient_for_review', 'Check whether the invoice description is sufficient for admin pre-review of insulation scope, material, location, R-value, area, rebate line, and amount.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ins_health_safety_issue_flag', 'Check whether the invoice references pest, rodent, vermiculite, asbestos, mould, or removed insulation issues.
 Set rule_result="fail" only if unresolved issues appear to block processing or if evidence is unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -406,9 +406,9 @@ Set rule_result="warn" when the rebate amount or visible insulation cost is miss
 Set rule_result="fail" when the rebate clearly exceeds the visible insulation cost, clearly exceeds $5,500 overall, clearly exceeds the visible single-location cap/formula, or is claimed for ESP3.
 In calculation, show the visible location context, R-value added, area, formula/rate if available, visible insulation cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ins_supporting_documents_attached', 'Check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set and, when applicable, floor_plan_document.
-Set rule_result="pass" if the required document package is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if required document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if the required document package is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if required document types are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_invoice_arithmetic_consistent', 'Check whether the visible invoice arithmetic is internally consistent when invoice total, overall rebate, deposit, and amount due after rebate are shown.
 Invoices may use either of these acceptable arithmetic patterns:
 1. Customer amount owing model: expected_customer_due = invoice_total - overall_rebate_line_amount - customer_payment_or_deposit. Pass when expected_customer_due matches the visible customer amount due within normal invoice rounding.
@@ -438,9 +438,9 @@ Set rule_result="pass" if the invoice clearly describes the claimed upgrade doma
 Set rule_result="warn" if the invoice uses broad wording such as HVAC, service upgrade, insulation work, or remediation without enough detail to confirm the precise subtype but does not contradict the claimed domain. Admin should verify the exact upgrade subtype only.
 Set rule_result="fail" if the claimed upgrade domain is clearly absent or contradicted by the invoice.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('utility_account_supporting_document_attached', 'Check whether supporting_document_summary includes utility_bill or utility_account_document.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if missing or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_associated_upgrade_present', 'Check whether invoice text connects ventilation work to an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade.
 Set rule_result="warn" if this likely requires application/DB context and the invoice does not clearly show standalone ventilation.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_description_sufficient_for_review', 'Check whether the invoice description is sufficient for admin pre-review of ventilation scope, equipment, contractor, rebate line, and amount.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -492,9 +492,9 @@ Look for line items that identify windows/doors, quantities, models, U-factor, l
 Set rule_result="warn" if the scope is missing or ambiguous and admin should verify scope against application/quote context.
 Set rule_result="fail" if the visible scope appears ineligible, such as new construction, additions, skylights, interior doors, or unrelated glazing.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('wd_label_photo_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes manufacturer_label_photo.
-Set rule_result="pass" if present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if missing, listed in missing_configured_type_keys, or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('wd_no_skylights', 'Check whether the invoice appears to include skylights as part of the Windows and doors claim.
 Set rule_result="fail" only if the invoice clearly claims skylights.
 Set rule_result="pass" if there is no clear skylight evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -523,9 +523,9 @@ Set rule_result="warn" when hardware, labour, quantity, eligibility code, tax ba
 Set rule_result="fail" when visible values clearly show the claimed per-unit rebate exceeds the eligible cost calculation or $950 per-unit cap.
 In calculation, show the visible formula and values used. Do not invent missing line-item values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('wd_preapproval_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes preapproval_quote or preapproval_notice.
-Set rule_result="pass" if an acceptable document is present with supplement_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supplement_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supplement_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
+Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
+Set rule_result="fail" if all acceptable document types are missing, listed in missing_configured_type_keys, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('wd_rough_opening_evidence_present', 'Check whether the invoice appears to provide enough quantity/count evidence for an admin to reason about Rough Openings (RO).
 Program meaning:
 - The eligible count is based on Rough Openings (RO), not panes or individual glass sections.

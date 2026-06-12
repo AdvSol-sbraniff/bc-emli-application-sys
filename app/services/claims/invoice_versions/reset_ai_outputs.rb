@@ -27,9 +27,15 @@ module Claims
             scope.where.not(source_engine: "classifier") if @preserve_classifier
           scope.delete_all
 
-          ::Claims::InvoiceVersionLocatedField.where(
-            invoice_version_id: invoice_version.id
-          ).delete_all
+          located_field_scope =
+            ::Claims::InvoiceVersionLocatedField.where(
+              invoice_version_id: invoice_version.id
+            )
+          located_field_scope =
+            located_field_scope.where.not(
+              source_engine: "classifier"
+            ) if @preserve_classifier
+          located_field_scope.delete_all
 
           ::Claims::InvoiceVersionRulecheck.where(
             invoice_version_id: invoice_version.id

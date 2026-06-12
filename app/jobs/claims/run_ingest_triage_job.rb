@@ -26,10 +26,7 @@ module Claims
         updated_at: Time.current
       )
 
-      contextwindowjson =
-        build_classifier_contextwindowjson(
-          di_raw_json: document.di_read_raw_json
-        )
+      contextwindowjson = build_classifier_contextwindowjson(document: document)
       triage_payload = call_node_genai!(contextwindowjson: contextwindowjson)
       result =
         ::Claims::Ingest::ApplyDocumentTriageResult.call(
@@ -90,7 +87,7 @@ module Claims
         )
     end
 
-    def build_classifier_contextwindowjson(di_raw_json:)
+    def build_classifier_contextwindowjson(document:)
       config = ::Claims::ValidationgenaiConfig.order(:created_at).first
       sys = config&.classifier_system_record.to_s
       user0 = config&.user_record0.to_s
@@ -112,8 +109,13 @@ module Claims
         role: "user",
         content: [{ type: "input_text", text: <<~TEXT }]
               User record: Document to classify
+              File metadata:
+              original_filename: #{document.original_filename}
+              content_type: #{document.content_type}
+              byte_size: #{document.byte_size}
+
               Document Intelligence raw json:
-              #{di_raw_json.to_json}
+              #{document.di_read_raw_json.to_json}
 
               Actual ask:
               Classify the document. If it is a supporting document, classify the supporting document type and assess routing quality.

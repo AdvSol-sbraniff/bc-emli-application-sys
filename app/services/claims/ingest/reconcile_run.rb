@@ -45,7 +45,7 @@ module Claims
         running = 0
 
         invoice_version_ids.each do |invoice_version_id|
-          ocr = latest_step(run.id, invoice_version_id, "ocr")
+          ocr = latest_step(run.id, invoice_version_id, %w[ocr ocr_invoice])
 
           if ocr.nil?
             running += 1
@@ -136,7 +136,7 @@ module Claims
           .where(
             ingest_run_id: ingest_run_id,
             invoice_version_id: invoice_version_id,
-            step_type: step_type
+            step_type: Array(step_type)
           )
           .order(created_at: :desc)
           .first

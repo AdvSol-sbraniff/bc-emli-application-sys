@@ -3,7 +3,7 @@
 module Claims
   module Ingest
     class ApplyDocumentTriageResult
-      ALLOWED_DOCUMENT_KINDS = %w[invoice supplement unknown].freeze
+      ALLOWED_DOCUMENT_KINDS = %w[invoice supporting_document unknown].freeze
 
       def self.call(
         ingest_document_id: nil,
@@ -25,7 +25,7 @@ module Claims
 
       def call
         document_kind = normalized_document_kind
-        type_key = supplement_type_key
+        type_key = supporting_document_type_key
         type =
           ::Claims::SupportingDocumentType.find_by(
             type_key: type_key
@@ -60,22 +60,24 @@ module Claims
             ),
           classification_confidence:
             coerce_confidence(
-              @triage_payload["supplement_type_confidence"] ||
-                @triage_payload[:supplement_type_confidence] ||
+              @triage_payload["supporting_document_type_confidence"] ||
+                @triage_payload[:supporting_document_type_confidence] ||
                 @triage_payload["document_kind_confidence"] ||
                 @triage_payload[:document_kind_confidence]
             ),
           classification_reason:
             (
-              @triage_payload["supplement_type_reason"] ||
-                @triage_payload[:supplement_type_reason] ||
+              @triage_payload["supporting_document_type_reason"] ||
+                @triage_payload[:supporting_document_type_reason] ||
                 @triage_payload["document_kind_reason"] ||
                 @triage_payload[:document_kind_reason]
             ).to_s.presence,
-          supplement_routing_quality:
-            supplement_routing_quality(document_kind: document_kind),
-          supplement_routing_quality_reason:
-            supplement_routing_quality_reason(document_kind: document_kind),
+          supporting_document_routing_quality:
+            supporting_document_routing_quality(document_kind: document_kind),
+          supporting_document_routing_quality_reason:
+            supporting_document_routing_quality_reason(
+              document_kind: document_kind
+            ),
           classified_at: Time.current,
           updated_at: Time.current
         )
@@ -84,9 +86,11 @@ module Claims
           ok: true,
           document_kind: document_kind,
           document_kind_confidence: ingest_document.document_kind_confidence,
-          supplement_type_key: type_key,
-          supplement_type_confidence: ingest_document.classification_confidence,
-          supplement_routing_quality: ingest_document.supplement_routing_quality
+          supporting_document_type_key: type_key,
+          supporting_document_type_confidence:
+            ingest_document.classification_confidence,
+          supporting_document_routing_quality:
+            ingest_document.supporting_document_routing_quality
         }
       rescue => e
         { ok: false, error: e.message, error_class: e.class.name }
@@ -104,10 +108,10 @@ module Claims
         "unknown"
       end
 
-      def supplement_type_key
+      def supporting_document_type_key
         (
-          @triage_payload["supplement_type_key"] ||
-            @triage_payload[:supplement_type_key]
+          @triage_payload["supporting_document_type_key"] ||
+            @triage_payload[:supporting_document_type_key]
         ).to_s.strip.presence
       end
 
@@ -120,13 +124,13 @@ module Claims
         "needs_review"
       end
 
-      def supplement_routing_quality(document_kind:)
-        return nil unless document_kind == "supplement"
+      def supporting_document_routing_quality(document_kind:)
+        return nil unless document_kind == "supporting_document"
 
         value =
           (
-            @triage_payload["supplement_routing_quality"] ||
-              @triage_payload[:supplement_routing_quality]
+            @triage_payload["supporting_document_routing_quality"] ||
+              @triage_payload[:supporting_document_routing_quality]
           ).to_s.strip.presence
         if %w[usable needs_review requires_visual_review unusable].include?(
              value
@@ -137,12 +141,12 @@ module Claims
         nil
       end
 
-      def supplement_routing_quality_reason(document_kind:)
-        return nil unless document_kind == "supplement"
+      def supporting_document_routing_quality_reason(document_kind:)
+        return nil unless document_kind == "supporting_document"
 
         (
-          @triage_payload["supplement_routing_quality_reason"] ||
-            @triage_payload[:supplement_routing_quality_reason]
+          @triage_payload["supporting_document_routing_quality_reason"] ||
+            @triage_payload[:supporting_document_routing_quality_reason]
         ).to_s.presence
       end
 
@@ -173,11 +177,11 @@ module Claims
               @triage_payload["document_kind_confidence"] ||
                 @triage_payload[:document_kind_confidence]
             ),
-          supplement_type_key: supplement_type_key,
-          supplement_type_confidence:
+          supporting_document_type_key: supporting_document_type_key,
+          supporting_document_type_confidence:
             coerce_confidence(
-              @triage_payload["supplement_type_confidence"] ||
-                @triage_payload[:supplement_type_confidence]
+              @triage_payload["supporting_document_type_confidence"] ||
+                @triage_payload[:supporting_document_type_confidence]
             )
         }
       end

@@ -600,44 +600,7 @@ module Api
           return rows if rows.any?
         end
 
-        document_scope =
-          ::Claims::IngestDocument.where(
-            resolved_invoice_id: invoice_id,
-            document_kind: "invoice"
-          )
-        document_scope =
-          document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
-        document = document_scope.order(created_at: :asc).first
-        payload = document&.classifier_raw_json
-        return [] unless payload.is_a?(Hash)
-
-        detected =
-          payload["detected_upgrade_types"] || payload[:detected_upgrade_types]
-        return [] unless detected.is_a?(Array)
-
-        detected.filter_map.with_index do |row, index|
-          next unless row.is_a?(Hash)
-
-          {
-            id: "staged-classifier-#{index}",
-            invoice_version_id: document&.resolved_invoice_version_id,
-            invoice_upgrade_type_id: nil,
-            upgrade_type_key:
-              (row["upgrade_type_key"] || row[:upgrade_type_key]).to_s.presence,
-            upgrade_type_description:
-              (
-                row["upgrade_type_description"] ||
-                  row[:upgrade_type_description]
-              ).to_s.presence,
-            call_status: "classified",
-            confidence: row["confidence"] || row[:confidence],
-            evidence_text: row["evidence_text"] || row[:evidence_text],
-            classifier_notes:
-              row["classification_explanation"] ||
-                row[:classification_explanation],
-            updated_at: document&.classified_at || document&.updated_at
-          }
-        end
+        []
       end
 
       def serialize_revision_request(record)

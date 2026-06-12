@@ -179,11 +179,11 @@ WITH field_seed (
   ('floor_plan_document', 'floor_plan_address_or_project_reference', 4, 'Locate property address, project name, participant/customer name, or other case reference visible on the floor plan.', true),
   ('floor_plan_document', 'floor_plan_legibility_concern', 5, 'Locate or summarize any visible cutoff, missing scale, unreadable measurements, unclear room labels, or other legibility issue affecting floor-plan review.', true),
 
-  ('before_after_photo_set', 'before_photo_evidence', 1, 'Locate text, captions, filenames, or page labels indicating before-photo evidence.', true),
-  ('before_after_photo_set', 'after_photo_evidence', 2, 'Locate text, captions, filenames, or page labels indicating after-photo evidence.', true),
-  ('before_after_photo_set', 'subject_area_evidence', 3, 'Locate text or captions identifying the photographed subject or area, such as insulation, remediation, attic, wall, crawlspace, or label.', true),
-  ('before_after_photo_set', 'visual_review_limitation', 4, 'Summarize whether text-only DI is insufficient and visual review is required to confirm the photo content.', true),
-  ('before_after_photo_set', 'photo_pair_completeness_evidence', 5, 'Locate evidence that both before and after images are present for the same subject/system/area, or summarize if the pair appears incomplete from the text/DI evidence.', true)
+  ('before_after_photo_set', 'photo_role', 1, 'For this single uploaded file, identify whether the visible evidence appears to be a before photo, after photo, unknown, or not applicable.', true),
+  ('before_after_photo_set', 'visible_subject_or_area', 2, 'For this single uploaded file, summarize the visible photographed subject or area, such as insulation, remediation, attic, wall, crawlspace, window label, equipment label, or unknown.', true),
+  ('before_after_photo_set', 'visible_condition_summary', 3, 'For this single uploaded file, summarize the visible condition or work state shown in the image.', true),
+  ('before_after_photo_set', 'image_quality_or_legibility', 4, 'For this single uploaded file, summarize whether the image is clear enough for review and whether any visible text is legible.', true),
+  ('before_after_photo_set', 'visible_text_or_label_values', 5, 'For this single uploaded file, locate any visible text, captions, labels, or label values in the image.', true)
 )
 INSERT INTO claims.supporting_document_type_located_fields (
   supporting_document_type_id,
@@ -203,6 +203,40 @@ SELECT
   NOW(),
   NOW()
 FROM field_seed seed
+JOIN claims.supporting_document_types sdt
+  ON sdt.type_key = seed.supporting_document_type_key
+ON CONFLICT (supporting_document_type_id, field_key) DO UPDATE SET
+  field_number = EXCLUDED.field_number,
+  prompt_text = EXCLUDED.prompt_text,
+  enabled = EXCLUDED.enabled,
+  updated_at = NOW();
+
+WITH group_field_seed(supporting_document_type_key, field_key, field_number, prompt_text, enabled) AS (
+  VALUES
+    ('before_after_photo_set', 'before_photo_present', 1, 'Across all files in this supporting-document group, determine whether at least one before-photo is present. Explain the file/evidence used.', true),
+    ('before_after_photo_set', 'after_photo_present', 2, 'Across all files in this supporting-document group, determine whether at least one after-photo is present. Explain the file/evidence used.', true),
+    ('before_after_photo_set', 'photo_pair_completeness_evidence', 3, 'Across all files in this supporting-document group, determine whether the uploaded files together provide a complete before/after evidence pair for the same subject/system/area, or explain why the pair appears incomplete.', true),
+    ('before_after_photo_set', 'same_subject_or_area_evidence', 4, 'Across all files in this supporting-document group, summarize whether the photos appear to show the same subject, system, room, area, label, or work scope.', true),
+    ('before_after_photo_set', 'group_visual_consistency_summary', 5, 'Across all files in this supporting-document group, summarize the combined visual evidence and any review limitation, mismatch, or uncertainty.', true)
+)
+INSERT INTO claims.supporting_document_group_type_located_fields (
+  supporting_document_type_id,
+  field_key,
+  field_number,
+  prompt_text,
+  enabled,
+  created_at,
+  updated_at
+)
+SELECT
+  sdt.id,
+  seed.field_key,
+  seed.field_number,
+  seed.prompt_text,
+  seed.enabled,
+  NOW(),
+  NOW()
+FROM group_field_seed seed
 JOIN claims.supporting_document_types sdt
   ON sdt.type_key = seed.supporting_document_type_key
 ON CONFLICT (supporting_document_type_id, field_key) DO UPDATE SET

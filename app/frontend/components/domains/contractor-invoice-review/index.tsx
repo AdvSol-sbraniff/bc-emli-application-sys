@@ -245,7 +245,6 @@ export default function ContractorInvoiceReviewScreen() {
   const [showPdf, setShowPdf] = useState<boolean>(true);
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
   const [readData, setReadData] = useState<any>(null);
-  const [lineitems, setLineitems] = useState<any[]>([]);
   const [codeFields, setCodeFields] = useState<any[]>([]);
   const [genAiFields, setGenAiFields] = useState<any[]>([]);
   const [genAiRulechecks, setGenAiRulechecks] = useState<any[]>([]);
@@ -344,8 +343,6 @@ export default function ContractorInvoiceReviewScreen() {
             }
           : null,
       );
-      setLineitems(Array.isArray(readJson?.lineitems) ? readJson.lineitems : []);
-
       const pdfJson = await pdfResp.json().catch(() => ({}));
       if (!pdfResp.ok || !pdfJson?.sas_url) {
         setPdfUrl(null);
@@ -493,7 +490,6 @@ export default function ContractorInvoiceReviewScreen() {
       {
         description: string;
         fields: any[];
-        lineitems: any[];
         rulechecks: any[];
         upgradeTypeKey: string;
       }
@@ -507,7 +503,6 @@ export default function ContractorInvoiceReviewScreen() {
       const group = {
         description: upgradeTypeDescriptionFor(row),
         fields: [],
-        lineitems: [],
         rulechecks: [],
         upgradeTypeKey,
       };
@@ -516,7 +511,6 @@ export default function ContractorInvoiceReviewScreen() {
     };
 
     genAiFields.forEach((row) => ensureGroup(row).fields.push(row));
-    lineitems.forEach((row) => ensureGroup(row).lineitems.push(row));
     genAiRulechecks.forEach((row) => ensureGroup(row).rulechecks.push(row));
     upgradeTypeResults.forEach((row) => ensureGroup(row));
 
@@ -526,7 +520,7 @@ export default function ContractorInvoiceReviewScreen() {
       if (sortA !== sortB) return sortA - sortB;
       return a.description.localeCompare(b.description);
     });
-  }, [genAiFields, genAiRulechecks, lineitems, upgradeTypeResults]);
+  }, [genAiFields, genAiRulechecks, upgradeTypeResults]);
 
   const submitToAdmin = async () => {
     if (!currentInvoiceId || !canSubmit) return;
@@ -868,8 +862,7 @@ export default function ContractorInvoiceReviewScreen() {
                                   {meta.label}
                                 </Text>
                                 <Text fontSize="xs" opacity={0.65}>
-                                  {group.fields.length} fields - {group.rulechecks.length} rules -{' '}
-                                  {group.lineitems.length} line items
+                                  {group.fields.length} fields - {group.rulechecks.length} rules
                                 </Text>
                               </Box>
                             </Flex>
@@ -992,80 +985,6 @@ export default function ContractorInvoiceReviewScreen() {
                                       )}
                                     </Box>
                                   );
-                                })}
-                              </Box>
-                            )}
-                          </Box>
-
-                          <Box>
-                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
-                              Line items
-                            </Text>
-                            {group.lineitems.length === 0 ? (
-                              <Text fontSize="sm" opacity={0.7}>
-                                No line items for this upgrade type.
-                              </Text>
-                            ) : (
-                              <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
-                                {group.lineitems.map((lineitem: any) => {
-                                  const seq = lineitem.lineitem_seqno ?? lineitem.seqno ?? '-';
-                                  const rows = [
-                                    {
-                                      subKey: 'desc',
-                                      label: 'Description',
-                                      value: lineitem.ocr_description ?? '-',
-                                      page: lineitem.ocr_description_page,
-                                      polygon: lineitem.ocr_description_polygon,
-                                    },
-                                    {
-                                      subKey: 'qty',
-                                      label: 'Quantity',
-                                      value: lineitem.ocr_quantity != null ? String(lineitem.ocr_quantity) : '-',
-                                      page: lineitem.ocr_quantity_page,
-                                      polygon: lineitem.ocr_quantity_polygon,
-                                    },
-                                    {
-                                      subKey: 'unit',
-                                      label: 'Unit price',
-                                      value: lineitem.ocr_unit_price != null ? fmtMoney(lineitem.ocr_unit_price) : '-',
-                                      page: lineitem.ocr_unit_price_page,
-                                      polygon: lineitem.ocr_unit_price_polygon,
-                                    },
-                                    {
-                                      subKey: 'amt',
-                                      label: 'Amount',
-                                      value: lineitem.ocr_amount != null ? fmtMoney(lineitem.ocr_amount) : '-',
-                                      page: lineitem.ocr_amount_page,
-                                      polygon: lineitem.ocr_amount_polygon,
-                                    },
-                                  ];
-
-                                  return rows.map((row) => {
-                                    const clickable = row.page != null && row.polygon != null;
-                                    const highlightKey = `lineitem_${seq}_${row.subKey}`;
-                                    return (
-                                      <FieldRow
-                                        key={`${lineitem.id ?? `li-${seq}`}-${row.subKey}`}
-                                        label={`Line ${seq} - ${row.label}`}
-                                        value={row.value}
-                                        active={activeHighlightKey === highlightKey}
-                                        disabled={!clickable}
-                                        onClick={
-                                          clickable
-                                            ? () => {
-                                                setActiveHighlight({
-                                                  source: 'di',
-                                                  key: highlightKey,
-                                                  pageNumber: Number(row.page),
-                                                  polygon: row.polygon,
-                                                });
-                                                setActiveHighlightKey(highlightKey);
-                                              }
-                                            : undefined
-                                        }
-                                      />
-                                    );
-                                  });
                                 })}
                               </Box>
                             )}

@@ -1047,6 +1047,9 @@ export const InvoiceVersionShowScreen = () => {
   const uploadedSupportingDocuments = Array.isArray(readData?.uploaded_supporting_documents)
     ? readData.uploaded_supporting_documents
     : [];
+  const uploadedSupportingDocumentGroups = Array.isArray(readData?.uploaded_supporting_document_groups)
+    ? readData.uploaded_supporting_document_groups
+    : [];
   const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
 
   // ============================================================
@@ -1251,8 +1254,6 @@ export const InvoiceVersionShowScreen = () => {
                           {sortedLineitems.map((li: any) => {
                             const seq = li.lineitem_seqno ?? li.seqno ?? '-';
                             const lineitemKey = li.id ?? seq;
-                            const upgradeTypeKey = li.upgrade_type_key || 'common';
-                            const meta = getInvoiceUpgradeTypeMeta(upgradeTypeKey, li.upgrade_type_description);
                             const rows = [
                               {
                                 subKey: 'desc',
@@ -1294,25 +1295,10 @@ export const InvoiceVersionShowScreen = () => {
                                 p="10px"
                               >
                                 <Flex align="center" gap="8px" mb="8px" wrap="wrap">
-                                  <InvoiceUpgradeTypeTile
-                                    upgradeTypeKey={upgradeTypeKey}
-                                    description={li.upgrade_type_description}
-                                    size={28}
-                                  />
                                   <Text fontSize="sm" fontWeight="bold">
                                     Line {seq}
                                   </Text>
-                                  <Badge colorScheme="orange" variant="subtle" textTransform="none">
-                                    Likely upgrade type: {meta.label}
-                                  </Badge>
-                                  <Badge colorScheme="gray" variant="subtle" textTransform="none">
-                                    classifier guess
-                                  </Badge>
                                 </Flex>
-                                <Text fontSize="xs" opacity={0.65} mb="8px">
-                                  This grouping is a classifier hint only. Verify it if the upgrade type affects the
-                                  rule outcome.
-                                </Text>
                                 <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                                   {rows.map((row) => {
                                     const clickable = row.page != null && row.polygon != null;
@@ -1436,6 +1422,95 @@ export const InvoiceVersionShowScreen = () => {
 
                         <Box>
                           <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
+                            Group-level supporting evidence
+                          </Text>
+                          {uploadedSupportingDocumentGroups.length === 0 ? (
+                            <Text fontSize="sm" opacity={0.7}>
+                              No grouped supporting-document evidence stored for this invoice.
+                            </Text>
+                          ) : (
+                            <Box display="flex" flexDirection="column" gap="10px">
+                              {uploadedSupportingDocumentGroups.map((group: any) => (
+                                <Box
+                                  key={String(group?.id || group?.group_label || 'supporting-doc-group')}
+                                  borderWidth="1px"
+                                  borderColor="blue.100"
+                                  borderRadius="md"
+                                  bg="blue.50"
+                                  p="10px"
+                                >
+                                  <Flex align="center" gap="8px" mb="6px" wrap="wrap">
+                                    <Badge colorScheme="blue" variant="subtle" textTransform="none">
+                                      {String(
+                                        group?.group_label ||
+                                          group?.supporting_document_type_description ||
+                                          group?.supporting_document_type_key ||
+                                          'Grouped evidence',
+                                      )}
+                                    </Badge>
+                                    <Badge
+                                      colorScheme={group?.group_status === 'extracted' ? 'green' : 'gray'}
+                                      variant="subtle"
+                                    >
+                                      {String(group?.group_status || 'pending')}
+                                    </Badge>
+                                    <Text fontSize="xs" opacity={0.75}>
+                                      {Array.isArray(group?.original_filenames)
+                                        ? `${group.original_filenames.length} file(s)`
+                                        : '0 file(s)'}
+                                    </Text>
+                                  </Flex>
+
+                                  {Array.isArray(group?.original_filenames) && group.original_filenames.length > 0 && (
+                                    <Text fontSize="xs" opacity={0.75} mb="8px">
+                                      {group.original_filenames.filter(Boolean).map(String).join(', ')}
+                                    </Text>
+                                  )}
+
+                                  {Array.isArray(group?.located_fields) && group.located_fields.length > 0 ? (
+                                    <Box display="flex" flexDirection="column" gap="4px">
+                                      {group.located_fields.map((field: any) => (
+                                        <Box
+                                          key={String(field?.id || `${group?.id}:${field?.field_key}`)}
+                                          borderWidth="1px"
+                                          borderColor="blue.100"
+                                          borderRadius="md"
+                                          bg="white"
+                                          px="8px"
+                                          py="6px"
+                                        >
+                                          <Flex gap="8px" align="baseline" wrap="wrap" fontSize="xs">
+                                            <Text fontWeight="bold">{String(field?.field_key || 'field')}</Text>
+                                            <Text opacity={0.85}>
+                                              {field?.value_text != null
+                                                ? String(field.value_text)
+                                                : field?.value_json != null
+                                                  ? JSON.stringify(field.value_json)
+                                                  : 'not found'}
+                                            </Text>
+                                            <Text opacity={0.6}>confidence: {String(field?.confidence ?? 0)}</Text>
+                                          </Flex>
+                                          {String(field?.evidence_text || '').trim() && (
+                                            <Text fontSize="xs" opacity={0.75} mt="3px">
+                                              {String(field.evidence_text)}
+                                            </Text>
+                                          )}
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  ) : (
+                                    <Text fontSize="sm" opacity={0.7}>
+                                      No group-level located fields stored yet.
+                                    </Text>
+                                  )}
+                                </Box>
+                              ))}
+                            </Box>
+                          )}
+                        </Box>
+
+                        <Box>
+                          <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="6px">
                             Uploaded supporting documents
                           </Text>
                           {uploadedSupportingDocuments.length === 0 ? (
@@ -1486,14 +1561,14 @@ export const InvoiceVersionShowScreen = () => {
                                     </Text>
                                   )}
 
-                                  {String(doc?.supplement_routing_quality || '').trim() && (
+                                  {String(doc?.supporting_document_routing_quality || '').trim() && (
                                     <Box mt="6px">
                                       <Badge colorScheme="teal" variant="subtle" textTransform="none">
-                                        routing: {String(doc.supplement_routing_quality)}
+                                        routing: {String(doc.supporting_document_routing_quality)}
                                       </Badge>
-                                      {String(doc?.supplement_routing_quality_reason || '').trim() && (
+                                      {String(doc?.supporting_document_routing_quality_reason || '').trim() && (
                                         <Text fontSize="xs" opacity={0.8} mt="4px">
-                                          {String(doc.supplement_routing_quality_reason)}
+                                          {String(doc.supporting_document_routing_quality_reason)}
                                         </Text>
                                       )}
                                     </Box>

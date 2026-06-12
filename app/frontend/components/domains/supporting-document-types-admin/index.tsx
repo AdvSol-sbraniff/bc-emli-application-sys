@@ -247,6 +247,13 @@ export default function SupportingDocumentTypesAdminScreen() {
     });
   };
 
+  const openGroupFields = (row: SupportingDocumentTypeRow) => {
+    navigate({
+      pathname: '/supporting-document-group-type-fields-admin',
+      search: `?${buildSearchParams({ type_id: row.id }).toString()}`,
+    });
+  };
+
   const closeEditor = () => {
     navigate('/supporting-document-types-admin');
     setError('');
@@ -433,7 +440,7 @@ export default function SupportingDocumentTypesAdminScreen() {
                 Supporting document type registry
               </Text>
               <Text fontSize="sm" opacity={0.7}>
-                Manage the supplement-type classifications used by the mixed upload pipeline.
+                Manage the supporting-document classifications used by the mixed upload pipeline.
               </Text>
             </Box>
             <Button leftIcon={<Plus size={16} />} onClick={openCreate}>
@@ -517,6 +524,16 @@ export default function SupportingDocumentTypesAdminScreen() {
                                 variant="ghost"
                                 size="xs"
                                 onClick={() => openFields(row)}
+                              />
+                            </Tooltip>
+                            <Tooltip label="Manage group fields">
+                              <IconButton
+                                aria-label="Manage supporting document group fields"
+                                icon={<ListChecks size={18} />}
+                                colorScheme="blue"
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => openGroupFields(row)}
                               />
                             </Tooltip>
                             <Tooltip label="Edit type">
@@ -641,6 +658,16 @@ export default function SupportingDocumentTypesAdminScreen() {
                                   variant="ghost"
                                   size="xs"
                                   onClick={() => openFields(row)}
+                                />
+                              </Tooltip>
+                              <Tooltip label="Manage group fields">
+                                <IconButton
+                                  aria-label="Manage supporting document group fields"
+                                  icon={<ListChecks size={18} />}
+                                  colorScheme="blue"
+                                  variant="ghost"
+                                  size="xs"
+                                  onClick={() => openGroupFields(row)}
                                 />
                               </Tooltip>
                               <Tooltip label="Edit type">

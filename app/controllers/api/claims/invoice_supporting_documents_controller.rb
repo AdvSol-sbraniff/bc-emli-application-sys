@@ -51,13 +51,18 @@ module Api
             .supporting_documents
             .includes(
               :supporting_document_type,
+              :supporting_document_group,
               :supporting_document_located_fields,
               :supporting_document_visual_findings
             )
             .order(created_at: :desc, id: :desc)
             .map { |row| serialize_supporting_document(row) }
 
-        render json: { rows: rows }, status: :ok
+        render json: {
+                 rows: rows,
+                 groups: serialize_supporting_document_groups(invoice)
+               },
+               status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: {
                  error: "Invoice not found",
@@ -154,6 +159,7 @@ module Api
         {
           id: row.id,
           invoice_id: row.invoice_id,
+          supporting_document_group_id: row.supporting_document_group_id,
           supporting_document_type_id: row.supporting_document_type_id,
           supporting_document_type_key: row.supporting_document_type&.type_key,
           supporting_document_type_description:
@@ -161,9 +167,10 @@ module Api
           classification_status: row.classification_status,
           classification_confidence: row.classification_confidence,
           classification_reason: row.classification_reason,
-          supplement_routing_quality: row.supplement_routing_quality,
-          supplement_routing_quality_reason:
-            row.supplement_routing_quality_reason,
+          supporting_document_routing_quality:
+            row.supporting_document_routing_quality,
+          supporting_document_routing_quality_reason:
+            row.supporting_document_routing_quality_reason,
           located_fields: serialize_located_fields(row),
           visual_findings: serialize_visual_findings(row),
           classified_at: row.classified_at,
@@ -177,6 +184,69 @@ module Api
           created_at: row.created_at,
           updated_at: row.updated_at
         }
+      end
+
+      def serialize_supporting_document_groups(invoice)
+        invoice
+          .supporting_document_groups
+          .includes(
+            :supporting_document_type,
+            :supporting_documents,
+            supporting_document_group_located_fields:
+              :supporting_document_group_type_located_field
+          )
+          .order(created_at: :desc, id: :desc)
+          .map do |group|
+            docs =
+              group.supporting_documents.sort_by do |doc|
+                [doc.original_filename.to_s.downcase, doc.id]
+              end
+
+            {
+              id: group.id,
+              invoice_id: group.invoice_id,
+              supporting_document_type_id: group.supporting_document_type_id,
+              supporting_document_type_key:
+                group.supporting_document_type&.type_key,
+              supporting_document_type_description:
+                group.supporting_document_type&.description,
+              group_label: group.group_label,
+              group_status: group.group_status,
+              supporting_document_ids: docs.map(&:id),
+              original_filenames: docs.map(&:original_filename),
+              located_fields: serialize_group_located_fields(group),
+              created_at: group.created_at,
+              updated_at: group.updated_at
+            }
+          end
+      end
+
+      def serialize_group_located_fields(group)
+        group
+          .supporting_document_group_located_fields
+          .sort_by { |field| [field.field_key.to_s, field.created_at] }
+          .map do |field|
+            definition = field.supporting_document_group_type_located_field
+            field.as_json(
+              only: %i[
+                id
+                supporting_document_group_id
+                supporting_document_group_type_located_field_id
+                source_engine
+                field_key
+                value_type
+                value_text
+                value_json
+                confidence
+                evidence_text
+                created_at
+                updated_at
+              ]
+            ).merge(
+              "field_number" => definition&.field_number,
+              "prompt_text" => definition&.prompt_text
+            )
+          end
       end
 
       def serialize_located_fields(row)

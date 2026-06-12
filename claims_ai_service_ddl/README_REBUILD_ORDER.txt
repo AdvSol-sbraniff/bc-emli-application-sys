@@ -38,9 +38,6 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 - `8_enforce_separate_supporting_document_extraction.sql`
   - Run once against an existing claims schema to collapse classifier config to one routing-only prompt and make supporting-document field extraction a separate pipeline step.
   - A clean rebuild from `2_create_schema.sql` already includes these columns and step-type constraints.
-- `8_redo_invoice_package_ingest_documents.sql`
-  - Run once against an existing claims schema to make `claims.ingest_documents` a child of `claims.invoices`, add promotion traceability, and add redo-package/case-facts/aggregate step types.
-  - A clean rebuild from `2_create_schema.sql` already includes these columns and constraints.
 - `8_create_awhp_product_list.sql`
   - Run once against an existing claims schema to add Better Homes BC air-to-water / combined heat pump product-list tables and `claims.invoice_versions.awhp_product_id`.
   - A clean rebuild from `2_create_schema.sql` already includes these tables and columns.

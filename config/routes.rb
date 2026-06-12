@@ -115,20 +115,6 @@ Rails.application.routes.draw do
           to: "invoice_supporting_documents#pdf_url"
       get "admin/supporting_documents/:id/pdf",
           to: "invoice_supporting_documents#pdf"
-      get "admin/invoices/:invoice_id/redo_package/context",
-          to: "redo_invoice_package#context"
-      get "admin/invoices/:invoice_id/redo_package/documents",
-          to: "redo_invoice_package#documents"
-      post "admin/invoices/:invoice_id/redo_package/documents",
-           to: "redo_invoice_package#create"
-      post "admin/invoices/:invoice_id/redo_package",
-           to: "redo_invoice_package#redo"
-      delete "admin/redo_package/documents/:id",
-             to: "redo_invoice_package#destroy"
-      get "admin/redo_package/documents/:id/pdf_url",
-          to: "redo_invoice_package#pdf_url"
-      get "admin/redo_package/documents/:id/pdf", to: "redo_invoice_package#pdf"
-
       get "admin/reports/volume_value/summary",
           to: "reports_volume_value#summary"
       get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"
@@ -165,8 +151,6 @@ Rails.application.routes.draw do
       post "ingest/admin_submit_batch", to: "ingest#admin_submit_batch"
 
       post "ingest/run_ocr", to: "ingest#run_ocr"
-
-      post "ingest/run_genai", to: "ingest#run_genai"
 
       # ============================================================
       # SECTION 50 — ADMIN / POC (claims)
@@ -240,6 +224,14 @@ Rails.application.routes.draw do
           to: "supporting_document_type_located_fields_admin#show"
       patch "admin/supporting_document_type_located_fields/:id",
             to: "supporting_document_type_located_fields_admin#update"
+      get "admin/supporting_document_types/:supporting_document_type_id/group_located_fields",
+          to: "supporting_document_group_type_located_fields_admin#index"
+      post "admin/supporting_document_types/:supporting_document_type_id/group_located_fields",
+           to: "supporting_document_group_type_located_fields_admin#create"
+      get "admin/supporting_document_group_type_located_fields/:id",
+          to: "supporting_document_group_type_located_fields_admin#show"
+      patch "admin/supporting_document_group_type_located_fields/:id",
+            to: "supporting_document_group_type_located_fields_admin#update"
       get "admin/validation_rules/:record_type/:id/history",
           to: "validation_rules_admin#history"
       post "admin/validation_rules/:record_type",

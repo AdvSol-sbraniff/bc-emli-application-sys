@@ -95,6 +95,11 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
         { href: '/supporting-document-type-fields-admin', title: 'Located Fields' },
       ],
+      '/supporting-document-group-type-fields-admin': [
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
+        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
+        { href: '/supporting-document-group-type-fields-admin', title: 'Group Located Fields' },
+      ],
       '/downloads-admin': [{ href: '/downloads-admin', title: 'Downloads' }],
       '/heat-pump-product-list-admin': [
         { href: '/downloads-admin', title: 'Downloads' },
@@ -122,10 +127,6 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/invoice-versions-admin', title: 'Versions History Inspection' },
       ],
-      '/ai-admin': [
-        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/ai-admin', title: 'Redo GenAI Only' },
-      ],
       '/hello-ai-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/hello-ai-admin', title: 'Hello AI' },
@@ -141,10 +142,6 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/invoice-supporting-documents-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/invoice-supporting-documents-admin', title: 'Invoice Supporting Documents' },
-      ],
-      '/redo-invoice-package': [
-        { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/redo-invoice-package', title: 'Redo Invoice Package' },
       ],
       '/submission-simulator-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
@@ -217,6 +214,29 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
             ...(recordId ? { id: recordId } : {}),
           }).toString()}`,
           title: validationRulesMode === 'create' ? 'Add Field' : 'Edit Field',
+        },
+      ]);
+      return;
+    }
+
+    if (path === '/supporting-document-group-type-fields-admin' && validationRulesMode) {
+      const typeId = searchParams.get('type_id') || '';
+      const recordId = searchParams.get('id') || '';
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
+        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
+        {
+          href: `/supporting-document-group-type-fields-admin${typeId ? `?type_id=${encodeURIComponent(typeId)}` : ''}`,
+          title: 'Group Located Fields',
+        },
+        {
+          href: `/supporting-document-group-type-fields-admin?${new URLSearchParams({
+            ...(typeId ? { type_id: typeId } : {}),
+            mode: validationRulesMode,
+            ...(recordId ? { id: recordId } : {}),
+          }).toString()}`,
+          title: validationRulesMode === 'create' ? 'Add Group Field' : 'Edit Group Field',
         },
       ]);
       return;

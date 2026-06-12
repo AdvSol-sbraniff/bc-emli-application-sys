@@ -110,10 +110,16 @@ export class InvService {
     await containerClient.createIfNotExists();
 
     const blobClient = containerClient.getBlockBlobClient(storageKey);
+    const blobContentType =
+      args.contentType && args.contentType !== 'application/octet-stream'
+        ? args.contentType
+        : this.contentTypeFromStorageKey(filename) ||
+          args.contentType ||
+          'application/pdf';
 
     const uploadResp = await blobClient.uploadData(args.buffer, {
       blobHTTPHeaders: {
-        blobContentType: args.contentType || 'application/pdf',
+        blobContentType,
       },
       metadata: {
         original_name: (args.originalName || '').slice(0, 200),
@@ -162,10 +168,16 @@ export class InvService {
     await containerClient.createIfNotExists();
 
     const blobClient = containerClient.getBlockBlobClient(storageKey);
+    const blobContentType =
+      args.contentType && args.contentType !== 'application/octet-stream'
+        ? args.contentType
+        : this.contentTypeFromStorageKey(filename) ||
+          args.contentType ||
+          'application/pdf';
 
     const uploadResp = await blobClient.uploadData(args.buffer, {
       blobHTTPHeaders: {
-        blobContentType: args.contentType || 'application/pdf',
+        blobContentType,
       },
       metadata: {
         original_name: (args.originalName || '').slice(0, 200),
@@ -304,12 +316,16 @@ export class InvService {
     return { di_raw_json };
   }
 
-  private async runDiAnalyzeFromBytes(pdfBuffer: Buffer, modelId: string) {
+  private async runDiAnalyzeFromBytes(
+    fileBuffer: Buffer,
+    modelId: string,
+    contentType: string,
+  ) {
     const initialResponse = await this.client
       .path('/documentModels/{modelId}:analyze', modelId)
       .post({
-        body: pdfBuffer as any,
-        contentType: 'application/pdf',
+        body: fileBuffer as any,
+        contentType: contentType as any,
       });
 
     if (isUnexpected(initialResponse)) {
@@ -344,12 +360,20 @@ export class InvService {
 
     const containerClient = this.blobSvc.getContainerClient(container);
     const blobClient = containerClient.getBlockBlobClient(storageKey);
-    const pdfBuffer = await blobClient.downloadToBuffer();
+    const [fileBuffer, properties] = await Promise.all([
+      blobClient.downloadToBuffer(),
+      blobClient.getProperties(),
+    ]);
+    const contentType =
+      properties.contentType ||
+      this.contentTypeFromStorageKey(storageKey) ||
+      'application/pdf';
 
     // Send bytes directly so private-only storage does not need to be reachable by DI.
     const { di_raw_json } = await this.runDiAnalyzeFromBytes(
-      pdfBuffer,
+      fileBuffer,
       args.modelId,
+      contentType,
     );
 
     return {
@@ -402,7 +426,10 @@ export class InvService {
     return {
       container,
       storage_key: storageKey,
-      content_type: properties.contentType || 'application/pdf',
+      content_type:
+        properties.contentType ||
+        this.contentTypeFromStorageKey(storageKey) ||
+        'application/pdf',
       byte_size: buffer.length,
       filename: storageKey.split('/').pop() || 'document.pdf',
       buffer,
@@ -417,6 +444,14 @@ export class InvService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private contentTypeFromStorageKey(storageKey: string): string | undefined {
+    const lower = storageKey.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    return undefined;
   }
 
   private retryAfterMs(error: any): number | undefined {
@@ -593,20 +628,31 @@ export class InvService {
         container: attachment.container,
         storageKey,
       });
-      const contentType = blob.content_type || 'application/pdf';
+      const contentType =
+        blob.content_type ||
+        this.contentTypeFromStorageKey(storageKey) ||
+        'application/pdf';
       const filename =
         String(attachment.filename || blob.filename || 'document.pdf').trim() ||
         'document.pdf';
 
       attachmentParts.push({
         type: 'input_text',
-        text: `Attached supporting document PDF: ${filename}`,
+        text: `Attached supporting document file: ${filename}`,
       });
-      attachmentParts.push({
-        type: 'input_file',
-        filename,
-        file_data: `data:${contentType};base64,${blob.buffer.toString('base64')}`,
-      });
+      const dataUrl = `data:${contentType};base64,${blob.buffer.toString('base64')}`;
+      if (contentType === 'image/jpeg' || contentType === 'image/png') {
+        attachmentParts.push({
+          type: 'input_image',
+          image_url: dataUrl,
+        });
+      } else {
+        attachmentParts.push({
+          type: 'input_file',
+          filename,
+          file_data: dataUrl,
+        });
+      }
     }
 
     if (attachmentParts.length === 0) return input;

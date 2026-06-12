@@ -120,21 +120,6 @@ module Claims
           unless li_result[:ok] || li_result["ok"]
             raise "ApplyDiLineitems failed: #{li_result[:error] || li_result["error"] || "unknown error"}"
           end
-
-          if genai_mode == "use_existing_classifier"
-            classifier_payload =
-              existing_classifier_payload_for(invoice_version_id: iv.id)
-            if classifier_payload.present?
-              classifier_result =
-                ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
-                  invoice_version_id: iv.id,
-                  classifier_payload: classifier_payload
-                )
-              unless classifier_result[:ok]
-                raise "ApplyClassifierResult failed: #{classifier_result.inspect}"
-              end
-            end
-          end
         end
       end
 
@@ -159,7 +144,8 @@ module Claims
       end
 
       if ingest_run_id.present?
-        if %w[ocr_read ocr_invoice].include?(step_type)
+        if bundle_ingest_run?(ingest_run_id) &&
+             %w[ocr_read ocr_invoice].include?(step_type)
           Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
         else
           Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
@@ -185,7 +171,8 @@ module Claims
 
       begin
         if ingest_run_id.present?
-          if %w[ocr_read ocr_invoice].include?(step_type)
+          if bundle_ingest_run?(ingest_run_id) &&
+               %w[ocr_read ocr_invoice].include?(step_type)
             Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
           else
             Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
@@ -200,37 +187,8 @@ module Claims
 
     private
 
-    def existing_classifier_payload_for(invoice_version_id:)
-      document =
-        Claims::IngestDocument.find_by(
-          resolved_invoice_version_id: invoice_version_id,
-          document_kind: "invoice"
-        )
-      payload = document&.classifier_raw_json
-      return payload if payload.is_a?(Hash)
-
-      invoice_id =
-        Claims::InvoiceVersion.where(id: invoice_version_id).pick(:invoice_id)
-      document =
-        Claims::IngestDocument
-          .where(resolved_invoice_id: invoice_id, document_kind: "invoice")
-          .order(created_at: :asc)
-          .first
-      payload = document&.classifier_raw_json
-      return payload if payload.is_a?(Hash)
-
-      step =
-        Claims::IngestStepRun
-          .where(
-            invoice_version_id: invoice_version_id,
-            step_type: "triage_classifier",
-            status: "succeeded"
-          )
-          .order(created_at: :desc)
-          .first
-
-      payload = step&.genai_results_json
-      payload.is_a?(Hash) ? payload : nil
+    def bundle_ingest_run?(ingest_run_id)
+      Claims::IngestDocument.exists?(ingest_run_id: ingest_run_id)
     end
   end
 end

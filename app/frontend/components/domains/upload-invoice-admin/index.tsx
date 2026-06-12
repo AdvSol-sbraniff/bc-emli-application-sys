@@ -41,7 +41,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 //     POST /api/claims/sessions/:session_id/upload  (multipart/form-data)
 // - Stores selection in URL as session_id
 // - After upload, shows invoice_id + invoice_version_id with copy buttons
-// - Optional: button to open Job Admin in new tab with session_id + invoice_version_id
+// - Optional: buttons to copy IDs and open the invoice grid
 // ============================================================
 
 type SessionRow = {
@@ -198,12 +198,7 @@ export default observer(function UploadInvoiceAdminScreen() {
   const [invoiceId, setInvoiceId] = useState<string>('');
   const [invoiceVersionId, setInvoiceVersionId] = useState<string>('');
 
-  const {
-    isOpen: isHelpOpen,
-    onOpen: onHelpOpen,
-    onClose: onHelpClose,
-  } = useDisclosure();
-
+  const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
   const openFileChooser = () => {
     setUploadError('');
@@ -244,7 +239,6 @@ export default observer(function UploadInvoiceAdminScreen() {
     setUploadError('');
     setUploadOkMsg('');
 
-
     // new upload => new ids
     setInvoiceId('');
     setInvoiceVersionId('');
@@ -262,8 +256,6 @@ export default observer(function UploadInvoiceAdminScreen() {
         body: form,
       });
 
-
-
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
@@ -274,10 +266,7 @@ export default observer(function UploadInvoiceAdminScreen() {
       if (ids.invoice_id) setInvoiceId(ids.invoice_id);
       if (ids.invoice_version_id) setInvoiceVersionId(ids.invoice_version_id);
 
-      const msg =
-        data?.message ||
-        data?.summary ||
-        `Upload accepted for session ${sid} (1 file).`;
+      const msg = data?.message || data?.summary || `Upload accepted for session ${sid} (1 file).`;
 
       setUploadOkMsg(String(msg));
     } catch (err: any) {
@@ -286,23 +275,6 @@ export default observer(function UploadInvoiceAdminScreen() {
       setIsUploading(false);
     }
   };
-
-const openJobAdmin = () => {
-  const sid = sessionIdFromUrl.trim();
-  const iid = invoiceId.trim();
-  const ivid = invoiceVersionId.trim();
-
-  if (!sid) return;
-  if (!iid) return;
-  if (!ivid) return;
-
-  const url =
-    `/ai-admin?session_id=${encodeURIComponent(sid)}` +
-    `&invoice_id=${encodeURIComponent(iid)}` +
-    `&invoice_version_id=${encodeURIComponent(ivid)}`;
-
-  window.open(url, '_blank');
-};
 
   // ============================================================
   // SECTION 04 — RENDER
@@ -335,44 +307,76 @@ const openJobAdmin = () => {
             </Text>
 
             <Box>
-              <Text as="div" fontSize="xs" opacity={0.7}>Session ID</Text>
-              <Text as="div" fontSize="xs" fontFamily="mono">{sessionIdFromUrl || '—'}</Text>
+              <Text as="div" fontSize="xs" opacity={0.7}>
+                Session ID
+              </Text>
+              <Text as="div" fontSize="xs" fontFamily="mono">
+                {sessionIdFromUrl || '—'}
+              </Text>
             </Box>
 
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mt={2}>
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Contractor name</Text>
-                <Text as="div" fontSize="sm">{selectedSession?.contractor_business_name ?? '—'}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Contractor name
+                </Text>
+                <Text as="div" fontSize="sm">
+                  {selectedSession?.contractor_business_name ?? '—'}
+                </Text>
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Contractor number</Text>
-                <Text as="div" fontSize="sm" fontFamily="mono">{selectedSession?.contractor_number ?? '—'}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Contractor number
+                </Text>
+                <Text as="div" fontSize="sm" fontFamily="mono">
+                  {selectedSession?.contractor_number ?? '—'}
+                </Text>
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Representative invoice submitted at</Text>
-                <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.submitted_at)}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Representative invoice submitted at
+                </Text>
+                <Text as="div" fontSize="sm" fontFamily="mono">
+                  {fmtTs(selectedSession?.submitted_at)}
+                </Text>
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Created at</Text>
-                <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.created_at)}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Created at
+                </Text>
+                <Text as="div" fontSize="sm" fontFamily="mono">
+                  {fmtTs(selectedSession?.created_at)}
+                </Text>
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Updated at</Text>
-                <Text as="div" fontSize="sm" fontFamily="mono">{fmtTs(selectedSession?.updated_at)}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Updated at
+                </Text>
+                <Text as="div" fontSize="sm" fontFamily="mono">
+                  {fmtTs(selectedSession?.updated_at)}
+                </Text>
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Contractor email</Text>
-                <Text as="div" fontSize="sm">{selectedSession?.contractor_email ?? '—'}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Contractor email
+                </Text>
+                <Text as="div" fontSize="sm">
+                  {selectedSession?.contractor_email ?? '—'}
+                </Text>
               </Box>
 
               <Box>
-                <Text as="div" fontSize="xs" opacity={0.7}>Contractor city</Text>
-                <Text as="div" fontSize="sm">{selectedSession?.contractor_city ?? '—'}</Text>
+                <Text as="div" fontSize="xs" opacity={0.7}>
+                  Contractor city
+                </Text>
+                <Text as="div" fontSize="sm">
+                  {selectedSession?.contractor_city ?? '—'}
+                </Text>
               </Box>
             </SimpleGrid>
           </Box>
@@ -452,10 +456,6 @@ const openJobAdmin = () => {
                   isDisabled={!invoiceVersionId.trim()}
                 >
                   Copy invoice_version_id
-                </Button>
-
-                <Button size="sm" onClick={openJobAdmin} isDisabled={!sessionIdFromUrl.trim() || !invoiceVersionId.trim()}>
-                  Open Job Admin
                 </Button>
 
                 <Button
@@ -608,11 +608,17 @@ const openJobAdmin = () => {
                           {fmtDate(r.created_at)}
                         </Td>
 
-                        <Td fontSize="sm" whiteSpace="nowrap">{r.contractor_business_name ?? '—'}</Td>
+                        <Td fontSize="sm" whiteSpace="nowrap">
+                          {r.contractor_business_name ?? '—'}
+                        </Td>
 
-                        <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">{r.contractor_number ?? '—'}</Td>
+                        <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+                          {r.contractor_number ?? '—'}
+                        </Td>
 
-                        <Td fontSize="sm" whiteSpace="nowrap">{r.contractor_city ?? '—'}</Td>
+                        <Td fontSize="sm" whiteSpace="nowrap">
+                          {r.contractor_city ?? '—'}
+                        </Td>
 
                         <Td fontFamily="mono" fontSize="xs">
                           {r.status ?? '—'}
@@ -693,42 +699,48 @@ const openJobAdmin = () => {
           <DrawerHeader>Upload Invoice Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This screen has a single flow: confirm session, upload invoice, then continue to processing/admin follow-up.
+              This screen has a single flow: confirm session, upload invoice, then continue to processing/admin
+              follow-up.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Confirm session
             </Text>
             <Text fontSize="sm" mb={3}>
-              Confirm the session populated from Invoices Admin before uploading. If needed, you can change it from the optional session grid at the bottom.
+              Confirm the session populated from Invoices Admin before uploading. If needed, you can change it from the
+              optional session grid at the bottom.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Contractor relationship
             </Text>
             <Text fontSize="sm" mb={3}>
-              One contractor belongs to the whole session. That means all invoices inside that session share the same contractor context.
+              One contractor belongs to the whole session. That means all invoices inside that session share the same
+              contractor context.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Upload invoice
             </Text>
             <Text fontSize="sm" mb={3}>
-              Upload only stores the PDF file and creates upload records. It does not run OCR and it does not run GenAI checks.
+              Upload only stores the PDF file and creates upload records. It does not run OCR and it does not run GenAI
+              checks.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               What happens next
             </Text>
             <Text fontSize="sm" mb={3}>
-              After upload, run OCR and GenAI from the appropriate admin workflow when you are ready. Keeping upload separate from processing makes retries and troubleshooting easier.
+              After upload, run OCR and GenAI from the appropriate admin workflow when you are ready. Keeping upload
+              separate from processing makes retries and troubleshooting easier.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
               Simple example
             </Text>
             <Text fontSize="sm">
-              If a session has 5 invoices, all 5 are tied to the same contractor through that session. Upload here only places files in storage; OCR/GenAI are separate processing steps.
+              If a session has 5 invoices, all 5 are tied to the same contractor through that session. Upload here only
+              places files in storage; OCR/GenAI are separate processing steps.
             </Text>
           </DrawerBody>
         </DrawerContent>

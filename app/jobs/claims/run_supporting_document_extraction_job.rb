@@ -13,7 +13,7 @@ module Claims
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
       end
-      unless document.document_kind == "supplement"
+      unless document.document_kind == "supporting_document"
         raise "Document is not a supporting document: ingest_document_id=#{document.id}"
       end
       if document.supporting_document_type_id.blank?
@@ -122,7 +122,7 @@ module Claims
 
                 Actual ask:
                 Extract the configured supporting_document_located_fields and relevant visual_findings for supporting_document_type_key=#{type.type_key}.
-                The original supporting-document PDF is attached as an input_file. Use both the DI-read text and the attached PDF page visuals.
+                The original supporting-document file is attached as an input_file. Use both the DI-read text and the attached file visuals when available.
                 Reply must be strict JSON using the supporting-document extraction schema from the system record.
               TEXT
       ]
@@ -136,8 +136,7 @@ module Claims
           type: "input_file",
           storageKey: document.storage_key,
           container: ENV["AZURE_BLOB_CONTAINER"].presence,
-          filename:
-            document.original_filename.presence || "supporting_document.pdf"
+          filename: document.original_filename.presence || "supporting_document"
         }.compact
       ]
     end

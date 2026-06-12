@@ -11,5 +11,10 @@ module Claims
                class_name: "Claims::IngestDocument",
                foreign_key: :ingest_document_id,
                optional: true
+
+    belongs_to :supporting_document_group,
+               class_name: "Claims::SupportingDocumentGroup",
+               foreign_key: :supporting_document_group_id,
+               optional: true
   end
 end

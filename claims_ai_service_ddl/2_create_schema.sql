@@ -1208,7 +1208,6 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_version_id uuid NOT NULL,
-  invoice_upgrade_type_id uuid NOT NULL DEFAULT 'd5eaa9f3-342f-4f30-b444-d54ca0c142f2',
   lineitem_seqno     integer NOT NULL,
 
   -- Minimal canonical line-item OCR fields (trim/extend as needed)
@@ -1233,9 +1232,6 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
   CONSTRAINT fk_claims_lineitems_invoice_version
     FOREIGN KEY (invoice_version_id) REFERENCES claims.invoice_versions(id),
 
-  CONSTRAINT fk_claims_lineitems_upgrade_type
-    FOREIGN KEY (invoice_upgrade_type_id) REFERENCES claims.invoice_upgrade_types(id),
-
   CONSTRAINT lineitems_invoice_version_seqno_uniq
     UNIQUE (invoice_version_id, lineitem_seqno),
 
@@ -1245,9 +1241,6 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
 
 CREATE INDEX IF NOT EXISTS index_claims_lineitems_on_invoice_version_id
   ON claims.lineitems (invoice_version_id);
-
-CREATE INDEX IF NOT EXISTS index_claims_lineitems_on_upgrade_type_id
-  ON claims.lineitems (invoice_upgrade_type_id);
 
 
 
@@ -1275,7 +1268,7 @@ CREATE INDEX IF NOT EXISTS idx_supporting_document_types_enabled
 --
 -- supporting_document_type_upgrade_types
 -- PURPOSE: Declares which invoice upgrade types each supporting
--- document type applies to. This keeps supplement-type applicability
+-- document type applies to. This keeps supporting-document applicability
 -- normalized the same way code/genai rules are mapped to upgrade types.
 --
 CREATE TABLE IF NOT EXISTS claims.supporting_document_type_upgrade_types (
@@ -1308,6 +1301,161 @@ CREATE INDEX IF NOT EXISTS idx_supporting_document_type_upgrade_types_upgrade_ty
   ON claims.supporting_document_type_upgrade_types (invoice_upgrade_type_id);
 
 
+-- ============================================================
+-- supporting_document_groups
+-- PURPOSE: Evidence-level grouping for supporting documents that
+-- answer one business question together, such as before/after photo sets.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.supporting_document_groups (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_id uuid NOT NULL,
+  supporting_document_type_id uuid NOT NULL,
+
+  group_label text NULL,
+  group_status text NOT NULL DEFAULT 'pending',
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_groups_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_supporting_document_groups_invoice
+    FOREIGN KEY (invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_supporting_document_groups_type
+    FOREIGN KEY (supporting_document_type_id)
+    REFERENCES claims.supporting_document_types(id),
+
+  CONSTRAINT supporting_document_groups_status_chk
+    CHECK (group_status IN ('pending','ready','extracted','needs_review','failed')),
+
+  CONSTRAINT supporting_document_groups_invoice_type_uniq
+    UNIQUE (invoice_id, supporting_document_type_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supporting_document_groups_invoice
+  ON claims.supporting_document_groups (invoice_id);
+
+CREATE INDEX IF NOT EXISTS idx_supporting_document_groups_type
+  ON claims.supporting_document_groups (supporting_document_type_id);
+
+
+-- ============================================================
+-- supporting_document_group_type_located_fields
+-- PURPOSE: Defines facts to extract from a group of related
+-- supporting documents rather than from a single file.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.supporting_document_group_type_located_fields (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  supporting_document_type_id uuid NOT NULL,
+
+  field_key text NOT NULL,
+  prompt_text text NOT NULL,
+  field_number integer NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_group_type_located_fields_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_sdgtlf_type
+    FOREIGN KEY (supporting_document_type_id)
+    REFERENCES claims.supporting_document_types(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT supporting_document_group_type_located_fields_field_number_chk
+    CHECK (field_number >= 1),
+
+  CONSTRAINT supporting_document_group_type_located_fields_key_uniq
+    UNIQUE (supporting_document_type_id, field_key),
+
+  CONSTRAINT supporting_document_group_type_located_fields_order_uniq
+    UNIQUE (supporting_document_type_id, field_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sdgtlf_type
+  ON claims.supporting_document_group_type_located_fields (supporting_document_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdgtlf_enabled
+  ON claims.supporting_document_group_type_located_fields (enabled);
+
+
+-- ============================================================
+-- supporting_document_group_located_fields
+-- PURPOSE: Runtime values located across a group of related
+-- supporting documents.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.supporting_document_group_located_fields (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  supporting_document_group_id uuid NOT NULL,
+  supporting_document_group_type_located_field_id uuid NULL,
+
+  source_engine text NOT NULL DEFAULT 'genai',
+  field_key text NOT NULL,
+
+  value_type text NOT NULL,
+  value_text text NULL,
+  value_json jsonb NULL,
+
+  confidence smallint NOT NULL DEFAULT 0,
+  evidence_text text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT supporting_document_group_located_fields_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_sdglf_group
+    FOREIGN KEY (supporting_document_group_id)
+    REFERENCES claims.supporting_document_groups(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_sdglf_definition
+    FOREIGN KEY (supporting_document_group_type_located_field_id)
+    REFERENCES claims.supporting_document_group_type_located_fields(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT supporting_document_group_located_fields_source_engine_chk
+    CHECK (source_engine IN ('genai','vision','code','manual')),
+
+  CONSTRAINT supporting_document_group_located_fields_confidence_chk
+    CHECK (confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT supporting_document_group_located_fields_value_type_chk
+    CHECK (value_type IN ('text','currency','number','date','bool','json')),
+
+  CONSTRAINT supporting_document_group_located_fields_value_storage_chk
+    CHECK (
+      (value_type = 'json' AND value_json IS NOT NULL AND value_text IS NULL)
+      OR
+      (value_type <> 'json' AND value_text IS NOT NULL AND value_json IS NULL)
+      OR
+      (value_text IS NULL AND value_json IS NULL)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_sdglf_group
+  ON claims.supporting_document_group_located_fields (supporting_document_group_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdglf_definition
+  ON claims.supporting_document_group_located_fields (supporting_document_group_type_located_field_id);
+
+CREATE INDEX IF NOT EXISTS idx_sdglf_lookup
+  ON claims.supporting_document_group_located_fields (supporting_document_group_id, field_key);
+
+CREATE INDEX IF NOT EXISTS idx_sdglf_engine
+  ON claims.supporting_document_group_located_fields (supporting_document_group_id, source_engine);
+
+
 -- 
 -- supporting documents
 --
@@ -1316,6 +1464,7 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
 
   invoice_id uuid NOT NULL,
   supporting_document_type_id uuid NULL,
+  supporting_document_group_id uuid NULL,
 
   -- storage pointer(s)
   storage_provider character varying NULL,   -- e.g., 'azure_blob', 'aws_s3' (optional)
@@ -1326,15 +1475,15 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   byte_size         bigint NULL,
   sha256            character varying NULL,  -- optional but handy for dedupe/integrity
 
-  -- supplement OCR / triage retention
+  -- supporting-document OCR / triage retention
   di_read_raw_json jsonb NULL,
   classifier_raw_json jsonb NULL,
 
   classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
-  supplement_routing_quality text NULL,
-  supplement_routing_quality_reason text NULL,
+  supporting_document_routing_quality text NULL,
+  supporting_document_routing_quality_reason text NULL,
   classified_at timestamp(6) without time zone NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
@@ -1349,13 +1498,18 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
     FOREIGN KEY (supporting_document_type_id)
     REFERENCES claims.supporting_document_types(id),
 
+  CONSTRAINT fk_claims_supporting_documents_group
+    FOREIGN KEY (supporting_document_group_id)
+    REFERENCES claims.supporting_document_groups(id)
+    ON DELETE SET NULL,
+
   CONSTRAINT supporting_documents_classification_status_chk
     CHECK (classification_status IN ('pending','classified','needs_review','failed')),
 
   CONSTRAINT supporting_documents_routing_quality_chk
     CHECK (
-      supplement_routing_quality IS NULL OR
-      supplement_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
+      supporting_document_routing_quality IS NULL OR
+      supporting_document_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
     )
 );
 
@@ -1365,9 +1519,13 @@ CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_invoice_id
 CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_type_id
   ON claims.supporting_documents (supporting_document_type_id);
 
+CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_group_id
+  ON claims.supporting_documents (supporting_document_group_id);
+
 -- Optional: prevent duplicate uploads of same blob/key under the same invoice
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_supporting_documents_invoice_storage_key
   ON claims.supporting_documents (invoice_id, storage_key);
+
 
 
 -- ============================================================
@@ -1638,6 +1796,7 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   system_record character varying NULL,
   classifier_system_record character varying NULL,
   supporting_document_extraction_system_record character varying NULL,
+  supporting_document_group_extraction_system_record character varying NULL,
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
   admin_advice_closing character varying NULL,
@@ -2042,8 +2201,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
   classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
-  supplement_routing_quality text NULL,
-  supplement_routing_quality_reason text NULL,
+  supporting_document_routing_quality text NULL,
+  supporting_document_routing_quality_reason text NULL,
   classified_at timestamp(6) without time zone NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
@@ -2090,7 +2249,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
     REFERENCES claims.supporting_document_types(id),
 
   CONSTRAINT ingest_documents_document_kind_chk
-    CHECK (document_kind IS NULL OR document_kind IN ('invoice','supplement','unknown')),
+    CHECK (document_kind IS NULL OR document_kind IN ('invoice','supporting_document','unknown')),
 
   CONSTRAINT ingest_documents_document_kind_confidence_chk
     CHECK (document_kind_confidence BETWEEN 0 AND 100),
@@ -2103,8 +2262,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
 
   CONSTRAINT ingest_documents_routing_quality_chk
     CHECK (
-      supplement_routing_quality IS NULL OR
-      supplement_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
+      supporting_document_routing_quality IS NULL OR
+      supporting_document_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
     )
 );
 
@@ -2157,8 +2316,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   -- GenAI subcall target. Null for upload/ocr/classifier/legacy genai summary rows.
   invoice_upgrade_type_id uuid NULL,
 
+  -- Supporting document group target. Used by group-level extraction steps.
+  supporting_document_group_id uuid NULL,
+
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | upload_package_stage | reprocess_package_stage | ocr | classifier | genai | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | supporting_document_extraction | ocr_invoice
+  step_type text NOT NULL,  -- upload | upload_package_stage | ocr | classifier | genai | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | supporting_document_extraction | supporting_document_group_extraction | ocr_invoice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -2201,8 +2363,13 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id),
 
+  CONSTRAINT fk_ingest_step_runs_supporting_document_group
+    FOREIGN KEY (supporting_document_group_id)
+    REFERENCES claims.supporting_document_groups(id)
+    ON DELETE CASCADE,
+
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','upload_package_stage','reprocess_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
+    CHECK (step_type IN ('upload','upload_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','supporting_document_group_extraction','ocr_invoice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -2227,31 +2394,52 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   CONSTRAINT ingest_step_runs_target_required_chk
     CHECK (
-      step_type IN ('upload_package_stage','reprocess_package_stage')
-      OR
-      (invoice_version_id IS NOT NULL AND ingest_document_id IS NULL)
-      OR
-      (invoice_version_id IS NULL AND ingest_document_id IS NOT NULL)
+      step_type = 'upload_package_stage'
+      OR (
+        invoice_version_id IS NOT NULL
+        AND ingest_document_id IS NULL
+        AND supporting_document_group_id IS NULL
+      )
+      OR (
+        invoice_version_id IS NULL
+        AND ingest_document_id IS NOT NULL
+        AND supporting_document_group_id IS NULL
+      )
+      OR (
+        invoice_version_id IS NULL
+        AND ingest_document_id IS NULL
+        AND supporting_document_group_id IS NOT NULL
+      )
     ),
 
   CONSTRAINT ingest_step_runs_target_compatibility_chk
     CHECK (
       (
-        step_type IN ('upload_package_stage','reprocess_package_stage')
+        step_type = 'upload_package_stage'
         AND invoice_version_id IS NULL
         AND ingest_document_id IS NULL
+        AND supporting_document_group_id IS NULL
       )
       OR
       (
         step_type IN ('ocr_read','triage_classifier','supporting_document_extraction')
         AND ingest_document_id IS NOT NULL
         AND invoice_version_id IS NULL
+        AND supporting_document_group_id IS NULL
       )
       OR
       (
-        step_type NOT IN ('ocr_read','triage_classifier','supporting_document_extraction')
+        step_type = 'supporting_document_group_extraction'
+        AND supporting_document_group_id IS NOT NULL
+        AND invoice_version_id IS NULL
+        AND ingest_document_id IS NULL
+      )
+      OR
+      (
+        step_type NOT IN ('ocr_read','triage_classifier','supporting_document_extraction','supporting_document_group_extraction')
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
+        AND supporting_document_group_id IS NULL
       )
     ),
 
@@ -2282,6 +2470,12 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_document_step
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_upgrade_type_id
   ON claims.ingest_step_runs (invoice_upgrade_type_id);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_supporting_document_group_id
+  ON claims.ingest_step_runs (supporting_document_group_id);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_supporting_document_group_step
+  ON claims.ingest_step_runs (supporting_document_group_id, step_type, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
   ON claims.ingest_step_runs (invoice_version_id, invoice_upgrade_type_id, step_type, created_at DESC);
@@ -2353,4 +2547,3 @@ CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_expires_at
 
 CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_income_level
   ON claims.users_eligibilitycodes (income_level);
-

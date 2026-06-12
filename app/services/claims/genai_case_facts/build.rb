@@ -3,7 +3,7 @@
 # app/services/claims/genai_case_facts/build.rb
 #
 # PURPOSE
-# 1) Build "ESP database values" (case facts) for the GenAI context window.
+# 1) Build "ESP database values" from pre-existing DB records.
 # 2) Persist those DB-derived facts into claims.invoice_version_located_fields
 #    as source_engine='code' snapshot rows (for the Confirm Your Details screen).
 #
@@ -122,11 +122,7 @@ module Claims
 
         prune_disabled_code_fields!(esp_database_values)
 
-        case_facts = {
-          esp_database_values: esp_database_values,
-          supporting_document_summary:
-            build_supporting_document_summary(invoice: invoice)
-        }
+        case_facts = { esp_database_values: esp_database_values }
 
         {
           case_facts: case_facts,
@@ -134,15 +130,15 @@ module Claims
         }
       end
 
-      def self.case_facts_for_upgrade_type(case_facts:, invoice_upgrade_type:)
-        facts = case_facts.deep_dup
-        facts[
-          :supporting_document_summary_for_upgrade_type
-        ] = build_supporting_document_summary_for_upgrade_type(
-          supporting_document_summary: facts[:supporting_document_summary],
+      def self.supporting_document_context_for_upgrade_type(
+        invoice:,
+        invoice_upgrade_type:
+      )
+        build_supporting_document_summary_for_upgrade_type(
+          supporting_document_summary:
+            build_supporting_document_summary(invoice: invoice),
           invoice_upgrade_type: invoice_upgrade_type
         )
-        facts
       end
 
       # ------------------------------------------------------------
@@ -386,6 +382,7 @@ module Claims
             .supporting_documents
             .includes(
               :supporting_document_type,
+              :supporting_document_group,
               :supporting_document_visual_findings,
               supporting_document_located_fields:
                 :supporting_document_type_located_field
@@ -394,18 +391,45 @@ module Claims
             .map do |doc|
               {
                 supporting_document_id: doc.id,
+                supporting_document_group_id: doc.supporting_document_group_id,
                 type_key: doc.supporting_document_type&.type_key,
                 type_description: doc.supporting_document_type&.description,
                 original_filename: doc.original_filename,
                 classification_status: doc.classification_status,
                 classification_confidence: doc.classification_confidence,
-                supplement_routing_quality: doc.supplement_routing_quality,
-                supplement_routing_quality_reason:
-                  doc.supplement_routing_quality_reason,
+                supporting_document_routing_quality:
+                  doc.supporting_document_routing_quality,
+                supporting_document_routing_quality_reason:
+                  doc.supporting_document_routing_quality_reason,
                 located_fields:
                   serialize_supporting_document_located_fields(doc),
                 visual_findings:
                   serialize_supporting_document_visual_findings(doc)
+              }
+            end
+
+        groups =
+          invoice
+            .supporting_document_groups
+            .includes(
+              :supporting_document_type,
+              :supporting_documents,
+              supporting_document_group_located_fields:
+                :supporting_document_group_type_located_field
+            )
+            .order(created_at: :asc, id: :asc)
+            .map do |group|
+              {
+                supporting_document_group_id: group.id,
+                type_key: group.supporting_document_type&.type_key,
+                type_description: group.supporting_document_type&.description,
+                group_label: group.group_label,
+                group_status: group.group_status,
+                supporting_document_ids: group.supporting_documents.map(&:id),
+                original_filenames:
+                  group.supporting_documents.map(&:original_filename).compact,
+                group_located_fields:
+                  serialize_supporting_document_group_located_fields(group)
               }
             end
 
@@ -418,7 +442,8 @@ module Claims
           type_keys:
             docs.map { |row| row[:type_key].to_s.presence }.compact.uniq.sort,
           type_counts: type_counts,
-          documents: docs
+          documents: docs,
+          groups: groups
         }
       rescue StandardError
         {
@@ -427,7 +452,8 @@ module Claims
           type_keys: [],
           type_counts: {
           },
-          documents: []
+          documents: [],
+          groups: []
         }
       end
 
@@ -437,6 +463,7 @@ module Claims
       )
         summary = supporting_document_summary || {}
         documents = Array(summary[:documents] || summary["documents"])
+        groups = Array(summary[:groups] || summary["groups"])
         configured_types =
           enabled_supporting_document_types_for_upgrade_type(
             invoice_upgrade_type: invoice_upgrade_type
@@ -445,6 +472,13 @@ module Claims
 
         relevant_documents =
           documents.select do |row|
+            configured_type_keys.include?(
+              row[:type_key].to_s.presence || row["type_key"].to_s.presence
+            )
+          end
+
+        relevant_groups =
+          groups.select do |row|
             configured_type_keys.include?(
               row[:type_key].to_s.presence || row["type_key"].to_s.presence
             )
@@ -473,7 +507,8 @@ module Claims
             configured_type_keys - present_type_keys,
           present_configured_type_counts:
             count_document_types(relevant_documents),
-          configured_documents: relevant_documents
+          configured_documents: relevant_documents,
+          configured_groups: relevant_groups
         }
       rescue StandardError
         {
@@ -486,7 +521,8 @@ module Claims
           missing_configured_type_keys: [],
           present_configured_type_counts: {
           },
-          configured_documents: []
+          configured_documents: [],
+          configured_groups: []
         }
       end
 
@@ -557,6 +593,32 @@ module Claims
               legibility: finding.legibility,
               relevant_text_seen: finding.relevant_text_seen,
               confidence: finding.confidence
+            }
+          end
+      end
+
+      def self.serialize_supporting_document_group_located_fields(group)
+        group
+          .supporting_document_group_located_fields
+          .sort_by do |field|
+            [
+              field.supporting_document_group_type_located_field&.field_number ||
+                99_999,
+              field.field_key.to_s
+            ]
+          end
+          .map do |field|
+            {
+              supporting_document_group_located_field_id: field.id,
+              supporting_document_group_type_located_field_id:
+                field.supporting_document_group_type_located_field_id,
+              field_key: field.field_key,
+              source_engine: field.source_engine,
+              value_type: field.value_type,
+              value_text: field.value_text,
+              value_json: field.value_json,
+              confidence: field.confidence,
+              evidence_text: field.evidence_text
             }
           end
       end

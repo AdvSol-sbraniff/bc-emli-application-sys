@@ -76,11 +76,11 @@ ALTER TABLE claims.ingest_step_runs
 
 ALTER TABLE claims.ingest_step_runs
   ADD CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','upload_package_stage','reprocess_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
+    CHECK (step_type IN ('upload','upload_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','ocr_invoice')),
   ADD CONSTRAINT ingest_step_runs_target_compatibility_chk
     CHECK (
       (
-        step_type IN ('upload_package_stage','reprocess_package_stage')
+        step_type = 'upload_package_stage'
         AND invoice_version_id IS NULL
         AND ingest_document_id IS NULL
       )

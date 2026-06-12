@@ -24,7 +24,7 @@ module Claims
       def call
         raise "Missing contractor_id" if contractor_id.empty?
         if files.empty?
-          raise "No files received. Expected multipart field pdfs[] (or pdfs)."
+          raise "No files received. Expected multipart field files[] (or files)."
         end
 
         session_result =
@@ -76,7 +76,7 @@ module Claims
           stage_step.update!(
             status: "failed",
             error_text:
-              "One or more PDFs failed during upload package staging.",
+              "One or more evidence files failed during upload package staging.",
             updated_at: Time.current
           )
         else
@@ -117,10 +117,14 @@ module Claims
       attr_reader :contractor_id, :files, :log_prefix
 
       def process_file(file, index, session_id, ingest_run, shell_invoice_id)
-        name = file_safe_call(file, :original_filename) || "unknown.pdf"
-        content_type = file_safe_call(file, :content_type) || "application/pdf"
+        name = file_safe_call(file, :original_filename) || "unknown"
+        content_type =
+          file_safe_call(file, :content_type) || "application/octet-stream"
         size = file_safe_call(file, :size)
         ingest_document = nil
+        unless supported_evidence_file?(name, content_type)
+          raise "Only PDF, JPG, JPEG, and PNG evidence files are supported."
+        end
 
         begin
           ingest_document =
@@ -132,7 +136,7 @@ module Claims
               resolved_invoice_id: shell_invoice_id,
               storage_provider: "azure_blob",
               storage_key:
-                "PENDING/session=#{session_id}/ingest_document=#{SecureRandom.uuid}/#{SecureRandom.uuid}.pdf",
+                "PENDING/session=#{session_id}/ingest_document=#{SecureRandom.uuid}/#{SecureRandom.uuid}#{storage_extension_for(name, content_type)}",
               original_filename: name,
               content_type: content_type,
               byte_size: size,
@@ -250,7 +254,8 @@ module Claims
         io = File.open(file.path, "rb")
         filename =
           file_safe_call(file, :original_filename) || File.basename(file.path)
-        content_type = file_safe_call(file, :content_type) || "application/pdf"
+        content_type =
+          file_safe_call(file, :content_type) || "application/octet-stream"
 
         req.set_form(
           [
@@ -277,6 +282,35 @@ module Claims
         JSON.parse(body)
       ensure
         io&.close
+      end
+
+      def supported_evidence_file?(filename, content_type)
+        supported_content_type?(content_type) ||
+          %w[.pdf .jpg .jpeg .png].include?(
+            File.extname(filename.to_s).downcase
+          )
+      end
+
+      def supported_content_type?(content_type)
+        %w[application/pdf image/jpeg image/png].include?(
+          content_type.to_s.downcase
+        )
+      end
+
+      def storage_extension_for(filename, content_type)
+        ext = File.extname(filename.to_s).downcase
+        return ext if %w[.pdf .jpg .jpeg .png].include?(ext)
+
+        case content_type.to_s.downcase
+        when "application/pdf"
+          ".pdf"
+        when "image/jpeg"
+          ".jpg"
+        when "image/png"
+          ".png"
+        else
+          ".bin"
+        end
       end
 
       def mark_orphaned_ingest_failures!(ingest_run:, results:)

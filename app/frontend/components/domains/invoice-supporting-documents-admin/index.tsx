@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Badge,
   Box,
   Container,
   Drawer,
@@ -61,17 +62,33 @@ type SupportingDocumentVisualFinding = {
   confidence?: number | null;
 };
 
+type SupportingDocumentGroupRow = {
+  id: string;
+  invoice_id: string;
+  supporting_document_type_id?: string | null;
+  supporting_document_type_key?: string | null;
+  supporting_document_type_description?: string | null;
+  group_label?: string | null;
+  group_status?: string | null;
+  supporting_document_ids?: string[];
+  original_filenames?: string[];
+  located_fields?: SupportingDocumentLocatedField[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 type SupportingDocumentRow = {
   id: string;
   invoice_id: string;
+  supporting_document_group_id?: string | null;
   supporting_document_type_id?: string | null;
   supporting_document_type_key?: string | null;
   supporting_document_type_description?: string | null;
   classification_status?: string | null;
   classification_confidence?: number | null;
   classification_reason?: string | null;
-  supplement_routing_quality?: string | null;
-  supplement_routing_quality_reason?: string | null;
+  supporting_document_routing_quality?: string | null;
+  supporting_document_routing_quality_reason?: string | null;
   located_fields?: SupportingDocumentLocatedField[];
   visual_findings?: SupportingDocumentVisualFinding[];
   storage_provider?: string | null;
@@ -118,6 +135,7 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
 
   const [context, setContext] = useState<ContextPayload | null>(null);
   const [rows, setRows] = useState<SupportingDocumentRow[]>([]);
+  const [groups, setGroups] = useState<SupportingDocumentGroupRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedInfoRow, setSelectedInfoRow] = useState<SupportingDocumentRow | null>(null);
@@ -127,6 +145,7 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
       setError('Missing invoice_id in URL.');
       setContext(null);
       setRows([]);
+      setGroups([]);
       return;
     }
 
@@ -155,9 +174,11 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
 
       setContext(contextJson as ContextPayload);
       setRows(Array.isArray(listJson?.rows) ? listJson.rows : []);
+      setGroups(Array.isArray(listJson?.groups) ? listJson.groups : []);
     } catch (e: any) {
       setContext(null);
       setRows([]);
+      setGroups([]);
       setError(e?.message || 'Failed to load supporting-document screen.');
     } finally {
       setLoading(false);
@@ -224,6 +245,67 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
           </Box>
         )}
 
+        {groups.length > 0 && (
+          <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white" mb={5}>
+            <Text fontSize="sm" fontWeight="bold" mb={3}>
+              Grouped Supporting Document Evidence
+            </Text>
+            <VStack align="stretch" spacing={3}>
+              {groups.map((group) => (
+                <Box key={group.id} borderWidth="1px" borderColor="blue.100" bg="blue.50" borderRadius="md" p={3}>
+                  <Flex justify="space-between" align="start" gap={3} wrap="wrap">
+                    <Box>
+                      <HStack spacing={2} mb={1} wrap="wrap">
+                        <Badge colorScheme="blue" variant="subtle" textTransform="none">
+                          {group.group_label ||
+                            group.supporting_document_type_description ||
+                            group.supporting_document_type_key}
+                        </Badge>
+                        <Badge colorScheme={group.group_status === 'extracted' ? 'green' : 'gray'} variant="subtle">
+                          {group.group_status || 'pending'}
+                        </Badge>
+                      </HStack>
+                      <Text fontSize="xs" opacity={0.75}>
+                        {(group.original_filenames || []).filter(Boolean).join(', ') || 'No child files listed'}
+                      </Text>
+                    </Box>
+                    <Text fontSize="xs" opacity={0.75}>
+                      {evidenceCountLabel(group.located_fields?.length || 0, 'group field')}
+                    </Text>
+                  </Flex>
+
+                  {Array.isArray(group.located_fields) && group.located_fields.length > 0 && (
+                    <Table size="sm" mt={3}>
+                      <Thead>
+                        <Tr>
+                          <Th>field</Th>
+                          <Th>value</Th>
+                          <Th>confidence</Th>
+                          <Th>evidence</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {group.located_fields.map((field) => (
+                          <Tr key={field.id || `${group.id}:${field.field_key}`}>
+                            <Td fontSize="xs" fontWeight="semibold">
+                              {field.field_key || 'field'}
+                            </Td>
+                            <Td fontSize="xs">{fmtLocatedFieldValue(field)}</Td>
+                            <Td fontSize="xs">{field.confidence ?? 0}</Td>
+                            <Td fontSize="xs" whiteSpace="pre-wrap">
+                              {field.evidence_text || '—'}
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  )}
+                </Box>
+              ))}
+            </VStack>
+          </Box>
+        )}
+
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           {loading && (
             <Flex justify="flex-end" mb={3}>
@@ -245,7 +327,14 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
             <Tbody>
               {rows.map((row) => (
                 <Tr key={row.id}>
-                  <Td fontSize="sm">{row.original_filename || '—'}</Td>
+                  <Td fontSize="sm">
+                    <Text>{row.original_filename || '—'}</Text>
+                    {row.supporting_document_group_id && (
+                      <Badge colorScheme="blue" variant="subtle" textTransform="none" mt={1}>
+                        grouped evidence
+                      </Badge>
+                    )}
+                  </Td>
                   <Td fontSize="xs" maxW="220px">
                     <Text fontSize="xs">
                       {row.supporting_document_type_description ||
@@ -265,10 +354,10 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                     )}
                   </Td>
                   <Td fontSize="xs" maxW="220px">
-                    <Text fontSize="xs">{row.supplement_routing_quality || '—'}</Text>
-                    {String(row.supplement_routing_quality_reason || '').trim() && (
+                    <Text fontSize="xs">{row.supporting_document_routing_quality || '—'}</Text>
+                    {String(row.supporting_document_routing_quality_reason || '').trim() && (
                       <Text fontSize="xs" opacity={0.65} noOfLines={2}>
-                        {row.supplement_routing_quality_reason}
+                        {row.supporting_document_routing_quality_reason}
                       </Text>
                     )}
                   </Td>
@@ -346,7 +435,7 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                       </Tr>
                       <Tr>
                         <Td fontWeight="semibold">routing</Td>
-                        <Td>{selectedInfoRow.supplement_routing_quality || '—'}</Td>
+                        <Td>{selectedInfoRow.supporting_document_routing_quality || '—'}</Td>
                       </Tr>
                       <Tr>
                         <Td fontWeight="semibold">classification confidence</Td>
@@ -373,12 +462,12 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                   </Box>
                 )}
 
-                {String(selectedInfoRow.supplement_routing_quality_reason || '').trim() && (
+                {String(selectedInfoRow.supporting_document_routing_quality_reason || '').trim() && (
                   <Box>
                     <Heading size="sm" mb={2}>
                       Routing Quality Reason
                     </Heading>
-                    <Text fontSize="sm">{selectedInfoRow.supplement_routing_quality_reason}</Text>
+                    <Text fontSize="sm">{selectedInfoRow.supporting_document_routing_quality_reason}</Text>
                   </Box>
                 )}
 

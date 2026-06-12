@@ -10,8 +10,8 @@ module Claims
     sidekiq_options queue: :claims_genai, retry: 0
 
     # args must match controller perform_async call order.
-    # GenAI validation reruns always reuse the classifier payload persisted by
-    # the upload triage phase; classifier execution belongs in RunIngestTriageJob.
+    # GenAI validation reads classifier facts from evidence tables. Classifier
+    # execution belongs in RunIngestTriageJob; ingest_documents is staging only.
     def perform(
       session_id,
       invoice_version_id,
@@ -45,19 +45,7 @@ module Claims
         preserve_classifier: true
       )
 
-      classifier_payload =
-        existing_classifier_payload_for(invoice_version_id: iv.id)
-      if classifier_payload.blank?
-        raise "Missing stored triage classifier payload for invoice_version_id=#{iv.id}"
-      end
-      classifier_result =
-        ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
-          invoice_version_id: iv.id,
-          classifier_payload: classifier_payload
-        )
-      unless classifier_result[:ok]
-        raise "ApplyClassifierResult failed: #{classifier_result.inspect}"
-      end
+      classifier_payload = classifier_payload_from_evidence(invoice_version: iv)
 
       inv.update!(status: "genai_in_progress", status_updated_at: Time.current)
 
@@ -87,11 +75,6 @@ module Claims
         )
 
       common_upgrade_type = upgrade_type_by_key!("common")
-      common_case_facts =
-        Claims::GenaiCaseFacts::Build.case_facts_for_upgrade_type(
-          case_facts: case_facts,
-          invoice_upgrade_type: common_upgrade_type
-        )
       common_user_record1 =
         compiled_user_record1_for_upgrade_type!(common_upgrade_type)
       ruleset_results = []
@@ -100,31 +83,27 @@ module Claims
         ingest_run_id: ingest_run_id,
         session_id: sess.id,
         invoice_version_id: iv.id,
+        invoice: inv,
         step_type: "genai_common",
         upgrade_type: common_upgrade_type,
         compiled_user_record1: common_user_record1,
-        case_facts: common_case_facts,
+        case_facts: case_facts,
         classifier_payload: classifier_payload,
         product_context: product_context,
         di_raw_json: iv.di_raw_json
       )
 
       upgrade_types.each do |upgrade_type|
-        upgrade_type_case_facts =
-          Claims::GenaiCaseFacts::Build.case_facts_for_upgrade_type(
-            case_facts: case_facts,
-            invoice_upgrade_type: upgrade_type
-          )
-
         ruleset_results << run_genai_ruleset!(
           ingest_run_id: ingest_run_id,
           session_id: sess.id,
           invoice_version_id: iv.id,
+          invoice: inv,
           step_type: "genai_upgrade",
           upgrade_type: upgrade_type,
           compiled_user_record1:
             compiled_user_record1_for_upgrade_type!(upgrade_type),
-          case_facts: upgrade_type_case_facts,
+          case_facts: case_facts,
           classifier_payload: classifier_payload,
           product_context: product_context,
           di_raw_json: iv.di_raw_json
@@ -242,11 +221,6 @@ module Claims
         case_facts: case_facts,
         classifier_eligibility_code:
           shared_context[:classifier_eligibility_code]
-      )
-
-      Claims::GenaiCaseFacts::Build.persist_classifier_located_fields!(
-        invoice_version_id: invoice_version.id,
-        classifier_payload: classifier_payload
       )
 
       payload = {
@@ -374,37 +348,76 @@ module Claims
       Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
     end
 
-    def existing_classifier_payload_for(invoice_version_id:)
-      document =
-        Claims::IngestDocument.find_by(
-          resolved_invoice_version_id: invoice_version_id,
-          document_kind: "invoice"
-        )
-      payload = document&.classifier_raw_json
-      return payload if payload.is_a?(Hash)
-
-      invoice_id =
-        Claims::InvoiceVersion.where(id: invoice_version_id).pick(:invoice_id)
-      document =
-        Claims::IngestDocument
-          .where(resolved_invoice_id: invoice_id, document_kind: "invoice")
-          .order(created_at: :asc)
-          .first
-      payload = document&.classifier_raw_json
-      return payload if payload.is_a?(Hash)
-
-      step =
-        Claims::IngestStepRun
+    def classifier_payload_from_evidence(invoice_version:)
+      detected_rows =
+        Claims::InvoiceVersionUpgradeType
           .where(
-            invoice_version_id: invoice_version_id,
-            step_type: "triage_classifier",
-            status: "succeeded"
+            invoice_version_id: invoice_version.id,
+            source_engine: "classifier"
           )
-          .order(created_at: :desc)
-          .first
+          .order(created_at: :asc, id: :asc)
+          .to_a
+      upgrade_types_by_id =
+        Claims::InvoiceUpgradeType.where(
+          id: detected_rows.map(&:invoice_upgrade_type_id).compact
+        ).index_by(&:id)
+      detected_rows =
+        detected_rows.reject do |row|
+          upgrade_types_by_id[row.invoice_upgrade_type_id]&.upgrade_type_key ==
+            "common"
+        end
+      detected_rows =
+        detected_rows.sort_by do |row|
+          upgrade_types_by_id[
+            row.invoice_upgrade_type_id
+          ]&.upgrade_type_key.to_s
+        end
 
-      payload = step&.genai_results_json
-      payload.is_a?(Hash) ? payload : nil
+      if detected_rows.empty?
+        raise "Missing classifier evidence rows for invoice_version_id=#{invoice_version.id}"
+      end
+
+      fields =
+        Claims::InvoiceVersionLocatedField.where(
+          invoice_version_id: invoice_version.id,
+          source_engine: "classifier"
+        ).index_by(&:field_key)
+
+      {
+        "document_kind" => "invoice",
+        "detected_upgrade_types" =>
+          detected_rows.map do |row|
+            upgrade_type = upgrade_types_by_id[row.invoice_upgrade_type_id]
+            raw = row.raw_json.is_a?(Hash) ? row.raw_json : {}
+            raw.merge(
+              "upgrade_type_key" => upgrade_type&.upgrade_type_key,
+              "upgrade_type_description" => upgrade_type&.description,
+              "confidence" => row.confidence
+            ).compact
+          end,
+        "eligibility_code" =>
+          field_value(fields["classifier.eligibility_code"]),
+        "product_references" => {
+          "ahri_reference" => field_value(fields["classifier.ahri_reference"]),
+          "neea_reference" => field_value(fields["classifier.neea_reference"]),
+          "awhp_reference" => field_value(fields["classifier.awhp_reference"]),
+          "ohpa_reference" => field_value(fields["classifier.ohpa_reference"]),
+          "product_model_number" =>
+            field_value(fields["classifier.product_model_number"]),
+          "product_manufacturer" =>
+            field_value(fields["classifier.product_manufacturer"])
+        }
+      }
+    end
+
+    def field_value(field)
+      return nil unless field
+
+      if field.value_json.present?
+        field.value_json
+      else
+        field.value_text.to_s.strip.presence
+      end
     end
 
     def find_or_create_step!(
@@ -471,6 +484,7 @@ module Claims
       ingest_run_id:,
       session_id:,
       invoice_version_id:,
+      invoice:,
       step_type:,
       upgrade_type:,
       compiled_user_record1:,
@@ -504,6 +518,8 @@ module Claims
         build_contextwindowjson(
           compiled_user_record1: compiled_user_record1,
           case_facts: case_facts,
+          invoice: invoice,
+          upgrade_type: upgrade_type,
           classifier_payload: classifier_payload,
           product_context: product_context,
           di_raw_json: di_raw_json
@@ -1033,13 +1049,16 @@ module Claims
     #   1) system_record (schema + constraints)
     #   2) user_record0 (shared DI/OCR reading guidance)
     #   3) user_record1 (compiled normalized located-field + rule tasks)
-    #   4) user_record2 (case facts only)
-    #   5) user_record3 (raw DI invoice JSON only)
-    #   6) user_record4 (actual ask)
+    #   4) user_record2/3 (supporting-document context built just in time)
+    #   5) user_record4 (pre-existing DB facts from the case_facts step)
+    #   6) user_record5/6 (classifier keys and product enrichment)
+    #   7) user_record7/8 (raw DI invoice JSON and actual ask)
     # ============================================================
     def build_contextwindowjson(
       compiled_user_record1:,
       case_facts:,
+      invoice:,
+      upgrade_type:,
       classifier_payload:,
       product_context:,
       di_raw_json:
@@ -1057,6 +1076,12 @@ module Claims
         { role: "system", content: [{ type: "input_text", text: sys }] }
       ]
 
+      supporting_document_context =
+        Claims::GenaiCaseFacts::Build.supporting_document_context_for_upgrade_type(
+          invoice: invoice,
+          invoice_upgrade_type: upgrade_type
+        )
+
       if user0.strip.present?
         messages << {
           role: "user",
@@ -1069,14 +1094,14 @@ module Claims
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
                   User record 1 (fields to locate and rules to evaluate)
                   #{gt}
-                TEXT
+          TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
             User record 2 (supporting documents possible)
-#{supporting_documents_possible_record(case_facts).to_json}
+#{supporting_documents_possible_record(supporting_document_context).to_json}
           TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
             User record 3 (supporting documents actually attached)
-#{supporting_documents_attached_record(case_facts).to_json}
+#{supporting_documents_attached_record(supporting_document_context).to_json}
           TEXT
           { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
             User record 4 (pre-existing database values)
@@ -1103,11 +1128,8 @@ module Claims
       )
     end
 
-    def supporting_documents_possible_record(case_facts)
-      summary =
-        case_facts[:supporting_document_summary_for_upgrade_type] ||
-          case_facts["supporting_document_summary_for_upgrade_type"] || {}
-
+    def supporting_documents_possible_record(summary)
+      summary ||= {}
       {
         record_name: "supporting_documents_possible",
         upgrade_type_key:
@@ -1126,11 +1148,8 @@ module Claims
       }
     end
 
-    def supporting_documents_attached_record(case_facts)
-      summary =
-        case_facts[:supporting_document_summary_for_upgrade_type] ||
-          case_facts["supporting_document_summary_for_upgrade_type"] || {}
-
+    def supporting_documents_attached_record(summary)
+      summary ||= {}
       {
         record_name: "supporting_documents_attached",
         upgrade_type_key:
@@ -1143,7 +1162,9 @@ module Claims
             summary["present_configured_type_counts"] || {},
         documents:
           summary[:configured_documents] || summary["configured_documents"] ||
-            []
+            [],
+        groups:
+          summary[:configured_groups] || summary["configured_groups"] || []
       }
     end
 

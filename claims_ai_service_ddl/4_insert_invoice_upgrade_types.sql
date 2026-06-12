@@ -156,10 +156,6 @@ AND NOT EXISTS (
   WHERE rc.invoice_upgrade_type_id = ut.id
 )
 AND NOT EXISTS (
-  SELECT 1 FROM claims.lineitems li
-  WHERE li.invoice_upgrade_type_id = ut.id
-)
-AND NOT EXISTS (
   SELECT 1 FROM claims.ingest_step_runs s
   WHERE s.invoice_upgrade_type_id = ut.id
 );

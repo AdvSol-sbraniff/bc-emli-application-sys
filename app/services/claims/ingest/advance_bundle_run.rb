@@ -5,7 +5,7 @@ module Claims
     class AdvanceBundleRun
       BUNDLE_INVALID_ERROR_CODE = "invoice_bundle_count_invalid"
       BUNDLE_UNKNOWN_ERROR_CODE = "invoice_bundle_unknown_documents"
-      SUPPLEMENTS_ATTACHED_INFO_CODE = "supplements_attached"
+      SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE = "supporting_documents_attached"
 
       def self.call(ingest_run_id:)
         new(ingest_run_id: ingest_run_id).call
@@ -272,13 +272,100 @@ module Claims
             resolved_document: resolved_document
           )
         resolved_invoice_id = resolved_document.reload.resolved_invoice_id
-        supplement_documents =
-          documents.select { |doc| doc.document_kind == "supplement" }
+        supporting_document_rows =
+          documents.select { |doc| doc.document_kind == "supporting_document" }
 
-        supplement_documents.each do |document|
+        supporting_document_rows.each do |document|
           ::Claims::SupportingDocuments::PromoteFromIngestDocument.call(
             resolved_invoice_id: resolved_invoice_id,
             ingest_document_id: document.id
+          )
+        end
+
+        supporting_document_groups =
+          ::Claims::SupportingDocumentGroups::EnsureForInvoice.call(
+            invoice_id: resolved_invoice_id
+          )
+
+        group_extraction_groups =
+          groups_requiring_supporting_document_group_extraction(
+            supporting_document_groups
+          )
+        group_extraction_steps =
+          latest_group_steps_map(
+            run.id,
+            group_extraction_groups.map(&:id),
+            "supporting_document_group_extraction"
+          )
+        missing_group_extraction_groups =
+          group_extraction_groups.reject do |group|
+            group_extraction_steps.key?(group.id)
+          end
+
+        if missing_group_extraction_groups.any?
+          enqueue_supporting_document_group_extraction_jobs!(
+            groups: missing_group_extraction_groups
+          )
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
+            )
+          )
+        end
+
+        if group_extraction_steps.size < group_extraction_groups.size
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
+            )
+          )
+        end
+
+        if failed_row =
+             group_extraction_steps.values.find { |row| row.status == "failed" }
+          failed_group =
+            group_extraction_groups.detect do |group|
+              group.id == failed_row.supporting_document_group_id
+            end
+          return(
+            update_failed!(
+              run: run,
+              total_files: total_files,
+              failed_files: 1,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id,
+              shell_invoice_status: "ocr_failed",
+              extra_messages: [
+                {
+                  code: "bundle_supporting_document_group_extraction_failed",
+                  level: "error",
+                  message:
+                    "One or more supporting document groups failed during group-level extraction.",
+                  supporting_document_group_id:
+                    failed_row.supporting_document_group_id,
+                  group_label: failed_group&.group_label
+                }
+              ]
+            )
+          )
+        end
+
+        if group_extraction_steps.values.any? { |row|
+             row.status != "succeeded"
+           }
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
+            )
           )
         end
 
@@ -379,13 +466,13 @@ module Claims
         end
 
         info_messages = []
-        if supplement_documents.any?
+        if supporting_document_rows.any?
           info_messages << {
-            code: SUPPLEMENTS_ATTACHED_INFO_CODE,
+            code: SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE,
             level: "info",
             message:
-              "#{supplement_documents.size} supporting document#{"s" unless supplement_documents.size == 1} attached to the resolved invoice.",
-            attached_supporting_documents_count: supplement_documents.size
+              "#{supporting_document_rows.size} supporting document#{"s" unless supporting_document_rows.size == 1} attached to the resolved invoice.",
+            attached_supporting_documents_count: supporting_document_rows.size
           }
         end
 
@@ -424,6 +511,21 @@ module Claims
           )
           .order(created_at: :desc)
           .first
+      end
+
+      def latest_group_steps_map(ingest_run_id, group_ids, step_type)
+        return {} if group_ids.empty?
+
+        ::Claims::IngestStepRun
+          .where(
+            ingest_run_id: ingest_run_id,
+            supporting_document_group_id: group_ids,
+            step_type: step_type
+          )
+          .order(created_at: :desc)
+          .to_a
+          .group_by(&:supporting_document_group_id)
+          .transform_values(&:first)
       end
 
       def latest_validation_steps(ingest_run_id, invoice_version_id)
@@ -484,27 +586,67 @@ module Claims
         end
       end
 
+      def enqueue_supporting_document_group_extraction_jobs!(groups:)
+        groups.each do |group|
+          ::Claims::IngestStepRun.find_or_create_by!(
+            ingest_run_id: @ingest_run_id,
+            supporting_document_group_id: group.id,
+            step_type: "supporting_document_group_extraction"
+          ) do |step|
+            step.session_id = group.invoice.session_id
+            step.status = "queued"
+            step.error_text = nil
+            step.created_at = Time.current
+            step.updated_at = Time.current
+          end
+
+          ::Claims::RunSupportingDocumentGroupExtractionJob.perform_async(
+            group.id,
+            @ingest_run_id
+          )
+        end
+      end
+
       def documents_requiring_supporting_document_extraction(documents)
-        supplements =
+        supporting_document_rows =
           documents.select do |doc|
-            doc.document_kind == "supplement" &&
+            doc.document_kind == "supporting_document" &&
               doc.supporting_document_type_id.present?
           end
-        return [] if supplements.empty?
+        return [] if supporting_document_rows.empty?
 
         type_ids_with_fields =
           ::Claims::SupportingDocumentTypeLocatedField
             .where(
               supporting_document_type_id:
-                supplements.map(&:supporting_document_type_id),
+                supporting_document_rows.map(&:supporting_document_type_id),
               enabled: true
             )
             .distinct
             .pluck(:supporting_document_type_id)
             .map(&:to_s)
 
-        supplements.select do |doc|
+        supporting_document_rows.select do |doc|
           type_ids_with_fields.include?(doc.supporting_document_type_id.to_s)
+        end
+      end
+
+      def groups_requiring_supporting_document_group_extraction(groups)
+        return [] if groups.empty?
+
+        type_ids_with_fields =
+          ::Claims::SupportingDocumentGroupTypeLocatedField
+            .where(
+              supporting_document_type_id:
+                groups.map(&:supporting_document_type_id),
+              enabled: true
+            )
+            .distinct
+            .pluck(:supporting_document_type_id)
+            .map(&:to_s)
+
+        groups.select do |group|
+          type_ids_with_fields.include?(group.supporting_document_type_id.to_s)
         end
       end
 
@@ -545,6 +687,11 @@ module Claims
               updated_at: Time.current
             )
 
+            apply_classifier_evidence!(
+              invoice_version_id: existing_invoice_version.id,
+              classifier_payload: resolved_document.classifier_raw_json
+            )
+
             resolved_document.update!(
               resolved_invoice_id: invoice.id,
               resolved_invoice_version_id: existing_invoice_version.id,
@@ -568,6 +715,11 @@ module Claims
               updated_at: Time.current
             )
 
+          apply_classifier_evidence!(
+            invoice_version_id: invoice_version.id,
+            classifier_payload: resolved_document.classifier_raw_json
+          )
+
           resolved_document.update!(
             resolved_invoice_id: invoice.id,
             resolved_invoice_version_id: invoice_version.id,
@@ -576,6 +728,18 @@ module Claims
 
           invoice_version.id
         end
+      end
+
+      def apply_classifier_evidence!(invoice_version_id:, classifier_payload:)
+        result =
+          ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
+            invoice_version_id: invoice_version_id,
+            classifier_payload: classifier_payload
+          )
+
+        return if result[:ok] || result["ok"]
+
+        raise "ApplyClassifierResult failed: #{result.inspect}"
       end
 
       def next_invoice_versionno(invoice_id)
@@ -710,7 +874,7 @@ module Claims
           [
             BUNDLE_INVALID_ERROR_CODE,
             BUNDLE_UNKNOWN_ERROR_CODE,
-            SUPPLEMENTS_ATTACHED_INFO_CODE,
+            SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE,
             "bundle_read_ocr_failed",
             "bundle_triage_failed",
             "bundle_supporting_document_extraction_failed",

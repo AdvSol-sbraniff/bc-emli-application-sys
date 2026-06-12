@@ -37,10 +37,10 @@ module Claims
           classification_status: ingest_document.classification_status,
           classification_confidence: ingest_document.classification_confidence,
           classification_reason: ingest_document.classification_reason,
-          supplement_routing_quality:
-            ingest_document.supplement_routing_quality,
-          supplement_routing_quality_reason:
-            ingest_document.supplement_routing_quality_reason,
+          supporting_document_routing_quality:
+            ingest_document.supporting_document_routing_quality,
+          supporting_document_routing_quality_reason:
+            ingest_document.supporting_document_routing_quality_reason,
           classified_at: ingest_document.classified_at,
           updated_at: Time.current
         )

@@ -32,29 +32,14 @@ type InvoiceVersionRow = {
 
   di_ocr_invoice_id?: string | null;
   di_ocr_invoice_date?: string | null;
-  di_ocr_vendor_name?: string | null;
-  di_ocr_invoice_total?: string | number | null;
 
   created_at?: string;
   updated_at?: string;
 };
 
-type InvoiceVersionDetail = {
-  id: string;
-  invoice_id: string;
-  invoice_versionno: number;
-  di_raw_json?: any | null;
-  genai_raw_json?: any | null;
-  [key: string]: any;
-};
-
 type InvoiceMeta = {
   id: string;
-  status?: string | null;
-  created_at?: string | null;
   updated_at?: string | null;
-  status_updated_at?: string | null;
-  session_created_at?: string | null;
   contractor_business_name?: string | null;
 };
 
@@ -83,32 +68,39 @@ type AiDiff = {
   changedRules: Array<{ key: string; before: any; after: any }>;
 };
 
-type DrawerView = 'details' | 'diJson' | 'genaiJson' | 'genaiAdvice';
 type SimpleDiffRow = { label: string; before: string; after: string };
 type SimpleDiffSection = {
   title: string;
   rows: SimpleDiffRow[];
+  upgradeTypeKey?: string | null;
   beforePass?: boolean | null;
   afterPass?: boolean | null;
+  beforeResult?: string | null;
+  afterResult?: string | null;
+  beforeRule?: any | null;
+  afterRule?: any | null;
+};
+
+type PdfChangeRow = {
+  id: string;
+  category: string;
+  title: string;
+  before: string;
+  after: string;
+  rows: SimpleDiffRow[];
+};
+
+type PdfChangeGroup = {
+  upgradeTypeKey: string;
+  rows: PdfChangeRow[];
+};
+
+type RuleDiffGroup = {
+  upgradeTypeKey: string;
+  sections: SimpleDiffSection[];
 };
 
 const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
-const fmtDate = (s?: string | null) => {
-  if (!s) return '—';
-  const raw = String(s);
-  if (raw.includes('T')) return raw.split('T')[0];
-  return raw.slice(0, 10);
-};
-
-function prettyJson(v: any): string {
-  if (v === null || v === undefined) return '';
-  try {
-    return JSON.stringify(v, null, 2);
-  } catch {
-    return String(v);
-  }
-}
-
 function norm(v: any): string {
   if (v === null || v === undefined) return '';
   return String(v).trim();
@@ -132,11 +124,20 @@ const locatedFieldDisplayFields = [
 
 const ruleDisplayFields = [
   { key: 'rule_key', label: 'Rule key' },
-  { key: 'pass', label: 'Pass' },
+  { key: 'result', label: 'Rule result' },
+];
+
+const ruleDetailFields = [
+  { key: 'source_engine', label: 'Source' },
+  { key: 'upgrade_type_key', label: 'Upgrade type' },
+  { key: 'rule_key', label: 'Rule key' },
+  { key: 'rule_result', label: 'Rule result' },
   { key: 'confidence', label: 'Confidence' },
-  { key: 'expected', label: 'Expected' },
-  { key: 'observed', label: 'Observed' },
-  { key: 'reason', label: 'Reason' },
+  { key: 'expected_text', label: 'Expected' },
+  { key: 'observed_text', label: 'Observed' },
+  { key: 'calculation', label: 'Calculation' },
+  { key: 'evidence_text', label: 'Evidence' },
+  { key: 'reason_and_likely_causes', label: 'Reason' },
 ];
 
 function lineitemFieldVal(v: any): string {
@@ -150,12 +151,46 @@ function diffFieldVal(v: any): string {
   return String(v);
 }
 
-type StatusDotProps = { pass: boolean | null | undefined };
+type StatusDotProps = { result?: string | null; pass?: boolean | null | undefined; label?: string };
 
-function StatusDot({ pass }: StatusDotProps) {
-  const bg = pass === true ? 'green.400' : pass === false ? 'red.400' : 'red.400';
+function formatRuleResult(result?: string | null): string {
+  const normalized = String(result ?? '').trim();
+  return normalized || 'missing';
+}
 
-  return <Box as="span" w="10px" h="10px" borderRadius="full" display="inline-block" bg={bg} flexShrink={0} />;
+function StatusDot({ result, pass, label }: StatusDotProps) {
+  const normalized = String(result ?? '').toLowerCase();
+  const bg =
+    normalized === 'pass'
+      ? 'green.400'
+      : normalized === 'info'
+        ? 'blue.400'
+        : normalized === 'warn'
+          ? 'orange.400'
+          : normalized === 'fail'
+            ? 'red.400'
+            : pass === true
+              ? 'green.400'
+              : pass === false
+                ? 'red.400'
+                : 'gray.300';
+
+  const tooltip = label || `Rule result: ${formatRuleResult(result)}`;
+
+  return (
+    <Tooltip label={tooltip} hasArrow placement="top">
+      <Box
+        as="span"
+        w="10px"
+        h="10px"
+        borderRadius="full"
+        display="inline-block"
+        bg={bg}
+        flexShrink={0}
+        aria-label={tooltip}
+      />
+    </Tooltip>
+  );
 }
 
 function lineitemKey(li: any): string {
@@ -184,9 +219,6 @@ function diffContractor(a: DiffSnapshot, b: DiffSnapshot): ContractorDiff {
     { key: 'di_ocr_vendor_address', label: 'OCR vendor address' },
     { key: 'di_ocr_customer_name', label: 'OCR customer name' },
     { key: 'di_ocr_billing_address', label: 'OCR billing address' },
-    { key: 'di_ocr_sub_total', label: 'OCR sub-total' },
-    { key: 'di_ocr_total_tax', label: 'OCR total tax' },
-    { key: 'di_ocr_invoice_total', label: 'OCR invoice total' },
     { key: 'di_ocr_amount_due', label: 'OCR amount due' },
   ];
 
@@ -237,28 +269,38 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
       after: norm(b.read?.[f.key]) || '—',
     }));
 
-  const fieldKey = (r: any) => String(r?.field_key ?? '');
-  const baseFieldKey = (k: string) => String(k || '').split('|')[0] || k;
+  const fieldKey = (r: any) =>
+    [r?.source_engine ?? '', r?.upgrade_type_key ?? r?.invoice_upgrade_type_id ?? '', r?.field_key ?? ''].join('|');
+  const baseFieldKey = (k: string) =>
+    String(k || '')
+      .split('|')
+      .pop() || k;
+  const genaiLocatedFieldsA = a.locatedFields.filter((r) => String(r?.source_engine ?? '').toLowerCase() === 'genai');
+  const genaiLocatedFieldsB = b.locatedFields.filter((r) => String(r?.source_engine ?? '').toLowerCase() === 'genai');
   const locatedMeaningfulChanged = (x: any, y: any): boolean => {
     const xValue = norm(x?.value);
     const yValue = norm(y?.value);
     return xValue !== yValue;
   };
   const mapFieldA = new Map(
-    a.locatedFields.map((r) => [
+    genaiLocatedFieldsA.map((r) => [
       fieldKey(r),
       {
         field_key: r?.field_key ?? '',
+        source_engine: r?.source_engine ?? '',
+        upgrade_type_key: r?.upgrade_type_key ?? null,
         value: r?.value_text ?? null,
         confidence: r?.confidence ?? null,
       },
     ]),
   );
   const mapFieldB = new Map(
-    b.locatedFields.map((r) => [
+    genaiLocatedFieldsB.map((r) => [
       fieldKey(r),
       {
         field_key: r?.field_key ?? '',
+        source_engine: r?.source_engine ?? '',
+        upgrade_type_key: r?.upgrade_type_key ?? null,
         value: r?.value_text ?? null,
         confidence: r?.confidence ?? null,
       },
@@ -312,48 +354,41 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
   unmatchedAdded.forEach((x) => addedFields.push(x));
   unmatchedRemoved.forEach((x) => removedFields.push(x));
 
-  const ruleKey = (r: any) => String(r?.rule_number ?? r?.id ?? '');
-  const mapRuleA = new Map(
-    a.rulechecks.map((r) => [
-      ruleKey(r),
-      {
-        rule_key: r?.rule_key ?? null,
-        result: r?.rule_result ?? null,
-        confidence: r?.confidence ?? null,
-        expected: r?.expected_text ?? null,
-        observed: r?.observed_text ?? null,
-        reason: r?.reason_and_likely_causes ?? null,
-      },
-    ]),
-  );
-  const mapRuleB = new Map(
-    b.rulechecks.map((r) => [
-      ruleKey(r),
-      {
-        rule_key: r?.rule_key ?? null,
-        result: r?.rule_result ?? null,
-        confidence: r?.confidence ?? null,
-        expected: r?.expected_text ?? null,
-        observed: r?.observed_text ?? null,
-        reason: r?.reason_and_likely_causes ?? null,
-      },
-    ]),
-  );
+  const ruleKey = (r: any) =>
+    [r?.source_engine ?? '', r?.upgrade_type_key ?? '', r?.rule_key ?? r?.rule_number ?? r?.id ?? ''].join('|');
+  const toRuleComparable = (r: any) => ({
+    rule_key: r?.rule_key ?? null,
+    result: r?.rule_result ?? null,
+  });
+  const toRuleEntry = (r: any) => ({
+    comparable: toRuleComparable(r),
+    raw: r,
+  });
+  const mapRuleA = new Map(a.rulechecks.map((r) => [ruleKey(r), toRuleEntry(r)]));
+  const mapRuleB = new Map(b.rulechecks.map((r) => [ruleKey(r), toRuleEntry(r)]));
 
   const addedRules: any[] = [];
   const removedRules: any[] = [];
   const changedRules: Array<{ key: string; before: any; after: any }> = [];
 
   mapRuleB.forEach((v, k) => {
-    if (!mapRuleA.has(k)) addedRules.push({ key: k, ...v });
+    if (!mapRuleA.has(k)) addedRules.push({ key: k, ...v.comparable, rawRule: v.raw });
   });
   mapRuleA.forEach((v, k) => {
-    if (!mapRuleB.has(k)) removedRules.push({ key: k, ...v });
+    if (!mapRuleB.has(k)) removedRules.push({ key: k, ...v.comparable, rawRule: v.raw });
   });
   mapRuleA.forEach((vA, k) => {
     if (!mapRuleB.has(k)) return;
     const vB = mapRuleB.get(k);
-    if (!deepEqualSimple(vA, vB)) changedRules.push({ key: k, before: vA, after: vB });
+    if (norm(vA?.comparable?.result) !== norm(vB?.comparable?.result)) {
+      changedRules.push({
+        key: k,
+        before: vA?.comparable,
+        after: vB?.comparable,
+        beforeRule: vA?.raw,
+        afterRule: vB?.raw,
+      });
+    }
   });
 
   return { overallChanges, addedFields, removedFields, changedFields, addedRules, removedRules, changedRules };
@@ -400,26 +435,93 @@ function lineitemDiffSections(diff: ContractorDiff): SimpleDiffSection[] {
 
 function locatedFieldTitle(entry: { key: string; before?: any; after?: any }): string {
   const fieldKey = entry.before?.field_key || entry.after?.field_key || entry.key;
-  return `Field ${fieldKey}`;
+  const upgradeType = entry.before?.upgrade_type_key || entry.after?.upgrade_type_key;
+  return upgradeType ? `Field ${fieldKey} (${upgradeType})` : `Field ${fieldKey}`;
+}
+
+function locatedFieldUpgradeType(before?: any | null, after?: any | null): string {
+  return String(after?.upgrade_type_key || before?.upgrade_type_key || 'common');
 }
 
 function locatedFieldDiffSections(diff: AiDiff): SimpleDiffSection[] {
   const changed = sortedByKey(diff.changedFields, (item) => item.key).map((item) => ({
     title: locatedFieldTitle(item),
     rows: buildDiffRows(locatedFieldDisplayFields, item.before, item.after, diffFieldVal),
+    upgradeTypeKey: locatedFieldUpgradeType(item.before, item.after),
   }));
 
   const added = sortedByKey(diff.addedFields, (item) => String(item.key)).map((item) => ({
     title: locatedFieldTitle({ key: String(item.key), after: item }),
     rows: buildDiffRows(locatedFieldDisplayFields, {}, item, diffFieldVal),
+    upgradeTypeKey: locatedFieldUpgradeType(null, item),
   }));
 
   const removed = sortedByKey(diff.removedFields, (item) => String(item.key)).map((item) => ({
     title: locatedFieldTitle({ key: String(item.key), before: item }),
     rows: buildDiffRows(locatedFieldDisplayFields, item, {}, diffFieldVal),
+    upgradeTypeKey: locatedFieldUpgradeType(item, null),
   }));
 
   return [...changed, ...added, ...removed].filter((section) => section.rows.length > 0);
+}
+
+function firstChangedValue(rows: SimpleDiffRow[], side: 'before' | 'after'): string {
+  const row = rows.find((r) => norm(r[side]));
+  return row?.[side] || '—';
+}
+
+function invoicePdfChangeRows(
+  contractorDiff: ContractorDiff | null,
+  lineSections: SimpleDiffSection[],
+): PdfChangeRow[] {
+  if (!contractorDiff) return [];
+
+  const headerRows = contractorDiff.changedFields.map((field) => ({
+    id: `header-${field.label}`,
+    category: 'Header',
+    title: field.label,
+    before: field.before || '—',
+    after: field.after || '—',
+    rows: [{ label: field.label, before: field.before || '—', after: field.after || '—' }],
+  }));
+
+  const lineRows = lineSections.map((section) => ({
+    id: `line-${section.title}`,
+    category: 'Line item',
+    title: section.title,
+    before: firstChangedValue(section.rows, 'before'),
+    after: firstChangedValue(section.rows, 'after'),
+    rows: section.rows,
+  }));
+
+  return [...headerRows, ...lineRows];
+}
+
+function locatedFieldPdfChangeGroups(locatedSections: SimpleDiffSection[]): PdfChangeGroup[] {
+  const groups = new Map<string, PdfChangeRow[]>();
+
+  sortedByKey(locatedSections, (section) => `${section.upgradeTypeKey || 'common'}|${section.title}`).forEach(
+    (section) => {
+      const upgradeTypeKey = section.upgradeTypeKey || 'common';
+      const groupRows = groups.get(upgradeTypeKey) || [];
+
+      groupRows.push({
+        id: `genai-field-${upgradeTypeKey}-${section.title}`,
+        category: 'GenAI field',
+        title: section.title,
+        before: firstChangedValue(section.rows, 'before'),
+        after: firstChangedValue(section.rows, 'after'),
+        rows: section.rows,
+      });
+
+      groups.set(upgradeTypeKey, groupRows);
+    },
+  );
+
+  return Array.from(groups.entries()).map(([upgradeTypeKey, groupRows]) => ({
+    upgradeTypeKey,
+    rows: groupRows,
+  }));
 }
 
 function ruleSectionTitle(ruleNumber: string, record?: any): string {
@@ -427,47 +529,71 @@ function ruleSectionTitle(ruleNumber: string, record?: any): string {
   return key || `rule_${ruleNumber}`;
 }
 
+function ruleUpgradeType(beforeRule?: any | null, afterRule?: any | null): string {
+  return String(afterRule?.upgrade_type_key || beforeRule?.upgrade_type_key || 'unknown_upgrade_type');
+}
+
 function ruleDiffSections(diff: AiDiff): SimpleDiffSection[] {
   const changed = sortedByKey(diff.changedRules, (item) => item.key).map((item) => ({
     title: ruleSectionTitle(item.key, item.after || item.before),
     rows: buildDiffRows(ruleDisplayFields, item.before, item.after, diffFieldVal),
-    beforePass: item.before?.pass,
-    afterPass: item.after?.pass,
+    upgradeTypeKey: ruleUpgradeType(item.beforeRule, item.afterRule),
+    beforeResult: item.before?.result,
+    afterResult: item.after?.result,
+    beforeRule: item.beforeRule,
+    afterRule: item.afterRule,
   }));
 
   const added = sortedByKey(diff.addedRules, (item) => String(item.key)).map((item) => ({
     title: ruleSectionTitle(String(item.key), item),
     rows: buildDiffRows(ruleDisplayFields, {}, item, diffFieldVal),
-    beforePass: null,
-    afterPass: item.pass,
+    upgradeTypeKey: ruleUpgradeType(null, item.rawRule),
+    beforeResult: null,
+    afterResult: item.result,
+    beforeRule: null,
+    afterRule: item.rawRule,
   }));
 
   const removed = sortedByKey(diff.removedRules, (item) => String(item.key)).map((item) => ({
     title: ruleSectionTitle(String(item.key), item),
     rows: buildDiffRows(ruleDisplayFields, item, {}, diffFieldVal),
-    beforePass: item.pass,
-    afterPass: null,
+    upgradeTypeKey: ruleUpgradeType(item.rawRule, null),
+    beforeResult: item.result,
+    afterResult: null,
+    beforeRule: item.rawRule,
+    afterRule: null,
   }));
 
   return [...changed, ...added, ...removed].filter((section) => section.rows.length > 0);
+}
+
+function ruleDiffGroups(sections: SimpleDiffSection[]): RuleDiffGroup[] {
+  const groups = new Map<string, SimpleDiffSection[]>();
+
+  sortedByKey(sections, (section) => `${section.upgradeTypeKey || 'unknown_upgrade_type'}|${section.title}`).forEach(
+    (section) => {
+      const key = section.upgradeTypeKey || 'unknown_upgrade_type';
+      const group = groups.get(key) || [];
+      group.push(section);
+      groups.set(key, group);
+    },
+  );
+
+  return Array.from(groups.entries()).map(([upgradeTypeKey, groupSections]) => ({
+    upgradeTypeKey,
+    sections: groupSections,
+  }));
 }
 
 export function InvoiceVersionsAdminScreen() {
   const [invoiceId, setInvoiceId] = useState<string>('');
   const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
   const [rows, setRows] = useState<InvoiceVersionRow[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>('');
-  const [selectedDetail, setSelectedDetail] = useState<InvoiceVersionDetail | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
-  const [drawerView, setDrawerView] = useState<DrawerView>('details');
-
-  const [diJson, setDiJson] = useState<any | null>(null);
-  const [genaiJson, setGenaiJson] = useState<any | null>(null);
 
   const [diffAId, setDiffAId] = useState<string>('');
   const [diffBId, setDiffBId] = useState<string>('');
@@ -475,7 +601,8 @@ export function InvoiceVersionsAdminScreen() {
   const [diffError, setDiffError] = useState<string>('');
   const [contractorDiff, setContractorDiff] = useState<ContractorDiff | null>(null);
   const [aiDiff, setAiDiff] = useState<AiDiff | null>(null);
-  const [lastDiffPair, setLastDiffPair] = useState<{ a: string; b: string } | null>(null);
+  const [selectedPdfDiff, setSelectedPdfDiff] = useState<PdfChangeRow | null>(null);
+  const [selectedRuleDiff, setSelectedRuleDiff] = useState<SimpleDiffSection | null>(null);
 
   // ============================================================
   // SECTION 01 — ROUTE QUERYSTRING (prefill invoice_id)
@@ -496,15 +623,11 @@ export function InvoiceVersionsAdminScreen() {
     setRows([]);
     setInvoiceMeta(null);
     setSelectedVersionId('');
-    setSelectedDetail(null);
-    setDiJson(null);
-    setGenaiJson(null);
     setDiffAId('');
     setDiffBId('');
     setDiffError('');
     setContractorDiff(null);
     setAiDiff(null);
-    setLastDiffPair(null);
 
     try {
       if (!id.trim()) throw new Error('Missing invoice_id.');
@@ -522,43 +645,10 @@ export function InvoiceVersionsAdminScreen() {
 
       setRows(Array.isArray(data?.invoice_versions) ? data.invoice_versions : []);
       setInvoiceMeta(data?.invoice || null);
-      setDrawerView('details');
     } catch (e: any) {
       setError(e?.message || 'Failed to load invoice_versions.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchVersionDetail = async (invoiceVersionId: string) => {
-    setLoadingDetail(true);
-    setError('');
-    setSelectedVersionId(invoiceVersionId);
-
-    try {
-      const url = `/api/claims/admin/invoice_versions/${encodeURIComponent(invoiceVersionId)}`;
-
-      const res = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-
-      const iv: InvoiceVersionDetail | undefined = data?.invoice_version;
-      if (!iv) throw new Error('Missing invoice_version in response.');
-
-      setSelectedDetail(iv);
-      setDiJson(iv.di_raw_json ?? null);
-      setGenaiJson(iv.genai_raw_json ?? null);
-      setDrawerView('details');
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load JSON blobs.');
-      setSelectedVersionId('');
-    } finally {
-      setLoadingDetail(false);
     }
   };
 
@@ -567,11 +657,6 @@ export function InvoiceVersionsAdminScreen() {
     fetchRows(invoiceId.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
-
-  const openDetailsDrawer = async (invoiceVersionId: string) => {
-    await fetchVersionDetail(invoiceVersionId);
-    setIsDrawerOpen(true);
-  };
 
   const fetchDiffSnapshot = async (invoiceVersionId: string): Promise<DiffSnapshot> => {
     const [readRes, genaiRes] = await Promise.all([
@@ -608,6 +693,8 @@ export function InvoiceVersionsAdminScreen() {
 
   const runDiffRefresh = async () => {
     setDiffError('');
+    setSelectedPdfDiff(null);
+    setSelectedRuleDiff(null);
 
     if (!diffAId || !diffBId) {
       setDiffError('Pick two versions: one A and one B.');
@@ -624,11 +711,11 @@ export function InvoiceVersionsAdminScreen() {
       const [snapA, snapB] = await Promise.all([fetchDiffSnapshot(diffAId), fetchDiffSnapshot(diffBId)]);
       setContractorDiff(diffContractor(snapA, snapB));
       setAiDiff(diffAi(snapA, snapB));
-      setLastDiffPair({ a: diffAId, b: diffBId });
     } catch (e: any) {
       setContractorDiff(null);
       setAiDiff(null);
-      setLastDiffPair(null);
+      setSelectedPdfDiff(null);
+      setSelectedRuleDiff(null);
       setDiffError(e?.message || 'Failed to refresh diff.');
     } finally {
       setDiffLoading(false);
@@ -645,20 +732,12 @@ export function InvoiceVersionsAdminScreen() {
     if (id === diffAId) setDiffAId('');
   };
 
-  const detailEntries = selectedDetail
-    ? Object.entries(selectedDetail)
-        .filter(([k]) => {
-          if (k === 'di_raw_json' || k === 'genai_raw_json') return false;
-          if (k === 'genai_admin_advice' || k === 'di_page_map') return false;
-          if (k.toLowerCase().includes('polygon')) return false;
-          return true;
-        })
-        .sort(([a], [b]) => a.localeCompare(b))
-    : [];
-
   const contractorLineSections = contractorDiff ? lineitemDiffSections(contractorDiff) : [];
   const aiLocatedSections = aiDiff ? locatedFieldDiffSections(aiDiff) : [];
+  const pdfChangeRows = invoicePdfChangeRows(contractorDiff, contractorLineSections);
+  const pdfLocatedGroups = locatedFieldPdfChangeGroups(aiLocatedSections);
   const aiRuleSections = aiDiff ? ruleDiffSections(aiDiff) : [];
+  const aiRuleGroups = ruleDiffGroups(aiRuleSections);
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
@@ -669,13 +748,6 @@ export function InvoiceVersionsAdminScreen() {
           {/* invoice context */}
           <Flex direction="column" gap={3} mb={4}>
             <Flex gap={3} align="end" wrap="wrap">
-              <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7} mb={1}>
-                  session_created_at
-                </Text>
-                <Input value={fmtDate(invoiceMeta?.session_created_at)} isReadOnly bg="white" />
-              </Box>
-
               <Box flex="1" minW="280px">
                 <Text fontSize="xs" opacity={0.7} mb={1}>
                   contractor
@@ -695,29 +767,6 @@ export function InvoiceVersionsAdminScreen() {
                 </Tooltip>
               </Box>
             </Flex>
-
-            <Flex gap={3} align="end" wrap="wrap">
-              <Box flex="1" minW="360px">
-                <Text fontSize="xs" opacity={0.7} mb={1}>
-                  invoice_id
-                </Text>
-                <Input value={invoiceId} isReadOnly bg="white" fontFamily="mono" />
-              </Box>
-
-              <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7} mb={1}>
-                  invoices.status
-                </Text>
-                <Input value={invoiceMeta?.status || '—'} isReadOnly bg="white" />
-              </Box>
-
-              <Box minW="220px">
-                <Text fontSize="xs" opacity={0.7} mb={1}>
-                  invoices.created_at
-                </Text>
-                <Input value={fmtDate(invoiceMeta?.created_at)} isReadOnly bg="white" />
-              </Box>
-            </Flex>
           </Flex>
 
           {error && (
@@ -730,26 +779,8 @@ export function InvoiceVersionsAdminScreen() {
 
           {/* grid */}
           <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} mb={4}>
-            <Flex align="center" justify="space-between" mb={2}>
-              <Text fontSize="sm" fontWeight="bold">
-                Invoice versions
-              </Text>
+            <Flex align="center" justify="flex-end" mb={2}>
               {loading && <Spinner size="sm" />}
-            </Flex>
-
-            <Flex mb={2} gap={4} align="center" wrap="wrap">
-              <Text fontSize="xs">
-                A:{' '}
-                <Box as="span" fontFamily="mono">
-                  {diffAId || '—'}
-                </Box>
-              </Text>
-              <Text fontSize="xs">
-                B:{' '}
-                <Box as="span" fontFamily="mono">
-                  {diffBId || '—'}
-                </Box>
-              </Text>
             </Flex>
 
             <Table size="sm">
@@ -758,9 +789,6 @@ export function InvoiceVersionsAdminScreen() {
                   <Th>diff select</Th>
                   <Th>updated</Th>
                   <Th>version</Th>
-                  <Th>di_invoice_id</Th>
-                  <Th>vendor</Th>
-                  <Th isNumeric>total</Th>
                   <Th></Th>
                 </Tr>
               </Thead>
@@ -773,7 +801,7 @@ export function InvoiceVersionsAdminScreen() {
                     borderLeftWidth={r.id === selectedVersionId ? '4px' : '0'}
                     borderLeftColor={r.id === selectedVersionId ? 'blue.500' : 'transparent'}
                     cursor="pointer"
-                    onClick={() => fetchVersionDetail(r.id)}
+                    onClick={() => setSelectedVersionId(r.id)}
                   >
                     <Td>
                       <Flex gap={1}>
@@ -807,15 +835,6 @@ export function InvoiceVersionsAdminScreen() {
                     <Td fontFamily="mono" fontSize="xs">
                       {r.invoice_versionno}
                     </Td>
-                    <Td fontFamily="mono" fontSize="xs">
-                      {r.di_ocr_invoice_id ?? ''}
-                    </Td>
-                    <Td fontSize="xs" maxW="280px">
-                      {r.di_ocr_vendor_name ?? ''}
-                    </Td>
-                    <Td fontFamily="mono" fontSize="xs" isNumeric>
-                      {r.di_ocr_invoice_total ?? ''}
-                    </Td>
                     <Td>
                       <Tooltip label="Open version-specific PDF viewer">
                         <IconButton
@@ -829,20 +848,6 @@ export function InvoiceVersionsAdminScreen() {
                             const url = `/invoice-versions/${encodeURIComponent(r.id)}/review`;
                             window.open(url, '_blank', 'noopener,noreferrer');
                           }}
-                        />
-                      </Tooltip>
-
-                      <Tooltip label="Open all invoice_version fields">
-                        <IconButton
-                          aria-label="Open invoice version details"
-                          icon={<Info size={16} />}
-                          size="xs"
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDetailsDrawer(r.id);
-                          }}
-                          isLoading={loadingDetail && selectedVersionId === r.id}
                         />
                       </Tooltip>
                     </Td>
@@ -864,10 +869,7 @@ export function InvoiceVersionsAdminScreen() {
 
           {/* diff panels */}
           <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
-            <Flex align="center" justify="space-between" mb={2}>
-              <Text fontSize="sm" fontWeight="bold">
-                Version diffs
-              </Text>
+            <Flex align="center" justify="flex-end" mb={2}>
               <Flex align="center" gap={2}>
                 <Tooltip label="Refresh A vs B diff tabs">
                   <IconButton
@@ -880,7 +882,6 @@ export function InvoiceVersionsAdminScreen() {
                     isLoading={diffLoading}
                   />
                 </Tooltip>
-                {loadingDetail && <Spinner size="sm" />}
               </Flex>
             </Flex>
 
@@ -888,21 +889,6 @@ export function InvoiceVersionsAdminScreen() {
               <Box mb={3} p={2} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
                 <Text fontSize="xs" color="red.700">
                   {diffError}
-                </Text>
-              </Box>
-            )}
-
-            {lastDiffPair && (
-              <Box mb={3} p={2} bg="blue.50" borderWidth="1px" borderColor="blue.200" borderRadius="md">
-                <Text fontSize="xs">
-                  Diff loaded for A:{' '}
-                  <Box as="span" fontFamily="mono">
-                    {lastDiffPair.a}
-                  </Box>{' '}
-                  and B:{' '}
-                  <Box as="span" fontFamily="mono">
-                    {lastDiffPair.b}
-                  </Box>
                 </Text>
               </Box>
             )}
@@ -931,8 +917,8 @@ export function InvoiceVersionsAdminScreen() {
               }}
             >
               <TabList>
-                <Tab>Diff Contractor Changes</Tab>
-                <Tab>Diff AI Changes</Tab>
+                <Tab>Invoice PDF Changes</Tab>
+                <Tab>Rule Status Changes</Tab>
               </TabList>
 
               <TabPanels>
@@ -944,8 +930,128 @@ export function InvoiceVersionsAdminScreen() {
                   ) : (
                     <Flex direction="column" gap={3}>
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        {pdfChangeRows.length === 0 && pdfLocatedGroups.length === 0 ? (
+                          <Text fontSize="xs" opacity={0.8}>
+                            No invoice PDF changes.
+                          </Text>
+                        ) : (
+                          <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" overflowX="auto" bg="white">
+                            <Table
+                              size="sm"
+                              variant="simple"
+                              sx={{
+                                'th, td': {
+                                  py: 1,
+                                },
+                              }}
+                            >
+                              <Thead>
+                                <Tr>
+                                  <Th>Type</Th>
+                                  <Th>Change</Th>
+                                  <Th>A</Th>
+                                  <Th>B</Th>
+                                  <Th w="56px">Info</Th>
+                                </Tr>
+                              </Thead>
+                              <Tbody>
+                                {pdfChangeRows.map((row) => (
+                                  <Tr key={row.id}>
+                                    <Td>
+                                      <Text fontSize="xs" noOfLines={1}>
+                                        {row.category}
+                                      </Text>
+                                    </Td>
+                                    <Td>
+                                      <Text fontSize="xs" fontWeight="bold" fontFamily="mono" noOfLines={1}>
+                                        {row.title}
+                                      </Text>
+                                    </Td>
+                                    <Td maxW="260px">
+                                      <Text fontSize="xs" noOfLines={1}>
+                                        {row.before}
+                                      </Text>
+                                    </Td>
+                                    <Td maxW="260px">
+                                      <Text fontSize="xs" noOfLines={1}>
+                                        {row.after}
+                                      </Text>
+                                    </Td>
+                                    <Td>
+                                      <Tooltip label="Show old and new values" hasArrow>
+                                        <IconButton
+                                          aria-label={`Show invoice PDF change for ${row.title}`}
+                                          icon={<Info />}
+                                          size="xs"
+                                          variant="ghost"
+                                          onClick={() => setSelectedPdfDiff(row)}
+                                        />
+                                      </Tooltip>
+                                    </Td>
+                                  </Tr>
+                                ))}
+                                {pdfLocatedGroups.map((group) => (
+                                  <React.Fragment key={group.upgradeTypeKey}>
+                                    <Tr>
+                                      <Td colSpan={5} bg="gray.50">
+                                        <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                          {group.upgradeTypeKey}
+                                        </Text>
+                                      </Td>
+                                    </Tr>
+                                    {group.rows.map((row) => (
+                                      <Tr key={row.id}>
+                                        <Td>
+                                          <Text fontSize="xs" noOfLines={1}>
+                                            {row.category}
+                                          </Text>
+                                        </Td>
+                                        <Td>
+                                          <Text fontSize="xs" fontWeight="bold" fontFamily="mono" noOfLines={1}>
+                                            {row.title}
+                                          </Text>
+                                        </Td>
+                                        <Td maxW="260px">
+                                          <Text fontSize="xs" noOfLines={1}>
+                                            {row.before}
+                                          </Text>
+                                        </Td>
+                                        <Td maxW="260px">
+                                          <Text fontSize="xs" noOfLines={1}>
+                                            {row.after}
+                                          </Text>
+                                        </Td>
+                                        <Td>
+                                          <Tooltip label="Show old and new values" hasArrow>
+                                            <IconButton
+                                              aria-label={`Show invoice PDF change for ${row.title}`}
+                                              icon={<Info />}
+                                              size="xs"
+                                              variant="ghost"
+                                              onClick={() => setSelectedPdfDiff(row)}
+                                            />
+                                          </Tooltip>
+                                        </Td>
+                                      </Tr>
+                                    ))}
+                                  </React.Fragment>
+                                ))}
+                              </Tbody>
+                            </Table>
+                          </Box>
+                        )}
+                      </Box>
+
+                      <Box
+                        display="none"
+                        borderWidth="1px"
+                        borderColor="greys.grey20"
+                        borderRadius="md"
+                        p={3}
+                        bg="gray.50"
+                      >
                         <Text fontSize="sm" fontWeight="bold" mb={2}>
-                          Header field changes
+                          Legacy hidden header diff
                         </Text>
                         {contractorDiff.changedFields.length === 0 ? (
                           <Text fontSize="xs" opacity={0.8}>
@@ -989,9 +1095,16 @@ export function InvoiceVersionsAdminScreen() {
                         )}
                       </Box>
 
-                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                      <Box
+                        display="none"
+                        borderWidth="1px"
+                        borderColor="greys.grey20"
+                        borderRadius="md"
+                        p={3}
+                        bg="gray.50"
+                      >
                         <Text fontSize="sm" fontWeight="bold" mb={2}>
-                          Line item changes
+                          Legacy hidden line diff
                         </Text>
                         <Flex direction="column" gap={2}>
                           {contractorLineSections.length === 0 ? (
@@ -1059,7 +1172,14 @@ export function InvoiceVersionsAdminScreen() {
                     </Text>
                   ) : (
                     <Flex direction="column" gap={3}>
-                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                      <Box
+                        display="none"
+                        borderWidth="1px"
+                        borderColor="greys.grey20"
+                        borderRadius="md"
+                        p={3}
+                        bg="gray.50"
+                      >
                         <Text fontSize="sm" fontWeight="bold" mb={2}>
                           Overall AI changes
                         </Text>
@@ -1105,7 +1225,14 @@ export function InvoiceVersionsAdminScreen() {
                         )}
                       </Box>
 
-                      <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                      <Box
+                        display="none"
+                        borderWidth="1px"
+                        borderColor="greys.grey20"
+                        borderRadius="md"
+                        p={3}
+                        bg="gray.50"
+                      >
                         <Text fontSize="sm" fontWeight="bold" mb={2}>
                           Located field changes
                         </Text>
@@ -1166,81 +1293,74 @@ export function InvoiceVersionsAdminScreen() {
                       </Box>
 
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>
-                          Rulecheck changes
-                        </Text>
-                        {aiRuleSections.length === 0 ? (
+                        {aiRuleGroups.length === 0 ? (
                           <Text fontSize="xs" opacity={0.8}>
-                            No rulecheck changes.
+                            No rule status changes.
                           </Text>
                         ) : (
-                          <Flex direction="column" gap={2}>
-                            {aiRuleSections.map((section) => (
-                              <Box
-                                key={section.title}
-                                borderWidth="1px"
-                                borderColor="gray.200"
-                                borderRadius="md"
-                                p={2}
-                                bg="white"
-                              >
-                                <Flex align="center" justify="space-between" gap={3} mb={1} wrap="wrap">
-                                  <Text fontSize="xs" fontWeight="bold">
-                                    {section.title}
-                                  </Text>
-                                  <Flex align="center" gap={3}>
-                                    <Flex align="center" gap={2}>
-                                      <Text fontSize="10px" opacity={0.7}>
-                                        A
-                                      </Text>
-                                      <StatusDot pass={section.beforePass} />
-                                    </Flex>
-                                    <Text fontSize="10px" opacity={0.5}>
-                                      →
-                                    </Text>
-                                    <Flex align="center" gap={2}>
-                                      <Text fontSize="10px" opacity={0.7}>
-                                        B
-                                      </Text>
-                                      <StatusDot pass={section.afterPass} />
-                                    </Flex>
-                                  </Flex>
-                                </Flex>
-                                <Flex direction="column" gap={1}>
-                                  {section.rows.map((row) => (
-                                    <Box
-                                      key={`${section.title}-${row.label}`}
-                                      borderTopWidth="1px"
-                                      borderColor="gray.100"
-                                      pt={1}
-                                    >
-                                      <Text fontSize="10px" opacity={0.7}>
-                                        {row.label}
-                                      </Text>
-                                      <Flex gap={3}>
-                                        <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>
-                                            A (before)
+                          <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" overflowX="auto" bg="white">
+                            <Table size="sm" variant="simple">
+                              <Thead>
+                                <Tr>
+                                  <Th>Rule</Th>
+                                  <Th w="64px">A</Th>
+                                  <Th w="28px"></Th>
+                                  <Th w="64px">B</Th>
+                                  <Th w="56px">Info</Th>
+                                </Tr>
+                              </Thead>
+                              <Tbody>
+                                {aiRuleGroups.map((group) => (
+                                  <React.Fragment key={group.upgradeTypeKey}>
+                                    <Tr>
+                                      <Td colSpan={5} bg="gray.50">
+                                        <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                          {group.upgradeTypeKey}
+                                        </Text>
+                                      </Td>
+                                    </Tr>
+                                    {group.sections.map((section) => (
+                                      <Tr key={section.title}>
+                                        <Td>
+                                          <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                            {section.title}
                                           </Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
-                                            {row.before || '-'}
+                                        </Td>
+                                        <Td>
+                                          <StatusDot
+                                            result={section.beforeResult}
+                                            label={`A: ${formatRuleResult(section.beforeResult)}`}
+                                          />
+                                        </Td>
+                                        <Td>
+                                          <Text fontSize="10px" opacity={0.5}>
+                                            →
                                           </Text>
-                                        </Box>
-                                        <Box flex="1">
-                                          <Text fontSize="10px" opacity={0.7}>
-                                            B (after)
-                                          </Text>
-                                          <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
-                                            {row.after || '-'}
-                                          </Text>
-                                        </Box>
-                                      </Flex>
-                                    </Box>
-                                  ))}
-                                </Flex>
-                              </Box>
-                            ))}
-                          </Flex>
+                                        </Td>
+                                        <Td>
+                                          <StatusDot
+                                            result={section.afterResult}
+                                            label={`B: ${formatRuleResult(section.afterResult)}`}
+                                          />
+                                        </Td>
+                                        <Td>
+                                          <Tooltip label="Show old and new rule text" hasArrow>
+                                            <IconButton
+                                              aria-label={`Show rule text for ${section.title}`}
+                                              icon={<Info />}
+                                              size="xs"
+                                              variant="ghost"
+                                              onClick={() => setSelectedRuleDiff(section)}
+                                            />
+                                          </Tooltip>
+                                        </Td>
+                                      </Tr>
+                                    ))}
+                                  </React.Fragment>
+                                ))}
+                              </Tbody>
+                            </Table>
+                          </Box>
                         )}
                       </Box>
                     </Flex>
@@ -1252,148 +1372,142 @@ export function InvoiceVersionsAdminScreen() {
         </Box>
       </Container>
 
-      <Drawer isOpen={isDrawerOpen} placement="right" onClose={() => setIsDrawerOpen(false)} size="xl">
+      <Drawer isOpen={!!selectedPdfDiff} placement="right" onClose={() => setSelectedPdfDiff(null)} size="xl">
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Invoice Version Inspection Details</DrawerHeader>
+          <DrawerHeader>Invoice PDF Change</DrawerHeader>
           <DrawerBody>
-            {!selectedDetail ? (
+            {!selectedPdfDiff ? (
               <Text fontSize="sm" opacity={0.7}>
-                No row selected.
+                No change selected.
               </Text>
             ) : (
-              <Flex direction="column" gap={3}>
-                <Flex gap={2} wrap="wrap">
-                  <Button
-                    size="sm"
-                    variant={drawerView === 'details' ? 'solid' : 'outline'}
-                    colorScheme="blue"
-                    onClick={() => setDrawerView('details')}
-                  >
-                    Details
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={drawerView === 'diJson' ? 'solid' : 'outline'}
-                    colorScheme="blue"
-                    onClick={() => setDrawerView('diJson')}
-                  >
-                    DI JSON
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={drawerView === 'genaiJson' ? 'solid' : 'outline'}
-                    colorScheme="blue"
-                    onClick={() => setDrawerView('genaiJson')}
-                  >
-                    GenAI JSON
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={drawerView === 'genaiAdvice' ? 'solid' : 'outline'}
-                    colorScheme="blue"
-                    onClick={() => setDrawerView('genaiAdvice')}
-                  >
-                    GenAI Advice
-                  </Button>
-                </Flex>
+              <Flex direction="column" gap={4}>
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    {selectedPdfDiff.category}
+                  </Text>
+                  <Text fontSize="sm" fontWeight="bold" fontFamily="mono">
+                    {selectedPdfDiff.title}
+                  </Text>
+                </Box>
 
-                {drawerView === 'details' && (
-                  <Flex direction="column" gap={3}>
-                    {detailEntries.map(([k, v]) => (
-                      <Box key={k}>
-                        <Text fontSize="xs" opacity={0.7} mb={1}>
-                          {k}
-                        </Text>
-                        {typeof v === 'object' && v !== null ? (
-                          <Box
-                            as="pre"
-                            fontFamily="mono"
-                            fontSize="xs"
-                            whiteSpace="pre-wrap"
-                            borderWidth="1px"
-                            borderColor="greys.grey20"
-                            borderRadius="md"
-                            p={3}
-                            bg="gray.50"
-                            maxH="260px"
-                            overflow="auto"
-                          >
-                            {prettyJson(v)}
-                          </Box>
-                        ) : (
-                          <Text fontSize="sm" fontFamily={k.endsWith('_id') ? 'mono' : undefined} whiteSpace="pre-wrap">
-                            {v === null || v === undefined || v === '' ? '—' : String(v)}
-                          </Text>
-                        )}
-                      </Box>
-                    ))}
-                  </Flex>
-                )}
+                <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" overflowX="auto">
+                  <Table size="sm" variant="simple">
+                    <Thead>
+                      <Tr>
+                        <Th>Value</Th>
+                        <Th>A</Th>
+                        <Th>B</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {selectedPdfDiff.rows.map((row) => (
+                        <Tr key={row.label}>
+                          <Td>
+                            <Text fontSize="xs" fontWeight="bold">
+                              {row.label}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <Text fontSize="xs" whiteSpace="pre-wrap">
+                              {row.before || '—'}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <Text fontSize="xs" whiteSpace="pre-wrap">
+                              {row.after || '—'}
+                            </Text>
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </Box>
+              </Flex>
+            )}
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
 
-                {drawerView === 'diJson' && (
-                  <Box>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>
-                      di_raw_json
-                    </Text>
+      <Drawer isOpen={!!selectedRuleDiff} placement="right" onClose={() => setSelectedRuleDiff(null)} size="xl">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Rule Text Change</DrawerHeader>
+          <DrawerBody>
+            {!selectedRuleDiff ? (
+              <Text fontSize="sm" opacity={0.7}>
+                No rule selected.
+              </Text>
+            ) : (
+              <Flex direction="column" gap={4}>
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    Rule
+                  </Text>
+                  <Text fontSize="sm" fontWeight="bold" fontFamily="mono">
+                    {selectedRuleDiff.title}
+                  </Text>
+                </Box>
+
+                <Flex gap={3} align="stretch" direction={{ base: 'column', md: 'row' }}>
+                  {[
+                    {
+                      label: `A: ${formatRuleResult(selectedRuleDiff.beforeResult)}`,
+                      record: selectedRuleDiff.beforeRule,
+                    },
+                    {
+                      label: `B: ${formatRuleResult(selectedRuleDiff.afterResult)}`,
+                      record: selectedRuleDiff.afterRule,
+                    },
+                  ].map((column) => (
                     <Box
-                      as="pre"
-                      fontFamily="mono"
-                      fontSize="xs"
-                      whiteSpace="pre-wrap"
+                      key={column.label}
+                      flex="1"
                       borderWidth="1px"
-                      borderColor="greys.grey20"
+                      borderColor="gray.200"
                       borderRadius="md"
-                      p={3}
                       bg="gray.50"
-                      minH="420px"
-                      maxH="70vh"
-                      overflow="auto"
-                    >
-                      {diJson ? prettyJson(diJson) : 'No DI JSON found for this version.'}
-                    </Box>
-                  </Box>
-                )}
-
-                {drawerView === 'genaiJson' && (
-                  <Box>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>
-                      genai_raw_json
-                    </Text>
-                    <Box
-                      as="pre"
-                      fontFamily="mono"
-                      fontSize="xs"
-                      whiteSpace="pre-wrap"
-                      borderWidth="1px"
-                      borderColor="greys.grey20"
-                      borderRadius="md"
                       p={3}
-                      bg="gray.50"
-                      minH="420px"
-                      maxH="70vh"
-                      overflow="auto"
                     >
-                      {genaiJson ? prettyJson(genaiJson) : 'No GenAI JSON found for this version.'}
-                    </Box>
-                  </Box>
-                )}
-
-                {drawerView === 'genaiAdvice' && (
-                  <Box>
-                    <Text fontSize="xs" opacity={0.7} mb={1}>
-                      genai_admin_advice
-                    </Text>
-                    <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50" minH="220px">
-                      <Text fontSize="sm" whiteSpace="pre-wrap">
-                        {selectedDetail?.genai_admin_advice
-                          ? String(selectedDetail.genai_admin_advice)
-                          : 'No GenAI advice found for this version.'}
+                      <Text fontSize="sm" fontWeight="bold" mb={3}>
+                        {column.label}
                       </Text>
+
+                      {!column.record ? (
+                        <Text fontSize="sm" opacity={0.7}>
+                          No rulecheck record in this version.
+                        </Text>
+                      ) : (
+                        <Flex direction="column" gap={3}>
+                          {ruleDetailFields.map((field) => (
+                            <Box key={field.key}>
+                              <Text fontSize="10px" opacity={0.7} mb={1}>
+                                {field.label}
+                              </Text>
+                              <Box
+                                as="pre"
+                                fontFamily="mono"
+                                fontSize="xs"
+                                whiteSpace="pre-wrap"
+                                borderWidth="1px"
+                                borderColor="gray.200"
+                                borderRadius="md"
+                                p={2}
+                                bg="white"
+                                minH="28px"
+                              >
+                                {diffFieldVal(column.record?.[field.key])}
+                              </Box>
+                            </Box>
+                          ))}
+                        </Flex>
+                      )}
                     </Box>
-                  </Box>
-                )}
+                  ))}
+                </Flex>
               </Flex>
             )}
           </DrawerBody>
@@ -1413,7 +1527,7 @@ export function InvoiceVersionsAdminScreen() {
                 </Text>
                 <Text fontSize="sm">
                   Use this page to compare two invoice versions and quickly see what changed. The main view is now
-                  focused on just the two diff tabs: contractor changes and AI changes.
+                  focused on two diff tabs: invoice PDF changes and rule status changes.
                 </Text>
               </Box>
 
@@ -1422,10 +1536,6 @@ export function InvoiceVersionsAdminScreen() {
                   Top context area
                 </Text>
                 <Text fontSize="sm">This gives you quick context before you compare:</Text>
-                <Text fontSize="sm">- invoice_id: which invoice you are reviewing.</Text>
-                <Text fontSize="sm">- invoices.status: current invoice status.</Text>
-                <Text fontSize="sm">- invoices.created_at: when the invoice record was created.</Text>
-                <Text fontSize="sm">- session_created_at: when this invoice session started.</Text>
                 <Text fontSize="sm">- contractor: the contractor business name tied to the invoice session.</Text>
               </Box>
 
@@ -1437,12 +1547,12 @@ export function InvoiceVersionsAdminScreen() {
                 <Text fontSize="sm">2. Click the diff refresh icon.</Text>
                 <Text fontSize="sm">3. Read the two diff tabs:</Text>
                 <Text fontSize="sm">
-                  - Diff Contractor Changes: invoice/header fields and line item changes only when the values actually
+                  - Invoice PDF Changes: OCR/header fields, line items, and GenAI located fields when the values
                   changed.
                 </Text>
                 <Text fontSize="sm">
-                  - Diff AI Changes: AI extracted fields and AI rule check changes only when the values actually
-                  changed.
+                  - Rule Status Changes: rulechecks only when the rule status changed, or when a rule was added or
+                  removed.
                 </Text>
               </Box>
 

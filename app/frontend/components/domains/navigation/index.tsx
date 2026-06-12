@@ -35,7 +35,6 @@ import { trackPageViewEvent } from '../../../utils/snowplow';
 const InvoiceVersionShowScreen = lazy(() =>
   import('../invoice-versions').then((module) => ({ default: module.InvoiceVersionShowScreen })),
 );
-const AIAdminScreen = lazy(() => import('../ai-admin').then((module) => ({ default: module.AIAdminScreen })));
 const ValidationRulesAdminScreen = lazy(() =>
   import('../validation-rules-admin').then((module) => ({ default: module.default })),
 );
@@ -50,6 +49,9 @@ const SupportingDocumentTypesAdminScreen = lazy(() =>
 );
 const SupportingDocumentTypeFieldsAdminScreen = lazy(() =>
   import('../supporting-document-type-fields-admin').then((module) => ({ default: module.default })),
+);
+const SupportingDocumentGroupTypeFieldsAdminScreen = lazy(() =>
+  import('../supporting-document-group-type-fields-admin').then((module) => ({ default: module.default })),
 );
 const HeatPumpProductListAdminScreen = lazy(() =>
   import('../heat-pump-product-list-admin').then((module) => ({ default: module.default })),
@@ -88,9 +90,6 @@ const SubmissionSimulatorAdminScreen = lazy(() =>
 );
 const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
   import('../invoice-supporting-documents-admin').then((module) => ({ default: module.default })),
-);
-const RedoInvoicePackageScreen = lazy(() =>
-  import('../redo-invoice-package').then((module) => ({ default: module.default })),
 );
 const ContractorInvoiceReviewScreen = lazy(() =>
   import('../contractor-invoice-review').then((module) => ({ default: module.default })),
@@ -837,7 +836,6 @@ const AppRoutes = observer(() => {
           <Route path="/invoice-versions/:id/review" element={<InvoiceVersionShowScreen />} />
           <Route path="/sessions/:sessionId/invoices/:invoiceId/read" element={<InvoiceVersionShowScreen />} />
           <Route path="/invoice-versions-by-version/:invoiceVersionId/read" element={<InvoiceVersionShowScreen />} />
-          <Route path="/ai-admin" element={<AIAdminScreen />} />
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
           <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
@@ -845,6 +843,10 @@ const AppRoutes = observer(() => {
           <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />
           <Route path="/supporting-document-types-admin" element={<SupportingDocumentTypesAdminScreen />} />
           <Route path="/supporting-document-type-fields-admin" element={<SupportingDocumentTypeFieldsAdminScreen />} />
+          <Route
+            path="/supporting-document-group-type-fields-admin"
+            element={<SupportingDocumentGroupTypeFieldsAdminScreen />}
+          />
           <Route path="/downloads-admin" element={<DownloadsAdminScreen />} />
           <Route path="/heat-pump-product-list-admin" element={<HeatPumpProductListAdminScreen />} />
           <Route path="/hpwh-product-list-admin" element={<HpwhProductListAdminScreen />} />
@@ -855,7 +857,6 @@ const AppRoutes = observer(() => {
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
-          <Route path="/redo-invoice-package" element={<RedoInvoicePackageScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />

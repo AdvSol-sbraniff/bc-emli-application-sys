@@ -211,7 +211,7 @@ export class InvController {
       container: dto.container,
       filename: dto.filename,
       buffer: file.buffer,
-      contentType: file.mimetype || 'application/pdf',
+      contentType: file.mimetype || 'application/octet-stream',
       originalName: file.originalname,
     });
   }
@@ -234,7 +234,7 @@ export class InvController {
       container: dto.container,
       filename: dto.filename,
       buffer: file.buffer,
-      contentType: file.mimetype || 'application/pdf',
+      contentType: file.mimetype || 'application/octet-stream',
       originalName: file.originalname,
     });
   }

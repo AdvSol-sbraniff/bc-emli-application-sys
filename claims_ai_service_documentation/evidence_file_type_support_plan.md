@@ -1,6 +1,6 @@
 # Evidence File Type Support Plan
 
-Status: draft plan
+Status: implemented locally
 
 Purpose: update the claims AI package intake pipeline so uploaded evidence files are not treated as PDF-only. The immediate driver is the Health and Safety `test006` package, which contains one invoice PDF plus standalone JPG after-photo files.
 
@@ -14,7 +14,7 @@ Known symptoms:
 - The file picker accepts only `application/pdf,.pdf`.
 - Ingest services use `pdfs[]` naming and PDF fallback filenames/content types.
 - The Node upload and OCR code path often defaults content type to `application/pdf`.
-- The pipeline language still contains legacy terms such as `supplement`, while the intended domain term is supporting document.
+- The pipeline language is being normalized on `supporting_document`; old `supplement` terminology should be removed from active schema, prompts, services, UI, docs, and tests.
 
 This breaks realistic evidence packages where contractors upload photos directly from phones, such as:
 
@@ -86,7 +86,7 @@ Visual findings should be stored in the supporting-document evidence model, not 
 
 User-facing docs/UI/plans should say supporting document, not supplement.
 
-Existing database enum values such as `document_kind = 'supplement'` and columns such as `supplement_routing_quality` may remain temporarily, but they should be treated as legacy implementation names.
+The database should physically use `document_kind = 'supporting_document'` and `supporting_document_routing_quality` columns. No translation layer should remain in active runtime code.
 
 ## 4. Proposed Pipeline Changes
 
@@ -113,6 +113,8 @@ Accepted file types: PDF, JPG, JPEG, PNG
 Preserve original filename and content type.
 
 Storage keys should not force every file to end in `.pdf`. Use a safe extension derived from the uploaded filename/content type.
+
+Implementation note: the current local implementation preserves filename, extension, and content type while keeping the existing upload endpoint/path convention. A later cleanup can rename storage path segments such as `pdfs` to `evidence`, but that is not required for functional JPG/PNG support.
 
 Example:
 
@@ -155,15 +157,11 @@ Desired logical output language:
 {
   "document_kind": "invoice | supporting_document | unknown",
   "supporting_document_type_key": "before_after_photo_set | manufacturer_label_photo | ...",
-  "routing_quality": "usable | needs_review | requires_visual_review | unusable"
+  "supporting_document_routing_quality": "usable | needs_review | requires_visual_review | unusable"
 }
 ```
 
-If the database still stores `supplement`, the Rails apply service can translate:
-
-```text
-supporting_document -> supplement
-```
+The Rails apply service should persist the classifier value directly as `supporting_document`.
 
 That keeps the model stable while letting prompts and UI use the right term.
 
@@ -275,13 +273,13 @@ Expected high-level result:
 - Supporting-document extraction produces located fields and/or visual findings.
 - Health and safety GenAI validation can see that photo evidence exists.
 
-## 8. Open Questions
+## 8. Decisions
 
-- Should the DB enum physically change from `supplement` to `supporting_document`, or should we keep a translation layer for now?
-- Should `before_after_photo_set` represent one file, multiple files, or a grouped logical set?
-- Should two standalone photos be grouped together for review, or remain separate supporting-document rows with the same type?
-- Should image OCR failures be fatal, or should image files continue to visual extraction with `requires_visual_review`?
-- Which image MIME types are approved for go-live: JPG/JPEG/PNG only, or also HEIC from iPhones?
+- Decision: physically rename the legacy `supplement` concept everywhere to `supporting_document`. This includes DB enum/check constraints, prompts, Rails services, UI wording, docs, and tests.
+- Decision: `before_after_photo_set` remains a supporting-document type. Each uploaded photo/file is stored as its own `claims.supporting_documents` row. Multiple rows can share `before_after_photo_set` for the same invoice. Do not add a grouping table yet; grouping can be inferred at review/context-build time by `invoice_id` plus `supporting_document_type`.
+- Decision: keep each standalone photo as its own `claims.supporting_documents` row. Group photos only at presentation/context-build time by invoice and supporting-document type. Do not create a physical photo-group entity yet.
+- Decision: OCR/read failure on a supporting image is not package-fatal when the file is still accessible for review or visual extraction. Continue processing where possible and mark the supporting document as `requires_visual_review` or `needs_review`. Fatal failure is reserved for corrupt/unreadable files, unsafe files, or failures that prevent the package from determining the one invoice document.
+- Decision: support PDF, JPG/JPEG, and PNG for go-live. Do not support HEIC/HEIF initially. If a contractor uploads HEIC/HEIF, reject it with a clear message asking them to upload JPG, JPEG, PNG, or PDF. Revisit HEIC conversion after the main evidence-file pipeline is stable.
 
 ## 9. Recommended First Implementation Slice
 
@@ -292,3 +290,36 @@ Expected high-level result:
 5. Promote image supporting documents into `claims.supporting_documents`.
 6. Run Health and Safety `test006` end to end.
 7. Only after that, expand visual extraction behavior if needed.
+
+## 10. Local Implementation Result
+
+Implemented locally on June 11, 2026:
+
+- The active schema, Rails services, prompts, and React surfaces now use `supporting_document` instead of the legacy `supplement` document kind.
+- Local DB rows were migrated from `document_kind = 'supplement'` to `document_kind = 'supporting_document'`.
+- Local DB columns were renamed from `supplement_routing_quality*` to `supporting_document_routing_quality*`.
+- Upload validation now accepts PDF, JPG/JPEG, and PNG evidence files.
+- The submission simulator accepts PDF/JPG/JPEG/PNG and submits them as `files[]`.
+- Node upload preserves image content type and infers MIME type from filename when needed.
+- Document Intelligence read now sends the actual content type instead of hard-coding `application/pdf`.
+- Triage classifier context now includes filename/content type so standalone photos can be routed safely.
+- Supporting-document extraction sends PDF evidence as `input_file` and JPG/PNG evidence as `input_image`.
+
+Health and Safety `test006` local run:
+
+```text
+ingest_run_id = f24267dc-67c2-4b03-b1a4-62ae5b91a1e4
+invoice_id = 6320839f-11a5-4eb7-a7f6-5d3772a2fe36
+invoice_version_id = 38c0f72e-1718-4be1-9b24-0dab36f759c8
+run_status = succeeded
+invoice_status = genai_complete
+```
+
+Observed result:
+
+- `Health & Safety invoice.pdf` was classified as `invoice` and promoted to invoice version 1.
+- `Health & Safety after photo (1).jpg` was classified as `supporting_document`, type `before_after_photo_set`, routing `requires_visual_review`, and promoted to `claims.supporting_documents`.
+- `Health & Safety after photo (2).jpg` was classified as `supporting_document`, type `before_after_photo_set`, routing `requires_visual_review`, and promoted to `claims.supporting_documents`.
+- Supporting-document extraction succeeded for both JPG files.
+- Visual findings were persisted and included in case facts.
+- The full validation/advice pipeline completed.

@@ -270,18 +270,13 @@ module Api
 
       def serialize_lineitems(invoice_version_id)
         ::Claims::Lineitem
-          .joins(
-            "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.lineitems.invoice_upgrade_type_id"
-          )
           .where(invoice_version_id: invoice_version_id)
-          .select(*upgrade_type_select_sql("claims.lineitems"))
           .order(:lineitem_seqno)
           .map do |row|
             row.as_json(
               only: %i[
                 id
                 invoice_version_id
-                invoice_upgrade_type_id
                 lineitem_seqno
                 ocr_description
                 ocr_description_page
@@ -298,10 +293,6 @@ module Api
                 created_at
                 updated_at
               ]
-            ).merge(
-              "upgrade_type_key" => row.read_attribute("upgrade_type_key"),
-              "upgrade_type_description" =>
-                row.read_attribute("upgrade_type_description")
             )
           end
       end

@@ -21,7 +21,8 @@ module Claims
 
         type_key =
           (
-            payload["supplement_type_key"] || payload[:supplement_type_key]
+            payload["supporting_document_type_key"] ||
+              payload[:supporting_document_type_key]
           ).to_s.strip
         type =
           ::Claims::SupportingDocumentType.find_by(
@@ -47,19 +48,20 @@ module Claims
             classification_status_for(type_key: type_key, type: type),
           classification_confidence:
             coerce_confidence(
-              payload["supplement_type_confidence"] ||
-                payload[:supplement_type_confidence]
+              payload["supporting_document_type_confidence"] ||
+                payload[:supporting_document_type_confidence]
             ),
           classification_reason:
             (
-              payload["supplement_type_reason"] ||
-                payload[:supplement_type_reason] ||
+              payload["supporting_document_type_reason"] ||
+                payload[:supporting_document_type_reason] ||
                 payload["document_kind_reason"] ||
                 payload[:document_kind_reason]
             ).to_s.presence,
-          supplement_routing_quality: supplement_routing_quality(payload),
-          supplement_routing_quality_reason:
-            supplement_routing_quality_reason(payload),
+          supporting_document_routing_quality:
+            supporting_document_routing_quality(payload),
+          supporting_document_routing_quality_reason:
+            supporting_document_routing_quality_reason(payload),
           classified_at: Time.current,
           updated_at: Time.current
         )
@@ -103,11 +105,11 @@ module Claims
         "needs_review"
       end
 
-      def supplement_routing_quality(payload)
+      def supporting_document_routing_quality(payload)
         value =
           (
-            payload["supplement_routing_quality"] ||
-              payload[:supplement_routing_quality]
+            payload["supporting_document_routing_quality"] ||
+              payload[:supporting_document_routing_quality]
           ).to_s.strip.presence
         if %w[usable needs_review requires_visual_review unusable].include?(
              value
@@ -118,10 +120,10 @@ module Claims
         nil
       end
 
-      def supplement_routing_quality_reason(payload)
+      def supporting_document_routing_quality_reason(payload)
         (
-          payload["supplement_routing_quality_reason"] ||
-            payload[:supplement_routing_quality_reason]
+          payload["supporting_document_routing_quality_reason"] ||
+            payload[:supporting_document_routing_quality_reason]
         ).to_s.presence
       end
 

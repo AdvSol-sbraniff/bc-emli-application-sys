@@ -69,12 +69,18 @@ module Claims
 
         now = Time.zone.now
         invoice_version = nil
+        previous_invoice_version = nil
         ingest_run = nil
         attempts = 0
 
         begin
           ActiveRecord::Base.transaction do
             locked_invoice = ::Claims::Invoice.lock.find(invoice.id)
+            previous_invoice_version =
+              ::Claims::InvoiceVersion
+                .where(invoice_id: locked_invoice.id)
+                .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+                .first
             next_versionno =
               ::Claims::InvoiceVersion
                 .where(invoice_id: locked_invoice.id)
@@ -172,6 +178,15 @@ module Claims
 
           locked_version.update_columns(version_updates)
 
+          unless previous_invoice_version
+            raise "Upload fix requires an existing invoice version to copy classifier evidence from."
+          end
+
+          ::Claims::InvoiceVersions::CopyClassifierEvidence.call(
+            source_invoice_version_id: previous_invoice_version.id,
+            target_invoice_version_id: locked_version.id
+          )
+
           locked_invoice.update_columns(
             status: "ocr_queued",
             status_updated_at: Time.zone.now,
@@ -182,7 +197,7 @@ module Claims
             ingest_run_id: ingest_run.id,
             session_id: locked_invoice.session_id,
             invoice_version_id: locked_version.id,
-            step_type: "ocr",
+            step_type: "ocr_invoice",
             status: "queued",
             error_text: nil,
             created_at: Time.current,
@@ -191,7 +206,14 @@ module Claims
         end
 
         job_id =
-          ::Claims::RunOcrJob.perform_async(invoice_version.id, ingest_run.id)
+          ::Claims::RunOcrJob.perform_async(
+            invoice_version.id,
+            ingest_run.id,
+            "prebuilt-invoice",
+            true,
+            "use_existing_classifier",
+            "ocr_invoice"
+          )
 
         ::Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload
@@ -216,7 +238,7 @@ module Claims
               ingest_run_id: ingest_run.id,
               session_id: invoice&.session_id,
               invoice_version_id: invoice_version.id,
-              step_type: "ocr",
+              step_type: "ocr_invoice",
               status: "failed",
               error_text: "upload_fix_failed: #{e.message}",
               created_at: Time.current,

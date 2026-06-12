@@ -37,13 +37,13 @@ module Claims
           if @supporting_document_type.present?
             "Use only the field tasks listed below for the selected supporting_document_type_key."
           else
-            "If document_kind=\"supplement\", first choose supplement_type_key. Then use only the field tasks listed under that selected supplement_type_key."
+            "If document_kind=\"supporting_document\", first choose supporting_document_type_key. Then use only the field tasks listed under that selected supporting_document_type_key."
           end
 
         <<~TEXT.strip
           User record: Supporting document located-field tasks
           #{instruction}
-          Return one supporting_document_located_fields[] row for each listed field task for the selected supplement type. If the value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
+          Return one supporting_document_located_fields[] row for each listed field task for the selected supporting-document type. If the value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
 
           #{sections.join("\n\n")}
         TEXT

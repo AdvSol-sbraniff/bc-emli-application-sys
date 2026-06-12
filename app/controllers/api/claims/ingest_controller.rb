@@ -36,7 +36,6 @@ module Api
                            steps_index
                            steps_by_session_index
                            run_ocr
-                           run_genai
                            run_show
                            run_invoices_index
                            steps_by_invoice_index
@@ -51,7 +50,6 @@ module Api
                            steps_index
                            steps_by_session_index
                            run_ocr
-                           run_genai
                            run_show
                            run_invoices_index
                            steps_by_invoice_index
@@ -65,7 +63,6 @@ module Api
                           steps_index
                           steps_by_session_index
                           run_ocr
-                          run_genai
                           run_show
                           run_invoices_index
                           steps_by_invoice_index
@@ -78,7 +75,6 @@ module Api
                                 steps_index
                                 steps_by_session_index
                                 run_ocr
-                                run_genai
                                 run_show
                                 run_invoices_index
                                 steps_by_invoice_index
@@ -342,95 +338,6 @@ module Api
       rescue => e
         Rails.logger.error(
           "[claims][ingest][run_ocr] ERROR: #{e.class}: #{e.message}"
-        )
-        render json: {
-                 ok: false,
-                 error: e.message
-               },
-               status: :unprocessable_entity
-      end
-
-      # ============================================================
-      # SECTION 02.20 — ACTION: run_genai
-      # ROUTE: POST /api/claims/ingest/run_genai
-      # BODY: { session_id: "uuid", invoice_version_id: "uuid", ingest_run_id?: "uuid" }
-      # PURPOSE (milestone 1):
-      # - enqueue validation GenAI only
-      # - reuse the stored triage classifier result from the ingest pipeline
-      # ============================================================
-      def run_genai
-        session_id = params[:session_id].to_s.strip
-        raise "Missing session_id" if session_id.empty?
-
-        invoice_version_id = params[:invoice_version_id].to_s.strip
-        raise "Missing invoice_version_id" if invoice_version_id.empty?
-
-        invoice_id =
-          ::Claims::InvoiceVersion.where(id: invoice_version_id).pick(
-            :invoice_id
-          )
-        raise "Invoice version not found." if invoice_id.blank?
-
-        latest_invoice_version_created_at =
-          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).maximum(
-            :created_at
-          )
-        pending_count =
-          ::Claims::IngestDocument
-            .where(
-              "invoice_id = :invoice_id OR resolved_invoice_id = :invoice_id",
-              invoice_id: invoice_id
-            )
-            .where(promoted_supporting_document_id: nil)
-            .where(resolved_invoice_version_id: nil)
-            .where(
-              "classification_status IS NULL OR classification_status <> ?",
-              "superseded"
-            )
-            .where(
-              (
-                if latest_invoice_version_created_at.present?
-                  ["created_at > ?", latest_invoice_version_created_at]
-                else
-                  "1=1"
-                end
-              )
-            )
-            .count
-        if pending_count.positive?
-          raise "This invoice has #{pending_count} unprocessed package PDF#{"s" unless pending_count == 1}. Use Redo Entire Package before running GenAI."
-        end
-
-        requested_mode = params[:mode].to_s.strip
-        if requested_mode == "classifier_only"
-          raise "Classifier-only GenAI rerun has been removed. Run OCR to refresh triage classification."
-        end
-        mode = "use_existing_classifier"
-
-        ingest_run_id = params[:ingest_run_id].to_s.strip
-        ingest_run_id = nil if ingest_run_id.empty?
-
-        jid =
-          ::Claims::RunGenaiJob.perform_async(
-            session_id,
-            invoice_version_id,
-            ingest_run_id,
-            mode
-          )
-
-        render json: {
-                 ok: true,
-                 enqueued: true,
-                 job_id: jid,
-                 session_id: session_id,
-                 invoice_version_id: invoice_version_id,
-                 mode: mode,
-                 ingest_run_id: ingest_run_id
-               },
-               status: :ok
-      rescue => e
-        Rails.logger.error(
-          "[claims][ingest][run_genai] ERROR: #{e.class}: #{e.message}"
         )
         render json: {
                  ok: false,
@@ -849,49 +756,7 @@ module Api
           return rows if rows.any?
         end
 
-        document_scope =
-          ::Claims::IngestDocument.where(
-            resolved_invoice_id: invoice_id,
-            document_kind: "invoice"
-          )
-        document_scope =
-          document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
-        document =
-          document_scope.order(created_at: :asc).first ||
-            ::Claims::IngestDocument
-              .where(resolved_invoice_id: invoice_id)
-              .order(created_at: :asc)
-              .first
-        payload = document&.classifier_raw_json
-        return [] unless payload.is_a?(Hash)
-
-        detected =
-          payload["detected_upgrade_types"] || payload[:detected_upgrade_types]
-        return [] unless detected.is_a?(Array)
-
-        detected.filter_map.with_index do |row, index|
-          next unless row.is_a?(Hash)
-
-          {
-            id: "staged-classifier-#{index}",
-            invoice_version_id: document&.resolved_invoice_version_id,
-            invoice_upgrade_type_id: nil,
-            upgrade_type_key:
-              (row["upgrade_type_key"] || row[:upgrade_type_key]).to_s.presence,
-            upgrade_type_description:
-              (
-                row["upgrade_type_description"] ||
-                  row[:upgrade_type_description]
-              ).to_s.presence,
-            call_status: "classified",
-            confidence: row["confidence"] || row[:confidence],
-            evidence_text: row["evidence_text"] || row[:evidence_text],
-            classifier_notes:
-              row["classification_explanation"] ||
-                row[:classification_explanation],
-            updated_at: document&.classified_at || document&.updated_at
-          }
-        end
+        []
       end
 
       def file_safe_call(obj, method_name)

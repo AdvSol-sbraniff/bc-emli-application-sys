@@ -56,6 +56,34 @@ type EditorState = {
   enabled: boolean;
 };
 
+type FieldAdminConfig = {
+  basePath: string;
+  listEndpointName: string;
+  rowEndpointName: string;
+  listTitle: string;
+  createTitle: string;
+  editTitle: string;
+  helperText: string;
+  loadRowsError: string;
+  loadEditorError: string;
+  saveError: string;
+  editAriaLabel: string;
+};
+
+const fileFieldConfig: FieldAdminConfig = {
+  basePath: '/supporting-document-type-fields-admin',
+  listEndpointName: 'located_fields',
+  rowEndpointName: 'supporting_document_type_located_fields',
+  listTitle: 'Supporting Document Fields',
+  createTitle: 'Add Supporting Document Field',
+  editTitle: 'Edit Supporting Document Field',
+  helperText: 'Manage the located-field tasks sent to the supporting-document extraction prompt.',
+  loadRowsError: 'Failed to load supporting document fields.',
+  loadEditorError: 'Failed to load supporting document field.',
+  saveError: 'Failed to save supporting document field.',
+  editAriaLabel: 'Edit supporting document field',
+};
+
 const fmtDate = (value?: string | null) => {
   if (!value) return '';
   const str = String(value);
@@ -71,7 +99,7 @@ const buildSearchParams = (obj: Record<string, string | undefined>) => {
   return params;
 };
 
-export default function SupportingDocumentTypeFieldsAdminScreen() {
+export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConfig }: { config?: FieldAdminConfig }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -89,10 +117,10 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
 
   const fieldGridPath = useCallback(
     (mode?: string, id?: string) => ({
-      pathname: '/supporting-document-type-fields-admin',
+      pathname: config.basePath,
       search: `?${buildSearchParams({ type_id: typeId, mode, id }).toString()}`,
     }),
-    [typeId],
+    [config.basePath, typeId],
   );
 
   const loadRows = useCallback(async () => {
@@ -108,7 +136,7 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
 
     try {
       const res = await fetch(
-        `/api/claims/admin/supporting_document_types/${encodeURIComponent(typeId)}/located_fields`,
+        `/api/claims/admin/supporting_document_types/${encodeURIComponent(typeId)}/${config.listEndpointName}`,
         {
           method: 'GET',
           headers: { Accept: 'application/json' },
@@ -125,11 +153,11 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
       setRows(Array.isArray(data?.rows) ? data.rows : []);
     } catch (e: any) {
       setRows([]);
-      setError(e?.message || 'Failed to load supporting document fields.');
+      setError(e?.message || config.loadRowsError);
     } finally {
       setLoading(false);
     }
-  }, [typeId]);
+  }, [config.listEndpointName, config.loadRowsError, typeId]);
 
   const loadEditor = useCallback(async () => {
     if (!isEditorScreen) {
@@ -152,14 +180,11 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
     setError('');
 
     try {
-      const res = await fetch(
-        `/api/claims/admin/supporting_document_type_located_fields/${encodeURIComponent(editorId)}`,
-        {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          credentials: 'include',
-        },
-      );
+      const res = await fetch(`/api/claims/admin/${config.rowEndpointName}/${encodeURIComponent(editorId)}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
 
       const data: LocatedFieldRow = await res.json().catch(() => ({}) as LocatedFieldRow);
       if (!res.ok) {
@@ -175,11 +200,19 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
         enabled: !!data.enabled,
       });
     } catch (e: any) {
-      setError(e?.message || 'Failed to load supporting document field.');
+      setError(e?.message || config.loadEditorError);
     } finally {
       setLoading(false);
     }
-  }, [editorId, editorMode, isEditorScreen, rows, supportingDocumentType]);
+  }, [
+    config.loadEditorError,
+    config.rowEndpointName,
+    editorId,
+    editorMode,
+    isEditorScreen,
+    rows,
+    supportingDocumentType,
+  ]);
 
   useEffect(() => {
     loadRows();
@@ -218,8 +251,8 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
 
       const res = await fetch(
         editor.id
-          ? `/api/claims/admin/supporting_document_type_located_fields/${encodeURIComponent(editor.id)}`
-          : `/api/claims/admin/supporting_document_types/${encodeURIComponent(typeId)}/located_fields`,
+          ? `/api/claims/admin/${config.rowEndpointName}/${encodeURIComponent(editor.id)}`
+          : `/api/claims/admin/supporting_document_types/${encodeURIComponent(typeId)}/${config.listEndpointName}`,
         {
           method: editor.id ? 'PATCH' : 'POST',
           headers: {
@@ -239,7 +272,7 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
       await loadRows();
       closeEditor();
     } catch (e: any) {
-      setError(e?.message || 'Failed to save supporting document field.');
+      setError(e?.message || config.saveError);
     } finally {
       setSaving(false);
     }
@@ -251,9 +284,7 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
   if (isEditorScreen) {
     return (
       <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-        <ThinBlueTitleBar
-          title={editorMode === 'create' ? 'Add Supporting Document Field' : 'Edit Supporting Document Field'}
-        />
+        <ThinBlueTitleBar title={editorMode === 'create' ? config.createTitle : config.editTitle} />
         <Container maxW="container.md" pb={4} flex="1" pt={6}>
           <VStack align="stretch" spacing={4}>
             <Button alignSelf="flex-start" variant="ghost" leftIcon={<ArrowLeft size={16} />} onClick={closeEditor}>
@@ -344,7 +375,7 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Supporting Document Fields" />
+      <ThinBlueTitleBar title={config.listTitle} />
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <VStack align="stretch" spacing={4}>
           <Button
@@ -370,7 +401,7 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
                   ) : null}
                 </HStack>
                 <Text fontSize="sm" opacity={0.7}>
-                  Manage the located-field tasks sent to the supporting-document extraction prompt.
+                  {config.helperText}
                 </Text>
               </Box>
               <Button leftIcon={<Plus size={16} />} onClick={openCreate} isDisabled={!typeId}>
@@ -421,7 +452,7 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
                           <Flex justify="end">
                             <Tooltip label="Edit field">
                               <IconButton
-                                aria-label="Edit supporting document field"
+                                aria-label={config.editAriaLabel}
                                 icon={<PencilSimple size={18} />}
                                 variant="outline"
                                 size="sm"
@@ -451,3 +482,5 @@ export default function SupportingDocumentTypeFieldsAdminScreen() {
     </Flex>
   );
 }
+
+export default SupportingDocumentTypeFieldsAdminScreen;

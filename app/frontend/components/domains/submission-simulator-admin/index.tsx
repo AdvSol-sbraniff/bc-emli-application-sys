@@ -369,11 +369,11 @@ export default function SubmissionSimulatorAdminScreen() {
     setSubmitOk('');
     try {
       if (!contractorId.trim()) throw new Error('Select a contractor first.');
-      if (!selectedFiles.length) throw new Error('Select one or more PDF files.');
+      if (!selectedFiles.length) throw new Error('Select one or more evidence files.');
 
       const form = new FormData();
       if (contractorId.trim()) form.append('contractor_id', contractorId.trim());
-      selectedFiles.forEach((f) => form.append('pdfs[]', f, f.name));
+      selectedFiles.forEach((f) => form.append('files[]', f, f.name));
 
       const res = await fetch('/api/claims/ingest/admin_submit_batch', {
         method: 'POST',
@@ -411,19 +411,19 @@ export default function SubmissionSimulatorAdminScreen() {
   };
 
   const mergeStagedFiles = (files: File[]) => {
-    const pdfsOnly = files.filter((f) => {
-      const byType = String(f.type || '').toLowerCase() === 'application/pdf';
-      const byExt = String(f.name || '')
-        .toLowerCase()
-        .endsWith('.pdf');
+    const supportedEvidenceFiles = files.filter((f) => {
+      const type = String(f.type || '').toLowerCase();
+      const name = String(f.name || '').toLowerCase();
+      const byType = type === 'application/pdf' || type === 'image/jpeg' || type === 'image/png';
+      const byExt = name.endsWith('.pdf') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png');
       return byType || byExt;
     });
 
-    if (!pdfsOnly.length) return;
+    if (!supportedEvidenceFiles.length) return;
 
     setSelectedFiles((prev: File[]) => {
       const next = [...prev];
-      pdfsOnly.forEach((f: File) => {
+      supportedEvidenceFiles.forEach((f: File) => {
         const alreadyStaged = next.some(
           (p) => p.name === f.name && p.size === f.size && p.lastModified === f.lastModified,
         );
@@ -492,7 +492,7 @@ export default function SubmissionSimulatorAdminScreen() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="application/pdf,.pdf"
+            accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
             style={{ display: 'none' }}
             onChange={handleFilesPicked}
           />
@@ -525,11 +525,11 @@ export default function SubmissionSimulatorAdminScreen() {
             <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
               <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
                 <Text fontSize="sm" fontWeight="bold">
-                  Step 2: Stage PDF Files
+                  Step 2: Stage Evidence Files
                 </Text>
                 <HStack spacing={2}>
                   <Button variant="outline" onClick={openFilePicker}>
-                    Add PDFs
+                    Add Files
                   </Button>
                   <Tooltip label="Clear all staged files">
                     <IconButton
@@ -560,10 +560,10 @@ export default function SubmissionSimulatorAdminScreen() {
                 onDrop={handleDropZoneDrop}
               >
                 <Text fontSize="sm" fontWeight="bold">
-                  Drag and drop PDF files here
+                  Drag and drop PDF, JPG, JPEG, or PNG files here
                 </Text>
                 <Text fontSize="xs" opacity={0.75} mt={1}>
-                  or use Add PDFs to browse from your device
+                  or use Add Files to browse from your device
                 </Text>
               </Box>
 
@@ -584,7 +584,7 @@ export default function SubmissionSimulatorAdminScreen() {
                         <Td fontSize="xs">{index + 1}</Td>
                         <Td fontSize="xs">{file.name}</Td>
                         <Td fontSize="xs">{fileSizeMb(file.size)}</Td>
-                        <Td fontSize="xs">{file.type || 'application/pdf'}</Td>
+                        <Td fontSize="xs">{file.type || 'application/octet-stream'}</Td>
                         <Td>
                           <Button size="xs" variant="ghost" colorScheme="red" onClick={() => removeStagedFile(index)}>
                             Remove
@@ -596,7 +596,7 @@ export default function SubmissionSimulatorAdminScreen() {
                       <Tr>
                         <Td colSpan={5}>
                           <Text fontSize="sm" opacity={0.7}>
-                            No staged PDFs yet. Click Add PDFs to build the batch.
+                            No staged files yet. Click Add Files to build the batch.
                           </Text>
                         </Td>
                       </Tr>
@@ -783,7 +783,8 @@ export default function SubmissionSimulatorAdminScreen() {
                     <Thead bg="gray.50">
                       <Tr>
                         <Th>created</Th>
-                        <Th>document</Th>
+                        <Th>filename</Th>
+                        <Th>document kind</Th>
                         <Th>step</Th>
                         <Th>state</Th>
                         <Th>error</Th>
@@ -793,10 +794,8 @@ export default function SubmissionSimulatorAdminScreen() {
                       {steps.map((s) => (
                         <Tr key={s.id}>
                           <Td fontSize="xs">{fmtTs(s.created_at)}</Td>
-                          <Td fontSize="xs">
-                            <Text>{s.original_filename || 'â€”'}</Text>
-                            <Text opacity={0.7}>{s.document_kind || 'â€”'}</Text>
-                          </Td>
+                          <Td fontSize="xs">{s.original_filename || '—'}</Td>
+                          <Td fontSize="xs">{s.document_kind || '—'}</Td>
                           <Td fontSize="xs">{s.step_type || '—'}</Td>
                           <Td fontSize="xs">{renderStepState(s)}</Td>
                           <Td fontSize="xs">{s.error_text || '—'}</Td>
@@ -805,7 +804,7 @@ export default function SubmissionSimulatorAdminScreen() {
 
                       {!stepsLoading && steps.length === 0 && (
                         <Tr>
-                          <Td colSpan={5}>
+                          <Td colSpan={6}>
                             <Text fontSize="sm" opacity={0.7}>
                               No step rows for current selection.
                             </Text>
@@ -833,7 +832,8 @@ export default function SubmissionSimulatorAdminScreen() {
                   How this screen works
                 </Text>
                 <Text fontSize="sm">
-                  Step 1 sets the contractor, Step 2 stages PDFs, and Step 3 creates contractor draft invoices.
+                  Step 1 sets the contractor, Step 2 stages evidence files, and Step 3 creates contractor draft
+                  invoices.
                 </Text>
                 <Text fontSize="sm" mt={1}>
                   Files are staged in browser memory until you click Create Contractor Drafts.
