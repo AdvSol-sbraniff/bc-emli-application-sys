@@ -73,7 +73,12 @@ if Rails.env.production? && ENV["IS_DOCKER_BUILD"].blank? # skip this during pre
   end
 elsif Rails.env.development?
   # Development configuration uses default Redis connection
-  Sidekiq.configure_server { |config| configure_sidekiq_server(config) }
+  dev_concurrency = ENV["SIDEKIQ_CONCURRENCY"].to_i
+  dev_concurrency = nil if dev_concurrency <= 0
+
+  Sidekiq.configure_server do |config|
+    configure_sidekiq_server(config, nil, dev_concurrency)
+  end
 
   Sidekiq.configure_client { |config| configure_sidekiq_client(config) }
 

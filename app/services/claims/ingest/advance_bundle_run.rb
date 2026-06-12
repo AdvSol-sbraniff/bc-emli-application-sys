@@ -421,6 +421,11 @@ module Claims
           )
         end
 
+        apply_succeeded_group_extraction_payloads!(
+          ingest_run_id: run.id,
+          groups: group_extraction_groups
+        )
+
         resolved_invoice_status =
           invoice_status_for(resolved_invoice_version_id)
         validation_steps =
@@ -615,6 +620,15 @@ module Claims
           end
         return [] if supporting_document_rows.empty?
 
+        # Group-capable supporting-document types are extracted by one group
+        # GenAI call, which also writes child-file fields and visual findings.
+        grouped_type_ids = group_capable_supporting_document_type_ids
+        supporting_document_rows =
+          supporting_document_rows.reject do |doc|
+            grouped_type_ids.include?(doc.supporting_document_type_id.to_s)
+          end
+        return [] if supporting_document_rows.empty?
+
         type_ids_with_fields =
           ::Claims::SupportingDocumentTypeLocatedField
             .where(
@@ -629,6 +643,17 @@ module Claims
         supporting_document_rows.select do |doc|
           type_ids_with_fields.include?(doc.supporting_document_type_id.to_s)
         end
+      end
+
+      def group_capable_supporting_document_type_ids
+        ::Claims::SupportingDocumentType
+          .where(
+            type_key:
+              ::Claims::SupportingDocumentGroups::EnsureForInvoice::GROUP_CAPABLE_TYPE_KEYS,
+            enabled: true
+          )
+          .pluck(:id)
+          .map(&:to_s)
       end
 
       def groups_requiring_supporting_document_group_extraction(groups)
@@ -647,6 +672,41 @@ module Claims
 
         groups.select do |group|
           type_ids_with_fields.include?(group.supporting_document_type_id.to_s)
+        end
+      end
+
+      def apply_succeeded_group_extraction_payloads!(ingest_run_id:, groups:)
+        return if groups.empty?
+
+        latest_group_steps_map(
+          ingest_run_id,
+          groups.map(&:id),
+          "supporting_document_group_extraction"
+        ).each_value do |step|
+          next unless step.status == "succeeded"
+          next unless step.genai_results_json.is_a?(Hash)
+
+          result =
+            ::Claims::SupportingDocumentGroups::ApplyLocatedFields.call(
+              supporting_document_group_id: step.supporting_document_group_id,
+              located_fields_payload: step.genai_results_json
+            )
+          unless result[:ok] || result["ok"]
+            raise "ApplySupportingDocumentGroupLocatedFields failed during bundle advance: #{result.inspect}"
+          end
+
+          child_payload_count =
+            Array(
+              step.genai_results_json[
+                "supporting_document_located_fields_by_document"
+              ]
+            ).size
+          child_evidence_count =
+            (result[:child_located_fields_replaced] || 0).to_i +
+              (result[:child_visual_findings_replaced] || 0).to_i
+          if child_payload_count.positive? && child_evidence_count.zero?
+            raise "ApplySupportingDocumentGroupLocatedFields wrote no child evidence rows during bundle advance despite #{child_payload_count} child payloads: #{result.inspect}"
+          end
         end
       end
 

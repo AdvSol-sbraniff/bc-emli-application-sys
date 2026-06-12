@@ -120,6 +120,7 @@ services:
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT: "30"
       VIRUS_SCAN_TEMP_DIR: "/tmp/virus_scan"
+      DATABASE_URL: postgres://postgres:password@postgres:5432/app_development?pool=25
       SIDEKIQ_CONCURRENCY: "20"
       SIDEKIQ_QUEUES: "claims_ocr,claims_genai"
       <<: *default-env-vars

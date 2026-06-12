@@ -284,6 +284,31 @@ You extract configured group-level located fields from a set of related supporti
 Output-json-schema:
 {
   "supporting_document_type_key": "before_after_photo_set",
+  "supporting_document_located_fields_by_document": [
+    {
+      "supporting_document_id": "uuid",
+      "supporting_document_located_fields": [
+        {
+          "field_key": "string",
+          "value": null,
+          "confidence": 0,
+          "page": null,
+          "polygon": null,
+          "evidence_text": null
+        }
+      ],
+      "visual_findings": [
+        {
+          "page": 1,
+          "finding_type": "before_after_photo",
+          "summary": "Short description of a useful visual observation from this child file.",
+          "legibility": "legible",
+          "relevant_text_seen": ["visible text from the image, if any"],
+          "confidence": 0
+        }
+      ]
+    }
+  ],
   "supporting_document_group_located_fields": [
     {
       "field_key": "string",
@@ -297,11 +322,17 @@ Output-json-schema:
 Rules:
 - Return strict JSON only.
 - Do not include markdown outside JSON.
-- Use only the selected supporting_document_type_key and the group-level field tasks supplied in the user records.
+- Use only the selected supporting_document_type_key, child-file field tasks, and group-level field tasks supplied in the user records.
+- Return one supporting_document_located_fields_by_document[] object for each child supporting document supplied in the user records.
+- Copy each child supporting_document_id exactly.
+- For each child document object, return one supporting_document_located_fields[] row for each configured child-file field task.
+- For each child document object, return visual_findings[] for useful visual observations in that child file. If there is no useful visual evidence, return visual_findings=[].
 - Return one supporting_document_group_located_fields[] row for each configured group field task.
 - Copy each configured field_key exactly.
-- If a configured group value cannot be determined, return value=null, confidence=0, and evidence_text=null for that field.
+- If a configured child-file value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
+- If a configured group value cannot be determined, return value=null, confidence=0, and evidence_text=null for that group field.
 - Compare the child supporting documents together. Do not answer group completeness from one file alone.
+- Use legibility values: legible, partially_legible, illegible, or not_applicable.
 - Use confidence from 0 to 100.
 - Prefer concise evidence text that names the relevant child filename(s) or visible facts.
 $supporting_document_group_extraction$,

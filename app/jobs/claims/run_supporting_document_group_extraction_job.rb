@@ -44,6 +44,14 @@ module Claims
       unless located_result[:ok]
         raise "ApplySupportingDocumentGroupLocatedFields failed: #{located_result.inspect}"
       end
+      child_payload_count =
+        Array(payload["supporting_document_located_fields_by_document"]).size
+      child_evidence_count =
+        located_result[:child_located_fields_replaced].to_i +
+          located_result[:child_visual_findings_replaced].to_i
+      if child_payload_count.positive? && child_evidence_count.zero?
+        raise "ApplySupportingDocumentGroupLocatedFields wrote no child evidence rows despite #{child_payload_count} child payloads: #{located_result.inspect}"
+      end
 
       step.update!(
         status: "succeeded",
@@ -104,11 +112,15 @@ module Claims
       end
 
       type = group.supporting_document_type
-      field_tasks =
+      group_field_tasks =
         ::Claims::SupportingDocumentGroups::LocatedFieldPrompt.call(
           supporting_document_type: type
         )
-      if field_tasks.blank?
+      child_field_tasks =
+        ::Claims::SupportingDocuments::LocatedFieldPrompt.call(
+          supporting_document_type: type
+        )
+      if group_field_tasks.blank?
         raise "No supporting-document group located-field tasks configured for #{type&.type_key || group.supporting_document_type_id}"
       end
 
@@ -121,15 +133,22 @@ module Claims
                 supporting_document_type_description: #{type.description}
                 group_label: #{group.group_label}
 
-                #{field_tasks}
+                #{group_field_tasks}
+              TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                User record: Child supporting-document file located-field tasks
+                These tasks are applied separately to each child supporting document in this group.
+                Return the child-file results under supporting_document_located_fields_by_document[].
+
+                #{child_field_tasks.presence || "No child-file located-field tasks are configured for this supporting document type."}
               TEXT
         { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
                 User record: Child supporting documents in this group
                 #{child_document_context(group).to_json}
 
                 Actual ask:
-                Extract the configured supporting_document_group_located_fields by comparing the child files together.
-                Use child DI-read text, file-level located fields, visual findings, filenames, and the attached file visuals.
+                Extract the configured child-file supporting_document_located_fields, child-file visual_findings, and supporting_document_group_located_fields.
+                Use child DI-read text, filenames, and the attached file visuals.
                 Reply must be strict JSON using the system record schema.
               TEXT
       ]

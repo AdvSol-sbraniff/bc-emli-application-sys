@@ -137,9 +137,198 @@ const normalizeResult = (result: unknown): 'pass' | 'warn' | 'fail' | null => {
 
 function ResultDot({ val }: { val: unknown }) {
   const result = normalizeResult(val);
-  const bg =
-    result === 'pass' ? 'green.400' : result === 'warn' ? 'yellow.400' : result === 'fail' ? 'red.400' : 'gray.300';
-  return <Box w="10px" h="10px" borderRadius="full" bg={bg} display="inline-block" />;
+  const visual =
+    result === 'pass'
+      ? { bg: 'green.400', glow: 'rgba(72, 187, 120, 0.45)' }
+      : result === 'warn'
+        ? { bg: 'yellow.400', glow: 'rgba(236, 201, 75, 0.5)' }
+        : result === 'fail'
+          ? { bg: 'red.400', glow: 'rgba(245, 101, 101, 0.55)' }
+          : { bg: 'gray.300', glow: 'transparent' };
+
+  return (
+    <Box
+      w="14px"
+      h="14px"
+      borderRadius="full"
+      bg={visual.bg}
+      display="inline-block"
+      boxShadow={result ? `0 0 0 4px ${visual.glow}, 0 0 14px ${visual.glow}` : 'none'}
+      sx={
+        result
+          ? {
+              '@keyframes claimsAiSignalPulse': {
+                '0%, 100%': {
+                  boxShadow: `0 0 0 3px ${visual.glow}, 0 0 10px ${visual.glow}`,
+                },
+                '50%': {
+                  boxShadow: `0 0 0 6px ${visual.glow}, 0 0 18px ${visual.glow}`,
+                },
+              },
+              animation: 'claimsAiSignalPulse 2.8s ease-in-out infinite',
+            }
+          : undefined
+      }
+    />
+  );
+}
+
+const INVOICE_STATUS_COPY: Record<string, { label: string; hint: string }> = {
+  upload_in_progress: {
+    label: 'Uploading Package',
+    hint: 'The uploaded package is being staged before evidence preparation starts.',
+  },
+  ocr_in_progress: {
+    label: 'Preparing Evidence',
+    hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
+  },
+  evidence_prep: {
+    label: 'Preparing Evidence',
+    hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
+  },
+  genai_in_progress: {
+    label: 'Running AI Review',
+    hint: 'Validation and advice are running: case facts, product lookup, GenAI rules, code rules, and final advice.',
+  },
+  validation_advice: {
+    label: 'Running AI Review',
+    hint: 'Validation and advice are running: case facts, product lookup, GenAI rules, code rules, and final advice.',
+  },
+  genai_complete: {
+    label: 'AI Review Complete',
+    hint: 'AI processing is complete and the claim is ready for review.',
+  },
+  admin_review_inbox: {
+    label: 'Waiting for Admin Review',
+    hint: 'The claim is waiting for an admin to review it.',
+  },
+  in_review: {
+    label: 'Admin Reviewing',
+    hint: 'An admin review is underway.',
+  },
+  contractor_revision_inbox: {
+    label: 'Waiting for Contractor',
+    hint: 'The claim has been sent back to the contractor for a response or corrected documents.',
+  },
+  approved_pending: {
+    label: 'Approved, Pending Payment',
+    hint: 'The claim is approved, but payment or final closeout is not complete yet.',
+  },
+  approved_paid: {
+    label: 'Approved and Paid',
+    hint: 'The claim has been approved and paid or closed.',
+  },
+  ineligible: {
+    label: 'Ineligible',
+    hint: 'The claim has been marked ineligible.',
+  },
+  failed: {
+    label: 'Processing Failed',
+    hint: 'Processing failed and needs troubleshooting.',
+  },
+  upload_failed: {
+    label: 'Processing Failed',
+    hint: 'Upload or package staging failed and needs troubleshooting.',
+  },
+  ocr_failed: {
+    label: 'Processing Failed',
+    hint: 'Evidence preparation failed and needs troubleshooting.',
+  },
+  genai_failed: {
+    label: 'Processing Failed',
+    hint: 'AI review failed and needs troubleshooting.',
+  },
+};
+
+const humanizeStatus = (status: string) =>
+  status
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+const invoiceStatusCopy = (status?: string | null) => {
+  const rawStatus = String(status || '').trim();
+  if (!rawStatus) {
+    return {
+      label: 'Unknown',
+      hint: 'No invoice status is available yet.',
+    };
+  }
+
+  return (
+    INVOICE_STATUS_COPY[rawStatus] || {
+      label: humanizeStatus(rawStatus),
+      hint: 'This invoice is in a workflow status that does not have custom help text yet.',
+    }
+  );
+};
+
+const aiResultHint = (result: unknown) => {
+  const normalized = normalizeResult(result);
+  if (normalized === 'pass') return 'AI review passed based on the latest rule outputs.';
+  if (normalized === 'warn') return 'AI review found warnings that may need attention.';
+  if (normalized === 'fail') return 'AI review found failing rule outcomes that need attention.';
+  return 'AI review result is not available yet.';
+};
+
+const sortParts = (sort: string) => {
+  const [field, direction] = sort.split(':', 2);
+  return {
+    field,
+    direction: direction === 'asc' ? 'asc' : 'desc',
+  };
+};
+
+function SortableHeader({
+  field,
+  label,
+  sort,
+  onSort,
+}: {
+  field: string;
+  label: string;
+  sort: string;
+  onSort: (field: string) => void;
+}) {
+  const activeSort = sortParts(sort);
+  const isActive = activeSort.field === field;
+  const arrow = isActive ? (activeSort.direction === 'asc' ? '↑' : '↓') : '↕';
+
+  return (
+    <Box
+      as="button"
+      type="button"
+      display="inline-flex"
+      alignItems="center"
+      gap={1.5}
+      px={1.5}
+      py={1}
+      ml={-1.5}
+      borderRadius="md"
+      cursor="pointer"
+      role="group"
+      transition="background-color 140ms ease, color 140ms ease"
+      onClick={() => onSort(field)}
+      _hover={{ bg: 'blue.50', color: 'blue.800' }}
+      _focusVisible={{ boxShadow: 'outline' }}
+    >
+      <Text as="span" fontSize="xs" fontWeight="bold" textTransform="uppercase">
+        {label}
+      </Text>
+      <Text
+        as="span"
+        fontSize="sm"
+        color={isActive ? 'blue.600' : 'gray.400'}
+        opacity={isActive ? 1 : 0.45}
+        textShadow={isActive ? '0 0 8px rgba(49, 130, 206, 0.35)' : 'none'}
+        transition="opacity 140ms ease, color 140ms ease, transform 140ms ease"
+        _groupHover={{ opacity: 0.8 }}
+      >
+        {arrow}
+      </Text>
+    </Box>
+  );
 }
 
 function buildSearchParams(obj: Record<string, string | undefined>) {
@@ -454,6 +643,17 @@ export function InvoicesAdminScreen() {
     setSelected(null);
   };
 
+  const handleHeaderSort = (field: string) => {
+    const current = sortParts(sort);
+    const defaultDirection = field === 'contractor_business_name' ? 'asc' : 'desc';
+    const nextDirection = current.field === field ? (current.direction === 'asc' ? 'desc' : 'asc') : defaultDirection;
+    const nextSort = `${field}:${nextDirection}`;
+
+    setSort(nextSort);
+    setPage(1);
+    pushUrl({ sort: nextSort, page: 1 });
+  };
+
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar title="Invoices Admin" />
@@ -495,16 +695,19 @@ export function InvoicesAdminScreen() {
                 }}
                 bg="white"
               >
-                <option value="">(all)</option>
-                <option value="processing">processing (queued / in progress)</option>
-                <option value="failed">failed (upload / OCR / GenAI)</option>
-                <option value="genai_complete">genai_complete - contractor reviewing</option>
-                <option value="admin_review_inbox">admin_review_inbox</option>
-                <option value="contractor_revision_inbox">contractor_revision_inbox</option>
-                <option value="in_review">in_review</option>
-                <option value="approved_pending">approved_pending</option>
-                <option value="approved_paid">approved_paid</option>
-                <option value="ineligible">ineligible</option>
+                <option value="">All statuses</option>
+                <option value="processing">Any Processing Status</option>
+                <option value="upload_in_progress">Uploading Package</option>
+                <option value="ocr_in_progress">Preparing Evidence</option>
+                <option value="genai_in_progress">Running AI Review</option>
+                <option value="genai_complete">AI Review Complete</option>
+                <option value="admin_review_inbox">Waiting for Admin Review</option>
+                <option value="contractor_revision_inbox">Waiting for Contractor</option>
+                <option value="in_review">Admin Reviewing</option>
+                <option value="approved_pending">Approved, Pending Payment</option>
+                <option value="approved_paid">Approved and Paid</option>
+                <option value="ineligible">Ineligible</option>
+                <option value="failed">Processing Failed</option>
               </Select>
             </Box>
 
@@ -523,29 +726,6 @@ export function InvoicesAdminScreen() {
                 placeholder="All upgrade types"
                 menuListMinW="420px"
               />
-            </Box>
-
-            <Box minW="180px" maxW="210px">
-              <Text fontSize="xs" opacity={0.7} mb={1}>
-                sort
-              </Text>
-              <Select
-                value={sort}
-                onChange={(e) => {
-                  setSort(e.target.value);
-                  pushUrl({ sort: e.target.value });
-                }}
-                bg="white"
-              >
-                <option value="latest_invoice_version_updated_at:desc">latest update ↓</option>
-                <option value="latest_invoice_version_updated_at:asc">latest update ↑</option>
-                <option value="invoice_created_at:desc">created ↓</option>
-                <option value="invoice_created_at:asc">created ↑</option>
-                <option value="contractor_business_name:asc">contractor A→Z</option>
-                <option value="contractor_business_name:desc">contractor Z→A</option>
-                <option value="latest_genai_overall_confidence:desc">confidence ↓</option>
-                <option value="latest_genai_overall_confidence:asc">confidence ↑</option>
-              </Select>
             </Box>
 
             <Box minW="100px" maxW="120px">
@@ -627,41 +807,52 @@ export function InvoicesAdminScreen() {
 
           {/* Grid */}
           <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} overflowX="auto">
-            <Flex align="center" justify="space-between" mb={2}>
-              <HStack spacing={3}>
-                <Text fontSize="sm" fontWeight="bold">
-                  Invoices
-                </Text>
-                <Text fontSize="xs" opacity={0.7}>
-                  {total.toLocaleString()} total
-                </Text>
-              </HStack>
+            <Flex align="center" justify="flex-end" mb={2}>
               {loading && <Spinner size="sm" />}
             </Flex>
 
             <Table size="sm" minW="990px">
               <Thead bg="gray.50">
                 <Tr>
-                  <Th>version updated</Th>
+                  <Th>
+                    <SortableHeader field="invoice_status" label="status" sort={sort} onSort={handleHeaderSort} />
+                  </Th>
+                  <Th>
+                    <SortableHeader
+                      field="latest_invoice_version_updated_at"
+                      label="version updated"
+                      sort={sort}
+                      onSort={handleHeaderSort}
+                    />
+                  </Th>
                   <Th w="86px">version #</Th>
-                  <Th>contractor</Th>
-                  <Th>status</Th>
-                  <Th minW="180px">upgrade types</Th>
+                  <Th>
+                    <SortableHeader
+                      field="contractor_business_name"
+                      label="contractor"
+                      sort={sort}
+                      onSort={handleHeaderSort}
+                    />
+                  </Th>
+                  <Th minW="180px"></Th>
                   <Th>AI</Th>
-                  <Th minW="190px" textAlign="right">
-                    Actions
-                  </Th>
-                  <Th minW="160px" textAlign="right">
-                    Admin Tools
-                  </Th>
+                  <Th minW="260px" textAlign="right"></Th>
                 </Tr>
               </Thead>
 
               <Tbody>
                 {rows.map((r, idx) => {
                   const hasInvoice = Boolean(r.invoice_id && String(r.invoice_id).trim());
+                  const statusCopy = invoiceStatusCopy(r.invoice_status);
+                  const technicalStatus = String(r.invoice_status || '').trim() || 'unknown';
                   return (
                     <Tr key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}>
+                      <Td>
+                        <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`}>
+                          <Badge>{statusCopy.label}</Badge>
+                        </Tooltip>
+                      </Td>
+
                       <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
                         {fmtDate(r.latest_invoice_version_updated_at ?? r.invoice_updated_at)}
                       </Td>
@@ -673,11 +864,36 @@ export function InvoicesAdminScreen() {
                       </Td>
 
                       <Td fontSize="sm" whiteSpace="nowrap">
-                        {r.contractor_business_name ?? '—'}
-                      </Td>
-
-                      <Td>
-                        <Badge>{r.invoice_status || '—'}</Badge>
+                        {hasInvoice ? (
+                          <Tooltip label="Open PDF review">
+                            <Text
+                              as="button"
+                              type="button"
+                              fontSize="sm"
+                              fontWeight="semibold"
+                              color="blue.700"
+                              textAlign="left"
+                              cursor="pointer"
+                              px={2}
+                              py={1}
+                              ml={-2}
+                              borderRadius="md"
+                              transition="background-color 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 140ms ease"
+                              onClick={() => handleOpenDetailsWithPdf(r)}
+                              _hover={{
+                                bg: 'blue.50',
+                                color: 'blue.900',
+                                boxShadow: '0 8px 18px rgba(49, 130, 206, 0.14)',
+                                transform: 'translateY(-1px)',
+                              }}
+                              _focusVisible={{ boxShadow: 'outline', borderRadius: 'sm' }}
+                            >
+                              {r.contractor_business_name ?? '—'}
+                            </Text>
+                          </Tooltip>
+                        ) : (
+                          r.contractor_business_name ?? '—'
+                        )}
                       </Td>
 
                       <Td whiteSpace="nowrap" minW="180px">
@@ -716,15 +932,14 @@ export function InvoicesAdminScreen() {
                       </Td>
 
                       <Td>
-                        <HStack spacing={2}>
-                          <ResultDot val={r.latest_genai_result} />
-                          <Text fontSize="xs" opacity={0.8}>
-                            {normalizeResult(r.latest_genai_result) ?? 'unknown'}
-                          </Text>
-                        </HStack>
+                        <Tooltip label={aiResultHint(r.latest_genai_result)}>
+                          <Box as="span" display="inline-flex" alignItems="center">
+                            <ResultDot val={r.latest_genai_result} />
+                          </Box>
+                        </Tooltip>
                       </Td>
 
-                      <Td whiteSpace="nowrap" minW="190px">
+                      <Td whiteSpace="nowrap" minW="260px">
                         <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
                           <Tooltip label="Open details drawer">
                             <IconButton
@@ -780,11 +995,9 @@ export function InvoicesAdminScreen() {
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
-                        </Flex>
-                      </Td>
 
-                      <Td whiteSpace="nowrap" minW="160px">
-                        <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
+                          <Divider orientation="vertical" h="18px" borderColor="gray.300" mx={1} />
+
                           <Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
                             <IconButton
                               aria-label="Upload fix invoice version"
@@ -820,7 +1033,7 @@ export function InvoicesAdminScreen() {
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={8}>
+                    <Td colSpan={7}>
                       <Text fontSize="sm" opacity={0.7}>
                         No rows. Adjust filters or click Refresh.
                       </Text>
@@ -881,59 +1094,76 @@ export function InvoicesAdminScreen() {
           <DrawerHeader>Invoices Admin Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
-              This screen has four related but distinct actions: Submission, upload fix, Inspect Versions, and Revision
-              Requests. They are intentionally separated so document upload correction, version inspection, and
-              revision-request review remain clear and testable.
+              This screen is the working queue for claims AI invoices. Each row represents one claim invoice and shows
+              the latest invoice version only. Older invoice versions are still preserved and can be inspected from the
+              versions action.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Upload fix
+              How to read a row
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              The status badge is the main workflow indicator. It uses business-friendly wording such as Preparing
+              Evidence, Running AI Review, or AI Review Complete. Hover over the badge to see what is happening and the
+              exact technical status stored in the database.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              The contractor name opens the current PDF review screen. The upgrade-type icons show what the classifier
+              and AI pipeline believe is present on the current invoice version.
             </Text>
             <Text fontSize="sm" mb={3}>
-              Use this when an existing invoice PDF needs correction (for example, a typo or other source-document
-              error). This creates a new child invoice version (+1) under the same invoice.
+              The glowing AI dot summarizes the latest AI result: green means pass, yellow means warn, red means fail,
+              and gray means no current AI result. Hover over the dot for the plain-English meaning.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Inspect Versions
+              Evidence prep and AI review
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              Preparing Evidence is the first major processing phase. It reads uploaded files, classifies invoice and
+              supporting documents, extracts invoice fields, extracts supporting-document fields, and promotes the
+              resolved invoice PDF into an invoice version.
             </Text>
             <Text fontSize="sm" mb={3}>
-              The main Invoices grid shows only the current (latest) version for each invoice. Use Inspect Versions to
-              view prior versions and compare what the contractor changed between revision requests.
+              Running AI Review is the second major phase. It builds case facts, enriches product-list matches, runs
+              GenAI and code rules, and aggregates the final advice shown to reviewers.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Revision Requests
+              Actions
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              The info action opens the details drawer for the selected row. The PDF action opens the same current PDF
+              review screen as clicking the contractor name.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              The conversation action opens invoice-scoped revision requests and internal notes. These are tied to the
+              invoice, not just one invoice version, so the history survives +1 invoice fixes.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              The versions action opens prior invoice versions and version diffs. Use this when a contractor uploaded a
+              corrected PDF and you need to compare what changed.
+            </Text>
+            <Text fontSize="sm" mb={2}>
+              The supporting-documents action opens the processed supporting-document evidence for the invoice,
+              including extracted fields, visual findings, and grouped supporting-document facts where applicable.
             </Text>
             <Text fontSize="sm" mb={3}>
-              Revision Requests opens an invoice-scoped grid across all versions for the selected invoice, even though
-              this Invoices grid only shows the current version. For example, an invoice with 3 versions might show 5
-              revision requests in total: 2 on version 1, 2 on version 2, and 1 on version 3. Each revision request
-              record includes both the admin request and the contractor response.
+              The wrench action uploads a +1 corrected invoice version under the same invoice. The delete action removes
+              the invoice and child claims AI records from this environment.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Why this separation matters
+              Search and sort
             </Text>
             <Text fontSize="sm" mb={2}>
-              Example 1: Participant or account data changed (such as a corrected eligibility code). Re-run GenAI only
-              to refresh rule checks against current system data.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              Example 2: The source PDF itself was incorrect. Request the contractor to correct and upload a fix, then
-              run OCR/GenAI on the new invoice version.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              Example 3: A new validation ruleset is introduced. Re-run GenAI and select the new ruleset to evaluate
-              outcomes without uploading again.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              Example 4: OCR quality improvements are released. Re-run OCR (and then GenAI if needed) to pick up
-              improved extraction quality from the same uploaded PDF.
+              Search can match some fields that are not currently displayed in the compact grid, including contractor
+              email, submitter email, invoice number, vendor name, and filename. This is intentional so the grid can
+              stay readable while still being useful for lookup.
             </Text>
             <Text fontSize="sm">
-              Example 5: Operational troubleshooting. If a prior run failed due to transient processing issues, re-run
-              only the failed step instead of repeating full upload.
+              Sort controls should be used for queue navigation, not for evidence review. Open the PDF review,
+              supporting-document screen, or version screen when you need to inspect the underlying evidence.
             </Text>
           </DrawerBody>
         </DrawerContent>
