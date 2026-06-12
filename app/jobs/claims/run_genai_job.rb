@@ -22,11 +22,18 @@ module Claims
         "[CLAIMS][RUN_GENAI_JOB] START session_id=#{session_id} invoice_version_id=#{invoice_version_id} mode=#{mode}"
       )
 
-      requested_mode = mode.to_s.presence
+      requested_mode = mode.to_s.presence || "use_existing_classifier"
       if %w[classifier_only triage_only].include?(requested_mode)
         raise "RunGenaiJob no longer runs classifier modes. Use RunIngestTriageJob through OCR/triage instead."
       end
-      mode = "use_existing_classifier"
+      if requested_mode == "finish_validation"
+        finish_validation_if_ready!(
+          session_id: session_id,
+          invoice_version_id: invoice_version_id,
+          ingest_run_id: ingest_run_id
+        )
+        return
+      end
 
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
@@ -49,113 +56,42 @@ module Claims
 
       inv.update!(status: "genai_in_progress", status_updated_at: Time.current)
 
-      case_facts_result =
-        run_case_facts_step!(
-          ingest_run_id: ingest_run_id,
-          session_id: sess.id,
-          invoice_version: iv,
-          invoice: inv,
-          claim_session: sess,
-          classifier_payload: classifier_payload
-        )
-      case_facts = case_facts_result.fetch(:case_facts)
-      upgrade_types = detected_upgrade_types(classifier_payload)
-
-      product_lookup_result =
-        run_product_lookup_enrichment_step!(
-          ingest_run_id: ingest_run_id,
-          session_id: sess.id,
-          invoice_version: iv,
-          invoice_upgrade_types: upgrade_types
-        )
-      product_context =
-        product_enrichment_context(
-          invoice_version: iv.reload,
-          lookup_result: product_lookup_result
-        )
-
-      common_upgrade_type = upgrade_type_by_key!("common")
-      common_user_record1 =
-        compiled_user_record1_for_upgrade_type!(common_upgrade_type)
-      ruleset_results = []
-
-      ruleset_results << run_genai_ruleset!(
+      run_case_facts_step!(
         ingest_run_id: ingest_run_id,
         session_id: sess.id,
-        invoice_version_id: iv.id,
+        invoice_version: iv,
         invoice: inv,
+        claim_session: sess,
+        classifier_payload: classifier_payload
+      )
+      upgrade_types = detected_upgrade_types(classifier_payload)
+
+      run_product_lookup_enrichment_step!(
+        ingest_run_id: ingest_run_id,
+        session_id: sess.id,
+        invoice_version: iv,
+        invoice_upgrade_types: upgrade_types
+      )
+
+      common_upgrade_type = upgrade_type_by_key!("common")
+
+      enqueue_genai_ruleset_job!(
+        ingest_run_id: ingest_run_id,
+        session_id: sess.id,
+        invoice_version: iv,
         step_type: "genai_common",
-        upgrade_type: common_upgrade_type,
-        compiled_user_record1: common_user_record1,
-        case_facts: case_facts,
-        classifier_payload: classifier_payload,
-        product_context: product_context,
-        di_raw_json: iv.di_raw_json
+        upgrade_type: common_upgrade_type
       )
 
       upgrade_types.each do |upgrade_type|
-        ruleset_results << run_genai_ruleset!(
+        enqueue_genai_ruleset_job!(
           ingest_run_id: ingest_run_id,
           session_id: sess.id,
-          invoice_version_id: iv.id,
-          invoice: inv,
-          step_type: "genai_upgrade",
-          upgrade_type: upgrade_type,
-          compiled_user_record1:
-            compiled_user_record1_for_upgrade_type!(upgrade_type),
-          case_facts: case_facts,
-          classifier_payload: classifier_payload,
-          product_context: product_context,
-          di_raw_json: iv.di_raw_json
-        )
-      end
-
-      if code_rules_enabled_for_upgrade_type?(common_upgrade_type)
-        run_code_ruleset!(
-          ingest_run_id: ingest_run_id,
-          session_id: sess.id,
-          invoice_version_id: iv.id,
-          step_type: "code_common",
-          upgrade_type: common_upgrade_type
-        ) do
-          ::Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks.call(
-            invoice_version_id: iv.id
-          )
-        end
-      end
-
-      upgrade_types.each do |upgrade_type|
-        next unless code_rules_enabled_for_upgrade_type?(upgrade_type)
-
-        run_code_ruleset!(
-          ingest_run_id: ingest_run_id,
-          session_id: sess.id,
-          invoice_version_id: iv.id,
-          step_type: "code_upgrade",
-          upgrade_type: upgrade_type
-        ) do
-          ::Claims::InvoiceVersionRulechecks::ApplyUpgradeCodeRulechecks.call(
-            invoice_version_id: iv.id,
-            invoice_upgrade_type_id: upgrade_type.id
-          )
-        end
-      end
-
-      run_aggregate_advice_step!(
-        ingest_run_id: ingest_run_id,
-        session_id: sess.id,
-        invoice_version: iv
-      ) do
-        apply_combined_overall!(
           invoice_version: iv,
-          classifier_payload: classifier_payload,
-          ruleset_results: ruleset_results
+          step_type: "genai_upgrade",
+          upgrade_type: upgrade_type
         )
       end
-
-      inv.update!(status: "genai_complete", status_updated_at: Time.current)
-
-      advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
     rescue => e
       # mark failed (best-effort)
       begin
@@ -181,6 +117,160 @@ module Claims
       end
 
       raise
+    end
+
+    def run_genai_ruleset_child!(
+      session_id:,
+      invoice_version_id:,
+      ingest_run_id:,
+      invoice_upgrade_type_id:,
+      step_type:
+    )
+      iv = Claims::InvoiceVersion.find(invoice_version_id)
+      inv = Claims::Invoice.find(iv.invoice_id)
+      upgrade_type = Claims::InvoiceUpgradeType.find(invoice_upgrade_type_id)
+      classifier_payload = classifier_payload_from_evidence(invoice_version: iv)
+      case_facts = case_facts_from_step!(iv.id, ingest_run_id)
+      product_lookup_result =
+        product_lookup_result_from_step!(iv.id, ingest_run_id)
+      product_context =
+        product_enrichment_context(
+          invoice_version: iv.reload,
+          lookup_result: product_lookup_result
+        )
+
+      run_genai_ruleset!(
+        ingest_run_id: ingest_run_id,
+        session_id: session_id,
+        invoice_version_id: iv.id,
+        invoice: inv,
+        step_type: step_type,
+        upgrade_type: upgrade_type,
+        compiled_user_record1:
+          compiled_user_record1_for_upgrade_type!(upgrade_type),
+        case_facts: case_facts,
+        classifier_payload: classifier_payload,
+        product_context: product_context,
+        di_raw_json: iv.di_raw_json
+      )
+
+      Claims::RunGenaiJob.perform_async(
+        session_id,
+        invoice_version_id,
+        ingest_run_id,
+        "finish_validation"
+      )
+    rescue => e
+      begin
+        inv&.update!(status: "genai_failed", status_updated_at: Time.current)
+      rescue StandardError
+        nil
+      end
+      begin
+        advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
+      rescue StandardError
+        nil
+      end
+      raise
+    end
+
+    def finish_validation_if_ready!(
+      session_id:,
+      invoice_version_id:,
+      ingest_run_id:
+    )
+      iv = Claims::InvoiceVersion.find(invoice_version_id)
+      inv = Claims::Invoice.find(iv.invoice_id)
+
+      iv.with_lock do
+        if latest_step(
+             ingest_run_id: ingest_run_id,
+             invoice_version_id: iv.id,
+             step_type: "aggregate_advice"
+           )&.status == "succeeded" && inv.reload.status == "genai_complete"
+          return
+        end
+
+        classifier_payload =
+          classifier_payload_from_evidence(invoice_version: iv)
+        common_upgrade_type = upgrade_type_by_key!("common")
+        upgrade_types = detected_upgrade_types(classifier_payload)
+        required_genai_steps =
+          [[common_upgrade_type, "genai_common"]] +
+            upgrade_types.map { |upgrade_type| [upgrade_type, "genai_upgrade"] }
+        step_rows =
+          required_genai_steps.map do |upgrade_type, step_type|
+            latest_step(
+              ingest_run_id: ingest_run_id,
+              invoice_version_id: iv.id,
+              step_type: step_type,
+              invoice_upgrade_type_id: upgrade_type.id
+            )
+          end
+
+        if failed_step = step_rows.compact.find { |row| row.status == "failed" }
+          inv.update!(status: "genai_failed", status_updated_at: Time.current)
+          raise(
+            "GenAI validation step failed: " \
+              "#{failed_step.step_type} #{failed_step.invoice_upgrade_type_id}"
+          )
+        end
+
+        return if step_rows.size != required_genai_steps.size
+        return unless step_rows.all? { |row| row&.status == "succeeded" }
+
+        if code_rules_enabled_for_upgrade_type?(common_upgrade_type)
+          run_code_ruleset_once!(
+            ingest_run_id: ingest_run_id,
+            session_id: session_id,
+            invoice_version_id: iv.id,
+            step_type: "code_common",
+            upgrade_type: common_upgrade_type
+          ) do
+            ::Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks.call(
+              invoice_version_id: iv.id
+            )
+          end
+        end
+
+        upgrade_types.each do |upgrade_type|
+          next unless code_rules_enabled_for_upgrade_type?(upgrade_type)
+
+          run_code_ruleset_once!(
+            ingest_run_id: ingest_run_id,
+            session_id: session_id,
+            invoice_version_id: iv.id,
+            step_type: "code_upgrade",
+            upgrade_type: upgrade_type
+          ) do
+            ::Claims::InvoiceVersionRulechecks::ApplyUpgradeCodeRulechecks.call(
+              invoice_version_id: iv.id,
+              invoice_upgrade_type_id: upgrade_type.id
+            )
+          end
+        end
+
+        run_aggregate_advice_once!(
+          ingest_run_id: ingest_run_id,
+          session_id: session_id,
+          invoice_version: iv
+        ) do
+          apply_combined_overall!(
+            invoice_version: iv,
+            classifier_payload: classifier_payload,
+            ruleset_results:
+              ruleset_results_from_steps!(
+                invoice_version_id: iv.id,
+                ingest_run_id: ingest_run_id,
+                upgrade_types: [common_upgrade_type] + upgrade_types
+              )
+          )
+        end
+
+        inv.update!(status: "genai_complete", status_updated_at: Time.current)
+      end
+
+      advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
     end
 
     private
@@ -346,6 +436,179 @@ module Claims
 
     def advance_run!(ingest_run_id:)
       Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
+    end
+
+    def enqueue_genai_ruleset_job!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version:,
+      step_type:,
+      upgrade_type:
+    )
+      existing_step =
+        latest_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version.id,
+          step_type: step_type,
+          invoice_upgrade_type_id: upgrade_type.id
+        )
+      return if existing_step&.status.in?(%w[queued in_progress succeeded])
+
+      find_or_create_step!(
+        ingest_run_id: ingest_run_id,
+        session_id: session_id,
+        invoice_version_id: invoice_version.id,
+        step_type: step_type,
+        invoice_upgrade_type_id: upgrade_type.id
+      )
+
+      Claims::RunGenaiRulesetJob.perform_async(
+        session_id,
+        invoice_version.id,
+        ingest_run_id,
+        upgrade_type.id,
+        step_type
+      )
+    end
+
+    def latest_step(
+      ingest_run_id:,
+      invoice_version_id:,
+      step_type:,
+      invoice_upgrade_type_id: nil
+    )
+      scope =
+        Claims::IngestStepRun.where(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: step_type
+        )
+      scope =
+        scope.where(
+          invoice_upgrade_type_id: invoice_upgrade_type_id
+        ) if invoice_upgrade_type_id.present?
+      scope.order(created_at: :desc).first
+    end
+
+    def case_facts_from_step!(invoice_version_id, ingest_run_id)
+      step =
+        latest_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: "case_facts"
+        )
+      unless step&.status == "succeeded"
+        raise "Missing succeeded case_facts step for invoice_version_id=#{invoice_version_id}"
+      end
+      payload = step&.genai_results_json
+      case_facts = payload&.dig("case_facts") || payload&.dig(:case_facts)
+      return case_facts if case_facts.is_a?(Hash)
+
+      raise "Missing succeeded case_facts step for invoice_version_id=#{invoice_version_id}"
+    end
+
+    def product_lookup_result_from_step!(invoice_version_id, ingest_run_id)
+      step =
+        latest_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: "product_lookup_enrichment"
+        )
+      unless step&.status == "succeeded"
+        raise(
+          "Missing succeeded product_lookup_enrichment step for " \
+            "invoice_version_id=#{invoice_version_id}"
+        )
+      end
+      payload = step&.genai_results_json
+      return payload if payload.is_a?(Hash)
+
+      raise(
+        "Missing succeeded product_lookup_enrichment step for " \
+          "invoice_version_id=#{invoice_version_id}"
+      )
+    end
+
+    def run_code_ruleset_once!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version_id:,
+      step_type:,
+      upgrade_type:
+    )
+      existing_step =
+        latest_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: step_type,
+          invoice_upgrade_type_id: upgrade_type.id
+        )
+      if existing_step&.status == "succeeded"
+        return existing_step.genai_results_json
+      end
+
+      run_code_ruleset!(
+        ingest_run_id: ingest_run_id,
+        session_id: session_id,
+        invoice_version_id: invoice_version_id,
+        step_type: step_type,
+        upgrade_type: upgrade_type
+      ) { yield }
+    end
+
+    def run_aggregate_advice_once!(
+      ingest_run_id:,
+      session_id:,
+      invoice_version:
+    )
+      existing_step =
+        latest_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version.id,
+          step_type: "aggregate_advice"
+        )
+      if existing_step&.status == "succeeded"
+        return existing_step.genai_results_json
+      end
+
+      run_aggregate_advice_step!(
+        ingest_run_id: ingest_run_id,
+        session_id: session_id,
+        invoice_version: invoice_version
+      ) { yield }
+    end
+
+    def ruleset_results_from_steps!(
+      invoice_version_id:,
+      ingest_run_id:,
+      upgrade_types:
+    )
+      upgrade_types.map do |upgrade_type|
+        step_type =
+          (
+            if upgrade_type.upgrade_type_key == "common"
+              "genai_common"
+            else
+              "genai_upgrade"
+            end
+          )
+        step =
+          latest_step(
+            ingest_run_id: ingest_run_id,
+            invoice_version_id: invoice_version_id,
+            step_type: step_type,
+            invoice_upgrade_type_id: upgrade_type.id
+          )
+        payload = step&.genai_results_json
+        unless step&.status == "succeeded" && payload.is_a?(Hash)
+          raise(
+            "Missing succeeded #{step_type} step for " \
+              "upgrade_type_key=#{upgrade_type.upgrade_type_key}"
+          )
+        end
+
+        { upgrade_type: upgrade_type, payload: payload }
+      end
     end
 
     def classifier_payload_from_evidence(invoice_version:)

@@ -120,7 +120,7 @@ services:
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT: "30"
       VIRUS_SCAN_TEMP_DIR: "/tmp/virus_scan"
-      SIDEKIQ_CONCURRENCY: "1"
+      SIDEKIQ_CONCURRENCY: "20"
       SIDEKIQ_QUEUES: "claims_ocr,claims_genai"
       <<: *default-env-vars
     command: 'bundle exec sidekiq'
