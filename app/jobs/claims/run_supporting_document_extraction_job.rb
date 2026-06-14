@@ -24,7 +24,7 @@ module Claims
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
           document: document,
-          step_type: "supporting_document_extraction"
+          step_type: "supporting_document_single_extraction"
         )
       step.update!(
         status: "in_progress",
@@ -39,6 +39,20 @@ module Claims
           contextwindowjson: contextwindowjson,
           attachments: attachments
         )
+
+      supporting_document_id = document.promoted_supporting_document_id
+      if supporting_document_id.blank?
+        raise "Missing promoted supporting_document for ingest_document_id=#{document.id}"
+      end
+
+      located_result =
+        ::Claims::SupportingDocuments::ApplyLocatedFields.call(
+          supporting_document_id: supporting_document_id,
+          located_fields_payload: payload
+        )
+      unless located_result[:ok]
+        raise "ApplyLocatedFields failed: #{located_result.inspect}"
+      end
 
       step.update!(
         status: "succeeded",

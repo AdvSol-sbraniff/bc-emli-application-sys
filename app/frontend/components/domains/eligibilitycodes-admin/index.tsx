@@ -292,7 +292,7 @@ export default function EligibilitycodesAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Eligibility Admin" />
+      <ThinBlueTitleBar title="Create Test Eligibility Codes" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -540,7 +540,7 @@ export default function EligibilitycodesAdminScreen() {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Eligibility Admin Help</DrawerHeader>
+          <DrawerHeader>Create Test Eligibility Codes Help</DrawerHeader>
           <DrawerBody>
             <Text fontSize="sm" mb={3}>
               This page combines two sets of information so staff can see them together in one place: person details and

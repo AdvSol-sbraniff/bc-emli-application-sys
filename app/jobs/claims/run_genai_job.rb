@@ -435,7 +435,11 @@ module Claims
     end
 
     def advance_run!(ingest_run_id:)
-      Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
+      if Claims::IngestDocument.exists?(ingest_run_id: ingest_run_id)
+        Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
+      else
+        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
+      end
     end
 
     def enqueue_genai_ruleset_job!(
@@ -968,6 +972,9 @@ module Claims
       value =
         classifier_payload["eligibility_code"] ||
           classifier_payload[:eligibility_code]
+      if value.is_a?(Hash)
+        value = value["value"] || value[:value] || value["text"] || value[:text]
+      end
       value.to_s.strip.presence
     end
 

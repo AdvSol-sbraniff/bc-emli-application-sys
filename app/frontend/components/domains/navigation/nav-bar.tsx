@@ -419,36 +419,30 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
 
   // ===== MENU ITEMS BY ROLE =====
   const superAdminItems = (
-    <MenuGroup>
+    <>
       <NavMenuItem label={t('home.permitTemplateCatalogueTitle')} to={'/requirement-templates'} />
       <NavMenuItem label={t('home.requirementsLibraryTitle')} to={'/requirements-library'} />
       <NavMenuItem label={t('home.configurationManagement.title')} to={'/configuration-management'} />
-    </MenuGroup>
+    </>
   );
 
   const reviewManagerItems = (
-    <MenuGroup>
+    <>
       <NavMenuItem label={t('home.submissionInboxTitle')} to={'/submission-inbox'} />
       <NavMenuItem label={t('site.newApplication')} to={`/new-application`} />
       <NavMenuItem label={t('home.viewBlankApplicationsTitle')} to={`/blank-applications`} />
       <NavMenuItem label={t('home.viewSupportedApplicationsTitle')} to={'/supported-applications'} />
       <NavMenuItem label={t('home.configureUsersTitle')} to={'/configure-users'} />
-    </MenuGroup>
+    </>
   );
 
   const reviewerItems = (
-    <MenuGroup>
+    <>
       <NavMenuItem label={t('home.submissionInboxTitle')} to={`/submission-inbox`} />
       <NavMenuItem label={t('site.newApplication')} to={`/new-application`} />
       <NavMenuItem label={t('home.viewBlankApplicationsTitle')} to={`/blank-applications`} />
       <NavMenuItem label={t('home.viewSupportedApplicationsTitle')} to={'/supported-applications'} />
-    </MenuGroup>
-  );
-
-  const reviewStaffItems = (
-    <MenuGroup>
-      <MenuDivider my={0} borderColor="border.light" />
-    </MenuGroup>
+    </>
   );
 
   const claimsAdminItems = (
@@ -456,19 +450,36 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
       <MenuDivider my={0} borderColor="border.light" />
       <MenuGroup title={t('home.claimsAdminSectionTitle')}>
         <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
-        <NavMenuItem label={'Hello AI'} to={'/hello-ai-admin'} />
         <NavMenuItem label={'Reports'} to={'/reports-volume-value'} />
         <NavMenuItem label={'Contractor Draft Simulator'} to={'/submission-simulator-admin'} />
         <NavMenuItem label={'Rules and Fields Editor'} to={'/validation-rules-admin'} />
         <NavMenuItem label={'Rules at a Glance'} to={'/validation-rules-alphabetic-admin'} />
-        <NavMenuItem label={'Validation Prompt Config'} to={'/validation-rules-config'} />
         <NavMenuItem label={'Supporting Document Types'} to={'/supporting-document-types-admin'} />
         <NavMenuItem label={'Downloads'} to={'/downloads-admin'} />
-        <NavMenuItem label={t('home.eligibilityAdminTitle')} to={'/eligibilitycodes-admin'} />
-        <NavMenuItem label={t('home.usersAdminTitle')} to={'/users-admin'} />
+      </MenuGroup>
+      <MenuDivider my={0} borderColor="border.light" />
+      <MenuGroup title="AI System Settings">
+        <NavMenuItem label="Test AI Network Connectivity" to={'/hello-ai-admin'} />
+        <NavMenuItem label="System Config" to={'/validation-rules-config'} />
+      </MenuGroup>
+      <MenuDivider my={0} borderColor="border.light" />
+      <MenuGroup title="Create Test Data">
+        <NavMenuItem label="Create Test Contractors" to={'/contractors-admin'} />
+        <NavMenuItem label="Create Test Users" to={'/users-admin'} />
+        <NavMenuItem label="Create Test Eligibility Codes" to={'/eligibilitycodes-admin'} />
       </MenuGroup>
     </>
   );
+
+  const adminRoleLabel = currentUser?.isSuperAdmin
+    ? 'System admin'
+    : currentUser?.isAdminManager
+      ? 'Admin manager'
+      : currentUser?.isAdmin
+        ? 'Admin'
+        : null;
+
+  const menuUserTitle = adminRoleLabel ? `${currentUser?.name} (${adminRoleLabel})` : currentUser?.name;
 
   // Combine the menu button rendering logic
   const renderMenuButton = () => {
@@ -541,17 +552,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
             {/* ===== LOGGED IN MENU ===== */}
             {loggedIn && !currentUser?.isUnconfirmed ? (
               <>
-                <MenuGroup title={currentUser?.name} noOfLines={1}>
-                  {/* Role display for admin users */}
-                  {(currentUser?.isSuperAdmin || currentUser?.isAdmin || currentUser?.isAdminManager) && (
-                    <Box py={2} px={3} fontSize="md" color="inherit">
-                      {currentUser?.isSuperAdmin
-                        ? 'System admin'
-                        : currentUser?.isAdminManager
-                          ? 'Admin manager'
-                          : 'Admin'}
-                    </Box>
-                  )}
+                <MenuGroup title={menuUserTitle} noOfLines={1}>
                   <MenuDivider my={0} borderColor="border.light" />
 
                   {/* Mobile/Tablet Home Link */}
@@ -560,12 +561,41 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
                   </Show>
 
                   {/* Role-based menu items */}
-                  {currentUser?.isSuperAdmin && <NavMenuItem label={t('home.jurisdictionsTitle')} to={'/programs'} />}
-                  {currentUser?.isSuperAdmin && superAdminItems}
-                  {(currentUser?.isReviewManager || currentUser?.isRegionalReviewManager) && reviewManagerItems}
-                  {currentUser?.isReviewer && reviewerItems}
-                  {currentUser?.isReviewStaff && reviewStaffItems}
                   {(currentUser?.isSuperAdmin || currentUser?.isReviewStaff) && claimsAdminItems}
+
+                  {(currentUser?.isSuperAdmin ||
+                    currentUser?.isReviewManager ||
+                    currentUser?.isRegionalReviewManager ||
+                    currentUser?.isReviewer ||
+                    currentUser?.isAdminManager ||
+                    currentUser?.isAdmin) && (
+                    <>
+                      <MenuDivider my={0} borderColor="border.light" />
+                      <MenuGroup title="Legacy">
+                        {currentUser?.isSuperAdmin && (
+                          <NavMenuItem label={t('home.jurisdictionsTitle')} to={'/programs'} />
+                        )}
+                        {currentUser?.isSuperAdmin && superAdminItems}
+                        {(currentUser?.isReviewManager || currentUser?.isRegionalReviewManager) && reviewManagerItems}
+                        {currentUser?.isReviewer && reviewerItems}
+                        {(currentUser?.isAdminManager || currentUser?.isAdmin || currentUser?.isSuperAdmin) && (
+                          <>
+                            <NavMenuItem
+                              label={t('contractor.management.title', 'Manage contractor details')}
+                              to={'/contractor-management'}
+                            />
+                            <NavMenuItem
+                              label={t('contractor.programResources.title')}
+                              to={'/contractor-program-resources'}
+                            />
+                          </>
+                        )}
+                        {(currentUser?.isReviewManager || currentUser?.isSuperAdmin) && (
+                          <NavMenuItem label={t('home.auditLogTitle')} to={`/audit-log`} />
+                        )}
+                      </MenuGroup>
+                    </>
+                  )}
 
                   {currentUser?.isContractor && (
                     <>
@@ -595,25 +625,6 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
                   )}
 
                   <MenuDivider my={0} borderColor="border.light" />
-
-                  {/* Admin Manager items */}
-                  {(currentUser?.isAdminManager || currentUser?.isAdmin || currentUser?.isSuperAdmin) && (
-                    <>
-                      <NavMenuItem
-                        label={t('contractor.management.title', 'Manage contractor details')}
-                        to={'/contractor-management'}
-                      />
-                      <NavMenuItem
-                        label={t('contractor.programResources.title')}
-                        to={'/contractor-program-resources'}
-                      />
-                    </>
-                  )}
-
-                  {/* Admin-only items */}
-                  {(currentUser?.isReviewManager || currentUser?.isSuperAdmin) && (
-                    <NavMenuItem label={t('home.auditLogTitle')} to={`/audit-log`} />
-                  )}
 
                   {/* Common logged-in items */}
                   <NavMenuItem label={t('user.myAccount')} to={'/profile'} />

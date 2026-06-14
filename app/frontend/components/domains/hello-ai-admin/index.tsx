@@ -50,7 +50,7 @@ export default function HelloAiAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Hello AI" />
+      <ThinBlueTitleBar title="Test AI Network Connectivity" />
 
       <Container maxW="container.lg" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">

@@ -33,6 +33,8 @@ module Api
           ::Claims::ValidationgenaiConfig.create!(
             system_record: "",
             classifier_system_record: "",
+            classifier_pdf_system_record: "",
+            classifier_image_system_record: "",
             supporting_document_extraction_system_record: "",
             supporting_document_group_extraction_system_record: "",
             user_record0: "",
@@ -48,6 +50,8 @@ module Api
         %i[
           system_record
           classifier_system_record
+          classifier_pdf_system_record
+          classifier_image_system_record
           supporting_document_extraction_system_record
           supporting_document_group_extraction_system_record
           user_record0
@@ -62,6 +66,18 @@ module Api
           id: config.id,
           system_record: config.system_record,
           classifier_system_record: config.classifier_system_record,
+          classifier_pdf_system_record:
+            (
+              if config.respond_to?(:classifier_pdf_system_record)
+                config.classifier_pdf_system_record
+              end
+            ),
+          classifier_image_system_record:
+            (
+              if config.respond_to?(:classifier_image_system_record)
+                config.classifier_image_system_record
+              end
+            ),
           supporting_document_extraction_system_record:
             config.supporting_document_extraction_system_record,
           supporting_document_group_extraction_system_record:

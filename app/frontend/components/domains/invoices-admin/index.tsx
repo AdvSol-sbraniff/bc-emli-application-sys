@@ -187,16 +187,16 @@ const INVOICE_STATUS_COPY: Record<string, { label: string; hint: string }> = {
     hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
   },
   genai_in_progress: {
-    label: 'Running AI Review',
-    hint: 'Validation and advice are running: case facts, product lookup, GenAI rules, code rules, and final advice.',
+    label: 'Building AI Rule Advice',
+    hint: 'AI rule advice is being built: case facts, product lookup, GenAI rule advice, code rules, and final advice.',
   },
   validation_advice: {
-    label: 'Running AI Review',
-    hint: 'Validation and advice are running: case facts, product lookup, GenAI rules, code rules, and final advice.',
+    label: 'Building AI Rule Advice',
+    hint: 'AI rule advice is being built: case facts, product lookup, GenAI rule advice, code rules, and final advice.',
   },
   genai_complete: {
-    label: 'AI Review Complete',
-    hint: 'AI processing is complete and the claim is ready for review.',
+    label: 'AI Rule Advice Complete',
+    hint: 'AI rule advice is complete. The contractor can pre-check the advice, revise if needed, and submit when ready.',
   },
   admin_review_inbox: {
     label: 'Waiting for Admin Review',
@@ -207,8 +207,8 @@ const INVOICE_STATUS_COPY: Record<string, { label: string; hint: string }> = {
     hint: 'An admin review is underway.',
   },
   contractor_revision_inbox: {
-    label: 'Waiting for Contractor',
-    hint: 'The claim has been sent back to the contractor for a response or corrected documents.',
+    label: 'Waiting for Contractor Revision',
+    hint: 'Admin review sent the claim back to the contractor to revise the package or provide supporting information.',
   },
   approved_pending: {
     label: 'Approved, Pending Payment',
@@ -236,7 +236,7 @@ const INVOICE_STATUS_COPY: Record<string, { label: string; hint: string }> = {
   },
   genai_failed: {
     label: 'Processing Failed',
-    hint: 'AI review failed and needs troubleshooting.',
+    hint: 'AI rule advice failed and needs troubleshooting.',
   },
 };
 
@@ -266,10 +266,11 @@ const invoiceStatusCopy = (status?: string | null) => {
 
 const aiResultHint = (result: unknown) => {
   const normalized = normalizeResult(result);
-  if (normalized === 'pass') return 'AI review passed based on the latest rule outputs.';
-  if (normalized === 'warn') return 'AI review found warnings that may need attention.';
-  if (normalized === 'fail') return 'AI review found failing rule outcomes that need attention.';
-  return 'AI review result is not available yet.';
+  if (normalized === 'pass') return 'AI advice says the latest rule outputs pass.';
+  if (normalized === 'warn')
+    return 'AI advice includes warnings that may need contractor pre-check or admin attention.';
+  if (normalized === 'fail') return 'AI advice includes failing rule outcomes that need attention.';
+  return 'AI advice result is not available yet.';
 };
 
 const sortParts = (sort: string) => {
@@ -699,10 +700,10 @@ export function InvoicesAdminScreen() {
                 <option value="processing">Any Processing Status</option>
                 <option value="upload_in_progress">Uploading Package</option>
                 <option value="ocr_in_progress">Preparing Evidence</option>
-                <option value="genai_in_progress">Running AI Review</option>
-                <option value="genai_complete">AI Review Complete</option>
+                <option value="genai_in_progress">Building AI Rule Advice</option>
+                <option value="genai_complete">AI Rule Advice Complete</option>
                 <option value="admin_review_inbox">Waiting for Admin Review</option>
-                <option value="contractor_revision_inbox">Waiting for Contractor</option>
+                <option value="contractor_revision_inbox">Waiting for Contractor Revision</option>
                 <option value="in_review">Admin Reviewing</option>
                 <option value="approved_pending">Approved, Pending Payment</option>
                 <option value="approved_paid">Approved and Paid</option>
@@ -963,9 +964,9 @@ export function InvoicesAdminScreen() {
                             />
                           </Tooltip>
 
-                          <Tooltip label="view all revision requests for all versions for this invoice">
+                          <Tooltip label="Open invoice messages and internal notes. Use messages for the back-and-forth with the contractor about requested changes; use internal notes for admin-only context.">
                             <IconButton
-                              aria-label="Open revision requests"
+                              aria-label="Open invoice messages and internal notes"
                               size="xs"
                               variant="outline"
                               icon={<ChatDots size={14} />}
@@ -1104,8 +1105,8 @@ export function InvoicesAdminScreen() {
             </Text>
             <Text fontSize="sm" mb={2}>
               The status badge is the main workflow indicator. It uses business-friendly wording such as Preparing
-              Evidence, Running AI Review, or AI Review Complete. Hover over the badge to see what is happening and the
-              exact technical status stored in the database.
+              Evidence, Building AI Rule Advice, or AI Rule Advice Complete. Hover over the badge to see what is
+              happening and the exact technical status stored in the database.
             </Text>
             <Text fontSize="sm" mb={2}>
               The contractor name opens the current PDF review screen. The upgrade-type icons show what the classifier
@@ -1117,7 +1118,7 @@ export function InvoicesAdminScreen() {
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Evidence prep and AI review
+              Evidence prep and AI rule advice
             </Text>
             <Text fontSize="sm" mb={2}>
               Preparing Evidence is the first major processing phase. It reads uploaded files, classifies invoice and
@@ -1125,8 +1126,9 @@ export function InvoicesAdminScreen() {
               resolved invoice PDF into an invoice version.
             </Text>
             <Text fontSize="sm" mb={3}>
-              Running AI Review is the second major phase. It builds case facts, enriches product-list matches, runs
-              GenAI and code rules, and aggregates the final advice shown to reviewers.
+              Building AI Rule Advice is the second major phase. It builds case facts, enriches product-list matches,
+              runs GenAI and code rules, and aggregates the final advice. Contractors pre-check that advice before
+              submission; admins review submitted claims after that.
             </Text>
 
             <Text fontSize="sm" fontWeight="bold" mb={1}>
@@ -1137,7 +1139,8 @@ export function InvoicesAdminScreen() {
               review screen as clicking the contractor name.
             </Text>
             <Text fontSize="sm" mb={2}>
-              The conversation action opens invoice-scoped revision requests and internal notes. These are tied to the
+              The conversation action opens invoice messages and internal notes. Messages are the back-and-forth with
+              the contractor about requested changes; internal notes are admin-only context. Both are tied to the
               invoice, not just one invoice version, so the history survives +1 invoice fixes.
             </Text>
             <Text fontSize="sm" mb={2}>

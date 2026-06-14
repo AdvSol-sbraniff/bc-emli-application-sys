@@ -240,6 +240,10 @@ Rails.application.routes.draw do
             to: "validation_rules_admin#update"
 
       get "admin/contractors", to: "contractors_admin#index"
+      get "admin/contractors/:id", to: "contractors_admin#show"
+      post "admin/contractors", to: "contractors_admin#create"
+      patch "admin/contractors/:id", to: "contractors_admin#update"
+      delete "admin/contractors/:id", to: "contractors_admin#destroy"
       post "admin/hello_ai", to: "hello_ai#create"
 
       get "admin/sessions/:id", to: "sessions_admin#show"

@@ -8,17 +8,22 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_genai, retry: 0
 
-    def perform(ingest_document_id, ingest_run_id = nil)
+    def perform(
+      ingest_document_id,
+      ingest_run_id = nil,
+      requested_step_type = nil
+    )
       document = ::Claims::IngestDocument.find(ingest_document_id)
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
       end
+      step_type = classifier_step_type_for(document, requested_step_type)
 
       step =
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
           document: document,
-          step_type: "triage_classifier"
+          step_type: step_type
         )
       step.update!(
         status: "in_progress",
@@ -26,8 +31,17 @@ module Claims
         updated_at: Time.current
       )
 
-      contextwindowjson = build_classifier_contextwindowjson(document: document)
-      triage_payload = call_node_genai!(contextwindowjson: contextwindowjson)
+      contextwindowjson =
+        build_classifier_contextwindowjson(
+          document: document,
+          step_type: step_type
+        )
+      attachments = build_attachments(document: document, step_type: step_type)
+      triage_payload =
+        call_node_genai!(
+          contextwindowjson: contextwindowjson,
+          attachments: attachments
+        )
       result =
         ::Claims::Ingest::ApplyDocumentTriageResult.call(
           ingest_document_id: document.id,
@@ -87,13 +101,13 @@ module Claims
         )
     end
 
-    def build_classifier_contextwindowjson(document:)
+    def build_classifier_contextwindowjson(document:, step_type:)
       config = ::Claims::ValidationgenaiConfig.order(:created_at).first
-      sys = config&.classifier_system_record.to_s
+      sys = classifier_system_record(config: config, step_type: step_type)
       user0 = config&.user_record0.to_s
 
       if sys.strip.empty?
-        raise "validationgenai_config.classifier_system_record is empty"
+        raise "validationgenai_config.#{classifier_config_field(step_type)} is empty"
       end
 
       messages = [
@@ -109,6 +123,7 @@ module Claims
         role: "user",
         content: [{ type: "input_text", text: <<~TEXT }]
               User record: Document to classify
+              classifier_step_type: #{step_type}
               File metadata:
               original_filename: #{document.original_filename}
               content_type: #{document.content_type}
@@ -118,8 +133,7 @@ module Claims
               #{document.di_read_raw_json.to_json}
 
               Actual ask:
-              Classify the document. If it is a supporting document, classify the supporting document type and assess routing quality.
-              Do not extract supporting-document located fields in this call. Supporting-document located fields are extracted in a separate downstream call after routing.
+              #{classifier_actual_ask(step_type)}
               Reply must be strict JSON using the classifier schema from the system record.
             TEXT
       }
@@ -127,13 +141,31 @@ module Claims
       messages
     end
 
-    def call_node_genai!(contextwindowjson:)
+    def build_attachments(document:, step_type:)
+      return [] unless step_type == "classifier_imagefiles"
+      return [] if document.storage_key.blank?
+
+      [
+        {
+          type: "input_file",
+          storageKey: document.storage_key,
+          container: ENV["AZURE_BLOB_CONTAINER"].presence,
+          filename: document.original_filename.presence || "image_document"
+        }.compact
+      ]
+    end
+
+    def call_node_genai!(contextwindowjson:, attachments: [])
       base = ENV.fetch("INV_NODE_BASE_URL")
       uri = URI("#{base}/inv/genai")
 
       req = Net::HTTP::Post.new(uri)
       req["Content-Type"] = "application/json"
-      req.body = JSON.generate(contextwindowjson: contextwindowjson)
+      req.body =
+        JSON.generate(
+          contextwindowjson: contextwindowjson,
+          attachments: attachments
+        )
 
       http = Net::HTTP.new(uri.host, uri.port)
       http.open_timeout = 10
@@ -145,6 +177,61 @@ module Claims
       end
 
       JSON.parse(resp.body)
+    end
+
+    def classifier_step_type_for(document, requested_step_type)
+      requested = requested_step_type.to_s
+      if %w[classifier_pdfs classifier_imagefiles triage_classifier].include?(
+           requested
+         )
+        return requested
+      end
+
+      image_document?(document) ? "classifier_imagefiles" : "classifier_pdfs"
+    end
+
+    def image_document?(document)
+      content_type = document.content_type.to_s.downcase
+      return true if content_type.start_with?("image/")
+
+      filename = document.original_filename.to_s.downcase
+      filename.end_with?(".jpg", ".jpeg", ".png")
+    end
+
+    def classifier_config_field(step_type)
+      if step_type == "classifier_imagefiles"
+        :classifier_image_system_record
+      else
+        :classifier_pdf_system_record
+      end
+    end
+
+    def classifier_system_record(config:, step_type:)
+      return "" if config.nil?
+
+      field = classifier_config_field(step_type)
+      value = config.respond_to?(field) ? config.public_send(field).to_s : ""
+      value.presence || config.classifier_system_record.to_s
+    end
+
+    def classifier_actual_ask(step_type)
+      return <<~TEXT.squish if step_type == "classifier_imagefiles"
+          Classify this image file. Use the attached image as primary evidence.
+          Treat filename, MIME type, and DI-read JSON as weak hints only.
+          If it is a supporting document, classify the supporting document type
+          and assess routing quality. Do not return official visual_findings or
+          supporting-document located fields in this call; those are extracted in
+          separate downstream calls after routing.
+        TEXT
+
+      <<~TEXT.squish
+        Classify this PDF/document from DI-read JSON only. If it is an invoice,
+        detect upgrade types, eligibility code, and product references. If it is
+        a supporting document, classify the supporting document type and assess
+        routing quality. Do not extract supporting-document located fields in
+        this call; those are extracted in separate downstream calls after
+        routing.
+      TEXT
     end
 
     def advance_run!(ingest_run_id:)

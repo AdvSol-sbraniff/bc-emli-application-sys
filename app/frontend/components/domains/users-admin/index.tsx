@@ -89,7 +89,11 @@ function Field({ label, value }: { label: string; value: any }) {
       <Text fontSize="xs" opacity={0.7} mb={1}>
         {label}
       </Text>
-      <Text fontSize="sm" whiteSpace="pre-wrap" fontFamily={label.endsWith('_id') || label === 'id' ? 'mono' : undefined}>
+      <Text
+        fontSize="sm"
+        whiteSpace="pre-wrap"
+        fontFamily={label.endsWith('_id') || label === 'id' ? 'mono' : undefined}
+      >
         {value === null || value === undefined || value === '' ? '--' : String(value)}
       </Text>
     </Box>
@@ -170,7 +174,7 @@ export default function UsersAdminScreen() {
         credentials: 'include',
       });
 
-      const data: UsersApiResp = await res.json().catch(() => ({ rows: [] } as UsersApiResp));
+      const data: UsersApiResp = await res.json().catch(() => ({ rows: [] }) as UsersApiResp);
       if (!res.ok) {
         throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
       }
@@ -267,7 +271,7 @@ export default function UsersAdminScreen() {
 
   return (
     <Box>
-      <ThinBlueTitleBar title="Users Admin" />
+      <ThinBlueTitleBar title="Create Test Users" />
 
       <Container maxW="container.xl" py={6}>
         <Flex align="center" justify="space-between" mb={4} gap={3} wrap="wrap">
@@ -413,7 +417,13 @@ export default function UsersAdminScreen() {
             {total} total users
           </Text>
           <Flex gap={2} align="center">
-            <Button size="sm" variant="outline" leftIcon={<CaretLeft size={16} />} onClick={() => setPage(Math.max(1, page - 1))} isDisabled={page <= 1 || loading}>
+            <Button
+              size="sm"
+              variant="outline"
+              leftIcon={<CaretLeft size={16} />}
+              onClick={() => setPage(Math.max(1, page - 1))}
+              isDisabled={page <= 1 || loading}
+            >
               Prev
             </Button>
             <Text fontSize="sm">

@@ -101,6 +101,9 @@ const ContractorInvoiceMessagesScreen = lazy(() =>
 const EligibilitycodesAdminScreen = lazy(() =>
   import('../eligibilitycodes-admin').then((module) => ({ default: module.default })),
 );
+const ContractorsAdminScreen = lazy(() =>
+  import('../contractors-admin').then((module) => ({ default: module.default })),
+);
 const UsersAdminScreen = lazy(() => import('../users-admin').then((module) => ({ default: module.default })));
 const UserEditorScreen = lazy(() => import('../user-editor').then((module) => ({ default: module.default })));
 const EligibilitycodeEditorScreen = lazy(() =>
@@ -857,6 +860,7 @@ const AppRoutes = observer(() => {
           <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
+          <Route path="/contractors-admin" element={<ContractorsAdminScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />

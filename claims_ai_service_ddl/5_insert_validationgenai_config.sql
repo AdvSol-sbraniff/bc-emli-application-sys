@@ -5,6 +5,7 @@ WITH config_row (
   id,
   system_record,
   classifier_system_record,
+  classifier_image_system_record,
   supporting_document_extraction_system_record,
   supporting_document_group_extraction_system_record,
   user_record0,
@@ -154,19 +155,63 @@ Output-json-schema:
   "supporting_document_type_reason": null,
   "supporting_document_routing_quality": null,
   "supporting_document_routing_quality_reason": null,
-  "eligibility_code": null,
+  "eligibility_code": {
+    "value": null,
+    "confidence": 0,
+    "page": null,
+    "polygon": null,
+    "evidence_text": null
+  },
   "product_references": {
-    "ahri_reference": null,
-    "neea_reference": null,
-    "awhp_reference": null,
-    "ohpa_reference": null,
-    "product_model_number": null,
-    "product_manufacturer": null
+    "ahri_reference": {
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    },
+    "neea_reference": {
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    },
+    "awhp_reference": {
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    },
+    "ohpa_reference": {
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    },
+    "product_model_number": {
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    },
+    "product_manufacturer": {
+      "value": null,
+      "confidence": 0,
+      "page": null,
+      "polygon": null,
+      "evidence_text": null
+    }
   },
   "detected_upgrade_types": [
     {
       "upgrade_type_key": "windows_doors",
       "confidence": 0,
+      "page": null,
+      "polygon": null,
       "evidence_text": "exact short invoice evidence",
       "classification_explanation": "2-4 sentences explaining why this appears to be a rebate-claimed upgrade type, including the exact rebate or claim evidence when available."
     }
@@ -202,12 +247,14 @@ Rules:
 - Use supporting_document_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
 - supporting_document_routing_quality_reason is mandatory when supporting_document_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
 - Do not return supporting_document_located_fields. Supporting-document extraction is handled by a separate extraction call.
-- If document_kind is supporting_document or unknown, return eligibility_code=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
-- If document_kind is supporting_document or unknown, return product_references with all values null.
+- If document_kind is supporting_document or unknown, return eligibility_code.value=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
+- If document_kind is supporting_document or unknown, return product_references with all nested values null.
 - Return only allowed upgrade_type_key values.
 - Return only allowed supporting_document_type_key values.
-- Set eligibility_code to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
-- Set product_references from exact invoice-visible product-list or product identity evidence when present. Use null for unknown values.
+- Set eligibility_code.value to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
+- For eligibility_code, set confidence, evidence_text, page, and polygon from the exact Document Intelligence evidence when available. Use page=null and polygon=null only when DI JSON does not provide a reliable location.
+- Set product_references.*.value from exact invoice-visible product-list or product identity evidence when present. Use null for unknown values.
+- For every non-null product_references.*.value, set confidence, evidence_text, page, and polygon from the exact Document Intelligence evidence when available. Use page=null and polygon=null only when DI JSON does not provide a reliable location.
 - For AHRI evidence, put the exact AHRI reference in product_references.ahri_reference.
 - For NEEA, AWHP, or OHPA evidence, use the corresponding product_references key only when the invoice explicitly shows that list/source. Otherwise use product_model_number and product_manufacturer when visible.
 - Do not invent product references from supporting documents in this classifier call. This call only classifies the current staged document OCR text.
@@ -216,6 +263,7 @@ Rules:
 - Strong classification evidence includes an explicit upgrade-specific rebate line, an explicit CleanBC/Better Homes/ESP amount tied to that upgrade, or invoice wording that clearly presents the item as a claimed program upgrade.
 - For each detected_upgrade_types[] row, classification_explanation must be a few concise sentences. Explain why the upgrade is classified, quote the key invoice evidence, and say whether the evidence is a direct rebate line or a direct work-scope claim.
 - Put the single best exact invoice phrase in evidence_text. Do not repeat the same phrase in extra evidence fields.
+- For each detected_upgrade_types[] row, set page and polygon from the Document Intelligence line/word/table evidence that supports evidence_text. Use page=null and polygon=null only when DI JSON does not provide a reliable location.
 - Do not classify from generic program boilerplate, rebate table summaries, sample-invoice instructions, supporting-document checklists, or text that merely lists possible Better Homes BC upgrades.
 - Do not classify broad "heat pump" when a more exact heat-pump key is required. Choose the exact key only when the invoice shows both heat-pump work and enough context for the source fuel/system path or equipment class.
 - For air-source heat pump conversion keys, require evidence of the new air-source heat pump plus evidence or strong invoice context for the prior source fuel: electric, wood/solid fuel, natural gas/propane, or oil.
@@ -231,6 +279,87 @@ Rules:
 - Prefer under-classification over over-classification. If the invoice clearly has two upgrade domains, return two, not every related program possibility.
 - If no upgrade type is visible, return an empty detected_upgrade_types array.
 $classifier$,
+    $classifier_image$
+purpose-statement:
+You classify an attached image file for the Better Homes BC Energy Savings Program. Use the attached image as primary evidence. Use filename, MIME type, byte size, and Document Intelligence JSON only as weak hints.
+
+You are not extracting official visual findings or supporting-document located fields. This call only decides how the image should route. Official visual findings are extracted later by supporting-document single/group extraction.
+
+Allowed document_kind values:
+- supporting_document
+- unknown
+
+Allowed supporting_document_type_key values:
+- before_after_photo_set
+- certification_sheet
+- dual_fuel_control_document
+- fenestration_energy_performance_label
+- energy_star_label
+- f280_heat_load_calculation
+- floor_plan_document
+- fossil_backup_system_document
+- fossil_fuel_removal_proof
+- income_verification_document
+- landlord_consent_form
+- manufacturer_label_photo
+- oil_removal_proof
+- permit_document
+- preapproval_notice
+- preapproval_quote
+- product_spec_sheet
+- utility_account_document
+- utility_bill
+- electrical_utility_upgrade_document
+- wett_report
+
+Output-json-schema:
+{
+  "document_kind": "supporting_document|unknown",
+  "document_kind_confidence": 0,
+  "document_kind_reason": "2-4 sentences explaining why the image is a supporting document or unknown.",
+  "supporting_document_type_key": null,
+  "supporting_document_type_confidence": 0,
+  "supporting_document_type_reason": null,
+  "supporting_document_routing_quality": null,
+  "supporting_document_routing_quality_reason": null,
+  "visual_routing_summary": null,
+  "eligibility_code": null,
+  "product_references": {
+    "ahri_reference": null,
+    "neea_reference": null,
+    "awhp_reference": null,
+    "ohpa_reference": null,
+    "product_model_number": null,
+    "product_manufacturer": null
+  },
+  "detected_upgrade_types": [],
+  "not_detected_upgrade_types": []
+}
+
+Rules:
+- Return strict JSON only.
+- Do not include markdown outside JSON.
+- Use the attached image as the primary evidence.
+- Treat DI-read text, filename, and MIME type as weak hints only.
+- Do not return visual_findings.
+- Do not return supporting_document_located_fields.
+- Use document_kind="supporting_document" when the image appears to be a photo, label, product plate, form page, bill page, permit page, report page, or other non-invoice supporting evidence.
+- Use document_kind="unknown" only when the image is too blank, irrelevant, unreadable, or ambiguous to route.
+- For before/after work photos, use supporting_document_type_key="before_after_photo_set".
+- For equipment/product nameplate photos, use supporting_document_type_key="manufacturer_label_photo".
+- For window/door energy label photos, use supporting_document_type_key="fenestration_energy_performance_label".
+- For ENERGY STAR label photos, use supporting_document_type_key="energy_star_label".
+- If a photographed page clearly belongs to another allowed supporting-document type, choose that type.
+- Set supporting_document_type_key only when document_kind="supporting_document"; otherwise return null.
+- Allowed supporting_document_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
+- Use supporting_document_routing_quality="usable" when the image is clear enough for downstream extraction.
+- Use supporting_document_routing_quality="requires_visual_review" when the image content is the evidence and later visual extraction must inspect it.
+- Use supporting_document_routing_quality="needs_review" when the likely type is clear but the image has blur, cutoff, glare, rotation, or ambiguity concerns.
+- Use supporting_document_routing_quality="unusable" when the image is blank, irrelevant, or too poor to route safely.
+- visual_routing_summary may briefly describe the image for routing only. It is not official evidence.
+- Return eligibility_code=null, product_references with all values null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
+- Use confidence from 0 to 100.
+$classifier_image$,
     $supporting_document_extraction$
 purpose-statement:
 You extract configured located fields from one supporting document for the Better Homes BC Energy Savings Program. The application has already classified the document type. You are not deciding final eligibility.
@@ -397,6 +526,8 @@ INSERT INTO claims.validationgenai_config (
   id,
   system_record,
   classifier_system_record,
+  classifier_pdf_system_record,
+  classifier_image_system_record,
   supporting_document_extraction_system_record,
   supporting_document_group_extraction_system_record,
   user_record0,
@@ -409,6 +540,8 @@ INSERT INTO claims.validationgenai_config (
     id,
     system_record,
     classifier_system_record,
+    classifier_system_record,
+    classifier_image_system_record,
     supporting_document_extraction_system_record,
     supporting_document_group_extraction_system_record,
     user_record0,
@@ -420,6 +553,8 @@ INSERT INTO claims.validationgenai_config (
   ON CONFLICT (id) DO UPDATE SET
     system_record = EXCLUDED.system_record,
     classifier_system_record = EXCLUDED.classifier_system_record,
+    classifier_pdf_system_record = EXCLUDED.classifier_pdf_system_record,
+    classifier_image_system_record = EXCLUDED.classifier_image_system_record,
     supporting_document_extraction_system_record = EXCLUDED.supporting_document_extraction_system_record,
     supporting_document_group_extraction_system_record = EXCLUDED.supporting_document_group_extraction_system_record,
     user_record0 = EXCLUDED.user_record0,

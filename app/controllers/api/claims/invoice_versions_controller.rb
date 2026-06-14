@@ -407,7 +407,10 @@ module Api
               confidence
               result
               admin_advice
-              raw_json
+              evidence_text
+              classification_explanation
+              page
+              polygon
               created_at
               updated_at
             ]

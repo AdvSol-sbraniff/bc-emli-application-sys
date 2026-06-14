@@ -1795,6 +1795,8 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
 
   system_record character varying NULL,
   classifier_system_record character varying NULL,
+  classifier_pdf_system_record character varying NULL,
+  classifier_image_system_record character varying NULL,
   supporting_document_extraction_system_record character varying NULL,
   supporting_document_group_extraction_system_record character varying NULL,
   user_record0 character varying NULL,
@@ -2071,6 +2073,10 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   confidence smallint NOT NULL DEFAULT 0,
   result text NULL,
   admin_advice text NULL,
+  evidence_text text NULL,
+  classification_explanation text NULL,
+  page integer NULL,
+  polygon jsonb NULL,
   raw_json jsonb NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -2095,6 +2101,9 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
 
   CONSTRAINT invoice_version_upgrade_types_confidence_chk
     CHECK (confidence BETWEEN 0 AND 100),
+
+  CONSTRAINT invoice_version_upgrade_types_page_chk
+    CHECK (page IS NULL OR page >= 1),
 
   CONSTRAINT invoice_version_upgrade_types_result_chk
     CHECK (result IS NULL OR result IN ('pass','info','warn','fail')),
@@ -2320,7 +2329,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   supporting_document_group_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | upload_package_stage | ocr | classifier | genai | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | supporting_document_extraction | supporting_document_group_extraction | ocr_invoice
+  step_type text NOT NULL,  -- upload | upload_package_stage | ocr | classifier | genai | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | classifier_pdfs | classifier_imagefiles | supporting_document_extraction | supporting_document_single_extraction | supporting_document_group_extraction | plus1fix_ocr_read | plus1fix_classifier | ocr_invoice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -2369,7 +2378,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     ON DELETE CASCADE,
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','upload_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','supporting_document_extraction','supporting_document_group_extraction','ocr_invoice')),
+    CHECK (step_type IN ('upload','upload_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','classifier_pdfs','classifier_imagefiles','supporting_document_extraction','supporting_document_single_extraction','supporting_document_group_extraction','plus1fix_ocr_read','plus1fix_classifier','ocr_invoice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -2422,9 +2431,32 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       )
       OR
       (
-        step_type IN ('ocr_read','triage_classifier','supporting_document_extraction')
+        step_type IN ('ocr_read','triage_classifier','classifier_imagefiles','supporting_document_extraction','supporting_document_single_extraction')
         AND ingest_document_id IS NOT NULL
         AND invoice_version_id IS NULL
+        AND supporting_document_group_id IS NULL
+      )
+      OR
+      (
+        step_type = 'classifier_pdfs'
+        AND supporting_document_group_id IS NULL
+        AND (
+          (
+            ingest_document_id IS NOT NULL
+            AND invoice_version_id IS NULL
+          )
+          OR
+          (
+            ingest_document_id IS NULL
+            AND invoice_version_id IS NOT NULL
+          )
+        )
+      )
+      OR
+      (
+        step_type IN ('plus1fix_ocr_read','plus1fix_classifier')
+        AND invoice_version_id IS NOT NULL
+        AND ingest_document_id IS NULL
         AND supporting_document_group_id IS NULL
       )
       OR
@@ -2436,7 +2468,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       )
       OR
       (
-        step_type NOT IN ('ocr_read','triage_classifier','supporting_document_extraction','supporting_document_group_extraction')
+        step_type NOT IN ('ocr_read','triage_classifier','classifier_pdfs','classifier_imagefiles','supporting_document_extraction','supporting_document_single_extraction','supporting_document_group_extraction')
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
         AND supporting_document_group_id IS NULL

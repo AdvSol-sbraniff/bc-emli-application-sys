@@ -84,7 +84,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/validation-rules-config': [
         { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
-        { href: '/validation-rules-config', title: 'Validation Prompt Config' },
+        { href: '/validation-rules-config', title: 'System Config' },
       ],
       '/supporting-document-types-admin': [
         { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
@@ -117,8 +117,8 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/downloads-admin', title: 'Downloads' },
         { href: '/ohpa-product-list-admin', title: 'OHPA BC product list config' },
       ],
-      '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') }],
-      '/users-admin': [{ href: '/users-admin', title: t('home.usersAdminTitle') }],
+      '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: 'Create Test Eligibility Codes' }],
+      '/users-admin': [{ href: '/users-admin', title: 'Create Test Users' }],
       '/revision-requests-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/revision-requests-admin', title: 'Revision Requests Admin' },
@@ -129,7 +129,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/hello-ai-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/hello-ai-admin', title: 'Hello AI' },
+        { href: '/hello-ai-admin', title: 'Test AI Network Connectivity' },
       ],
       '/upload-invoice-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
@@ -152,11 +152,12 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/contractor/upload-invoices', title: 'Upload Invoice(s)' },
       ],
       '/eligibilitycode-editor': [
-        { href: '/eligibilitycodes-admin', title: t('home.eligibilityAdminTitle') },
+        { href: '/eligibilitycodes-admin', title: 'Create Test Eligibility Codes' },
         { href: '/eligibilitycode-editor', title: 'Eligibility code editor' },
       ],
+      '/contractors-admin': [{ href: '/contractors-admin', title: 'Create Test Contractors' }],
       '/user-editor': [
-        { href: '/users-admin', title: t('home.usersAdminTitle') },
+        { href: '/users-admin', title: 'Create Test Users' },
         { href: '/user-editor', title: 'User editor' },
       ],
     };

@@ -173,7 +173,7 @@ module Api
       end
 
       # POST /api/claims/admin/invoices/:id/status_transition
-      # Body: { transition: "screen_in|request_revision|approve_pending|mark_paid" }
+      # Body: { transition: "screen_in|request_revision|approve_pending|mark_ineligible|mark_paid" }
       def status_transition
         transition_key = params[:transition].to_s.strip
         spec = status_transition_spec(transition_key)
@@ -253,6 +253,10 @@ module Api
           "approve_pending" => {
             from: %w[in_review],
             to: "approved_pending"
+          },
+          "mark_ineligible" => {
+            from: %w[admin_review_inbox in_review],
+            to: "ineligible"
           },
           "mark_paid" => {
             from: %w[approved_pending],

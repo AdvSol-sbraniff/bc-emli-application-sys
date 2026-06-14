@@ -45,6 +45,36 @@ module Claims
         running = 0
 
         invoice_version_ids.each do |invoice_version_id|
+          plus1fix_read =
+            latest_step(run.id, invoice_version_id, "plus1fix_ocr_read")
+
+          if plus1fix_read&.status == "failed"
+            failed += 1
+            next
+          end
+
+          if plus1fix_read.present? && plus1fix_read.status != "succeeded"
+            running += 1
+            next
+          end
+
+          classifier =
+            latest_step(
+              run.id,
+              invoice_version_id,
+              %w[plus1fix_classifier classifier_pdfs]
+            )
+
+          if classifier&.status == "failed"
+            failed += 1
+            next
+          end
+
+          if classifier.present? && classifier.status != "succeeded"
+            running += 1
+            next
+          end
+
           ocr = latest_step(run.id, invoice_version_id, %w[ocr ocr_invoice])
 
           if ocr.nil?
@@ -67,7 +97,11 @@ module Claims
           invoice_status = invoice_status_for(invoice_version_id)
 
           if validation_steps.empty?
-            succeeded += 1
+            if %w[genai_queued genai_in_progress].include?(invoice_status)
+              running += 1
+            else
+              succeeded += 1
+            end
           elsif validation_steps.any? { |step| step.status == "failed" } ||
                 invoice_status == "genai_failed"
             failed += 1

@@ -22,6 +22,8 @@ type ConfigDto = {
   id: string;
   system_record: string | null;
   classifier_system_record: string | null;
+  classifier_pdf_system_record: string | null;
+  classifier_image_system_record: string | null;
   supporting_document_extraction_system_record: string | null;
   supporting_document_group_extraction_system_record: string | null;
   user_record0: string | null;
@@ -37,6 +39,8 @@ export default function RulesetConfigEditorScreen() {
   const [config, setConfig] = useState<ConfigDto | null>(null);
   const [systemRecord, setSystemRecord] = useState<string>('');
   const [classifierSystemRecord, setClassifierSystemRecord] = useState<string>('');
+  const [classifierPdfSystemRecord, setClassifierPdfSystemRecord] = useState<string>('');
+  const [classifierImageSystemRecord, setClassifierImageSystemRecord] = useState<string>('');
   const [supportingDocumentExtractionSystemRecord, setSupportingDocumentExtractionSystemRecord] = useState<string>('');
   const [supportingDocumentGroupExtractionSystemRecord, setSupportingDocumentGroupExtractionSystemRecord] =
     useState<string>('');
@@ -46,6 +50,8 @@ export default function RulesetConfigEditorScreen() {
   const [initialValues, setInitialValues] = useState({
     systemRecord: '',
     classifierSystemRecord: '',
+    classifierPdfSystemRecord: '',
+    classifierImageSystemRecord: '',
     supportingDocumentExtractionSystemRecord: '',
     supportingDocumentGroupExtractionSystemRecord: '',
     userRecord0: '',
@@ -56,6 +62,8 @@ export default function RulesetConfigEditorScreen() {
   const isDirty =
     systemRecord !== initialValues.systemRecord ||
     classifierSystemRecord !== initialValues.classifierSystemRecord ||
+    classifierPdfSystemRecord !== initialValues.classifierPdfSystemRecord ||
+    classifierImageSystemRecord !== initialValues.classifierImageSystemRecord ||
     supportingDocumentExtractionSystemRecord !== initialValues.supportingDocumentExtractionSystemRecord ||
     supportingDocumentGroupExtractionSystemRecord !== initialValues.supportingDocumentGroupExtractionSystemRecord ||
     userRecord0 !== initialValues.userRecord0 ||
@@ -66,6 +74,8 @@ export default function RulesetConfigEditorScreen() {
     const values = {
       systemRecord: data.system_record ?? '',
       classifierSystemRecord: data.classifier_system_record ?? '',
+      classifierPdfSystemRecord: data.classifier_pdf_system_record ?? data.classifier_system_record ?? '',
+      classifierImageSystemRecord: data.classifier_image_system_record ?? data.classifier_system_record ?? '',
       supportingDocumentExtractionSystemRecord: data.supporting_document_extraction_system_record ?? '',
       supportingDocumentGroupExtractionSystemRecord: data.supporting_document_group_extraction_system_record ?? '',
       userRecord0: data.user_record0 ?? '',
@@ -76,6 +86,8 @@ export default function RulesetConfigEditorScreen() {
     setConfig(data);
     setSystemRecord(values.systemRecord);
     setClassifierSystemRecord(values.classifierSystemRecord);
+    setClassifierPdfSystemRecord(values.classifierPdfSystemRecord);
+    setClassifierImageSystemRecord(values.classifierImageSystemRecord);
     setSupportingDocumentExtractionSystemRecord(values.supportingDocumentExtractionSystemRecord);
     setSupportingDocumentGroupExtractionSystemRecord(values.supportingDocumentGroupExtractionSystemRecord);
     setUserRecord0(values.userRecord0);
@@ -121,6 +133,8 @@ export default function RulesetConfigEditorScreen() {
         body: JSON.stringify({
           system_record: systemRecord,
           classifier_system_record: classifierSystemRecord,
+          classifier_pdf_system_record: classifierPdfSystemRecord,
+          classifier_image_system_record: classifierImageSystemRecord,
           supporting_document_extraction_system_record: supportingDocumentExtractionSystemRecord,
           supporting_document_group_extraction_system_record: supportingDocumentGroupExtractionSystemRecord,
           user_record0: userRecord0,
@@ -150,15 +164,15 @@ export default function RulesetConfigEditorScreen() {
 
   return (
     <Box>
-      <ThinBlueTitleBar title="Validation Prompt Config" />
+      <ThinBlueTitleBar title="System Config" />
 
       <Container maxW="6xl" py={6}>
         <Flex align="center" justify="space-between" mb={4}>
           <Box>
-            <Heading size="md">Validation Prompt Config</Heading>
+            <Heading size="md">System Config</Heading>
             <Text fontSize="sm" opacity={0.75} mt={1}>
-              Shared validation prompt, routing classifier prompt, support-document extraction prompt, and admin advice
-              framing.
+              Shared validation prompt, PDF/image routing classifier prompts, support-document extraction prompts, and
+              admin advice framing.
             </Text>
           </Box>
 
@@ -204,7 +218,9 @@ export default function RulesetConfigEditorScreen() {
             <Tabs variant="line" isFitted colorScheme="gray">
               <TabList>
                 <Tab>Main</Tab>
-                <Tab>Classifier</Tab>
+                <Tab>PDF Classifier</Tab>
+                <Tab>Image Classifier</Tab>
+                <Tab>Legacy Classifier</Tab>
                 <Tab>Support Extract</Tab>
                 <Tab>Group Extract</Tab>
                 <Tab>DI Guidance</Tab>
@@ -221,8 +237,34 @@ export default function RulesetConfigEditorScreen() {
 
                 <TabPanel px={0} pt={3}>
                   <Text fontSize="sm" opacity={0.75} mb={3}>
-                    Routing-only classifier prompt. It identifies invoice/supporting/unknown documents and leaves all
+                    Routing-only classifier prompt for PDFs. It uses DI-read/OCR JSON only, identifies
+                    invoice/supporting/unknown documents, detects invoice upgrade references, and leaves all
                     supporting-document located fields to the separate extraction call.
+                  </Text>
+                  <Textarea
+                    value={classifierPdfSystemRecord}
+                    onChange={(e) => setClassifierPdfSystemRecord(e.target.value)}
+                    minH="420px"
+                  />
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Routing-only classifier prompt for image files. It uses the attached image as primary evidence and
+                    treats DI-read, filename, and MIME type as weak hints. Official visual findings still belong to the
+                    supporting-document extraction calls.
+                  </Text>
+                  <Textarea
+                    value={classifierImageSystemRecord}
+                    onChange={(e) => setClassifierImageSystemRecord(e.target.value)}
+                    minH="420px"
+                  />
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={3}>
+                    Legacy fallback classifier prompt. New pipeline code should prefer the PDF or image classifier
+                    prompts above, but this field remains for compatibility during transition.
                   </Text>
                   <Textarea
                     value={classifierSystemRecord}
