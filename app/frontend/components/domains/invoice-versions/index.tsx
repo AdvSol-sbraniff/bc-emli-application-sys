@@ -3,8 +3,6 @@ import { fmtDate, fmtMoney, fmtText } from './display';
 
 import {
   Box,
-  Button,
-  Heading,
   Text,
   Flex,
   Container,
@@ -15,15 +13,8 @@ import {
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
-  Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerHeader,
-  DrawerOverlay,
   IconButton,
   Tooltip,
-  useDisclosure,
   useToast,
 } from '@chakra-ui/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
@@ -32,7 +23,21 @@ import {
   INVOICE_UPGRADE_TYPE_FILTER_ORDER,
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
-import { ChatDots, Question } from '@phosphor-icons/react';
+import {
+  ArrowClockwise,
+  ArrowSquareOut,
+  ArrowUUpLeft,
+  CaretLeft,
+  CaretRight,
+  ChatDots,
+  CheckCircle,
+  CornersOut,
+  FrameCorners,
+  MagnifyingGlassMinus,
+  MagnifyingGlassPlus,
+  PaperPlaneTilt,
+  XCircle,
+} from '@phosphor-icons/react';
 
 // ============================================================
 // SECTION 00 - FILE OVERVIEW
@@ -340,6 +345,13 @@ const INVOICE_STATUS_ACTIONS: Array<{
   },
 ];
 
+const invoiceStatusActionIcon = (key: InvoiceStatusTransition) => {
+  if (key === 'screen_in') return <PaperPlaneTilt size={25} weight="bold" />;
+  if (key === 'request_revision') return <ArrowUUpLeft size={25} weight="bold" />;
+  if (key === 'approve_pending') return <CheckCircle size={25} weight="bold" />;
+  return <XCircle size={25} weight="bold" />;
+};
+
 // ============================================================
 // SECTION 02.02 - FIELD CATALOG
 // PURPOSE: Single source of truth for left-panel rows + highlight mapping
@@ -353,6 +365,7 @@ type FieldCatalogItem = {
   pageKey?: string; // readData field holding page number
   polygonKey?: string; // readData field holding polygon array/json
   disabled?: boolean; // allow showing row but not clickable
+  hideWhenBlank?: boolean; // omit optional evidence rows when DI did not return a value
 };
 
 const DI_FIELDS: FieldCatalogItem[] = [
@@ -400,12 +413,57 @@ const DI_FIELDS: FieldCatalogItem[] = [
     polygonKey: 'di_ocr_customer_name_polygon',
   },
   {
+    key: 'customer_address',
+    label: 'Customer address',
+    valueKey: 'di_ocr_customer_address',
+    formatter: fmtText,
+    pageKey: 'di_ocr_customer_address_page',
+    polygonKey: 'di_ocr_customer_address_polygon',
+    hideWhenBlank: true,
+  },
+  {
+    key: 'customer_address_recipient',
+    label: 'Customer address recipient',
+    valueKey: 'di_ocr_customer_address_recipient',
+    formatter: fmtText,
+    pageKey: 'di_ocr_customer_address_recipient_page',
+    polygonKey: 'di_ocr_customer_address_recipient_polygon',
+    hideWhenBlank: true,
+  },
+  {
+    key: 'service_address',
+    label: 'Service address',
+    valueKey: 'di_ocr_service_address',
+    formatter: fmtText,
+    pageKey: 'di_ocr_service_address_page',
+    polygonKey: 'di_ocr_service_address_polygon',
+    hideWhenBlank: true,
+  },
+  {
+    key: 'service_address_recipient',
+    label: 'Service address recipient',
+    valueKey: 'di_ocr_service_address_recipient',
+    formatter: fmtText,
+    pageKey: 'di_ocr_service_address_recipient_page',
+    polygonKey: 'di_ocr_service_address_recipient_polygon',
+    hideWhenBlank: true,
+  },
+  {
     key: 'billing_address',
     label: 'Billing address',
     valueKey: 'di_ocr_billing_address',
     formatter: fmtText,
     pageKey: 'di_ocr_billing_address_page',
     polygonKey: 'di_ocr_billing_address_polygon',
+  },
+  {
+    key: 'billing_address_recipient',
+    label: 'Billing address recipient',
+    valueKey: 'di_ocr_billing_address_recipient',
+    formatter: fmtText,
+    pageKey: 'di_ocr_billing_address_recipient_page',
+    polygonKey: 'di_ocr_billing_address_recipient_polygon',
+    hideWhenBlank: true,
   },
   {
     key: 'sub_total',
@@ -461,15 +519,13 @@ export const InvoiceVersionShowScreen = () => {
   const isLegacySessionCurrentRoute = !!routeInvoiceId && !!sessionId && !isVersionSnapshotRoute;
   const canRunWorkflowActions = isInvoiceCurrentRoute;
   const titleText = isVersionSnapshotRoute ? 'Invoice Version Snapshot' : 'Invoice Review - Current Version';
-  const bookmarkHelpText = isVersionSnapshotRoute
-    ? 'This bookmark shows one fixed invoice version. It will not move when newer fixes are uploaded.'
-    : 'This bookmark follows the invoice and always shows the latest uploaded invoice version.';
 
   // ============================================================
   // SECTION 05.01 - STATE
   // PURPOSE: invoiceIds + readData + pdf viewer state + highlight state
   // ============================================================
 
+  const [bannerHidden, setBannerHidden] = useState<boolean>(false);
   const [showPdf, setShowPdf] = useState<boolean>(false);
 
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
@@ -494,11 +550,19 @@ export const InvoiceVersionShowScreen = () => {
 
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
+  const [viewerFile, setViewerFile] = useState<{
+    source: 'invoice' | 'supporting_document';
+    url: string;
+    filename?: string;
+    mimeType?: string;
+    documentId?: string;
+  } | null>(null);
+  const [viewerPageMetaByPage, setViewerPageMetaByPage] = useState<
+    Record<number, { width: number; height: number; unit: string }>
+  >({});
 
   const [codeFields, setCodeFields] = useState<any[]>([]);
   const [classifierFields, setClassifierFields] = useState<any[]>([]);
-
-  const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
 
   // ============================================================
   // SECTION 05.01.01 - ACTIVE HIGHLIGHT (SINGLE SOURCE OF TRUTH)
@@ -506,9 +570,10 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
 
   const [activeHighlight, setActiveHighlight] = useState<{
-    source: 'di' | 'genai' | 'code' | 'classifier';
+    source: 'di' | 'genai' | 'code' | 'classifier' | 'supporting_document';
     key?: string; // for DI: which field key
     genaiId?: number; // for GenAI: which row id (optional)
+    supportingDocumentId?: string;
     pageNumber: number | null; // 1-based
     polygon: any | null; // DI-style 8-number polygon (or json string)
   } | null>(null);
@@ -538,6 +603,21 @@ export const InvoiceVersionShowScreen = () => {
   const [lineitemsError] = useState<string | null>(null);
   const [statusActionLoading, setStatusActionLoading] = useState<InvoiceStatusTransition | null>(null);
   const [statusActionError, setStatusActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (bannerHidden) {
+      document.body.dataset.claimsAiPdfViewerChromeHidden = 'true';
+    } else {
+      delete document.body.dataset.claimsAiPdfViewerChromeHidden;
+    }
+
+    window.dispatchEvent(new Event('claims-ai-pdf-viewer-chrome-change'));
+
+    return () => {
+      delete document.body.dataset.claimsAiPdfViewerChromeHidden;
+      window.dispatchEvent(new Event('claims-ai-pdf-viewer-chrome-change'));
+    };
+  }, [bannerHidden]);
 
   // ============================================================
   // SECTION 06.01 - LOAD INVOICE NAV LIST
@@ -608,6 +688,15 @@ export const InvoiceVersionShowScreen = () => {
         }
 
         setPdfUrl(sasUrl);
+        setViewerFile((current) => {
+          if (current && current.source !== 'invoice') return current;
+          return {
+            source: 'invoice',
+            url: sasUrl,
+            filename: 'Invoice',
+            mimeType: 'application/pdf',
+          };
+        });
       } catch (e: any) {
         setPdfUrl(null);
         setPdfUrlError(String(e?.message ?? e));
@@ -616,6 +705,13 @@ export const InvoiceVersionShowScreen = () => {
 
     run();
   }, [isInvoiceCurrentRoute, isLegacySessionCurrentRoute, routeInvoiceId, routeInvoiceVersionId, sessionId]);
+
+  useEffect(() => {
+    setViewerFile(null);
+    setViewerPageMetaByPage({});
+    setActivePageNumber(1);
+    setNumPages(0);
+  }, [routeInvoiceId, routeInvoiceVersionId, sessionId]);
 
   // ============================================================
   // SECTION 06.02 - LOAD INVOICE READ DATA
@@ -803,6 +899,114 @@ export const InvoiceVersionShowScreen = () => {
     window.open(`/revision-requests-admin?${params.toString()}`, '_blank', 'noopener,noreferrer');
   };
 
+  const openSupportingDocumentFile = async (doc: any) => {
+    const docId = String(doc?.id || '').trim();
+    if (!docId) {
+      toast({
+        title: 'Cannot open file',
+        description: 'This supporting document is missing its file identifier.',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/api/claims/admin/supporting_documents/${encodeURIComponent(docId)}/pdf_url`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+      const fileUrl = String(json?.sas_url || '').trim();
+
+      if (!resp.ok || !fileUrl) {
+        throw new Error(json?.error || `File URL request failed (${resp.status})`);
+      }
+
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      toast({
+        title: 'Could not open supporting document',
+        description: String(e?.message || e),
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const showSupportingDocumentInViewer = async (doc: any, field?: any) => {
+    const docId = String(doc?.id || '').trim();
+    const filename = String(doc?.original_filename || 'Supporting document').trim();
+    const mimeType = String(doc?.mime_content_type || doc?.content_type || '').trim();
+
+    const setSupportingDocumentHighlight = () => {
+      if (field) {
+        setActiveHighlight({
+          source: 'supporting_document',
+          key: `supporting_field_${String(field?.id || field?.field_key || 'unknown')}`,
+          supportingDocumentId: docId,
+          pageNumber: field?.page != null ? Number(field.page) : 1,
+          polygon: field?.polygon ?? null,
+        });
+      } else {
+        setActiveHighlight(null);
+        setActivePageNumber(1);
+      }
+    };
+
+    if (!docId) {
+      toast({
+        title: 'Cannot show file',
+        description: 'This supporting document is missing its file identifier.',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    if (viewerFile?.source === 'supporting_document' && viewerFile.documentId === docId && viewerFile.url) {
+      setSupportingDocumentHighlight();
+      setShowPdf(true);
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/api/claims/admin/supporting_documents/${encodeURIComponent(docId)}/pdf_url`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+      const fileUrl = String(json?.sas_url || '').trim();
+
+      if (!resp.ok || !fileUrl) {
+        throw new Error(json?.error || `File URL request failed (${resp.status})`);
+      }
+
+      setViewerPageMetaByPage({});
+      setViewerFile({
+        source: 'supporting_document',
+        url: fileUrl,
+        filename,
+        mimeType,
+        documentId: docId,
+      });
+
+      setSupportingDocumentHighlight();
+      setShowPdf(true);
+    } catch (e: any) {
+      toast({
+        title: 'Could not show supporting document',
+        description: String(e?.message || e),
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   const runStatusTransition = async (transition: InvoiceStatusTransition) => {
     if (!canRunWorkflowActions) return;
 
@@ -911,9 +1115,32 @@ export const InvoiceVersionShowScreen = () => {
     if (typeof p === 'number' && p >= 1) setActivePageNumber(p);
   }, [activeHighlight?.pageNumber]);
 
+  useEffect(() => {
+    if (!activeHighlight || activeHighlight.source === 'supporting_document' || !pdfUrl) return;
+    setViewerFile({
+      source: 'invoice',
+      url: pdfUrl,
+      filename: 'Invoice',
+      mimeType: 'application/pdf',
+    });
+  }, [activeHighlight, pdfUrl]);
+
+  const viewerUrl = viewerFile?.url || pdfUrl;
+  const viewerFilename = String(viewerFile?.filename || 'Invoice').trim();
+  const viewerMimeType = String(viewerFile?.mimeType || '').toLowerCase();
+  const viewerIsImage =
+    viewerMimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff?)($|\?)/i.test(viewerUrl || viewerFilename);
+  const viewerIsPdf = !viewerIsImage;
+
   const activePageMeta = useMemo(() => {
-    const pages = readData?.di_page_map;
     const pnum = activeHighlight?.pageNumber;
+
+    if (viewerFile?.source === 'supporting_document') {
+      if (!pnum) return null;
+      return viewerPageMetaByPage[Number(pnum)] ?? null;
+    }
+
+    const pages = readData?.di_page_map;
     if (!pages || !pnum) return null;
 
     // Your JSON uses "pageNumber", "width", "height", "unit"
@@ -925,7 +1152,7 @@ export const InvoiceVersionShowScreen = () => {
       height: Number(found.height),
       unit: String(found.unit || ''),
     };
-  }, [readData?.di_page_map, activeHighlight?.pageNumber]);
+  }, [activeHighlight?.pageNumber, readData?.di_page_map, viewerFile?.source, viewerPageMetaByPage]);
 
   // ============================================================
   // SECTION 06.07.01 - PDF RENDER GEOMETRY aka the renderWidthPx block
@@ -956,9 +1183,8 @@ export const InvoiceVersionShowScreen = () => {
     const meta = activePageMeta;
 
     if (!poly || !meta) return null;
-    if (meta.unit !== 'inch') {
-      // You can expand later to handle 'pixel' for images.
-      console.warn('Unexpected DI unit:', meta.unit);
+    if (meta.unit !== 'inch' && meta.unit !== 'pixel') {
+      console.warn('Unexpected document coordinate unit:', meta.unit);
       return null;
     }
 
@@ -1007,6 +1233,11 @@ export const InvoiceVersionShowScreen = () => {
 
     return pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
   }, [activeHighlight?.polygon, activePageMeta, renderWidthPx]);
+
+  const shouldShowActivePolygon =
+    !!svgPolygonPoints &&
+    activeHighlight?.pageNumber != null &&
+    Number(activeHighlight.pageNumber) === Number(activePageNumber);
 
   // ============================================================
   // SECTION 06.07.03 - OVERLAY HEIGHT SOURCE OF TRUTH
@@ -1173,7 +1404,11 @@ export const InvoiceVersionShowScreen = () => {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title={titleText} />
+      {!bannerHidden && (
+        <Box onDoubleClick={() => setBannerHidden(true)}>
+          <ThinBlueTitleBar title={titleText} />
+        </Box>
+      )}
       <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
         <Box display="flex" flexDirection="column" height="100%">
           {/* keep your existing content, but REMOVE your old <Heading ...>Admin Full Details</Heading>
@@ -1187,26 +1422,11 @@ export const InvoiceVersionShowScreen = () => {
         SECTION 07.03 - NAV BAR
         PURPOSE: Prev/Next invoice navigation + position indicator
         ============================================================ */}
-            <Box display="flex" alignItems="center" gap="8px" mb="12px" flexWrap="wrap">
-              {(() => {
-                const statusCopy = invoiceStatusCopy(currentInvoiceStatus);
-                const technicalStatus = String(currentInvoiceStatus || '').trim() || 'unknown';
-                return (
-                  <>
-                    <Text fontSize="xs" opacity={0.75} flexBasis="100%">
-                      {bookmarkHelpText}
-                    </Text>
-                    <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`} hasArrow>
-                      <Badge colorScheme="gray">Status: {statusCopy.label}</Badge>
-                    </Tooltip>
-                  </>
-                );
-              })()}
-              {invoiceVersionLabel && <Badge colorScheme="gray">{invoiceVersionLabel}</Badge>}
+            <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap" px="0" py="2px">
               {isVersionSnapshotRoute && <Badge colorScheme="purple">Fixed version bookmark</Badge>}
-              <Flex align="center" gap="6px">
+              <Flex align="center" gap="7px" px="0" py="0">
                 <Text fontSize="xs" fontWeight="semibold">
-                  PDF
+                  Image
                 </Text>
                 <Switch size="sm" isChecked={showPdf} onChange={(event) => setShowPdf(event.target.checked)} />
               </Flex>
@@ -1216,17 +1436,32 @@ export const InvoiceVersionShowScreen = () => {
                   const isValidNow = action.validFrom.includes(currentInvoiceStatus);
                   const disabledReason = ' This action is not available for this invoice status.';
                   return (
-                    <Tooltip key={action.key} label={`${action.tooltip} ${isValidNow ? '' : disabledReason}`} hasArrow>
-                      <Button
-                        size="xs"
+                    <Tooltip
+                      key={action.key}
+                      label={`${action.label}. ${action.tooltip}${isValidNow ? '' : disabledReason}`}
+                      hasArrow
+                    >
+                      <IconButton
+                        aria-label={action.label}
+                        icon={invoiceStatusActionIcon(action.key)}
+                        size="md"
                         colorScheme={action.colorScheme}
                         variant={isValidNow ? 'solid' : 'outline'}
+                        borderRadius="full"
+                        boxShadow={isValidNow ? '0 8px 18px rgba(15, 23, 42, 0.14)' : 'none'}
+                        transition="transform 140ms ease, box-shadow 140ms ease"
+                        _hover={
+                          isValidNow
+                            ? {
+                                transform: 'translateY(-1px)',
+                                boxShadow: '0 12px 24px rgba(15, 23, 42, 0.18)',
+                              }
+                            : undefined
+                        }
                         onClick={() => runStatusTransition(action.key)}
                         isDisabled={!isValidNow || !!statusActionLoading || !readData?.invoice_id}
                         isLoading={statusActionLoading === action.key}
-                      >
-                        {action.label}
-                      </Button>
+                      />
                     </Tooltip>
                   );
                 })
@@ -1247,25 +1482,16 @@ export const InvoiceVersionShowScreen = () => {
               >
                 <IconButton
                   aria-label="Open invoice messages and internal notes"
-                  size="xs"
-                  variant="outline"
-                  icon={<ChatDots size={14} />}
+                  size="md"
+                  colorScheme="cyan"
+                  variant={canOpenRevisionMessages ? 'solid' : 'outline'}
+                  borderRadius="full"
+                  boxShadow={canOpenRevisionMessages ? '0 8px 18px rgba(8, 145, 178, 0.18)' : 'none'}
+                  icon={<ChatDots size={25} weight="bold" />}
                   onClick={openRevisionMessages}
                   isDisabled={!canOpenRevisionMessages}
                 />
               </Tooltip>
-
-              <Box ml="auto">
-                <Tooltip label="Help: how this viewer is grouped and what each section means">
-                  <IconButton
-                    aria-label="Open PDF viewer help"
-                    icon={<Question size={18} />}
-                    size="sm"
-                    variant="outline"
-                    onClick={onHelpOpen}
-                  />
-                </Tooltip>
-              </Box>
             </Box>
             {statusActionError && (
               <Box mb="8px">
@@ -1285,9 +1511,7 @@ export const InvoiceVersionShowScreen = () => {
     ============================================================ */}
 
               <Box
-                borderWidth="1px"
-                borderRadius="md"
-                p="12px"
+                p="0"
                 // IMPORTANT: overflow must NOT be "visible" for resize to show
                 sx={{
                   resize: 'horizontal',
@@ -1352,9 +1576,29 @@ export const InvoiceVersionShowScreen = () => {
                     </h2>
 
                     <AccordionPanel px="0" pt="3px">
+                      <Flex gap="18px" align="center" wrap="wrap" mb="8px">
+                        {(() => {
+                          const statusCopy = invoiceStatusCopy(currentInvoiceStatus);
+                          const technicalStatus = String(currentInvoiceStatus || '').trim() || 'unknown';
+                          return (
+                            <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`} hasArrow>
+                              <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
+                                Status: {statusCopy.label}
+                              </Text>
+                            </Tooltip>
+                          );
+                        })()}
+                        {invoiceVersionLabel && (
+                          <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
+                            {invoiceVersionLabel}
+                          </Text>
+                        )}
+                      </Flex>
                       <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                         {DI_FIELDS.map((f) => {
                           const raw = readData?.[f.valueKey];
+                          if (f.hideWhenBlank && (raw == null || raw === '')) return null;
+
                           const display = f.formatter ? f.formatter(raw) : String(raw ?? '-');
                           const clickable = !f.disabled && !!f.pageKey && !!f.polygonKey;
 
@@ -1846,6 +2090,29 @@ export const InvoiceVersionShowScreen = () => {
                                     </h3>
                                     <AccordionPanel px="0" pt="6px">
                                       <Box px="10px" py="3px">
+                                        <Flex justify="flex-end" gap="8px" mb="6px">
+                                          <Tooltip label={`Show ${filename} in application`}>
+                                            <IconButton
+                                              aria-label={`Show ${filename} in application`}
+                                              icon={<FrameCorners size={24} weight="bold" />}
+                                              size="lg"
+                                              variant="outline"
+                                              colorScheme="green"
+                                              onClick={() => showSupportingDocumentInViewer(doc)}
+                                            />
+                                          </Tooltip>
+                                          <Tooltip label={`Open ${filename} in browser`}>
+                                            <IconButton
+                                              aria-label={`Open ${filename} in browser`}
+                                              icon={<ArrowSquareOut size={24} weight="bold" />}
+                                              size="lg"
+                                              variant="outline"
+                                              colorScheme="blue"
+                                              onClick={() => openSupportingDocumentFile(doc)}
+                                            />
+                                          </Tooltip>
+                                        </Flex>
+
                                         <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
                                           File details
                                         </Text>
@@ -1886,20 +2153,50 @@ export const InvoiceVersionShowScreen = () => {
                                             alignItems="baseline"
                                             pl="12px"
                                           >
-                                            {fields.map((field: any) => (
-                                              <React.Fragment key={String(field?.id || field?.field_key)}>
-                                                <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                  {String(field?.field_key || 'field')}
-                                                </Text>
-                                                <Text fontSize="sm" noOfLines={1}>
-                                                  {field?.value_text != null
-                                                    ? String(field.value_text)
-                                                    : field?.value_json != null
-                                                      ? JSON.stringify(field.value_json)
-                                                      : 'not found'}
-                                                </Text>
-                                              </React.Fragment>
-                                            ))}
+                                            {fields.map((field: any) => {
+                                              const clickable = field?.page != null && field?.polygon != null;
+                                              const isActive =
+                                                activeHighlight?.source === 'supporting_document' &&
+                                                activeHighlight?.supportingDocumentId === String(doc?.id) &&
+                                                activeHighlight?.key ===
+                                                  `supporting_field_${String(field?.id || field?.field_key || 'unknown')}`;
+                                              const fieldValue =
+                                                field?.value_text != null
+                                                  ? String(field.value_text)
+                                                  : field?.value_json != null
+                                                    ? JSON.stringify(field.value_json)
+                                                    : 'not found';
+                                              const handleClick = clickable
+                                                ? () => showSupportingDocumentInViewer(doc, field)
+                                                : undefined;
+
+                                              return (
+                                                <React.Fragment key={String(field?.id || field?.field_key)}>
+                                                  <Text
+                                                    fontSize="sm"
+                                                    opacity={0.7}
+                                                    noOfLines={1}
+                                                    cursor={clickable ? 'pointer' : 'default'}
+                                                    bg={isActive ? 'red.50' : 'transparent'}
+                                                    borderRadius="sm"
+                                                    onClick={handleClick}
+                                                  >
+                                                    {String(field?.field_key || 'field')}
+                                                  </Text>
+                                                  <Text
+                                                    fontSize="sm"
+                                                    noOfLines={1}
+                                                    cursor={clickable ? 'pointer' : 'default'}
+                                                    bg={isActive ? 'red.50' : 'transparent'}
+                                                    borderRadius="sm"
+                                                    onClick={handleClick}
+                                                    _hover={clickable ? { bg: 'gray.50' } : undefined}
+                                                  >
+                                                    {fieldValue}
+                                                  </Text>
+                                                </React.Fragment>
+                                              );
+                                            })}
                                           </Box>
                                         )}
 
@@ -3292,11 +3589,9 @@ export const InvoiceVersionShowScreen = () => {
                   maxW="640px"
                   minW="640px"
                   minH={0}
-                  borderWidth="1px"
-                  borderRadius="md"
                   overflow="auto"
-                  p="8px"
-                  bg="white"
+                  p="0"
+                  bg="transparent"
                 >
                   <Box position="relative" width="100%">
                     {/* ============================================================
@@ -3304,18 +3599,30 @@ export const InvoiceVersionShowScreen = () => {
         PURPOSE: Page nav + zoom/fit/rotate + open
         ============================================================ */}
 
-                    <Box display="flex" flexDirection="column" alignItems="stretch" gap="8px" mb="8px" p="0">
-                      {/* Left: page navigation */}
-                      <Box display="flex" alignItems="center" gap="6px" flexWrap="wrap">
-                        <Button
-                          size="sm"
-                          onClick={() => setActivePageNumber((p) => Math.max(1, p - 1))}
-                          isDisabled={activePageNumber <= 1}
-                        >
-                          Prev
-                        </Button>
+                    <Box
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      gap="10px"
+                      mb="10px"
+                      p="0"
+                      bg="transparent"
+                      flexWrap="wrap"
+                    >
+                      <Flex align="center" gap="5px" flexWrap="wrap">
+                        <Tooltip label="Previous page" hasArrow>
+                          <IconButton
+                            aria-label="Previous page"
+                            icon={<CaretLeft size={18} weight="bold" />}
+                            size="sm"
+                            variant="ghost"
+                            borderRadius="full"
+                            onClick={() => setActivePageNumber((p) => Math.max(1, p - 1))}
+                            isDisabled={activePageNumber <= 1}
+                          />
+                        </Tooltip>
 
-                        <Text fontSize="sm" opacity={0.8}>
+                        <Text fontSize="xs" opacity={0.7} fontWeight="semibold">
                           Page
                         </Text>
 
@@ -3336,77 +3643,116 @@ export const InvoiceVersionShowScreen = () => {
                             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                           }}
                           style={{
-                            width: 60,
-                            padding: '6px 8px',
+                            width: 46,
+                            padding: '4px 6px',
                             border: '1px solid #E2E8F0',
-                            borderRadius: 6,
+                            borderRadius: 999,
+                            background: 'white',
+                            fontSize: 12,
+                            textAlign: 'center',
                           }}
                         />
 
-                        <Text fontSize="sm" opacity={0.8}>
+                        <Text fontSize="xs" opacity={0.7}>
                           / {numPages || '-'}
                         </Text>
 
-                        <Button
-                          size="sm"
-                          onClick={() => setActivePageNumber((p) => Math.min(numPages || p + 1, p + 1))}
-                          isDisabled={!!numPages && activePageNumber >= numPages}
-                        >
-                          Next
-                        </Button>
-                      </Box>
+                        <Tooltip label="Next page" hasArrow>
+                          <IconButton
+                            aria-label="Next page"
+                            icon={<CaretRight size={18} weight="bold" />}
+                            size="sm"
+                            variant="ghost"
+                            borderRadius="full"
+                            onClick={() => setActivePageNumber((p) => Math.min(numPages || p + 1, p + 1))}
+                            isDisabled={!!numPages && activePageNumber >= numPages}
+                          />
+                        </Tooltip>
+                      </Flex>
 
-                      {/* Right: zoom/fit/rotate/actions */}
-                      <Box display="flex" alignItems="center" gap="6px" flexWrap="wrap">
-                        <Button size="sm" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}>
-                          -
-                        </Button>
+                      <Flex align="center" gap="5px" flexWrap="wrap">
+                        <Tooltip label="Zoom out" hasArrow>
+                          <IconButton
+                            aria-label="Zoom out"
+                            icon={<MagnifyingGlassMinus size={18} weight="bold" />}
+                            size="sm"
+                            variant="ghost"
+                            borderRadius="full"
+                            onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
+                          />
+                        </Tooltip>
 
-                        <Text fontSize="sm" minW="56px" textAlign="center">
+                        <Text fontSize="xs" minW="44px" textAlign="center" fontWeight="semibold" opacity={0.75}>
                           {Math.round(zoom * 100)}%
                         </Text>
 
-                        <Button size="sm" onClick={() => setZoom((z) => Math.min(3.0, +(z + 0.1).toFixed(2)))}>
-                          +
-                        </Button>
+                        <Tooltip label="Zoom in" hasArrow>
+                          <IconButton
+                            aria-label="Zoom in"
+                            icon={<MagnifyingGlassPlus size={18} weight="bold" />}
+                            size="sm"
+                            variant="ghost"
+                            borderRadius="full"
+                            onClick={() => setZoom((z) => Math.min(3.0, +(z + 0.1).toFixed(2)))}
+                          />
+                        </Tooltip>
 
-                        <Button
-                          size="sm"
-                          variant={fitMode === 'width' ? 'solid' : 'outline'}
-                          onClick={() => {
-                            setFitMode('width');
-                            setZoom(1.0);
-                          }}
-                        >
-                          Fit width
-                        </Button>
+                        <Tooltip label="Fit width" hasArrow>
+                          <IconButton
+                            aria-label="Fit width"
+                            icon={<CornersOut size={18} weight="bold" />}
+                            size="sm"
+                            colorScheme={fitMode === 'width' ? 'blue' : 'gray'}
+                            variant={fitMode === 'width' ? 'solid' : 'ghost'}
+                            borderRadius="full"
+                            onClick={() => {
+                              setFitMode('width');
+                              setZoom(1.0);
+                            }}
+                          />
+                        </Tooltip>
 
-                        <Button
-                          size="sm"
-                          variant={fitMode === 'page' ? 'solid' : 'outline'}
-                          onClick={() => {
-                            setFitMode('page');
-                            setZoom(1.0);
-                          }}
-                        >
-                          Fit page
-                        </Button>
+                        <Tooltip label="Fit page" hasArrow>
+                          <IconButton
+                            aria-label="Fit page"
+                            icon={<FrameCorners size={18} weight="bold" />}
+                            size="sm"
+                            colorScheme={fitMode === 'page' ? 'blue' : 'gray'}
+                            variant={fitMode === 'page' ? 'solid' : 'ghost'}
+                            borderRadius="full"
+                            onClick={() => {
+                              setFitMode('page');
+                              setZoom(1.0);
+                            }}
+                          />
+                        </Tooltip>
 
-                        <Button size="sm" onClick={() => setRotate((r) => (r + 90) % 360)}>
-                          Rotate
-                        </Button>
+                        <Tooltip label="Rotate clockwise" hasArrow>
+                          <IconButton
+                            aria-label="Rotate clockwise"
+                            icon={<ArrowClockwise size={18} weight="bold" />}
+                            size="sm"
+                            variant="ghost"
+                            borderRadius="full"
+                            onClick={() => setRotate((r) => (r + 90) % 360)}
+                          />
+                        </Tooltip>
 
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            if (!pdfUrl) return;
-                            window.open(pdfUrl, '_blank', 'noopener,noreferrer');
-                          }}
-                        >
-                          Open
-                        </Button>
-                      </Box>
+                        <Tooltip label={`Open ${viewerFilename} in browser`} hasArrow>
+                          <IconButton
+                            aria-label={`Open ${viewerFilename} in browser`}
+                            icon={<ArrowSquareOut size={18} weight="bold" />}
+                            size="sm"
+                            variant="ghost"
+                            borderRadius="full"
+                            onClick={() => {
+                              if (!viewerUrl) return;
+                              window.open(viewerUrl, '_blank', 'noopener,noreferrer');
+                            }}
+                            isDisabled={!viewerUrl}
+                          />
+                        </Tooltip>
+                      </Flex>
                     </Box>
 
                     {/* ============================================================
@@ -3417,24 +3763,67 @@ export const InvoiceVersionShowScreen = () => {
     ? We render Document only when pdfUrl is present
     ============================================================ */}
 
-                    {pdfUrlError && (
+                    {pdfUrlError && !viewerUrl && (
                       <Text fontSize="sm" color="red.500" mb="8px">
-                        PDF URL error: {pdfUrlError}
+                        Image URL error: {pdfUrlError}
                       </Text>
                     )}
 
                     {/* 2) loading state */}
-                    {!pdfUrl && !pdfUrlError && (
+                    {!viewerUrl && !pdfUrlError && (
                       <Text fontSize="sm" opacity={0.7} mb="8px">
-                        Loading PDF URL...
+                        Loading image URL...
                       </Text>
                     )}
 
+                    {viewerUrl && viewerIsImage && (
+                      <Box
+                        position="relative"
+                        width={`${overlayWidthPx}px`}
+                        height={`${overlayHeightPx}px`}
+                        mx="auto"
+                        bg="white"
+                        boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
+                        borderRadius="sm"
+                        overflow="hidden"
+                      >
+                        <svg
+                          width={overlayWidthPx}
+                          height={overlayHeightPx}
+                          style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
+                        >
+                          {shouldShowActivePolygon && (
+                            <polygon points={svgPolygonPoints} fill="rgba(255,0,0,0.20)" stroke="red" strokeWidth={2} />
+                          )}
+                        </svg>
+                        <Box
+                          as="img"
+                          src={viewerUrl}
+                          alt={viewerFilename}
+                          width={`${renderWidthPx}px`}
+                          height="auto"
+                          display="block"
+                          onLoad={(event: any) => {
+                            const img = event.currentTarget as HTMLImageElement;
+                            if (!img?.naturalWidth || !img?.naturalHeight) return;
+                            setNumPages(1);
+                            setViewerPageMetaByPage({
+                              1: {
+                                width: img.naturalWidth,
+                                height: img.naturalHeight,
+                                unit: 'pixel',
+                              },
+                            });
+                          }}
+                        />
+                      </Box>
+                    )}
+
                     {/* 3) render PDF only when url exists */}
-                    {pdfUrl && (
+                    {viewerUrl && viewerIsPdf && (
                       <Document
-                        key={pdfUrl} // force reload when url changes
-                        file={pdfUrl} // IMPORTANT: dynamic URL here
+                        key={viewerUrl} // force reload when url changes
+                        file={viewerUrl} // IMPORTANT: dynamic URL here
                         onLoadSuccess={({ numPages }) => setNumPages(numPages)}
                         onLoadError={(err) => console.error('PDF load error:', err)}
                       >
@@ -3444,6 +3833,9 @@ export const InvoiceVersionShowScreen = () => {
                           width={`${overlayWidthPx}px`}
                           height={`${overlayHeightPx}px`}
                           mx="auto"
+                          bg="white"
+                          boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
+                          borderRadius="sm"
                         >
                           {/* SVG overlay */}
                           <svg
@@ -3451,7 +3843,7 @@ export const InvoiceVersionShowScreen = () => {
                             height={overlayHeightPx}
                             style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
                           >
-                            {svgPolygonPoints && (
+                            {shouldShowActivePolygon && (
                               <polygon
                                 points={svgPolygonPoints}
                                 fill="rgba(255,0,0,0.20)"
@@ -3468,6 +3860,19 @@ export const InvoiceVersionShowScreen = () => {
                               pageNumber={activePageNumber}
                               width={renderWidthPx}
                               rotate={rotate}
+                              onLoadSuccess={(page: any) => {
+                                if (!page?.getViewport) return;
+                                const viewport = page.getViewport({ scale: 1 });
+                                if (!viewport?.width || !viewport?.height) return;
+                                setViewerPageMetaByPage((current) => ({
+                                  ...current,
+                                  [activePageNumber]: {
+                                    width: Number(viewport.width) / 72,
+                                    height: Number(viewport.height) / 72,
+                                    unit: 'inch',
+                                  },
+                                }));
+                              }}
                             />
                           </Box>
                         </Box>
@@ -3493,97 +3898,6 @@ export const InvoiceVersionShowScreen = () => {
         {/*  ADD THIS: closes the first Box inside Container (Box A) */}
       </Container>{' '}
       {/*  THIS is the closecontainer line */}
-      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerHeader>PDF Viewer Help</DrawerHeader>
-          <DrawerBody>
-            <Flex direction="column" gap={4}>
-              <Box>
-                <Heading size="sm" mb={2}>
-                  What This Screen Shows
-                </Heading>
-                <Text as="div" fontSize="sm">
-                  This screen shows the current invoice version and the PDF evidence used during admin review.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Older invoice versions are version history. Workflow status buttons belong on the current invoice
-                  only.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Use the action buttons at the top to screen in, send to contractor for revision, approve pending, or
-                  mark paid.
-                </Text>
-              </Box>
-
-              <Box>
-                <Heading size="sm" mb={2}>
-                  Status Actions
-                </Heading>
-                <Text as="div" fontSize="sm">
-                  Screen In moves a submitted invoice from admin_review_inbox to in_review.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Send to Contractor for Revision moves the invoice to contractor_revision_inbox. The message to the
-                  contractor is a separate revision request record so admins can clearly state what must be fixed or
-                  provided.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Approve Pending moves an in-review invoice to approved_pending after admin/supervisor review.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Mark Ineligible moves the invoice to ineligible when admin review determines the claim cannot be
-                  approved.
-                </Text>
-              </Box>
-
-              <Box>
-                <Heading size="sm" mb={2}>
-                  Accordion Sections
-                </Heading>
-                <Text as="div" fontSize="sm">
-                  Invoice: OCR header fields like invoice number, date, vendor, customer, and totals.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Line Items: OCR line rows like description, quantity, unit price, and amount. The likely upgrade type
-                  shown beside each line is a classifier guess and may need admin confirmation.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  GenAI Located Fields: values found by AI with evidence and document location details.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Product & Eligibility Codes: product references, eligibility codes, and related invoice keys found
-                  during classification.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Pre-existing case facts: known case data already in the system.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  GenAI Rule Advice: rule-by-rule pass or fail, confidence, evidence, and the overall AI summary/advice.
-                </Text>
-              </Box>
-
-              <Box>
-                <Heading size="sm" mb={2}>
-                  How This Relates To Rulesets
-                </Heading>
-                <Text as="div" fontSize="sm">
-                  The ruleset tells AI what to advise on and what output shape to return.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Because of that, ruleset changes directly affect what appears in GenAI Located Fields and GenAI Rule
-                  Advice.
-                </Text>
-                <Text as="div" fontSize="sm" mt={1}>
-                  Invoice and Line Items are OCR-driven sections, while the GenAI sections are ruleset-driven advice
-                  sections.
-                </Text>
-              </Box>
-            </Flex>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
     </Flex>
   );
 };

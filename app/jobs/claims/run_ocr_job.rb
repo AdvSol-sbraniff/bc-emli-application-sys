@@ -7,7 +7,7 @@ require "json"
 module Claims
   class RunOcrJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_ocr, retry: 5
+    sidekiq_options queue: :claims_ocr, retry: 3
 
     # args:
     # - invoice_version_id (required)

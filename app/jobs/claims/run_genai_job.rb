@@ -7,7 +7,7 @@ require "json"
 module Claims
   class RunGenaiJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 0
+    sidekiq_options queue: :claims_genai, retry: 3
 
     # args must match controller perform_async call order.
     # GenAI validation reads classifier facts from evidence tables. Classifier

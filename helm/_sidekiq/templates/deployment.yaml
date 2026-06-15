@@ -62,9 +62,9 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ $deploymentTag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/bin/sh", "-c"]
+          command: ["/bin/bash", "-lc"]
           args:
-            ['exec bundle exec sidekiq']
+            ['exec bash ./devops/docker/app/entrypoint.sh bundle exec sidekiq']
           env:
             - name: DEPLOYMENT_TAG
               value: {{ $deploymentTag | quote }}
@@ -78,7 +78,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.crunchydbSecret }}
                   key: host
-          {{- $env := merge (.Values.global.env | default dict) (.Values.env | default dict) -}}
+          {{- $env := mergeOverwrite (deepCopy (.Values.global.env | default dict)) (.Values.env | default dict) -}}
             {{- range $k, $v := $env }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}

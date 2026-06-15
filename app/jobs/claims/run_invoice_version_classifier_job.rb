@@ -6,7 +6,7 @@ require "net/http"
 module Claims
   class RunInvoiceVersionClassifierJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 0
+    sidekiq_options queue: :claims_genai, retry: 3
 
     def perform(invoice_version_id, ingest_run_id = nil)
       invoice_version = ::Claims::InvoiceVersion.find(invoice_version_id)

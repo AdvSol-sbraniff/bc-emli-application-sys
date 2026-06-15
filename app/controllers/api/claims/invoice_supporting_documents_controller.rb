@@ -109,7 +109,11 @@ module Api
       def pdf_url
         doc = ::Claims::SupportingDocument.find(params[:id])
         render json: {
-                 sas_url: "/api/claims/admin/supporting_documents/#{doc.id}/pdf"
+                 sas_url:
+                   node_mint_sas!(
+                     storage_key: doc.storage_key,
+                     container: ENV["AZURE_BLOB_CONTAINER"].presence
+                   ).fetch("sas_url")
                },
                status: :ok
       rescue ActiveRecord::RecordNotFound

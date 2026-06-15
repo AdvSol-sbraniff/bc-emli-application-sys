@@ -44,7 +44,6 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 - `8_create_ohpa_product_list.sql`
   - Run once against an existing claims schema to add NRCan Oil to Heat Pump Affordability BC product-list tables and `claims.invoice_versions.ohpa_product_id`.
   - A clean rebuild from `2_create_schema.sql` already includes these tables and columns.
-
 ## Not part of normal claims rebuild
 
 - `public_legacy_seed/` contains old/public-schema bootstrap scripts.

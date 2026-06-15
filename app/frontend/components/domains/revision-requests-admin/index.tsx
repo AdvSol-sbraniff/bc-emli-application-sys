@@ -1,10 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Box,
-  Button,
   Container,
   Flex,
-  Heading,
   IconButton,
   Spinner,
   Tab,
@@ -17,7 +15,7 @@ import {
   Tooltip,
   useToast,
 } from '@chakra-ui/react';
-import { ArrowsClockwise } from '@phosphor-icons/react';
+import { ArrowsClockwise, FloppyDiskBack, PaperPlaneTilt } from '@phosphor-icons/react';
 import { useLocation } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useMst } from '../../../setup/root';
@@ -91,11 +89,9 @@ export default function RevisionRequestsAdminScreen() {
   const currentUserId = (userStore as any)?.currentUser?.id ? String((userStore as any).currentUser.id) : '';
 
   const invoiceId = getParam(location.search, 'invoice_id');
-  const contextInvoiceStatus = getParam(location.search, 'context_invoice_status');
   const contextContractorBusinessName = getParam(location.search, 'context_contractor_business_name');
   const contextDiOcrInvoiceId = getParam(location.search, 'context_di_ocr_invoice_id');
   const latestInvoiceVersionIdFromUrl = getParam(location.search, 'latest_invoice_version_id');
-  const latestInvoiceVersionNoFromUrl = getParam(location.search, 'latest_invoice_versionno');
 
   const [gridLoading, setGridLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -104,7 +100,6 @@ export default function RevisionRequestsAdminScreen() {
   const [rows, setRows] = useState<RevisionRequestGridRow[]>([]);
   const [internalNotes, setInternalNotes] = useState<InternalNoteRow[]>([]);
   const [latestInvoiceVersionId, setLatestInvoiceVersionId] = useState<string>(latestInvoiceVersionIdFromUrl);
-  const [latestInvoiceVersionNo, setLatestInvoiceVersionNo] = useState<string>(latestInvoiceVersionNoFromUrl);
   const [messageText, setMessageText] = useState('');
   const [noteText, setNoteText] = useState('');
   const [savingMessage, setSavingMessage] = useState(false);
@@ -194,14 +189,8 @@ export default function RevisionRequestsAdminScreen() {
 
       const latest = Array.isArray(data?.invoice_versions) ? data.invoice_versions[0] : null;
       setLatestInvoiceVersionId(latest?.id ? String(latest.id) : '');
-      setLatestInvoiceVersionNo(
-        latest?.invoice_versionno !== null && latest?.invoice_versionno !== undefined
-          ? String(latest.invoice_versionno)
-          : '',
-      );
     } catch {
       setLatestInvoiceVersionId('');
-      setLatestInvoiceVersionNo('');
     }
   };
 
@@ -211,11 +200,9 @@ export default function RevisionRequestsAdminScreen() {
   }, [invoiceId, latestInvoiceVersionIdFromUrl]);
 
   const contextRow = rows[0] || null;
-  const displayInvoiceStatus = contextInvoiceStatus || contextRow?.invoice_status || '';
   const displayContractorBusinessName = contextContractorBusinessName || contextRow?.contractor_business_name || '';
   const displayDiOcrInvoiceId = contextDiOcrInvoiceId || contextRow?.di_ocr_invoice_id || '';
-  const hasInvoiceContext =
-    !!displayInvoiceStatus || !!displayContractorBusinessName || !!displayDiOcrInvoiceId || !!latestInvoiceVersionNo;
+  const hasInvoiceContext = !!displayContractorBusinessName || !!displayDiOcrInvoiceId;
 
   const canSendAdminMessage = !!latestInvoiceVersionId;
   const sendHint = !latestInvoiceVersionId
@@ -319,17 +306,11 @@ export default function RevisionRequestsAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Revision Requests Admin" />
+      <ThinBlueTitleBar title="Invoice Messages & Notes" />
 
-      <Container maxW="5xl" pb={4} flex="1" pt={6}>
-        <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Flex justify="space-between" align="center" gap={3} mb={5} flexWrap="wrap">
-            <Box>
-              <Heading size="md">Messages & Internal Notes</Heading>
-              <Text fontSize="sm" opacity={0.75} mt={1}>
-                Contractor-facing messages and admin-only notes share the same invoice context, but stay separate.
-              </Text>
-            </Box>
+      <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
+        <Box p={5} bg="white">
+          <Flex justify="flex-end" align="center" gap={3} mb={5} flexWrap="wrap">
             <Tooltip label="Refresh messages and notes">
               <IconButton
                 aria-label="Refresh messages and notes"
@@ -342,23 +323,14 @@ export default function RevisionRequestsAdminScreen() {
           </Flex>
 
           {(hasInvoiceContext || gridLoading) && (
-            <Box mb={5} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
+            <Box mb={5}>
               {!hasInvoiceContext ? (
                 <Text fontSize="sm" opacity={0.7}>
                   Loading invoice context...
                 </Text>
               ) : (
                 <Flex direction="column" gap={3}>
-                  <Text fontSize="sm" fontWeight="bold">
-                    Context (selected invoice)
-                  </Text>
                   <Flex wrap="wrap" gap={6}>
-                    <Box>
-                      <Text fontSize="xs" opacity={0.7}>
-                        invoice_status
-                      </Text>
-                      <Text fontSize="sm">{displayInvoiceStatus || '-'}</Text>
-                    </Box>
                     <Box>
                       <Text fontSize="xs" opacity={0.7}>
                         contractor_name
@@ -371,26 +343,20 @@ export default function RevisionRequestsAdminScreen() {
                       </Text>
                       <Text fontSize="sm">{displayDiOcrInvoiceId || '-'}</Text>
                     </Box>
-                    <Box>
-                      <Text fontSize="xs" opacity={0.7}>
-                        latest version
-                      </Text>
-                      <Text fontSize="sm">{latestInvoiceVersionNo || '-'}</Text>
-                    </Box>
                   </Flex>
                 </Flex>
               )}
             </Box>
           )}
 
-          <Tabs variant="enclosed" colorScheme="blue" isLazy>
+          <Tabs variant="line" isFitted colorScheme="gray" isLazy>
             <TabList>
-              <Tab>Contractor Conversation</Tab>
+              <Tab>Contractor</Tab>
               <Tab>Internal Notes</Tab>
             </TabList>
 
             <TabPanels>
-              <TabPanel px={0} pt={5}>
+              <TabPanel px={0} pt={3}>
                 {gridError && (
                   <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
                     <Text as="div" fontSize="sm" color="red.700">
@@ -459,7 +425,7 @@ export default function RevisionRequestsAdminScreen() {
                   </Flex>
                 )}
 
-                <Box mt={5} p={4} borderWidth="1px" borderRadius="xl" bg="white" borderColor="gray.200">
+                <Box mt={5}>
                   <Text fontWeight="bold" mb={1}>
                     Send a message to contractor
                   </Text>
@@ -478,20 +444,22 @@ export default function RevisionRequestsAdminScreen() {
                   />
                   <Flex justify="flex-end" mt={3}>
                     <Tooltip label={sendHint} shouldWrapChildren>
-                      <Button
+                      <IconButton
+                        aria-label="Send message to contractor"
+                        icon={<PaperPlaneTilt size={22} weight="bold" />}
+                        size="md"
                         colorScheme="blue"
+                        borderRadius="full"
                         onClick={() => void sendMessage()}
                         isLoading={savingMessage}
                         isDisabled={!latestInvoiceVersionId || !canSendAdminMessage}
-                      >
-                        Send
-                      </Button>
+                      />
                     </Tooltip>
                   </Flex>
                 </Box>
               </TabPanel>
 
-              <TabPanel px={0} pt={5}>
+              <TabPanel px={0} pt={3}>
                 {notesError && (
                   <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
                     <Text as="div" fontSize="sm" color="red.700">
@@ -500,11 +468,8 @@ export default function RevisionRequestsAdminScreen() {
                   </Box>
                 )}
 
-                <Text fontWeight="bold" mb={1}>
-                  Internal Notes
-                </Text>
-                <Text fontSize="sm" opacity={0.75} mb={3}>
-                  Admin-only notes for documenting review decisions, context, or why an AI warning was accepted.
+                <Text fontWeight="bold" mb={3}>
+                  Notes
                 </Text>
 
                 {notesLoading ? (
@@ -538,12 +503,13 @@ export default function RevisionRequestsAdminScreen() {
                   </Flex>
                 )}
 
-                <Box mt={5} p={4} borderWidth="1px" borderRadius="xl" bg="white" borderColor="gray.200">
+                <Box mt={5}>
                   <Text fontWeight="bold" mb={1}>
                     Add internal note
                   </Text>
                   <Text fontSize="sm" opacity={0.75} mb={3}>
-                    This note is for admins only. It is not shown in the contractor conversation.
+                    This note is for admins only. It is not shown in the contractor conversation. Admin-only notes are
+                    for documenting review decisions, context, or why an AI warning was accepted.
                   </Text>
                   <Textarea
                     value={noteText}
@@ -556,14 +522,16 @@ export default function RevisionRequestsAdminScreen() {
                   />
                   <Flex justify="flex-end" mt={3}>
                     <Tooltip label={noteHint} shouldWrapChildren>
-                      <Button
+                      <IconButton
+                        aria-label="Save internal note"
+                        icon={<FloppyDiskBack size={22} weight="bold" />}
+                        size="md"
                         colorScheme="blue"
+                        borderRadius="full"
                         onClick={() => void saveInternalNote()}
                         isLoading={savingNote}
                         isDisabled={!canSaveInternalNote}
-                      >
-                        Save Internal Note
-                      </Button>
+                      />
                     </Tooltip>
                   </Flex>
                 </Box>

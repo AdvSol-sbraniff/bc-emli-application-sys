@@ -250,7 +250,10 @@ module Api
 
         render json: {
                  sas_url:
-                   "/api/claims/admin/invoices/#{invoice_id}/current_version/pdf"
+                   node_mint_sas!(
+                     storage_key: iv.storage_key,
+                     container: ENV["AZURE_BLOB_CONTAINER"].presence
+                   ).fetch("sas_url")
                },
                status: :ok
       rescue => e
@@ -418,7 +421,11 @@ module Api
         end
 
         render json: {
-                 sas_url: "/api/claims/admin/invoice_versions/#{id}/pdf"
+                 sas_url:
+                   node_mint_sas!(
+                     storage_key: iv.storage_key,
+                     container: ENV["AZURE_BLOB_CONTAINER"].presence
+                   ).fetch("sas_url")
                },
                status: :ok
       rescue => e

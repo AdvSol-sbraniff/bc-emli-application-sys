@@ -716,7 +716,10 @@ module Api
 
       def ingest_invoice_classifier_results(invoice_id:, ingest_run_id:)
         invoice_version_ids =
-          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).pluck(:id)
+          classifier_invoice_version_ids(
+            invoice_id: invoice_id,
+            ingest_run_id: ingest_run_id
+          )
 
         if invoice_version_ids.any?
           scope =
@@ -757,6 +760,52 @@ module Api
         end
 
         []
+      end
+
+      def classifier_invoice_version_ids(invoice_id:, ingest_run_id:)
+        invoice_id = invoice_id.to_s.strip
+        ingest_run_id = ingest_run_id.to_s.strip
+        ingest_run_id = nil if ingest_run_id.empty?
+
+        if ingest_run_id
+          step_invoice_version_ids =
+            ::Claims::IngestStepRun
+              .joins(
+                "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
+              )
+              .where(ingest_run_id: ingest_run_id)
+              .where("iv.invoice_id = ?", invoice_id)
+              .where.not(invoice_version_id: nil)
+              .distinct
+              .pluck(:invoice_version_id)
+
+          document_invoice_version_ids =
+            ::Claims::IngestDocument
+              .where(ingest_run_id: ingest_run_id)
+              .where(
+                "invoice_id = :invoice_id OR resolved_invoice_id = :invoice_id",
+                invoice_id: invoice_id
+              )
+              .where.not(resolved_invoice_version_id: nil)
+              .distinct
+              .pluck(:resolved_invoice_version_id)
+
+          run_invoice_version_ids =
+            (
+              step_invoice_version_ids + document_invoice_version_ids
+            ).compact.uniq
+
+          return run_invoice_version_ids if run_invoice_version_ids.any?
+        end
+
+        latest_invoice_version_id =
+          ::Claims::InvoiceVersion
+            .where(invoice_id: invoice_id)
+            .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+            .limit(1)
+            .pluck(:id)
+
+        latest_invoice_version_id
       end
 
       def file_safe_call(obj, method_name)

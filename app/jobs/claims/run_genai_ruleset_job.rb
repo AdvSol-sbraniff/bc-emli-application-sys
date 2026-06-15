@@ -3,7 +3,7 @@
 module Claims
   class RunGenaiRulesetJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 0
+    sidekiq_options queue: :claims_genai, retry: 3
 
     def perform(
       session_id,

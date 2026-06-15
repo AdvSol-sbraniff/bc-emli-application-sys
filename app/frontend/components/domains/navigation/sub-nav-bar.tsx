@@ -17,6 +17,19 @@ interface ISubNavBar extends FlexProps {
 export const SubNavBar = observer(({ staticBreadCrumbs, breadCrumbContainerProps, ...containerProps }: ISubNavBar) => {
   const location = useLocation();
   const path = location.pathname;
+  const [pdfViewerChromeHidden, setPdfViewerChromeHidden] = useState(false);
+
+  useEffect(() => {
+    const syncPdfViewerChrome = () => {
+      setPdfViewerChromeHidden(document.body.dataset.claimsAiPdfViewerChromeHidden === 'true');
+    };
+
+    syncPdfViewerChrome();
+    window.addEventListener('claims-ai-pdf-viewer-chrome-change', syncPdfViewerChrome);
+    return () => window.removeEventListener('claims-ai-pdf-viewer-chrome-change', syncPdfViewerChrome);
+  }, []);
+
+  if (pdfViewerChromeHidden) return null;
 
   return (
     <Flex
@@ -29,7 +42,7 @@ export const SubNavBar = observer(({ staticBreadCrumbs, breadCrumbContainerProps
       overflow="hidden"
       {...containerProps}
     >
-      <Container minW="container.lg" px={8} {...breadCrumbContainerProps}>
+      <Container maxW="full" w="full" px={8} {...breadCrumbContainerProps}>
         {Array.isArray(staticBreadCrumbs) ? (
           <SiteBreadcrumbs breadcrumbs={staticBreadCrumbs} />
         ) : (
@@ -121,7 +134,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/users-admin': [{ href: '/users-admin', title: 'Create Test Users' }],
       '/revision-requests-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/revision-requests-admin', title: 'Revision Requests Admin' },
+        { href: '/revision-requests-admin', title: 'Invoice Messages & Notes' },
       ],
       '/invoice-versions-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
@@ -353,7 +366,7 @@ const SiteBreadcrumbs = observer(function SiteBreadcrumb({ breadcrumbs, includeH
         return (
           <BreadcrumbItem key={index}>
             {finalSegment ? (
-              <Text fontWeight="bold">{breadcrumb.title}</Text>
+              <Text fontWeight="normal">{breadcrumb.title}</Text>
             ) : (
               <BreadcrumbLink as={RouterLinkButton} to={breadcrumb.href} variant="link">
                 {breadcrumb.title}

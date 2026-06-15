@@ -114,6 +114,8 @@ sidekiq:
 
   env:
     'INV_NODE_BASE_URL': 'http://hesp-claims-ai:3001'
+    'DATABASE_POOL': '25'
+    'SIDEKIQ_CONCURRENCY': '20'
     'SIDEKIQ_QUEUES': 'default,virus_scan,file_processing,webhooks,websocket,model_callbacks'
     'CLAMAV_TIMEOUT': '30'
     'VIRUS_SCAN_TEMP_DIR': '/tmp/virus_scan'
@@ -141,7 +143,8 @@ sidekiqClaims:
 
   env:
     'INV_NODE_BASE_URL': 'http://hesp-claims-ai:3001'
-    'SIDEKIQ_CONCURRENCY': '1'
+    'DATABASE_POOL': '25'
+    'SIDEKIQ_CONCURRENCY': '20'
     'SIDEKIQ_QUEUES': 'claims_ocr,claims_genai'
 
 claimsAi:

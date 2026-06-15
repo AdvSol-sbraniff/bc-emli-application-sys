@@ -1,7 +1,6 @@
 // /app/frontend/components/domains/invoices-admin/index.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge,
   Box,
   Container,
   Divider,
@@ -16,7 +15,6 @@ import {
   IconButton,
   Input,
   Select,
-  SimpleGrid,
   Spinner,
   Table,
   Tbody,
@@ -33,16 +31,13 @@ import {
   CaretLeft,
   CaretRight,
   ChatDots,
-  Files,
-  FilePdf,
   Info,
   MagnifyingGlass,
-  Question,
   Trash,
   Wrench,
   XCircle,
 } from '@phosphor-icons/react';
-import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
+import { LightGradientTitleBar } from '../../shared/base/light-gradient-title-bar';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MultiCheckSelect } from '../../shared/select/multi-check-select';
 import {
@@ -114,12 +109,16 @@ type ApiResp = {
   };
 };
 
-const fmtTs = (s?: string | null) => (s ? String(s).replace('T', ' ').replace('Z', '') : '');
-const fmtDate = (s?: string | null) => {
+const fmtDateTime = (s?: string | null) => {
   if (!s) return '';
   const raw = String(s);
-  if (raw.includes('T')) return raw.split('T')[0];
-  return raw.slice(0, 10);
+  if (raw.includes('T'))
+    return raw
+      .replace('T', ' ')
+      .replace(/\.\d+Z?$/, '')
+      .replace(/Z$/, '')
+      .slice(0, 16);
+  return raw.slice(0, 16);
 };
 const fmtMoney = (v?: string | number | null) => {
   if (v === null || v === undefined || v === '') return '';
@@ -134,6 +133,16 @@ const normalizeResult = (result: unknown): 'pass' | 'warn' | 'fail' | null => {
     .toLowerCase();
   return value === 'pass' || value === 'warn' || value === 'fail' ? value : null;
 };
+
+const rowActionButtonProps = {
+  h: '38px',
+  minW: '38px',
+  w: '38px',
+  size: 'sm' as const,
+  variant: 'outline' as const,
+};
+
+const rowActionIconSize = 18;
 
 function ResultDot({ val }: { val: unknown }) {
   const result = normalizeResult(val);
@@ -314,7 +323,7 @@ function SortableHeader({
       _hover={{ bg: 'blue.50', color: 'blue.800' }}
       _focusVisible={{ boxShadow: 'outline' }}
     >
-      <Text as="span" fontSize="xs" fontWeight="bold" textTransform="uppercase">
+      <Text as="span" fontSize="sm" fontWeight="semibold" textTransform="none">
         {label}
       </Text>
       <Text
@@ -366,7 +375,6 @@ export function InvoicesAdminScreen() {
 
   // drawer
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { isOpen: isUploadHelpOpen, onOpen: onUploadHelpOpen, onClose: onUploadHelpClose } = useDisclosure();
   const [selected, setSelected] = useState<InvoiceGridRow | null>(null);
 
   const didInitFromUrl = useRef(false);
@@ -566,11 +574,6 @@ export function InvoicesAdminScreen() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleOpenSupportingDocuments = (row: InvoiceGridRow) => {
-    if (!row.invoice_id) return;
-    navigate(`/invoice-supporting-documents-admin?invoice_id=${encodeURIComponent(String(row.invoice_id))}`);
-  };
-
   const handleOpenUploadFix = (row: InvoiceGridRow) => {
     const params = new URLSearchParams();
     if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
@@ -657,15 +660,15 @@ export function InvoicesAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Invoices Admin" />
+      <LightGradientTitleBar title="Invoices Admin" />
 
-      <Container maxW="container.xl" pb={4} flex="1" pt={6}>
-        <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
+      <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
+        <Box p={5} bg="white">
           {/* Filters */}
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box flex="1" minW="260px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
-                search (q)
+                search
               </Text>
               <Input
                 value={q}
@@ -750,16 +753,6 @@ export function InvoicesAdminScreen() {
             </Box>
 
             <HStack spacing={1.5} pb={1} flexShrink={0} alignSelf="flex-end">
-              <Tooltip label="Help: upload fix, inspect versions">
-                <IconButton
-                  aria-label="Open invoices help"
-                  icon={<Question size={18} />}
-                  variant="outline"
-                  size="sm"
-                  onClick={onUploadHelpOpen}
-                />
-              </Tooltip>
-
               <Tooltip label="Refresh grid">
                 <IconButton
                   aria-label="Refresh grid"
@@ -807,18 +800,30 @@ export function InvoicesAdminScreen() {
           )}
 
           {/* Grid */}
-          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} overflowX="auto">
+          <Box bg="white" overflowX="auto">
             <Flex align="center" justify="flex-end" mb={2}>
               {loading && <Spinner size="sm" />}
             </Flex>
 
-            <Table size="sm" minW="990px">
-              <Thead bg="gray.50">
+            <Table size="sm" w="100%" tableLayout="fixed">
+              <Thead
+                sx={{
+                  th: {
+                    bg: 'linear-gradient(180deg, rgba(49, 130, 206, 0.12) 0%, rgba(255, 255, 255, 0) 88%)',
+                    color: 'blue.900',
+                    borderBottomColor: 'gray.200',
+                    fontSize: 'sm',
+                    fontWeight: 'semibold',
+                    letterSpacing: 'normal',
+                    textTransform: 'none',
+                  },
+                }}
+              >
                 <Tr>
-                  <Th>
+                  <Th w="220px">
                     <SortableHeader field="invoice_status" label="status" sort={sort} onSort={handleHeaderSort} />
                   </Th>
-                  <Th>
+                  <Th w="190px">
                     <SortableHeader
                       field="latest_invoice_version_updated_at"
                       label="version updated"
@@ -827,7 +832,7 @@ export function InvoicesAdminScreen() {
                     />
                   </Th>
                   <Th w="86px">version #</Th>
-                  <Th>
+                  <Th w="300px">
                     <SortableHeader
                       field="contractor_business_name"
                       label="contractor"
@@ -835,9 +840,10 @@ export function InvoicesAdminScreen() {
                       onSort={handleHeaderSort}
                     />
                   </Th>
-                  <Th minW="180px"></Th>
-                  <Th>AI</Th>
-                  <Th minW="260px" textAlign="right"></Th>
+                  <Th w="220px">Invoice #</Th>
+                  <Th w="190px"></Th>
+                  <Th w="46px">AI</Th>
+                  <Th w="220px" textAlign="right"></Th>
                 </Tr>
               </Thead>
 
@@ -847,34 +853,46 @@ export function InvoicesAdminScreen() {
                   const statusCopy = invoiceStatusCopy(r.invoice_status);
                   const technicalStatus = String(r.invoice_status || '').trim() || 'unknown';
                   return (
-                    <Tr key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}>
+                    <Tr
+                      key={`${r.invoice_id || 'no-invoice'}-${r.session_id}-${idx}`}
+                      transition="background 140ms ease, box-shadow 140ms ease"
+                      _hover={{
+                        bg: 'linear-gradient(90deg, rgba(49, 130, 206, 0.07) 0%, rgba(255, 255, 255, 0.98) 72%)',
+                        boxShadow: 'inset 3px 0 0 rgba(49, 130, 206, 0.35)',
+                      }}
+                    >
                       <Td>
                         <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`}>
-                          <Badge>{statusCopy.label}</Badge>
+                          <Text fontSize="sm" noOfLines={1}>
+                            {statusCopy.label}
+                          </Text>
                         </Tooltip>
                       </Td>
 
-                      <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
-                        {fmtDate(r.latest_invoice_version_updated_at ?? r.invoice_updated_at)}
+                      <Td fontSize="sm" whiteSpace="nowrap">
+                        {fmtDateTime(r.latest_invoice_version_updated_at ?? r.invoice_updated_at)}
                       </Td>
 
                       <Td whiteSpace="nowrap">
-                        <Badge colorScheme={(r.latest_invoice_versionno ?? 1) > 1 ? 'orange' : 'gray'}>
-                          v{r.latest_invoice_versionno ?? 1}
-                        </Badge>
+                        <Text fontSize="sm">v{r.latest_invoice_versionno ?? 1}</Text>
                       </Td>
 
-                      <Td fontSize="sm" whiteSpace="nowrap">
+                      <Td fontSize="sm" minW={0}>
                         {hasInvoice ? (
                           <Tooltip label="Open PDF review">
                             <Text
                               as="button"
                               type="button"
                               fontSize="sm"
-                              fontWeight="semibold"
-                              color="blue.700"
+                              fontWeight="normal"
+                              color="gray.800"
                               textAlign="left"
                               cursor="pointer"
+                              maxW="100%"
+                              display="block"
+                              whiteSpace="nowrap"
+                              overflow="hidden"
+                              textOverflow="ellipsis"
                               px={2}
                               py={1}
                               ml={-2}
@@ -884,6 +902,7 @@ export function InvoicesAdminScreen() {
                               _hover={{
                                 bg: 'blue.50',
                                 color: 'blue.900',
+                                fontWeight: 'semibold',
                                 boxShadow: '0 8px 18px rgba(49, 130, 206, 0.14)',
                                 transform: 'translateY(-1px)',
                               }}
@@ -893,14 +912,18 @@ export function InvoicesAdminScreen() {
                             </Text>
                           </Tooltip>
                         ) : (
-                          r.contractor_business_name ?? '—'
+                          <Text noOfLines={1}>{r.contractor_business_name ?? '—'}</Text>
                         )}
                       </Td>
 
-                      <Td whiteSpace="nowrap" minW="180px">
+                      <Td fontSize="sm" minW={0}>
+                        <Text noOfLines={1}>{r.latest_di_ocr_invoice_id || '—'}</Text>
+                      </Td>
+
+                      <Td whiteSpace="nowrap">
                         {Array.isArray(r.latest_detected_upgrade_types_json) &&
                         r.latest_detected_upgrade_types_json.length > 0 ? (
-                          <Flex gap={2} wrap="nowrap" align="center" minW="max-content">
+                          <Flex gap={2} wrap="nowrap" align="center" minW={0} overflow="hidden">
                             {r.latest_detected_upgrade_types_json.map((upgradeType) => {
                               const label =
                                 upgradeType.description ||
@@ -940,26 +963,14 @@ export function InvoicesAdminScreen() {
                         </Tooltip>
                       </Td>
 
-                      <Td whiteSpace="nowrap" minW="260px">
-                        <Flex justify="flex-end" align="center" gap={1} wrap="nowrap" minW="max-content">
+                      <Td whiteSpace="nowrap">
+                        <Flex justify="flex-end" align="center" gap={1.5} wrap="nowrap">
                           <Tooltip label="Open details drawer">
                             <IconButton
                               aria-label="Open details drawer"
-                              size="xs"
-                              variant="outline"
-                              icon={<Info size={14} />}
+                              {...rowActionButtonProps}
+                              icon={<Info size={rowActionIconSize} />}
                               onClick={() => handleOpenDrawer(r)}
-                              isDisabled={!hasInvoice}
-                            />
-                          </Tooltip>
-
-                          <Tooltip label="Open PDF viewer">
-                            <IconButton
-                              aria-label="Open PDF viewer"
-                              size="xs"
-                              variant="outline"
-                              icon={<FilePdf size={14} />}
-                              onClick={() => handleOpenDetailsWithPdf(r)}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
@@ -967,9 +978,8 @@ export function InvoicesAdminScreen() {
                           <Tooltip label="Open invoice messages and internal notes. Use messages for the back-and-forth with the contractor about requested changes; use internal notes for admin-only context.">
                             <IconButton
                               aria-label="Open invoice messages and internal notes"
-                              size="xs"
-                              variant="outline"
-                              icon={<ChatDots size={14} />}
+                              {...rowActionButtonProps}
+                              icon={<ChatDots size={rowActionIconSize} />}
                               onClick={() => handleOpenRevisions(r)}
                               isDisabled={!hasInvoice}
                             />
@@ -978,21 +988,9 @@ export function InvoicesAdminScreen() {
                           <Tooltip label="inspect prior versions of this invoice">
                             <IconButton
                               aria-label="Inspect invoice versions"
-                              size="xs"
-                              variant="outline"
-                              icon={<MagnifyingGlass size={14} />}
+                              {...rowActionButtonProps}
+                              icon={<MagnifyingGlass size={rowActionIconSize} />}
                               onClick={() => handleOpenVersions(String(r.invoice_id))}
-                              isDisabled={!hasInvoice}
-                            />
-                          </Tooltip>
-
-                          <Tooltip label="View processed supporting documents for this invoice">
-                            <IconButton
-                              aria-label="View supporting documents"
-                              size="xs"
-                              variant="outline"
-                              icon={<Files size={14} />}
-                              onClick={() => handleOpenSupportingDocuments(r)}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
@@ -1002,9 +1000,8 @@ export function InvoicesAdminScreen() {
                           <Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
                             <IconButton
                               aria-label="Upload fix invoice version"
-                              size="xs"
-                              variant="outline"
-                              icon={<Wrench size={14} />}
+                              {...rowActionButtonProps}
+                              icon={<Wrench size={rowActionIconSize} />}
                               onClick={() => handleOpenUploadFix(r)}
                               isDisabled={!hasInvoice || !r.latest_invoice_version_id}
                             />
@@ -1013,10 +1010,9 @@ export function InvoicesAdminScreen() {
                           <Tooltip label="Delete invoice and all child claim records">
                             <IconButton
                               aria-label="Delete invoice"
-                              size="xs"
-                              variant="outline"
+                              {...rowActionButtonProps}
                               colorScheme="red"
-                              icon={<Trash size={14} />}
+                              icon={<Trash size={rowActionIconSize} />}
                               onClick={() => handleDeleteInvoice(String(r.invoice_id))}
                               isDisabled={
                                 !hasInvoice ||
@@ -1088,90 +1084,6 @@ export function InvoicesAdminScreen() {
         </Box>
       </Container>
 
-      <Drawer isOpen={isUploadHelpOpen} placement="left" onClose={onUploadHelpClose} size="xl">
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerHeader>Invoices Admin Help</DrawerHeader>
-          <DrawerBody>
-            <Text fontSize="sm" mb={3}>
-              This screen is the working queue for claims AI invoices. Each row represents one claim invoice and shows
-              the latest invoice version only. Older invoice versions are still preserved and can be inspected from the
-              versions action.
-            </Text>
-
-            <Text fontSize="sm" fontWeight="bold" mb={1}>
-              How to read a row
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              The status badge is the main workflow indicator. It uses business-friendly wording such as Preparing
-              Evidence, Building AI Rule Advice, or AI Rule Advice Complete. Hover over the badge to see what is
-              happening and the exact technical status stored in the database.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              The contractor name opens the current PDF review screen. The upgrade-type icons show what the classifier
-              and AI pipeline believe is present on the current invoice version.
-            </Text>
-            <Text fontSize="sm" mb={3}>
-              The glowing AI dot summarizes the latest AI result: green means pass, yellow means warn, red means fail,
-              and gray means no current AI result. Hover over the dot for the plain-English meaning.
-            </Text>
-
-            <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Evidence prep and AI rule advice
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              Preparing Evidence is the first major processing phase. It reads uploaded files, classifies invoice and
-              supporting documents, extracts invoice fields, extracts supporting-document fields, and promotes the
-              resolved invoice PDF into an invoice version.
-            </Text>
-            <Text fontSize="sm" mb={3}>
-              Building AI Rule Advice is the second major phase. It builds case facts, enriches product-list matches,
-              runs GenAI and code rules, and aggregates the final advice. Contractors pre-check that advice before
-              submission; admins review submitted claims after that.
-            </Text>
-
-            <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Actions
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              The info action opens the details drawer for the selected row. The PDF action opens the same current PDF
-              review screen as clicking the contractor name.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              The conversation action opens invoice messages and internal notes. Messages are the back-and-forth with
-              the contractor about requested changes; internal notes are admin-only context. Both are tied to the
-              invoice, not just one invoice version, so the history survives +1 invoice fixes.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              The versions action opens prior invoice versions and version diffs. Use this when a contractor uploaded a
-              corrected PDF and you need to compare what changed.
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              The supporting-documents action opens the processed supporting-document evidence for the invoice,
-              including extracted fields, visual findings, and grouped supporting-document facts where applicable.
-            </Text>
-            <Text fontSize="sm" mb={3}>
-              The wrench action uploads a +1 corrected invoice version under the same invoice. The delete action removes
-              the invoice and child claims AI records from this environment.
-            </Text>
-
-            <Text fontSize="sm" fontWeight="bold" mb={1}>
-              Search and sort
-            </Text>
-            <Text fontSize="sm" mb={2}>
-              Search can match some fields that are not currently displayed in the compact grid, including contractor
-              email, submitter email, invoice number, vendor name, and filename. This is intentional so the grid can
-              stay readable while still being useful for lookup.
-            </Text>
-            <Text fontSize="sm">
-              Sort controls should be used for queue navigation, not for evidence review. Open the PDF review,
-              supporting-document screen, or version screen when you need to inspect the underlying evidence.
-            </Text>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
-
       {/* Drawer */}
       <Drawer isOpen={isOpen} placement="right" onClose={handleCloseDrawer} size="md">
         <DrawerOverlay />
@@ -1186,182 +1098,62 @@ export function InvoicesAdminScreen() {
               </Text>
             ) : (
               <Box>
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>
-                      Invoice
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice number (DI):</b> {selected.latest_di_ocr_invoice_id || '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice id:</b> {selected.invoice_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice status:</b> {selected.invoice_status ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Status updated at:</b> {fmtTs(selected.invoice_status_updated_at) || '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Created at:</b> {fmtTs(selected.invoice_created_at) || '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Updated at:</b> {fmtTs(selected.invoice_updated_at) || '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Submitted at:</b> {fmtTs(selected.invoice_submitted_at) || '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice total (DI):</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
-                    </Text>
-                    <Box mt={2}>
-                      <Text fontSize="sm" fontWeight="bold" mb={2}>
-                        Detected upgrade types
-                      </Text>
-                      {Array.isArray(selected.latest_detected_upgrade_types_json) &&
-                      selected.latest_detected_upgrade_types_json.length > 0 ? (
-                        <Flex gap={2} wrap="wrap">
-                          {selected.latest_detected_upgrade_types_json.map((upgradeType) => {
-                            const label =
-                              upgradeType.description || getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key).label;
-                            const confidenceSuffix =
-                              upgradeType.confidence === null || upgradeType.confidence === undefined
-                                ? ''
-                                : ` (${upgradeType.confidence}%)`;
-
-                            return (
-                              <Tooltip
-                                key={`drawer-${upgradeType.upgrade_type_key || 'unknown'}`}
-                                label={`${label}${confidenceSuffix}`}
-                              >
-                                <Box>
-                                  <InvoiceUpgradeTypeTile
-                                    size={42}
-                                    upgradeTypeKey={upgradeType.upgrade_type_key}
-                                    description={upgradeType.description}
-                                  />
-                                </Box>
-                              </Tooltip>
-                            );
-                          })}
-                        </Flex>
-                      ) : (
-                        <Text fontSize="sm" opacity={0.7}>
-                          No classifier upgrade types on the latest invoice version yet.
-                        </Text>
-                      )}
-                    </Box>
-                    <HStack spacing={2} mt={1}>
-                      <Text fontSize="sm">
-                        <b>GenAI:</b>
-                      </Text>
-                      <ResultDot val={selected.latest_genai_result} />
-                      <Text fontSize="sm" opacity={0.85}>
-                        {normalizeResult(selected.latest_genai_result) ?? 'unknown'}
-                      </Text>
-                      <Text fontSize="sm" opacity={0.85}>
-                        (confidence {selected.latest_genai_overall_confidence ?? '—'})
-                      </Text>
-                    </HStack>
-                  </Box>
-
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>
-                      Session
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Session id:</b> {selected.session_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Session created at:</b> {fmtTs(selected.session_created_at) || '—'}
-                    </Text>
-                  </Box>
-                </SimpleGrid>
+                <Box>
+                  <Text fontWeight="bold" mb={1}>
+                    Contractor contact
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Contractor number:</b> {selected.contractor_number ?? '—'}
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Contact name:</b> {selected.contractor_contact_name ?? '—'}
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Contact email:</b> {selected.contractor_contact_email ?? '—'}
+                  </Text>
+                </Box>
 
                 <Divider my={4} />
 
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>
-                      Contractor
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Contractor id:</b> {selected.contractor_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Business name:</b> {selected.contractor_business_name ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Contractor number:</b> {selected.contractor_number ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Contact name:</b> {selected.contractor_contact_name ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Contact email:</b> {selected.contractor_contact_email ?? '—'}
-                    </Text>
-                  </Box>
-
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>
-                      Submitter
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Submitter id:</b> {selected.submitter_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Name:</b> {selected.submitter_name ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Email:</b> {selected.submitter_email ?? '—'}
-                    </Text>
-                  </Box>
-                </SimpleGrid>
+                <Box>
+                  <Text fontWeight="bold" mb={1}>
+                    Submitter
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Name:</b> {selected.submitter_name ?? '—'}
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Email:</b> {selected.submitter_email ?? '—'}
+                  </Text>
+                </Box>
 
                 <Divider my={4} />
 
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>
-                      Invoice Version (latest)
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Version id:</b> {selected.latest_invoice_version_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Version number:</b> {selected.latest_invoice_versionno ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Version updated at:</b> {fmtTs(selected.latest_invoice_version_updated_at) || '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Original filename:</b> {selected.latest_original_filename ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Last updated (effective):</b>{' '}
-                      {fmtTs(selected.latest_invoice_version_updated_at ?? selected.invoice_updated_at) || '—'}
-                    </Text>
-                  </Box>
+                <Box>
+                  <Text fontWeight="bold" mb={1}>
+                    Current PDF
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Original filename:</b> {selected.latest_original_filename ?? '—'}
+                  </Text>
+                </Box>
 
-                  <Box>
-                    <Text fontWeight="bold" mb={1}>
-                      DI Extracted Values
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice number:</b> {selected.latest_di_ocr_invoice_id ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice date:</b> {selected.latest_di_ocr_invoice_date ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Vendor:</b> {selected.latest_di_ocr_vendor_name ?? '—'}
-                    </Text>
-                    <Text fontSize="sm">
-                      <b>Invoice total:</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
-                    </Text>
-                  </Box>
-                </SimpleGrid>
+                <Divider my={4} />
+
+                <Box>
+                  <Text fontWeight="bold" mb={1}>
+                    Extracted invoice values
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Invoice date:</b> {selected.latest_di_ocr_invoice_date ?? '—'}
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Vendor:</b> {selected.latest_di_ocr_vendor_name ?? '—'}
+                  </Text>
+                  <Text fontSize="sm">
+                    <b>Invoice total:</b> {fmtMoney(selected.latest_di_ocr_invoice_total)}
+                  </Text>
+                </Box>
 
                 {selected.system_help_notes ? (
                   <>

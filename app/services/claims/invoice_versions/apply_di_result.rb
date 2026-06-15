@@ -38,10 +38,10 @@ module Claims
       def call
         # 3.0.1 — Load record
         iv = Claims::InvoiceVersion.find(@invoice_version_id)
-# 3.0.1.10 — LOG: confirm service is running + which columns exist
-Rails.logger.info("[ApplyDiResult] 3.0.1 invoice_version_id=#{iv.id} has_di_raw_json=#{iv.has_attribute?(:di_raw_json)} has_di_completed_at=#{iv.has_attribute?(:di_completed_at)}")
-
-
+        # 3.0.1.10 — LOG: confirm service is running + which columns exist
+        Rails.logger.info(
+          "[ApplyDiResult] 3.0.1 invoice_version_id=#{iv.id} has_di_raw_json=#{iv.has_attribute?(:di_raw_json)} has_di_completed_at=#{iv.has_attribute?(:di_completed_at)}"
+        )
 
         # 3.0.2 — Build attrs hash for first-class fields
         attrs = build_invoice_version_attrs(@di_json)
@@ -50,17 +50,21 @@ Rails.logger.info("[ApplyDiResult] 3.0.1 invoice_version_id=#{iv.id} has_di_raw_
         Claims::InvoiceVersion.transaction do
           # 3.0.3.1 — Store raw DI result too (if you have a column for it)
           # NOTE: adjust column name if yours differs
-attrs[:di_raw_json] = @di_json if iv.has_attribute?(:di_raw_json)
-
-
+          attrs[:di_raw_json] = @di_json if iv.has_attribute?(:di_raw_json)
 
           # 3.0.3.2 — Status / timestamps (optional)
-attrs[:di_completed_at] = Time.current if iv.has_attribute?(:di_completed_at)
+          attrs[:di_completed_at] = Time.current if iv.has_attribute?(
+            :di_completed_at
+          )
 
-# 3.0.3.20 — LOG: what columns we are about to write
-Rails.logger.info("[ApplyDiResult] 3.0.3 writing_cols=#{attrs.compact.keys.sort.inspect}")
+          # 3.0.3.20 — LOG: what columns we are about to write
+          Rails.logger.info(
+            "[ApplyDiResult] 3.0.3 writing_cols=#{attrs.compact.keys.sort.inspect}"
+          )
 
-attrs[:di_page_map] = build_di_page_map(@di_json) if iv.has_attribute?(:di_page_map)
+          attrs[:di_page_map] = build_di_page_map(
+            @di_json
+          ) if iv.has_attribute?(:di_page_map)
 
           # 3.0.3.3 — Update invoice_version
           iv.update!(attrs.compact)
@@ -89,65 +93,88 @@ attrs[:di_page_map] = build_di_page_map(@di_json) if iv.has_attribute?(:di_page_
       # - This is the ONLY place where “DI field -> DB column” lives
       # - Start small, then expand as needed
       # ============================================================
-# SECTION 04 — MAPPING: DI JSON -> FIRST CLASS FIELDS
-def build_invoice_version_attrs(di_json)
-  fields = extract_fields(di_json)
-  raise "DI fields empty. Keys at top: #{di_json.keys.inspect}" if fields.blank?
+      # SECTION 04 — MAPPING: DI JSON -> FIRST CLASS FIELDS
+      def build_invoice_version_attrs(di_json)
+        fields = extract_fields(di_json)
+        if fields.blank?
+          raise "DI fields empty. Keys at top: #{di_json.keys.inspect}"
+        end
 
-  {
-    # InvoiceId
-    di_ocr_invoice_id:         text_field(fields, "InvoiceId"),
-    di_ocr_invoice_id_page:    page_field(fields, "InvoiceId"),
-    di_ocr_invoice_id_polygon: polygon_field(fields, "InvoiceId"),
-
-    # InvoiceDate
-    di_ocr_invoice_date:         date_field(fields, "InvoiceDate"),
-    di_ocr_invoice_date_page:    page_field(fields, "InvoiceDate"),
-    di_ocr_invoice_date_polygon: polygon_field(fields, "InvoiceDate"),
-
-    # VendorName
-    di_ocr_vendor_name:         text_field(fields, "VendorName"),
-    di_ocr_vendor_name_page:    page_field(fields, "VendorName"),
-    di_ocr_vendor_name_polygon: polygon_field(fields, "VendorName"),
-
-    # VendorAddress
-    di_ocr_vendor_address:         text_field(fields, "VendorAddress"),
-    di_ocr_vendor_address_page:    page_field(fields, "VendorAddress"),
-    di_ocr_vendor_address_polygon: polygon_field(fields, "VendorAddress"),
-
-    # CustomerName
-    di_ocr_customer_name:         text_field(fields, "CustomerName"),
-    di_ocr_customer_name_page:    page_field(fields, "CustomerName"),
-    di_ocr_customer_name_polygon: polygon_field(fields, "CustomerName"),
-
-    # BillingAddress
-    di_ocr_billing_address:         text_field(fields, "BillingAddress"),
-    di_ocr_billing_address_page:    page_field(fields, "BillingAddress"),
-    di_ocr_billing_address_polygon: polygon_field(fields, "BillingAddress"),
-
-    # SubTotal
-    di_ocr_sub_total:         number_field(fields, "SubTotal"),
-    di_ocr_sub_total_page:    page_field(fields, "SubTotal"),
-    di_ocr_sub_total_polygon: polygon_field(fields, "SubTotal"),
-
-    # TotalTax
-    di_ocr_total_tax:         number_field(fields, "TotalTax"),
-    di_ocr_total_tax_page:    page_field(fields, "TotalTax"),
-    di_ocr_total_tax_polygon: polygon_field(fields, "TotalTax"),
-
-    # InvoiceTotal
-    di_ocr_invoice_total:         number_field(fields, "InvoiceTotal"),
-    di_ocr_invoice_total_page:    page_field(fields, "InvoiceTotal"),
-    di_ocr_invoice_total_polygon: polygon_field(fields, "InvoiceTotal"),
-
-    # AmountDue
-    di_ocr_amount_due:         number_field(fields, "AmountDue"),
-    di_ocr_amount_due_page:    page_field(fields, "AmountDue"),
-    di_ocr_amount_due_polygon: polygon_field(fields, "AmountDue")
-  }
-end
-
-
+        {
+          # InvoiceId
+          di_ocr_invoice_id: text_field(fields, "InvoiceId"),
+          di_ocr_invoice_id_page: page_field(fields, "InvoiceId"),
+          di_ocr_invoice_id_polygon: polygon_field(fields, "InvoiceId"),
+          # InvoiceDate
+          di_ocr_invoice_date: date_field(fields, "InvoiceDate"),
+          di_ocr_invoice_date_page: page_field(fields, "InvoiceDate"),
+          di_ocr_invoice_date_polygon: polygon_field(fields, "InvoiceDate"),
+          # VendorName
+          di_ocr_vendor_name: text_field(fields, "VendorName"),
+          di_ocr_vendor_name_page: page_field(fields, "VendorName"),
+          di_ocr_vendor_name_polygon: polygon_field(fields, "VendorName"),
+          # VendorAddress
+          di_ocr_vendor_address: text_field(fields, "VendorAddress"),
+          di_ocr_vendor_address_page: page_field(fields, "VendorAddress"),
+          di_ocr_vendor_address_polygon: polygon_field(fields, "VendorAddress"),
+          # CustomerName
+          di_ocr_customer_name: text_field(fields, "CustomerName"),
+          di_ocr_customer_name_page: page_field(fields, "CustomerName"),
+          di_ocr_customer_name_polygon: polygon_field(fields, "CustomerName"),
+          # CustomerAddress
+          di_ocr_customer_address: text_field(fields, "CustomerAddress"),
+          di_ocr_customer_address_page: page_field(fields, "CustomerAddress"),
+          di_ocr_customer_address_polygon:
+            polygon_field(fields, "CustomerAddress"),
+          # CustomerAddressRecipient
+          di_ocr_customer_address_recipient:
+            text_field(fields, "CustomerAddressRecipient"),
+          di_ocr_customer_address_recipient_page:
+            page_field(fields, "CustomerAddressRecipient"),
+          di_ocr_customer_address_recipient_polygon:
+            polygon_field(fields, "CustomerAddressRecipient"),
+          # ServiceAddress
+          di_ocr_service_address: text_field(fields, "ServiceAddress"),
+          di_ocr_service_address_page: page_field(fields, "ServiceAddress"),
+          di_ocr_service_address_polygon:
+            polygon_field(fields, "ServiceAddress"),
+          # ServiceAddressRecipient
+          di_ocr_service_address_recipient:
+            text_field(fields, "ServiceAddressRecipient"),
+          di_ocr_service_address_recipient_page:
+            page_field(fields, "ServiceAddressRecipient"),
+          di_ocr_service_address_recipient_polygon:
+            polygon_field(fields, "ServiceAddressRecipient"),
+          # BillingAddress
+          di_ocr_billing_address: text_field(fields, "BillingAddress"),
+          di_ocr_billing_address_page: page_field(fields, "BillingAddress"),
+          di_ocr_billing_address_polygon:
+            polygon_field(fields, "BillingAddress"),
+          # BillingAddressRecipient
+          di_ocr_billing_address_recipient:
+            text_field(fields, "BillingAddressRecipient"),
+          di_ocr_billing_address_recipient_page:
+            page_field(fields, "BillingAddressRecipient"),
+          di_ocr_billing_address_recipient_polygon:
+            polygon_field(fields, "BillingAddressRecipient"),
+          # SubTotal
+          di_ocr_sub_total: number_field(fields, "SubTotal"),
+          di_ocr_sub_total_page: page_field(fields, "SubTotal"),
+          di_ocr_sub_total_polygon: polygon_field(fields, "SubTotal"),
+          # TotalTax
+          di_ocr_total_tax: number_field(fields, "TotalTax"),
+          di_ocr_total_tax_page: page_field(fields, "TotalTax"),
+          di_ocr_total_tax_polygon: polygon_field(fields, "TotalTax"),
+          # InvoiceTotal
+          di_ocr_invoice_total: number_field(fields, "InvoiceTotal"),
+          di_ocr_invoice_total_page: page_field(fields, "InvoiceTotal"),
+          di_ocr_invoice_total_polygon: polygon_field(fields, "InvoiceTotal"),
+          # AmountDue
+          di_ocr_amount_due: number_field(fields, "AmountDue"),
+          di_ocr_amount_due_page: page_field(fields, "AmountDue"),
+          di_ocr_amount_due_polygon: polygon_field(fields, "AmountDue")
+        }
+      end
 
       # ============================================================
       # SECTION 05 — DI JSON HELPERS
@@ -157,7 +184,14 @@ end
 
       def extract_fields(di_json)
         # 5.0.1 — Typical Azure DI prebuilt-invoice schema
-        docs = di_json.is_a?(Hash) ? (di_json["documents"] || di_json[:documents]) : nil
+        docs =
+          (
+            if di_json.is_a?(Hash)
+              (di_json["documents"] || di_json[:documents])
+            else
+              nil
+            end
+          )
         doc0 = docs.is_a?(Array) ? docs[0] : nil
         fields = doc0.is_a?(Hash) ? (doc0["fields"] || doc0[:fields]) : nil
 
@@ -165,29 +199,37 @@ end
 
         # 5.0.2 — fallback: some wrappers nest under analyzeResult -> documents
         analyze = di_json["analyzeResult"] || di_json[:analyzeResult]
-        docs2 = analyze.is_a?(Hash) ? (analyze["documents"] || analyze[:documents]) : nil
+        docs2 =
+          (
+            if analyze.is_a?(Hash)
+              (analyze["documents"] || analyze[:documents])
+            else
+              nil
+            end
+          )
         doc2 = docs2.is_a?(Array) ? docs2[0] : nil
         fields2 = doc2.is_a?(Hash) ? (doc2["fields"] || doc2[:fields]) : nil
 
         fields2.is_a?(Hash) ? fields2 : {}
       end
 
-def build_di_page_map(di_json)
-  # Expected shape: di_json["pages"] = [{ "pageNumber": 1, "width": 8.5, "height": 11, "unit": "inch" }, ...]
-  pages = di_json["pages"] || di_json[:pages]
-  return nil unless pages.is_a?(Array)
+      def build_di_page_map(di_json)
+        # Expected shape: di_json["pages"] = [{ "pageNumber": 1, "width": 8.5, "height": 11, "unit": "inch" }, ...]
+        pages = di_json["pages"] || di_json[:pages]
+        return nil unless pages.is_a?(Array)
 
-  pages.map do |p|
-    next unless p.is_a?(Hash)
-    {
-      "pageNumber" => p["pageNumber"] || p[:pageNumber],
-      "width"      => p["width"]      || p[:width],
-      "height"     => p["height"]     || p[:height],
-      "unit"       => p["unit"]       || p[:unit]
-    }.compact
-  end.compact
-end
-
+        pages
+          .map do |p|
+            next unless p.is_a?(Hash)
+            {
+              "pageNumber" => p["pageNumber"] || p[:pageNumber],
+              "width" => p["width"] || p[:width],
+              "height" => p["height"] || p[:height],
+              "unit" => p["unit"] || p[:unit]
+            }.compact
+          end
+          .compact
+      end
 
       # ============================================================
       # SECTION 06 — FIELD EXTRACTORS
@@ -216,63 +258,60 @@ end
         # Attempt parse
         begin
           Date.parse(raw.to_s)
-        rescue
+        rescue StandardError
           nil
         end
       end
 
+      # ============================================================
+      # SECTION 06.10 — REGION HELPERS (PAGE + POLYGON)
+      # PURPOSE:
+      # - Reads: fields[key]["boundingRegions"][0]["pageNumber"/"polygon"]
+      # ============================================================
 
-# ============================================================
-# SECTION 06.10 — REGION HELPERS (PAGE + POLYGON)
-# PURPOSE:
-# - Reads: fields[key]["boundingRegions"][0]["pageNumber"/"polygon"]
-# ============================================================
+      def page_field(fields, key)
+        f = fields[key]
+        return nil unless f.is_a?(Hash)
 
-def page_field(fields, key)
-  f = fields[key]
-  return nil unless f.is_a?(Hash)
+        br0 = f["boundingRegions"].is_a?(Array) ? f["boundingRegions"][0] : nil
+        return nil unless br0.is_a?(Hash)
 
-  br0 = f["boundingRegions"].is_a?(Array) ? f["boundingRegions"][0] : nil
-  return nil unless br0.is_a?(Hash)
+        br0["pageNumber"]
+      end
 
-  br0["pageNumber"]
-end
+      def polygon_field(fields, key)
+        f = fields[key]
+        return nil unless f.is_a?(Hash)
 
-def polygon_field(fields, key)
-  f = fields[key]
-  return nil unless f.is_a?(Hash)
+        br0 = f["boundingRegions"].is_a?(Array) ? f["boundingRegions"][0] : nil
+        return nil unless br0.is_a?(Hash)
 
-  br0 = f["boundingRegions"].is_a?(Array) ? f["boundingRegions"][0] : nil
-  return nil unless br0.is_a?(Hash)
+        br0["polygon"]
+      end
 
-  br0["polygon"]
-end
+      def page_field(fields, key)
+        f = fields[key] || fields[key.to_sym]
+        return nil unless f.is_a?(Hash)
 
-def page_field(fields, key)
-  f = fields[key] || fields[key.to_sym]
-  return nil unless f.is_a?(Hash)
+        br0 = f["boundingRegions"]&.first || f[:boundingRegions]&.first
+        return nil unless br0.is_a?(Hash)
 
-  br0 = f["boundingRegions"]&.first || f[:boundingRegions]&.first
-  return nil unless br0.is_a?(Hash)
+        n = br0["pageNumber"] || br0[:pageNumber]
+        n.nil? ? nil : n.to_i
+      end
 
-  n = br0["pageNumber"] || br0[:pageNumber]
-  n.nil? ? nil : n.to_i
-end
+      def polygon_field(fields, key)
+        f = fields[key] || fields[key.to_sym]
+        return nil unless f.is_a?(Hash)
 
-def polygon_field(fields, key)
-  f = fields[key] || fields[key.to_sym]
-  return nil unless f.is_a?(Hash)
+        br0 = f["boundingRegions"]&.first || f[:boundingRegions]&.first
+        return nil unless br0.is_a?(Hash)
 
-  br0 = f["boundingRegions"]&.first || f[:boundingRegions]&.first
-  return nil unless br0.is_a?(Hash)
+        poly = br0["polygon"] || br0[:polygon]
+        return nil unless poly.is_a?(Array)
 
-  poly = br0["polygon"] || br0[:polygon]
-  return nil unless poly.is_a?(Array)
-
-  poly.map { |x| x.nil? ? nil : x.to_f }  # ensures jsonb numbers, not strings
-end
-
-
+        poly.map { |x| x.nil? ? nil : x.to_f } # ensures jsonb numbers, not strings
+      end
 
       def number_field(fields, key)
         f = fields[key] || fields[key.to_sym]
@@ -298,7 +337,7 @@ end
 
         begin
           BigDecimal(cleaned)
-        rescue
+        rescue StandardError
           nil
         end
       end

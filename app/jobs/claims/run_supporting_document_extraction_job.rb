@@ -6,7 +6,7 @@ require "net/http"
 module Claims
   class RunSupportingDocumentExtractionJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 0
+    sidekiq_options queue: :claims_genai, retry: 3
 
     def perform(ingest_document_id, ingest_run_id = nil)
       document = ::Claims::IngestDocument.find(ingest_document_id)

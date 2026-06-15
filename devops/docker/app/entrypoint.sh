@@ -25,6 +25,40 @@ else
   echo "[entrypoint] Vault secrets directory (${VAULT_SECRETS_DIR}) does not exist"
 fi
 
+configure_database_pool() {
+  if [ -z "${DATABASE_URL:-}" ]; then
+    return
+  fi
+
+  if [[ "${DATABASE_URL}" == *"pool="* ]]; then
+    return
+  fi
+
+  local pool="${DATABASE_POOL:-}"
+  if [ -z "${pool}" ]; then
+    if [[ "$*" == *"sidekiq"* ]] && [ -n "${SIDEKIQ_CONCURRENCY:-}" ]; then
+      pool=$((SIDEKIQ_CONCURRENCY + 5))
+    else
+      pool="${RAILS_MAX_THREADS:-5}"
+    fi
+  fi
+
+  if [[ ! "${pool}" =~ ^[0-9]+$ ]] || [ "${pool}" -le 0 ]; then
+    echo "[entrypoint] DATABASE_POOL value (${pool}) is invalid; leaving DATABASE_URL unchanged"
+    return
+  fi
+
+  local separator="?"
+  if [[ "${DATABASE_URL}" == *"?"* ]]; then
+    separator="&"
+  fi
+
+  export DATABASE_URL="${DATABASE_URL}${separator}pool=${pool}"
+  echo "[entrypoint] ActiveRecord database pool set to ${pool}"
+}
+
+configure_database_pool "$@"
+
 # Rails Entrypoint
 # If running the rails server then create or migrate existing database
 if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then

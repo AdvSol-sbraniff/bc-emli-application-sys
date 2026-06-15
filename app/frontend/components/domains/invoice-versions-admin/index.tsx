@@ -10,7 +10,6 @@ import {
   DrawerOverlay,
   Flex,
   IconButton,
-  Input,
   Text,
   Tooltip,
 } from '@chakra-ui/react';
@@ -65,7 +64,8 @@ type AiDiff = {
   changedFields: Array<{ key: string; before: any; after: any }>;
   addedRules: any[];
   removedRules: any[];
-  changedRules: Array<{ key: string; before: any; after: any }>;
+  changedRules: Array<{ key: string; before: any; after: any; beforeRule?: any; afterRule?: any }>;
+  unchangedFailingRules: Array<{ key: string; before: any; after: any; beforeRule?: any; afterRule?: any }>;
 };
 
 type SimpleDiffRow = { label: string; before: string; after: string };
@@ -369,7 +369,8 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
 
   const addedRules: any[] = [];
   const removedRules: any[] = [];
-  const changedRules: Array<{ key: string; before: any; after: any }> = [];
+  const changedRules: Array<{ key: string; before: any; after: any; beforeRule?: any; afterRule?: any }> = [];
+  const unchangedFailingRules: Array<{ key: string; before: any; after: any; beforeRule?: any; afterRule?: any }> = [];
 
   mapRuleB.forEach((v, k) => {
     if (!mapRuleA.has(k)) addedRules.push({ key: k, ...v.comparable, rawRule: v.raw });
@@ -388,10 +389,27 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
         beforeRule: vA?.raw,
         afterRule: vB?.raw,
       });
+    } else if (String(vB?.comparable?.result ?? '').toLowerCase() === 'fail') {
+      unchangedFailingRules.push({
+        key: k,
+        before: vA?.comparable,
+        after: vB?.comparable,
+        beforeRule: vA?.raw,
+        afterRule: vB?.raw,
+      });
     }
   });
 
-  return { overallChanges, addedFields, removedFields, changedFields, addedRules, removedRules, changedRules };
+  return {
+    overallChanges,
+    addedFields,
+    removedFields,
+    changedFields,
+    addedRules,
+    removedRules,
+    changedRules,
+    unchangedFailingRules,
+  };
 }
 
 function buildDiffRows(
@@ -585,6 +603,18 @@ function ruleDiffGroups(sections: SimpleDiffSection[]): RuleDiffGroup[] {
   }));
 }
 
+function unchangedFailingRuleSections(diff: AiDiff): SimpleDiffSection[] {
+  return sortedByKey(diff.unchangedFailingRules, (item) => item.key).map((item) => ({
+    title: ruleSectionTitle(item.key, item.afterRule || item.beforeRule || item.after || item.before),
+    rows: buildDiffRows(ruleDisplayFields, item.before, item.after, diffFieldVal),
+    upgradeTypeKey: ruleUpgradeType(item.beforeRule, item.afterRule),
+    beforeResult: item.before?.result,
+    afterResult: item.after?.result,
+    beforeRule: item.beforeRule,
+    afterRule: item.afterRule,
+  }));
+}
+
 export function InvoiceVersionsAdminScreen() {
   const [invoiceId, setInvoiceId] = useState<string>('');
   const [invoiceMeta, setInvoiceMeta] = useState<InvoiceMeta | null>(null);
@@ -738,35 +768,41 @@ export function InvoiceVersionsAdminScreen() {
   const pdfLocatedGroups = locatedFieldPdfChangeGroups(aiLocatedSections);
   const aiRuleSections = aiDiff ? ruleDiffSections(aiDiff) : [];
   const aiRuleGroups = ruleDiffGroups(aiRuleSections);
+  const stillFailingRuleGroups = aiDiff ? ruleDiffGroups(unchangedFailingRuleSections(aiDiff)) : [];
+  const selectedVersion = rows.find((row) => row.id === selectedVersionId) || rows[0] || null;
+  const contextInvoiceNumber = selectedVersion?.di_ocr_invoice_id || '';
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar title="Versions History Inspection" />
 
-      <Container maxW="container.xl" pb={4} flex="1" pt={6}>
-        <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          {/* invoice context */}
-          <Flex direction="column" gap={3} mb={4}>
-            <Flex gap={3} align="end" wrap="wrap">
-              <Box flex="1" minW="280px">
-                <Text fontSize="xs" opacity={0.7} mb={1}>
-                  contractor
+      <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
+        <Box p={5} bg="white">
+          <Flex align="flex-start" justify="space-between" gap={6} mb={5} wrap="wrap">
+            <Flex wrap="wrap" gap={6}>
+              <Box>
+                <Text fontSize="xs" opacity={0.7}>
+                  contractor_name
                 </Text>
-                <Input value={invoiceMeta?.contractor_business_name || '—'} isReadOnly bg="white" />
+                <Text fontSize="sm">{invoiceMeta?.contractor_business_name || '—'}</Text>
               </Box>
-
-              <Box ml="auto">
-                <Tooltip label="Help for this screen">
-                  <IconButton
-                    aria-label="Open versions history help"
-                    icon={<Question size={18} />}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsHelpOpen(true)}
-                  />
-                </Tooltip>
+              <Box>
+                <Text fontSize="xs" opacity={0.7}>
+                  invoice #
+                </Text>
+                <Text fontSize="sm">{contextInvoiceNumber || '—'}</Text>
               </Box>
             </Flex>
+
+            <Tooltip label="Help for this screen">
+              <IconButton
+                aria-label="Open versions history help"
+                icon={<Question size={18} />}
+                size="sm"
+                variant="outline"
+                onClick={() => setIsHelpOpen(true)}
+              />
+            </Tooltip>
           </Flex>
 
           {error && (
@@ -778,18 +814,26 @@ export function InvoiceVersionsAdminScreen() {
           )}
 
           {/* grid */}
-          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} mb={4}>
+          <Box bg="white" mb={4}>
             <Flex align="center" justify="flex-end" mb={2}>
               {loading && <Spinner size="sm" />}
             </Flex>
 
             <Table size="sm">
-              <Thead>
+              <Thead
+                sx={{
+                  th: {
+                    bg: 'linear-gradient(180deg, rgba(49, 130, 206, 0.12) 0%, rgba(255, 255, 255, 0) 88%)',
+                    color: 'blue.900',
+                    borderBottomColor: 'blue.100',
+                  },
+                }}
+              >
                 <Tr>
-                  <Th>diff select</Th>
-                  <Th>updated</Th>
-                  <Th>version</Th>
-                  <Th></Th>
+                  <Th w="120px">Diff Select</Th>
+                  <Th w="210px">Updated</Th>
+                  <Th w="100px">Version</Th>
+                  <Th textAlign="right"></Th>
                 </Tr>
               </Thead>
 
@@ -868,7 +912,7 @@ export function InvoiceVersionsAdminScreen() {
           </Box>
 
           {/* diff panels */}
-          <Box bg="white" borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3}>
+          <Box bg="white">
             <Flex align="center" justify="flex-end" mb={2}>
               <Flex align="center" gap={2}>
                 <Tooltip label="Refresh A vs B diff tabs">
@@ -1293,6 +1337,9 @@ export function InvoiceVersionsAdminScreen() {
                       </Box>
 
                       <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                        <Text fontSize="sm" fontWeight="semibold" mb={2}>
+                          Rule Status Changes
+                        </Text>
                         {aiRuleGroups.length === 0 ? (
                           <Text fontSize="xs" opacity={0.8}>
                             No rule status changes.
@@ -1363,6 +1410,81 @@ export function InvoiceVersionsAdminScreen() {
                           </Box>
                         )}
                       </Box>
+
+                      {stillFailingRuleGroups.length > 0 && (
+                        <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" p={3} bg="gray.50">
+                          <Text fontSize="sm" fontWeight="semibold" mb={1}>
+                            Still Failing in B
+                          </Text>
+                          <Text fontSize="xs" opacity={0.75} mb={3}>
+                            These rules are still hard failures in the selected B version, even though their status did
+                            not change from A.
+                          </Text>
+                          <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" overflowX="auto" bg="white">
+                            <Table size="sm" variant="simple">
+                              <Thead>
+                                <Tr>
+                                  <Th>Rule</Th>
+                                  <Th w="64px">A</Th>
+                                  <Th w="28px"></Th>
+                                  <Th w="64px">B</Th>
+                                  <Th w="56px">Info</Th>
+                                </Tr>
+                              </Thead>
+                              <Tbody>
+                                {stillFailingRuleGroups.map((group) => (
+                                  <React.Fragment key={`still-failing-${group.upgradeTypeKey}`}>
+                                    <Tr>
+                                      <Td colSpan={5} bg="gray.50">
+                                        <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                          {group.upgradeTypeKey}
+                                        </Text>
+                                      </Td>
+                                    </Tr>
+                                    {group.sections.map((section) => (
+                                      <Tr key={`still-failing-${section.title}`}>
+                                        <Td>
+                                          <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                            {section.title}
+                                          </Text>
+                                        </Td>
+                                        <Td>
+                                          <StatusDot
+                                            result={section.beforeResult}
+                                            label={`A: ${formatRuleResult(section.beforeResult)}`}
+                                          />
+                                        </Td>
+                                        <Td>
+                                          <Text fontSize="10px" opacity={0.5}>
+                                            →
+                                          </Text>
+                                        </Td>
+                                        <Td>
+                                          <StatusDot
+                                            result={section.afterResult}
+                                            label={`B: ${formatRuleResult(section.afterResult)}`}
+                                          />
+                                        </Td>
+                                        <Td>
+                                          <Tooltip label="Show old and new rule text" hasArrow>
+                                            <IconButton
+                                              aria-label={`Show still failing rule text for ${section.title}`}
+                                              icon={<Info />}
+                                              size="xs"
+                                              variant="ghost"
+                                              onClick={() => setSelectedRuleDiff(section)}
+                                            />
+                                          </Tooltip>
+                                        </Td>
+                                      </Tr>
+                                    ))}
+                                  </React.Fragment>
+                                ))}
+                              </Tbody>
+                            </Table>
+                          </Box>
+                        </Box>
+                      )}
                     </Flex>
                   )}
                 </TabPanel>
@@ -1551,8 +1673,8 @@ export function InvoiceVersionsAdminScreen() {
                   changed.
                 </Text>
                 <Text fontSize="sm">
-                  - Rule Status Changes: rulechecks only when the rule status changed, or when a rule was added or
-                  removed.
+                  - Rule Status Changes: rulechecks when status changed, when a rule was added or removed, plus rules
+                  that are still failing in B.
                 </Text>
               </Box>
 

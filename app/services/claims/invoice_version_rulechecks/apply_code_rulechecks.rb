@@ -109,9 +109,7 @@ module Claims
           "Invoice number" => invoice_version.di_ocr_invoice_id,
           "Invoice date" => invoice_version.di_ocr_invoice_date,
           "Vendor name" => invoice_version.di_ocr_vendor_name,
-          "Vendor address" => invoice_version.di_ocr_vendor_address,
           "Customer name" => invoice_version.di_ocr_customer_name,
-          "Billing address" => invoice_version.di_ocr_billing_address,
           "Subtotal" => invoice_version.di_ocr_sub_total,
           "Total tax" => invoice_version.di_ocr_total_tax,
           "Invoice total" => invoice_version.di_ocr_invoice_total,
@@ -133,6 +131,12 @@ module Claims
                 "All tracked first-class fields are present."
               else
                 "Missing: #{missing.join(", ")}."
+              end
+            ),
+          calculation:
+            (
+              unless pass
+                "Missing tracked invoice fields: #{missing.join(", ")}."
               end
             ),
           evidence_text: "invoice_versions DI first-class columns",

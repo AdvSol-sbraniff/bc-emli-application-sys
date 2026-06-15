@@ -115,51 +115,8 @@ module Api
       # DELETE /api/claims/admin/invoices/:id
       # Deletes one invoice and all child claim artifacts in FK-safe order.
       def destroy
-        invoice = ::Claims::Invoice.find(params[:id])
-
-        deleted = {
-          invoice_id: invoice.id,
-          invoice_versions: 0,
-          lineitems: 0,
-          revision_requests: 0,
-          supporting_documents: 0,
-          ingest_step_runs: 0
-        }
-
-        ::Claims::Invoice.transaction do
-          invoice_version_ids =
-            ::Claims::InvoiceVersion.where(invoice_id: invoice.id).pluck(:id)
-
-          if invoice_version_ids.any?
-            deleted[:lineitems] = ::Claims::Lineitem.where(
-              invoice_version_id: invoice_version_ids
-            ).delete_all
-            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(
-              invoice_version_id: invoice_version_ids
-            ).delete_all
-
-            # These also cascade from invoice_versions, but explicit deletes keep counts accurate.
-            ::Claims::InvoiceVersionLocatedField.where(
-              invoice_version_id: invoice_version_ids
-            ).delete_all
-            ::Claims::InvoiceVersionRulecheck.where(
-              invoice_version_id: invoice_version_ids
-            ).delete_all
-            deleted[:ingest_step_runs] = ::Claims::IngestStepRun.where(
-              invoice_version_id: invoice_version_ids
-            ).delete_all
-
-            deleted[:invoice_versions] = ::Claims::InvoiceVersion.where(
-              id: invoice_version_ids
-            ).delete_all
-          end
-
-          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(
-            invoice_id: invoice.id
-          ).delete_all
-
-          invoice.destroy!
-        end
+        deleted =
+          ::Claims::Invoices::DestroyPackage.call(invoice_id: params[:id])
 
         render json: { deleted: true, counts: deleted }, status: :ok
       rescue ActiveRecord::RecordNotFound

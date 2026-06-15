@@ -84,6 +84,8 @@ sidekiq:
 
   env:
     'ELASTICSEARCH_URL': 'http://hesp-elasticsearch:9200'
+    'DATABASE_POOL': '25'
+    'SIDEKIQ_CONCURRENCY': '20'
 
 sidekiqClaims:
   enabled: false
@@ -100,7 +102,8 @@ sidekiqClaims:
 
   env:
     'ELASTICSEARCH_URL': 'http://hesp-elasticsearch:9200'
-    'SIDEKIQ_CONCURRENCY': '1'
+    'DATABASE_POOL': '25'
+    'SIDEKIQ_CONCURRENCY': '20'
     'SIDEKIQ_QUEUES': 'claims_ocr,claims_genai'
 
 claimsAi:

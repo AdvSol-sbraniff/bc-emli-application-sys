@@ -128,7 +128,10 @@ module Api
 
         render json: {
                  sas_url:
-                   "/api/claims/sessions/#{params[:session_id]}/invoices/#{params[:invoice_id]}/pdf"
+                   node_mint_sas!(
+                     storage_key: civ.storage_key,
+                     container: ENV["AZURE_BLOB_CONTAINER"].presence
+                   ).fetch("sas_url")
                }
       end
 

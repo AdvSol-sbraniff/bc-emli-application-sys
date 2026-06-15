@@ -162,6 +162,21 @@ function pipelineStage(status?: string | null) {
   return 'Pending';
 }
 
+function isActiveRunStatus(status?: string | null) {
+  const v = String(status || '').toLowerCase();
+  return v === 'queued' || v === 'running';
+}
+
+function isActiveInvoiceStatus(status?: string | null) {
+  const v = String(status || '').toLowerCase();
+  return v.endsWith('_queued') || v.endsWith('_in_progress');
+}
+
+function isActiveStepStatus(status?: string | null) {
+  const v = String(status || '').toLowerCase();
+  return v === 'queued' || v === 'in_progress';
+}
+
 function fileSizeMb(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
@@ -260,6 +275,7 @@ export default function SubmissionSimulatorAdminScreen() {
       const res = await fetch(`/api/claims/ingest/runs/${encodeURIComponent(id)}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
+        cache: 'no-store',
         credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
@@ -280,6 +296,7 @@ export default function SubmissionSimulatorAdminScreen() {
         const res = await fetch(`/api/claims/ingest/runs/${encodeURIComponent(id)}/invoices`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
+          cache: 'no-store',
           credentials: 'include',
         });
         const data = await res.json().catch(() => ({}));
@@ -311,6 +328,7 @@ export default function SubmissionSimulatorAdminScreen() {
           {
             method: 'GET',
             headers: { Accept: 'application/json' },
+            cache: 'no-store',
             credentials: 'include',
           },
         );
@@ -351,9 +369,14 @@ export default function SubmissionSimulatorAdminScreen() {
   }, [loadInvoiceSteps, selectedInvoiceId, runId]);
 
   const shouldPoll = useMemo(() => {
-    const s = String(runHeader?.status || '').toLowerCase();
-    return runId && (s === 'queued' || s === 'running');
-  }, [runHeader?.status, runId]);
+    if (!runId) return false;
+
+    return (
+      isActiveRunStatus(runHeader?.status) ||
+      invoiceRows.some((row) => isActiveInvoiceStatus(row.invoice_status)) ||
+      steps.some((step) => isActiveStepStatus(step.status))
+    );
+  }, [invoiceRows, runHeader?.status, runId, steps]);
 
   useEffect(() => {
     if (!shouldPoll) return;

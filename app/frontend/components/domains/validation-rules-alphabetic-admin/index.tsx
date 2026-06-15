@@ -66,6 +66,18 @@ const RULE_TYPE_LABELS: Record<RuleRecordType, string> = {
 
 type ListViewMode = 'matrix' | 'description';
 
+const ruleRowHoverSx = {
+  td: {
+    transition: 'background 140ms ease, border-color 140ms ease',
+  },
+  '&:hover td': {
+    background: 'linear-gradient(90deg, rgba(49, 130, 206, 0.1) 0%, rgba(255, 255, 255, 0.96) 72%)',
+  },
+  '&:hover td:first-of-type': {
+    borderLeftColor: 'blue.500',
+  },
+};
+
 const fmtDate = (value?: string | null) => {
   if (!value) return '';
   const str = String(value);
@@ -367,12 +379,14 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                       {filteredRows.map((row) => {
                         const mappedIds = mappedUpgradeTypeIds(row);
                         return (
-                          <Tr key={`${row.record_type}-${row.id}`}>
+                          <Tr key={`${row.record_type}-${row.id}`} sx={ruleRowHoverSx}>
                             <Td
                               position="sticky"
                               left={0}
                               zIndex={1}
                               bg="white"
+                              borderLeftWidth="3px"
+                              borderLeftColor="transparent"
                               borderRightWidth="1px"
                               borderColor="gray.100"
                               py={0.5}
@@ -477,8 +491,8 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                     </Thead>
                     <Tbody>
                       {filteredRows.map((row) => (
-                        <Tr key={`${row.record_type}-${row.id}`}>
-                          <Td py={0.5} minW="360px">
+                        <Tr key={`${row.record_type}-${row.id}`} sx={ruleRowHoverSx}>
+                          <Td py={0.5} minW="360px" borderLeftWidth="3px" borderLeftColor="transparent">
                             <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
                               {row.record_key}
                             </Text>
