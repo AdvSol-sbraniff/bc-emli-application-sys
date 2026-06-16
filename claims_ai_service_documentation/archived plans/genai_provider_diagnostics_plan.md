@@ -207,6 +207,8 @@ This phase does not:
 - change model deployment
 - write provider internals into evidence tables
 - add a new database table
+- rebuild Gold schema
+- deploy or rebuild Gold images
 
 Those decisions should come after the diagnostic logs show what kind of provider failure is actually occurring.
 
@@ -222,16 +224,14 @@ Those decisions should come after the diagnostic logs show what kind of provider
 8. If a GenAI call fails, confirm Rails steprun error includes diagnostic id and category.
 9. Search Docker logs by diagnostic id and confirm the low-level provider error details are findable.
 
-## Gold Test Plan
+## Optional Gold Verification
 
-Only after local validation:
+Gold rebuild/deploy is intentionally out of scope for this plan. If the user has already rebuilt/deployed Gold separately, use these verification-only checks:
 
-1. Build and deploy the Node image if only Node changed.
-2. Build and deploy the app image too if Rails callers changed.
-3. Run a Gold GenAI smoke test.
-4. Run test014 or a known package that exercises image classifier calls.
-5. Use `oc logs` to search for a diagnostic id.
-6. Confirm failed stepruns, if any, point to the exact Node diagnostic event.
+1. Run a Gold GenAI smoke test.
+2. Run test014 or a known package that exercises image classifier calls.
+3. Use `oc logs` to search for a diagnostic id.
+4. Confirm failed stepruns, if any, point to the exact Node diagnostic event.
 
 ## Success Criteria
 

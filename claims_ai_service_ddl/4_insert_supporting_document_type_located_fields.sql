@@ -211,38 +211,4 @@ ON CONFLICT (supporting_document_type_id, field_key) DO UPDATE SET
   enabled = EXCLUDED.enabled,
   updated_at = NOW();
 
-WITH group_field_seed(supporting_document_type_key, field_key, field_number, prompt_text, enabled) AS (
-  VALUES
-    ('before_after_photo_set', 'before_photo_present', 1, 'Across all files in this supporting-document group, determine whether at least one before-photo is present. Explain the file/evidence used.', true),
-    ('before_after_photo_set', 'after_photo_present', 2, 'Across all files in this supporting-document group, determine whether at least one after-photo is present. Explain the file/evidence used.', true),
-    ('before_after_photo_set', 'photo_pair_completeness_evidence', 3, 'Across all files in this supporting-document group, determine whether the uploaded files together provide a complete before/after evidence pair for the same subject/system/area, or explain why the pair appears incomplete.', true),
-    ('before_after_photo_set', 'same_subject_or_area_evidence', 4, 'Across all files in this supporting-document group, summarize whether the photos appear to show the same subject, system, room, area, label, or work scope.', true),
-    ('before_after_photo_set', 'group_visual_consistency_summary', 5, 'Across all files in this supporting-document group, summarize the combined visual evidence and any review limitation, mismatch, or uncertainty.', true)
-)
-INSERT INTO claims.supporting_document_group_type_located_fields (
-  supporting_document_type_id,
-  field_key,
-  field_number,
-  prompt_text,
-  enabled,
-  created_at,
-  updated_at
-)
-SELECT
-  sdt.id,
-  seed.field_key,
-  seed.field_number,
-  seed.prompt_text,
-  seed.enabled,
-  NOW(),
-  NOW()
-FROM group_field_seed seed
-JOIN claims.supporting_document_types sdt
-  ON sdt.type_key = seed.supporting_document_type_key
-ON CONFLICT (supporting_document_type_id, field_key) DO UPDATE SET
-  field_number = EXCLUDED.field_number,
-  prompt_text = EXCLUDED.prompt_text,
-  enabled = EXCLUDED.enabled,
-  updated_at = NOW();
-
 COMMIT;

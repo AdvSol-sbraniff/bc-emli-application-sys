@@ -9,11 +9,6 @@ module Claims
                foreign_key: :supporting_document_type_id,
                optional: true
 
-    belongs_to :supporting_document_group,
-               class_name: "Claims::SupportingDocumentGroup",
-               foreign_key: :supporting_document_group_id,
-               optional: true
-
     has_many :supporting_document_located_fields,
              class_name: "Claims::SupportingDocumentLocatedField",
              foreign_key: :supporting_document_id,

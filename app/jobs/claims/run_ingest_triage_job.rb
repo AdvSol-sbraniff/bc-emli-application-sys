@@ -40,7 +40,13 @@ module Claims
       triage_payload =
         call_node_genai!(
           contextwindowjson: contextwindowjson,
-          attachments: attachments
+          attachments: attachments,
+          diagnostic_context:
+            genai_diagnostic_context(
+              document: document,
+              step_type: step_type,
+              ingest_run_id: ingest_run_id
+            )
         )
       result =
         ::Claims::Ingest::ApplyDocumentTriageResult.call(
@@ -155,7 +161,11 @@ module Claims
       ]
     end
 
-    def call_node_genai!(contextwindowjson:, attachments: [])
+    def call_node_genai!(
+      contextwindowjson:,
+      attachments: [],
+      diagnostic_context: {}
+    )
       base = ENV.fetch("INV_NODE_BASE_URL")
       uri = URI("#{base}/inv/genai")
 
@@ -164,7 +174,8 @@ module Claims
       req.body =
         JSON.generate(
           contextwindowjson: contextwindowjson,
-          attachments: attachments
+          attachments: attachments,
+          diagnostic_context: diagnostic_context
         )
 
       http = Net::HTTP.new(uri.host, uri.port)
@@ -177,6 +188,16 @@ module Claims
       end
 
       JSON.parse(resp.body)
+    end
+
+    def genai_diagnostic_context(document:, step_type:, ingest_run_id:)
+      {
+        step_type: step_type,
+        ingest_run_id: ingest_run_id,
+        ingest_document_id: document.id,
+        original_filename: document.original_filename,
+        content_type: document.content_type
+      }.compact
     end
 
     def classifier_step_type_for(document, requested_step_type)

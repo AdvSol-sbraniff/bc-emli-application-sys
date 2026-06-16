@@ -12,9 +12,9 @@ module Claims
                foreign_key: :ingest_document_id,
                optional: true
 
-    belongs_to :supporting_document_group,
-               class_name: "Claims::SupportingDocumentGroup",
-               foreign_key: :supporting_document_group_id,
+    belongs_to :supporting_document_type,
+               class_name: "Claims::SupportingDocumentType",
+               foreign_key: :supporting_document_type_id,
                optional: true
   end
 end

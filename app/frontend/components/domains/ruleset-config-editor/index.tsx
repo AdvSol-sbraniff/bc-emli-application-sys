@@ -25,7 +25,6 @@ type ConfigDto = {
   classifier_pdf_system_record: string | null;
   classifier_image_system_record: string | null;
   supporting_document_extraction_system_record: string | null;
-  supporting_document_group_extraction_system_record: string | null;
   user_record0: string | null;
   admin_advice_intro: string | null;
   admin_advice_closing: string | null;
@@ -42,8 +41,6 @@ export default function RulesetConfigEditorScreen() {
   const [classifierPdfSystemRecord, setClassifierPdfSystemRecord] = useState<string>('');
   const [classifierImageSystemRecord, setClassifierImageSystemRecord] = useState<string>('');
   const [supportingDocumentExtractionSystemRecord, setSupportingDocumentExtractionSystemRecord] = useState<string>('');
-  const [supportingDocumentGroupExtractionSystemRecord, setSupportingDocumentGroupExtractionSystemRecord] =
-    useState<string>('');
   const [userRecord0, setUserRecord0] = useState<string>('');
   const [adminAdviceIntro, setAdminAdviceIntro] = useState<string>('');
   const [adminAdviceClosing, setAdminAdviceClosing] = useState<string>('');
@@ -53,7 +50,6 @@ export default function RulesetConfigEditorScreen() {
     classifierPdfSystemRecord: '',
     classifierImageSystemRecord: '',
     supportingDocumentExtractionSystemRecord: '',
-    supportingDocumentGroupExtractionSystemRecord: '',
     userRecord0: '',
     adminAdviceIntro: '',
     adminAdviceClosing: '',
@@ -65,7 +61,6 @@ export default function RulesetConfigEditorScreen() {
     classifierPdfSystemRecord !== initialValues.classifierPdfSystemRecord ||
     classifierImageSystemRecord !== initialValues.classifierImageSystemRecord ||
     supportingDocumentExtractionSystemRecord !== initialValues.supportingDocumentExtractionSystemRecord ||
-    supportingDocumentGroupExtractionSystemRecord !== initialValues.supportingDocumentGroupExtractionSystemRecord ||
     userRecord0 !== initialValues.userRecord0 ||
     adminAdviceIntro !== initialValues.adminAdviceIntro ||
     adminAdviceClosing !== initialValues.adminAdviceClosing;
@@ -77,7 +72,6 @@ export default function RulesetConfigEditorScreen() {
       classifierPdfSystemRecord: data.classifier_pdf_system_record ?? data.classifier_system_record ?? '',
       classifierImageSystemRecord: data.classifier_image_system_record ?? data.classifier_system_record ?? '',
       supportingDocumentExtractionSystemRecord: data.supporting_document_extraction_system_record ?? '',
-      supportingDocumentGroupExtractionSystemRecord: data.supporting_document_group_extraction_system_record ?? '',
       userRecord0: data.user_record0 ?? '',
       adminAdviceIntro: data.admin_advice_intro ?? '',
       adminAdviceClosing: data.admin_advice_closing ?? '',
@@ -89,7 +83,6 @@ export default function RulesetConfigEditorScreen() {
     setClassifierPdfSystemRecord(values.classifierPdfSystemRecord);
     setClassifierImageSystemRecord(values.classifierImageSystemRecord);
     setSupportingDocumentExtractionSystemRecord(values.supportingDocumentExtractionSystemRecord);
-    setSupportingDocumentGroupExtractionSystemRecord(values.supportingDocumentGroupExtractionSystemRecord);
     setUserRecord0(values.userRecord0);
     setAdminAdviceIntro(values.adminAdviceIntro);
     setAdminAdviceClosing(values.adminAdviceClosing);
@@ -136,7 +129,6 @@ export default function RulesetConfigEditorScreen() {
           classifier_pdf_system_record: classifierPdfSystemRecord,
           classifier_image_system_record: classifierImageSystemRecord,
           supporting_document_extraction_system_record: supportingDocumentExtractionSystemRecord,
-          supporting_document_group_extraction_system_record: supportingDocumentGroupExtractionSystemRecord,
           user_record0: userRecord0,
           admin_advice_intro: adminAdviceIntro,
           admin_advice_closing: adminAdviceClosing,
@@ -222,7 +214,6 @@ export default function RulesetConfigEditorScreen() {
                 <Tab>Image Classifier</Tab>
                 <Tab>Legacy Classifier</Tab>
                 <Tab>Support Extract</Tab>
-                <Tab>Group Extract</Tab>
                 <Tab>DI Guidance</Tab>
                 <Tab>Advice Intro</Tab>
                 <Tab>Advice Close</Tab>
@@ -275,22 +266,12 @@ export default function RulesetConfigEditorScreen() {
 
                 <TabPanel px={0} pt={3}>
                   <Text fontSize="sm" opacity={0.75} mb={3}>
-                    Extraction-only prompt for one already-classified supporting document type.
+                    Extraction-only prompt for one already-classified supporting document type, with all files of that
+                    type attached together.
                   </Text>
                   <Textarea
                     value={supportingDocumentExtractionSystemRecord}
                     onChange={(e) => setSupportingDocumentExtractionSystemRecord(e.target.value)}
-                    minH="420px"
-                  />
-                </TabPanel>
-
-                <TabPanel px={0} pt={3}>
-                  <Text fontSize="sm" opacity={0.75} mb={3}>
-                    Extraction-only prompt for one supporting-document group, such as a before/after photo set.
-                  </Text>
-                  <Textarea
-                    value={supportingDocumentGroupExtractionSystemRecord}
-                    onChange={(e) => setSupportingDocumentGroupExtractionSystemRecord(e.target.value)}
                     minH="420px"
                   />
                 </TabPanel>

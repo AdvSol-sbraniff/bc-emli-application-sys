@@ -1359,13 +1359,8 @@ export const InvoiceVersionShowScreen = () => {
     () => (Array.isArray(readData?.uploaded_supporting_documents) ? readData.uploaded_supporting_documents : []),
     [readData?.uploaded_supporting_documents],
   );
-  const uploadedSupportingDocumentGroups = useMemo(
-    () =>
-      Array.isArray(readData?.uploaded_supporting_document_groups) ? readData.uploaded_supporting_document_groups : [],
-    [readData?.uploaded_supporting_document_groups],
-  );
   const supportingDocumentEvidenceSections = useMemo(() => {
-    const sectionMap = new Map<string, { key: string; title: string; groups: any[]; documents: any[] }>();
+    const sectionMap = new Map<string, { key: string; title: string; documents: any[] }>();
     const ensureSection = (rawKey: unknown, rawTitle: unknown) => {
       const title = String(rawTitle || rawKey || 'Unclassified document').trim() || 'Unclassified document';
       const key =
@@ -1374,17 +1369,10 @@ export const InvoiceVersionShowScreen = () => {
           .toLowerCase() || 'unclassified-document';
       const existing = sectionMap.get(key);
       if (existing) return existing;
-      const section = { key, title, groups: [] as any[], documents: [] as any[] };
+      const section = { key, title, documents: [] as any[] };
       sectionMap.set(key, section);
       return section;
     };
-
-    uploadedSupportingDocumentGroups.forEach((group: any) => {
-      ensureSection(
-        group?.supporting_document_type_key || group?.supporting_document_type_description || group?.group_label,
-        group?.supporting_document_type_description || group?.supporting_document_type_key || group?.group_label,
-      ).groups.push(group);
-    });
 
     uploadedSupportingDocuments.forEach((doc: any) => {
       ensureSection(
@@ -1394,7 +1382,7 @@ export const InvoiceVersionShowScreen = () => {
     });
 
     return Array.from(sectionMap.values()).sort((a, b) => a.title.localeCompare(b.title));
-  }, [uploadedSupportingDocumentGroups, uploadedSupportingDocuments]);
+  }, [uploadedSupportingDocuments]);
   const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
 
   // ============================================================
@@ -1968,105 +1956,6 @@ export const InvoiceVersionShowScreen = () => {
                                 },
                               }}
                             >
-                              {section.groups.length > 0 && (
-                                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                                  <h3>
-                                    <AccordionButton py="6px" _hover={{ bg: 'transparent' }}>
-                                      <Box flex="1" textAlign="left" minW={0}>
-                                        <Flex align="center" gap="8px" wrap="wrap">
-                                          <Text fontSize="sm" fontWeight="bold">
-                                            Group
-                                          </Text>
-                                        </Flex>
-                                      </Box>
-                                      <AccordionIcon />
-                                    </AccordionButton>
-                                  </h3>
-                                  <AccordionPanel px="0" pt="6px">
-                                    <Box display="flex" flexDirection="column" gap="3px">
-                                      {section.groups.map((group: any) => {
-                                        const filenames = Array.isArray(group?.original_filenames)
-                                          ? group.original_filenames.filter(Boolean).map(String)
-                                          : [];
-                                        const fields = Array.isArray(group?.located_fields) ? group.located_fields : [];
-                                        const title = String(group?.group_label || '').trim();
-
-                                        return (
-                                          <Box
-                                            key={String(group?.id || group?.group_label || 'supporting-doc-group')}
-                                            px="10px"
-                                            py="3px"
-                                          >
-                                            {(title && title !== section.title) || filenames.length > 0 ? (
-                                              <Box
-                                                display="grid"
-                                                gridTemplateColumns="160px minmax(0, 1fr)"
-                                                columnGap="8px"
-                                                rowGap="2px"
-                                                alignItems="baseline"
-                                              >
-                                                {title && title !== section.title && (
-                                                  <>
-                                                    <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                      group
-                                                    </Text>
-                                                    <Text fontSize="sm" noOfLines={1}>
-                                                      {title}
-                                                    </Text>
-                                                  </>
-                                                )}
-                                                {filenames.length > 0 && (
-                                                  <>
-                                                    <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                      files
-                                                    </Text>
-                                                    <Text fontSize="sm" noOfLines={1}>
-                                                      {filenames.join(', ')}
-                                                    </Text>
-                                                  </>
-                                                )}
-                                              </Box>
-                                            ) : null}
-
-                                            {fields.length > 0 && (
-                                              <Box
-                                                mt={
-                                                  (title && title !== section.title) || filenames.length > 0
-                                                    ? '3px'
-                                                    : '0'
-                                                }
-                                                display="grid"
-                                                gridTemplateColumns="160px minmax(0, 1fr)"
-                                                columnGap="8px"
-                                                rowGap="2px"
-                                                alignItems="baseline"
-                                              >
-                                                {fields.map((field: any) => (
-                                                  <React.Fragment
-                                                    key={String(field?.id || `${group?.id}:${field?.field_key}`)}
-                                                  >
-                                                    <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                      {String(field?.field_key || 'field')}
-                                                    </Text>
-                                                    <Text fontSize="sm" noOfLines={1}>
-                                                      {field?.value_text != null
-                                                        ? String(field.value_text)
-                                                        : field?.value_json != null
-                                                          ? JSON.stringify(field.value_json)
-                                                          : 'not found'}
-                                                    </Text>
-                                                  </React.Fragment>
-                                                ))}
-                                              </Box>
-                                            )}
-                                          </Box>
-                                        );
-                                      })}
-                                    </Box>
-                                  </AccordionPanel>
-                                </AccordionItem>
-                              )}
-
                               {section.documents.map((doc: any) => {
                                 const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
                                 const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];

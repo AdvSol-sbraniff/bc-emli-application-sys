@@ -624,9 +624,35 @@ module Api
             id: invoice_steps.map(&:invoice_version_id).compact.uniq
           ).index_by(&:id)
 
+        supporting_documents_by_type_id =
+          invoice
+            .supporting_documents
+            .includes(:supporting_document_type)
+            .where.not(supporting_document_type_id: nil)
+            .order(:created_at, :id)
+            .to_a
+            .group_by { |doc| doc.supporting_document_type_id.to_s }
+        type_ids = supporting_documents_by_type_id.keys
+        type_steps =
+          if type_ids.empty?
+            []
+          else
+            scope =
+              ::Claims::IngestStepRun
+                .where(
+                  supporting_document_type_id: type_ids,
+                  step_type: "supporting_document_type_extraction"
+                )
+                .where.not(supporting_document_type_id: nil)
+            scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+            scope.to_a
+          end
+
         run_ids =
           (
-            documents.map(&:ingest_run_id) + invoice_steps.map(&:ingest_run_id)
+            documents.map(&:ingest_run_id) +
+              invoice_steps.map(&:ingest_run_id) +
+              type_steps.map(&:ingest_run_id)
           ).compact.uniq
         run_level_steps =
           if run_ids.empty?
@@ -635,7 +661,8 @@ module Api
             scope =
               ::Claims::IngestStepRun.where(ingest_run_id: run_ids).where(
                 ingest_document_id: nil,
-                invoice_version_id: nil
+                invoice_version_id: nil,
+                supporting_document_type_id: nil
               )
             scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
             scope.to_a
@@ -686,6 +713,33 @@ module Api
         )
 
         rows.concat(
+          type_steps.map do |step|
+            documents_for_type =
+              supporting_documents_by_type_id[
+                step.supporting_document_type_id.to_s
+              ] || []
+            {
+              id: step.id,
+              ingest_run_id: step.ingest_run_id,
+              session_id: step.session_id,
+              invoice_id: invoice.id,
+              ingest_document_id: nil,
+              invoice_version_id: nil,
+              invoice_versionno: nil,
+              original_filename:
+                supporting_document_type_step_label(documents_for_type),
+              document_kind: "supporting_document_type",
+              invoice_status: invoice.status,
+              step_type: step.step_type,
+              status: step.status,
+              error_text: step.error_text,
+              created_at: step.created_at,
+              updated_at: step.updated_at
+            }
+          end
+        )
+
+        rows.concat(
           invoice_steps.map do |step|
             invoice_version = invoice_versions_by_id[step.invoice_version_id]
             {
@@ -712,6 +766,21 @@ module Api
           .sort_by { |row| row[:created_at] || Time.at(0) }
           .reverse
           .first(limit)
+      end
+
+      def supporting_document_type_step_label(documents)
+        documents = Array(documents)
+        type = documents.first&.supporting_document_type
+        type_label = type&.description.presence || type&.type_key.to_s.humanize
+        filenames =
+          documents
+            .sort_by { |doc| [doc.created_at || Time.at(0), doc.id] }
+            .filter_map { |doc| doc.original_filename.to_s.presence }
+
+        return type_label if filenames.empty?
+        return filenames.join(", ") if type_label.blank?
+
+        "#{type_label}: #{filenames.join(", ")}"
       end
 
       def ingest_invoice_classifier_results(invoice_id:, ingest_run_id:)

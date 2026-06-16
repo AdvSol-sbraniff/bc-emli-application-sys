@@ -202,29 +202,26 @@ module Claims
           )
         end
 
-        supporting_document_groups =
-          ::Claims::SupportingDocumentGroups::EnsureForInvoice.call(
-            invoice_id: resolved_invoice_id
+        extraction_type_ids =
+          supporting_document_type_ids_requiring_extraction(
+            supporting_document_rows
           )
-
-        extraction_documents =
-          documents_requiring_supporting_document_extraction(documents)
-        extraction_ids = extraction_documents.map(&:id)
         extraction_steps =
-          latest_document_steps_map(
+          latest_type_steps_map(
             run.id,
-            extraction_ids,
-            single_extraction_step_types
+            extraction_type_ids,
+            "supporting_document_type_extraction"
           )
 
-        missing_extraction_documents =
-          extraction_documents.reject do |document|
-            extraction_steps.key?(document.id)
+        missing_extraction_type_ids =
+          extraction_type_ids.reject do |type_id|
+            extraction_steps.key?(type_id)
           end
 
-        if missing_extraction_documents.any?
-          enqueue_supporting_document_extraction_jobs!(
-            documents: missing_extraction_documents
+        if missing_extraction_type_ids.any?
+          enqueue_supporting_document_type_extraction_jobs!(
+            invoice_id: resolved_invoice_id,
+            supporting_document_type_ids: missing_extraction_type_ids
           )
           return(
             update_running!(
@@ -236,7 +233,7 @@ module Claims
           )
         end
 
-        if extraction_steps.size < extraction_documents.size
+        if extraction_steps.size < extraction_type_ids.size
           return(
             update_running!(
               run: run,
@@ -249,10 +246,10 @@ module Claims
 
         if failed_row =
              extraction_steps.values.find { |row| row.status == "failed" }
-          failed_doc =
-            extraction_documents.detect do |doc|
-              doc.id == failed_row.ingest_document_id
-            end
+          failed_type =
+            ::Claims::SupportingDocumentType.find_by(
+              id: failed_row.supporting_document_type_id
+            )
           return(
             update_failed!(
               run: run,
@@ -266,9 +263,10 @@ module Claims
                   code: "bundle_supporting_document_extraction_failed",
                   level: "error",
                   message:
-                    "One or more supporting documents failed during located-field extraction.",
-                  ingest_document_id: failed_row.ingest_document_id,
-                  filename: failed_doc&.original_filename
+                    "One or more supporting document types failed during located-field extraction.",
+                  supporting_document_type_id:
+                    failed_row.supporting_document_type_id,
+                  supporting_document_type_key: failed_type&.type_key
                 }
               ]
             )
@@ -276,88 +274,6 @@ module Claims
         end
 
         if extraction_steps.values.any? { |row| row.status != "succeeded" }
-          return(
-            update_running!(
-              run: run,
-              total_files: total_files,
-              messages: messages,
-              shell_invoice_id: shell_invoice_id
-            )
-          )
-        end
-
-        group_extraction_groups =
-          groups_requiring_supporting_document_group_extraction(
-            supporting_document_groups
-          )
-        group_extraction_steps =
-          latest_group_steps_map(
-            run.id,
-            group_extraction_groups.map(&:id),
-            "supporting_document_group_extraction"
-          )
-        missing_group_extraction_groups =
-          group_extraction_groups.reject do |group|
-            group_extraction_steps.key?(group.id)
-          end
-
-        if missing_group_extraction_groups.any?
-          enqueue_supporting_document_group_extraction_jobs!(
-            groups: missing_group_extraction_groups
-          )
-          return(
-            update_running!(
-              run: run,
-              total_files: total_files,
-              messages: messages,
-              shell_invoice_id: shell_invoice_id
-            )
-          )
-        end
-
-        if group_extraction_steps.size < group_extraction_groups.size
-          return(
-            update_running!(
-              run: run,
-              total_files: total_files,
-              messages: messages,
-              shell_invoice_id: shell_invoice_id
-            )
-          )
-        end
-
-        if failed_row =
-             group_extraction_steps.values.find { |row| row.status == "failed" }
-          failed_group =
-            group_extraction_groups.detect do |group|
-              group.id == failed_row.supporting_document_group_id
-            end
-          return(
-            update_failed!(
-              run: run,
-              total_files: total_files,
-              failed_files: 1,
-              messages: messages,
-              shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
-              extra_messages: [
-                {
-                  code: "bundle_supporting_document_group_extraction_failed",
-                  level: "error",
-                  message:
-                    "One or more supporting document groups failed during group-level extraction.",
-                  supporting_document_group_id:
-                    failed_row.supporting_document_group_id,
-                  group_label: failed_group&.group_label
-                }
-              ]
-            )
-          )
-        end
-
-        if group_extraction_steps.values.any? { |row|
-             row.status != "succeeded"
-           }
           return(
             update_running!(
               run: run,
@@ -512,18 +428,22 @@ module Claims
           .first
       end
 
-      def latest_group_steps_map(ingest_run_id, group_ids, step_type)
-        return {} if group_ids.empty?
+      def latest_type_steps_map(
+        ingest_run_id,
+        supporting_document_type_ids,
+        step_type
+      )
+        return {} if supporting_document_type_ids.empty?
 
         ::Claims::IngestStepRun
           .where(
             ingest_run_id: ingest_run_id,
-            supporting_document_group_id: group_ids,
+            supporting_document_type_id: supporting_document_type_ids,
             step_type: step_type
           )
           .order(created_at: :desc)
           .to_a
-          .group_by(&:supporting_document_group_id)
+          .group_by(&:supporting_document_type_id)
           .transform_values(&:first)
       end
 
@@ -566,49 +486,34 @@ module Claims
         end
       end
 
-      def enqueue_supporting_document_extraction_jobs!(documents:)
-        documents.each do |document|
+      def enqueue_supporting_document_type_extraction_jobs!(
+        invoice_id:,
+        supporting_document_type_ids:
+      )
+        invoice = ::Claims::Invoice.find(invoice_id)
+
+        supporting_document_type_ids.each do |type_id|
           ::Claims::IngestStepRun.find_or_create_by!(
             ingest_run_id: @ingest_run_id,
-            ingest_document_id: document.id,
-            step_type: "supporting_document_single_extraction"
+            supporting_document_type_id: type_id,
+            step_type: "supporting_document_type_extraction"
           ) do |step|
-            step.session_id = document.session_id
+            step.session_id = invoice.session_id
             step.status = "queued"
             step.error_text = nil
             step.created_at = Time.current
             step.updated_at = Time.current
           end
 
-          ::Claims::RunSupportingDocumentExtractionJob.perform_async(
-            document.id,
+          ::Claims::RunSupportingDocumentTypeExtractionJob.perform_async(
+            invoice.id,
+            type_id,
             @ingest_run_id
           )
         end
       end
 
-      def enqueue_supporting_document_group_extraction_jobs!(groups:)
-        groups.each do |group|
-          ::Claims::IngestStepRun.find_or_create_by!(
-            ingest_run_id: @ingest_run_id,
-            supporting_document_group_id: group.id,
-            step_type: "supporting_document_group_extraction"
-          ) do |step|
-            step.session_id = group.invoice.session_id
-            step.status = "queued"
-            step.error_text = nil
-            step.created_at = Time.current
-            step.updated_at = Time.current
-          end
-
-          ::Claims::RunSupportingDocumentGroupExtractionJob.perform_async(
-            group.id,
-            @ingest_run_id
-          )
-        end
-      end
-
-      def documents_requiring_supporting_document_extraction(documents)
+      def supporting_document_type_ids_requiring_extraction(documents)
         supporting_document_rows =
           documents.select do |doc|
             doc.document_kind == "supporting_document" &&
@@ -616,28 +521,23 @@ module Claims
           end
         return [] if supporting_document_rows.empty?
 
-        # Group-capable supporting-document types are extracted by one group
-        # GenAI call, which also writes child-file fields and visual findings.
-        grouped_type_ids = group_capable_supporting_document_type_ids
-        supporting_document_rows =
-          supporting_document_rows.reject do |doc|
-            grouped_type_ids.include?(doc.supporting_document_type_id.to_s)
-          end
-        return [] if supporting_document_rows.empty?
+        candidate_type_ids =
+          supporting_document_rows
+            .map { |row| row.supporting_document_type_id.to_s }
+            .uniq
 
         type_ids_with_fields =
           ::Claims::SupportingDocumentTypeLocatedField
             .where(
-              supporting_document_type_id:
-                supporting_document_rows.map(&:supporting_document_type_id),
+              supporting_document_type_id: candidate_type_ids,
               enabled: true
             )
             .distinct
             .pluck(:supporting_document_type_id)
             .map(&:to_s)
 
-        supporting_document_rows.select do |doc|
-          type_ids_with_fields.include?(doc.supporting_document_type_id.to_s)
+        candidate_type_ids.select do |type_id|
+          type_ids_with_fields.include?(type_id)
         end
       end
 
@@ -667,46 +567,12 @@ module Claims
         [classifier_step_type_for(document), "triage_classifier"]
       end
 
-      def single_extraction_step_types
-        %w[supporting_document_single_extraction supporting_document_extraction]
-      end
-
       def image_document?(document)
         content_type = document.content_type.to_s.downcase
         return true if content_type.start_with?("image/")
 
         filename = document.original_filename.to_s.downcase
         filename.end_with?(".jpg", ".jpeg", ".png")
-      end
-
-      def group_capable_supporting_document_type_ids
-        ::Claims::SupportingDocumentType
-          .where(
-            type_key:
-              ::Claims::SupportingDocumentGroups::EnsureForInvoice::GROUP_CAPABLE_TYPE_KEYS,
-            enabled: true
-          )
-          .pluck(:id)
-          .map(&:to_s)
-      end
-
-      def groups_requiring_supporting_document_group_extraction(groups)
-        return [] if groups.empty?
-
-        type_ids_with_fields =
-          ::Claims::SupportingDocumentGroupTypeLocatedField
-            .where(
-              supporting_document_type_id:
-                groups.map(&:supporting_document_type_id),
-              enabled: true
-            )
-            .distinct
-            .pluck(:supporting_document_type_id)
-            .map(&:to_s)
-
-        groups.select do |group|
-          type_ids_with_fields.include?(group.supporting_document_type_id.to_s)
-        end
       end
 
       def ensure_resolved_invoice!(run:, resolved_document:)

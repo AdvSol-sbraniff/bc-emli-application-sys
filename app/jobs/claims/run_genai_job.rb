@@ -727,13 +727,17 @@ module Claims
       step
     end
 
-    def call_node_genai!(contextwindowjson:)
+    def call_node_genai!(contextwindowjson:, diagnostic_context: {})
       base = ENV.fetch("INV_NODE_BASE_URL")
       uri = URI("#{base}/inv/genai")
 
       req = Net::HTTP::Post.new(uri)
       req["Content-Type"] = "application/json"
-      req.body = JSON.generate(contextwindowjson: contextwindowjson)
+      req.body =
+        JSON.generate(
+          contextwindowjson: contextwindowjson,
+          diagnostic_context: diagnostic_context
+        )
 
       http = Net::HTTP.new(uri.host, uri.port)
       http.open_timeout = 10
@@ -791,7 +795,17 @@ module Claims
           product_context: product_context,
           di_raw_json: di_raw_json
         )
-      payload = call_node_genai!(contextwindowjson: contextwindowjson)
+      payload =
+        call_node_genai!(
+          contextwindowjson: contextwindowjson,
+          diagnostic_context:
+            genai_diagnostic_context(
+              step_type: step_type,
+              ingest_run_id: ingest_run_id,
+              invoice_version_id: invoice_version_id,
+              invoice_upgrade_type_id: upgrade_type.id
+            )
+        )
 
       rulecheck_result =
         ::Claims::InvoiceVersionRulechecks::ApplyGenaiRulechecks.call(
@@ -853,6 +867,20 @@ module Claims
         nil
       end
       raise
+    end
+
+    def genai_diagnostic_context(
+      step_type:,
+      ingest_run_id:,
+      invoice_version_id:,
+      invoice_upgrade_type_id:
+    )
+      {
+        step_type: step_type,
+        ingest_run_id: ingest_run_id,
+        invoice_version_id: invoice_version_id,
+        invoice_upgrade_type_id: invoice_upgrade_type_id
+      }.compact
     end
 
     def run_code_ruleset!(
@@ -1412,8 +1440,10 @@ module Claims
             [],
         configured_types:
           summary[:configured_types] || summary["configured_types"] || [],
-        missing_configured_type_keys:
-          summary[:missing_configured_type_keys] ||
+        not_present_applicable_type_keys:
+          summary[:not_present_applicable_type_keys] ||
+            summary["not_present_applicable_type_keys"] ||
+            summary[:missing_configured_type_keys] ||
             summary["missing_configured_type_keys"] || []
       }
     end
@@ -1432,9 +1462,7 @@ module Claims
             summary["present_configured_type_counts"] || {},
         documents:
           summary[:configured_documents] || summary["configured_documents"] ||
-            [],
-        groups:
-          summary[:configured_groups] || summary["configured_groups"] || []
+            []
       }
     end
 

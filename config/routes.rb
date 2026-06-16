@@ -224,14 +224,6 @@ Rails.application.routes.draw do
           to: "supporting_document_type_located_fields_admin#show"
       patch "admin/supporting_document_type_located_fields/:id",
             to: "supporting_document_type_located_fields_admin#update"
-      get "admin/supporting_document_types/:supporting_document_type_id/group_located_fields",
-          to: "supporting_document_group_type_located_fields_admin#index"
-      post "admin/supporting_document_types/:supporting_document_type_id/group_located_fields",
-           to: "supporting_document_group_type_located_fields_admin#create"
-      get "admin/supporting_document_group_type_located_fields/:id",
-          to: "supporting_document_group_type_located_fields_admin#show"
-      patch "admin/supporting_document_group_type_located_fields/:id",
-            to: "supporting_document_group_type_located_fields_admin#update"
       get "admin/validation_rules/:record_type/:id/history",
           to: "validation_rules_admin#history"
       post "admin/validation_rules/:record_type",

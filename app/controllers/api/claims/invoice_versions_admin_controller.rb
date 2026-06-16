@@ -164,9 +164,7 @@ module Api
                          iv.id
                        ),
                      "uploaded_supporting_documents" =>
-                       serialize_uploaded_supporting_documents(invoice.id),
-                     "uploaded_supporting_document_groups" =>
-                       serialize_uploaded_supporting_document_groups(invoice.id)
+                       serialize_uploaded_supporting_documents(invoice.id)
                    ),
                  invoice:
                    invoice.as_json(
@@ -339,11 +337,7 @@ module Api
                          iv.id
                        ),
                      "uploaded_supporting_documents" =>
-                       serialize_uploaded_supporting_documents(iv.invoice_id),
-                     "uploaded_supporting_document_groups" =>
-                       serialize_uploaded_supporting_document_groups(
-                         iv.invoice_id
-                       )
+                       serialize_uploaded_supporting_documents(iv.invoice_id)
                    ),
                  invoice:
                    invoice&.as_json(
@@ -722,7 +716,6 @@ module Api
           .where(invoice_id: invoice_id)
           .includes(
             :supporting_document_type,
-            :supporting_document_group,
             :supporting_document_visual_findings
           )
           .order(created_at: :desc, id: :desc)
@@ -734,7 +727,6 @@ module Api
             {
               id: row.id,
               invoice_id: row.invoice_id,
-              supporting_document_group_id: row.supporting_document_group_id,
               supporting_document_type_id: row.supporting_document_type_id,
               supporting_document_type_key:
                 row.supporting_document_type&.type_key,
@@ -758,70 +750,6 @@ module Api
               created_at: row.created_at,
               updated_at: row.updated_at
             }
-          end
-      end
-
-      def serialize_uploaded_supporting_document_groups(invoice_id)
-        ::Claims::SupportingDocumentGroup
-          .where(invoice_id: invoice_id)
-          .includes(
-            :supporting_document_type,
-            :supporting_documents,
-            supporting_document_group_located_fields:
-              :supporting_document_group_type_located_field
-          )
-          .order(created_at: :desc, id: :desc)
-          .map do |group|
-            docs =
-              group.supporting_documents.sort_by do |doc|
-                [doc.original_filename.to_s.downcase, doc.id]
-              end
-
-            {
-              id: group.id,
-              invoice_id: group.invoice_id,
-              supporting_document_type_id: group.supporting_document_type_id,
-              supporting_document_type_key:
-                group.supporting_document_type&.type_key,
-              supporting_document_type_description:
-                group.supporting_document_type&.description,
-              group_label: group.group_label,
-              group_status: group.group_status,
-              supporting_document_ids: docs.map(&:id),
-              original_filenames: docs.map(&:original_filename),
-              located_fields:
-                serialize_supporting_document_group_located_fields(group),
-              created_at: group.created_at,
-              updated_at: group.updated_at
-            }
-          end
-      end
-
-      def serialize_supporting_document_group_located_fields(group)
-        group
-          .supporting_document_group_located_fields
-          .sort_by { |field| [field.field_key.to_s, field.created_at] }
-          .map do |field|
-            definition = field.supporting_document_group_type_located_field
-            field.as_json(
-              only: %i[
-                id
-                supporting_document_group_id
-                supporting_document_group_type_located_field_id
-                source_engine
-                field_key
-                value_type
-                value_text
-                value_json
-                confidence
-                evidence_text
-                created_at
-                updated_at
-              ]
-            ).merge(
-              "field_number" => definition&.field_number,
-              "prompt_text" => definition&.prompt_text
-            )
           end
       end
 

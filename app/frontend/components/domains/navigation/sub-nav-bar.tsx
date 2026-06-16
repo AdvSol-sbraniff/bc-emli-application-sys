@@ -108,11 +108,6 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
         { href: '/supporting-document-type-fields-admin', title: 'Located Fields' },
       ],
-      '/supporting-document-group-type-fields-admin': [
-        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
-        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
-        { href: '/supporting-document-group-type-fields-admin', title: 'Group Located Fields' },
-      ],
       '/downloads-admin': [{ href: '/downloads-admin', title: 'Downloads' }],
       '/heat-pump-product-list-admin': [
         { href: '/downloads-admin', title: 'Downloads' },
@@ -228,29 +223,6 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
             ...(recordId ? { id: recordId } : {}),
           }).toString()}`,
           title: validationRulesMode === 'create' ? 'Add Field' : 'Edit Field',
-        },
-      ]);
-      return;
-    }
-
-    if (path === '/supporting-document-group-type-fields-admin' && validationRulesMode) {
-      const typeId = searchParams.get('type_id') || '';
-      const recordId = searchParams.get('id') || '';
-      setIncludeHome(false);
-      setBreadcrumbs([
-        { href: '/validation-rules-admin', title: 'Rules and Fields Editor' },
-        { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
-        {
-          href: `/supporting-document-group-type-fields-admin${typeId ? `?type_id=${encodeURIComponent(typeId)}` : ''}`,
-          title: 'Group Located Fields',
-        },
-        {
-          href: `/supporting-document-group-type-fields-admin?${new URLSearchParams({
-            ...(typeId ? { type_id: typeId } : {}),
-            mode: validationRulesMode,
-            ...(recordId ? { id: recordId } : {}),
-          }).toString()}`,
-          title: validationRulesMode === 'create' ? 'Add Group Field' : 'Edit Group Field',
         },
       ]);
       return;

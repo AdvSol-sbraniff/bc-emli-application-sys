@@ -50,6 +50,10 @@ class GenAiDto {
   @IsOptional()
   @IsArray()
   attachments?: any[];
+
+  @IsOptional()
+  @IsObject()
+  diagnostic_context?: Record<string, any>;
 }
 
 class MintSasDto {
@@ -191,7 +195,11 @@ export class InvController {
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async genai(@Body() dto: GenAiDto): Promise<any> {
     // returns a real JSON object to Ruby
-    return this.invService.genai(dto.contextwindowjson, dto.attachments || []);
+    return this.invService.genai(
+      dto.contextwindowjson,
+      dto.attachments || [],
+      dto.diagnostic_context || {},
+    );
   }
 
   @Post('upload-pdf')

@@ -85,6 +85,14 @@ const compactUpgradeLabel = (upgradeType: UpgradeTypeRow) => {
     .replace(/_/g, ' ');
 };
 
+const registryRowHoverProps = {
+  transition: 'background 140ms ease, box-shadow 140ms ease',
+  _hover: {
+    bg: 'linear-gradient(90deg, rgba(49, 130, 206, 0.07) 0%, rgba(255, 255, 255, 0.98) 72%)',
+    boxShadow: 'inset 3px 0 0 rgba(49, 130, 206, 0.35)',
+  },
+};
+
 const buildSearchParams = (obj: Record<string, string | undefined>) => {
   const params = new URLSearchParams();
   Object.entries(obj).forEach(([key, value]) => {
@@ -243,13 +251,6 @@ export default function SupportingDocumentTypesAdminScreen() {
   const openFields = (row: SupportingDocumentTypeRow) => {
     navigate({
       pathname: '/supporting-document-type-fields-admin',
-      search: `?${buildSearchParams({ type_id: row.id }).toString()}`,
-    });
-  };
-
-  const openGroupFields = (row: SupportingDocumentTypeRow) => {
-    navigate({
-      pathname: '/supporting-document-group-type-fields-admin',
       search: `?${buildSearchParams({ type_id: row.id }).toString()}`,
     });
   };
@@ -494,7 +495,7 @@ export default function SupportingDocumentTypesAdminScreen() {
                   </Thead>
                   <Tbody>
                     {rows.map((row) => (
-                      <Tr key={row.id}>
+                      <Tr key={row.id} {...registryRowHoverProps}>
                         <Td py={0.5}>
                           <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
                             {row.type_key}
@@ -524,16 +525,6 @@ export default function SupportingDocumentTypesAdminScreen() {
                                 variant="ghost"
                                 size="xs"
                                 onClick={() => openFields(row)}
-                              />
-                            </Tooltip>
-                            <Tooltip label="Manage group fields">
-                              <IconButton
-                                aria-label="Manage supporting document group fields"
-                                icon={<ListChecks size={18} />}
-                                colorScheme="blue"
-                                variant="ghost"
-                                size="xs"
-                                onClick={() => openGroupFields(row)}
                               />
                             </Tooltip>
                             <Tooltip label="Edit type">
@@ -600,12 +591,16 @@ export default function SupportingDocumentTypesAdminScreen() {
                     {rows.map((row) => {
                       const mappedIds = mappedUpgradeTypeIdsByRowId.get(row.id) || new Set<string>();
                       return (
-                        <Tr key={row.id}>
+                        <Tr key={row.id} role="group" {...registryRowHoverProps}>
                           <Td
                             position="sticky"
                             left={0}
                             zIndex={1}
                             bg="white"
+                            _groupHover={{
+                              bg: 'linear-gradient(90deg, rgba(49, 130, 206, 0.09) 0%, rgba(255, 255, 255, 0.98) 92%)',
+                            }}
+                            transition="background 140ms ease"
                             borderRightWidth="1px"
                             borderColor="gray.100"
                             py={0.5}
@@ -658,16 +653,6 @@ export default function SupportingDocumentTypesAdminScreen() {
                                   variant="ghost"
                                   size="xs"
                                   onClick={() => openFields(row)}
-                                />
-                              </Tooltip>
-                              <Tooltip label="Manage group fields">
-                                <IconButton
-                                  aria-label="Manage supporting document group fields"
-                                  icon={<ListChecks size={18} />}
-                                  colorScheme="blue"
-                                  variant="ghost"
-                                  size="xs"
-                                  onClick={() => openGroupFields(row)}
                                 />
                               </Tooltip>
                               <Tooltip label="Edit type">

@@ -21,16 +21,5 @@ module Claims
              foreign_key: :supporting_document_type_id,
              dependent: :destroy,
              inverse_of: :supporting_document_type
-
-    has_many :supporting_document_groups,
-             class_name: "Claims::SupportingDocumentGroup",
-             foreign_key: :supporting_document_type_id,
-             dependent: :restrict_with_exception
-
-    has_many :supporting_document_group_type_located_fields,
-             class_name: "Claims::SupportingDocumentGroupTypeLocatedField",
-             foreign_key: :supporting_document_type_id,
-             dependent: :destroy,
-             inverse_of: :supporting_document_type
   end
 end

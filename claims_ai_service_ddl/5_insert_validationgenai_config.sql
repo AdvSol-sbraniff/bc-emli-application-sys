@@ -7,7 +7,6 @@ WITH config_row (
   classifier_system_record,
   classifier_image_system_record,
   supporting_document_extraction_system_record,
-  supporting_document_group_extraction_system_record,
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
@@ -78,6 +77,7 @@ Rules:
 - reason_and_likely_causes must summarize the result in plain admin-facing language. Do not put the explanation only in calculation or evidence_text.
 - Do not use vague phrases such as "admin should verify", "missing", "unclear", or "not provided" unless you also explain exactly what to verify, where to look, what evidence is missing, and why it matters.
 - Return exact invoice evidence where possible.
+- If a rule task, configured document type, not_present_applicable_type_keys value, or prompt instruction appears illogical when compared with the package evidence as a whole, call out that inconsistency explicitly in reason_and_likely_causes. Do not blindly fail only because a literal type_key is not present when another supplied document appears to satisfy the business intent of the rule. In that situation, explain the likely configuration/rule wording issue and use the least severe result that still gives the admin a clear review path.
 - For every located_fields[] item based on visible invoice evidence, set page and polygon when Document Intelligence provides a reliable location. Use polygon=null only for inferred/database-derived values or when no reliable DI location exists.
 - For every non-common upgrade-specific ruleset call, include a located_fields[] item with field_key="upgrade_specific_rebate_line_amount" for the CleanBC / Better Homes / Energy Savings Program rebate amount attributable to that specific upgrade type. Use value=null when the invoice does not clearly allocate a rebate to this upgrade type.
 - Supporting-document evidence is supplied in case_facts.supporting_document_summary and case_facts.supporting_document_summary_for_upgrade_type. When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, income/utility-account documents, landlord consent, or other attachments, inspect the configured supporting documents and their located_fields before warning or failing for missing evidence.
@@ -362,57 +362,11 @@ Rules:
 $classifier_image$,
     $supporting_document_extraction$
 purpose-statement:
-You extract configured located fields from one supporting document for the Better Homes BC Energy Savings Program. The application has already classified the document type. You are not deciding final eligibility.
+You extract configured located fields from all supplied supporting documents of one supporting-document type for the Better Homes BC Energy Savings Program. The application has already classified the document type for each file. You are not deciding final eligibility.
 
 Output-json-schema:
 {
   "supporting_document_type_key": "utility_bill",
-  "supporting_document_located_fields": [
-    {
-      "field_key": "string",
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    }
-  ],
-  "visual_findings": [
-    {
-      "page": 1,
-      "finding_type": "manufacturer_label_photo",
-      "summary": "Short description of a useful visual observation from the attached supporting-document PDF.",
-      "legibility": "legible",
-      "relevant_text_seen": ["visible text from the image, if any"],
-      "confidence": 0
-    }
-  ]
-}
-
-Rules:
-- Return strict JSON only.
-- Do not include markdown outside JSON.
-- Use only the selected supporting_document_type_key and the field tasks supplied in the user records.
-- Return one supporting_document_located_fields[] row for each configured field task.
-- Copy each configured field_key exactly.
-- If a configured field value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
-- Also inspect the attached supporting-document PDF when present.
-- Return visual_findings[] for useful visual observations from the PDF pages, such as equipment labels, before/after photos, energy labels, floor plans, fireplace/chimney photos, or unclear visual evidence.
-- visual_findings[] is one row per useful observation, not one row per embedded PDF image object.
-- If there is no useful visual evidence, return visual_findings=[].
-- Use legibility values: legible, partially_legible, illegible, or not_applicable.
-- Use confidence from 0 to 100.
-- Prefer exact short evidence text copied from the OCR/DI content.
-- Do not make final eligibility decisions. Extract document evidence only.
-- If the DI text is too poor to locate a field, return null for that field rather than guessing.
-$supporting_document_extraction$,
-    $supporting_document_group_extraction$
-purpose-statement:
-You extract configured group-level located fields from a set of related supporting documents for the Better Homes BC Energy Savings Program. The application has already classified each file and created a group. You are not deciding final eligibility.
-
-Output-json-schema:
-{
-  "supporting_document_type_key": "before_after_photo_set",
   "supporting_document_located_fields_by_document": [
     {
       "supporting_document_id": "uuid",
@@ -429,21 +383,13 @@ Output-json-schema:
       "visual_findings": [
         {
           "page": 1,
-          "finding_type": "before_after_photo",
-          "summary": "Short description of a useful visual observation from this child file.",
+          "finding_type": "manufacturer_label_photo",
+          "summary": "Short description of a useful visual observation from this supporting-document file.",
           "legibility": "legible",
           "relevant_text_seen": ["visible text from the image, if any"],
           "confidence": 0
         }
       ]
-    }
-  ],
-  "supporting_document_group_located_fields": [
-    {
-      "field_key": "string",
-      "value": null,
-      "confidence": 0,
-      "evidence_text": null
     }
   ]
 }
@@ -451,20 +397,22 @@ Output-json-schema:
 Rules:
 - Return strict JSON only.
 - Do not include markdown outside JSON.
-- Use only the selected supporting_document_type_key, child-file field tasks, and group-level field tasks supplied in the user records.
-- Return one supporting_document_located_fields_by_document[] object for each child supporting document supplied in the user records.
-- Copy each child supporting_document_id exactly.
-- For each child document object, return one supporting_document_located_fields[] row for each configured child-file field task.
-- For each child document object, return visual_findings[] for useful visual observations in that child file. If there is no useful visual evidence, return visual_findings=[].
-- Return one supporting_document_group_located_fields[] row for each configured group field task.
+- Use only the selected supporting_document_type_key, supplied supporting_document_id values, and field tasks supplied in the user records.
+- Return one supporting_document_located_fields_by_document[] object for every supplied supporting document.
+- Copy each supporting_document_id exactly.
+- For each document object, return one supporting_document_located_fields[] row for each configured field task.
 - Copy each configured field_key exactly.
-- If a configured child-file value is not visible, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
-- If a configured group value cannot be determined, return value=null, confidence=0, and evidence_text=null for that group field.
-- Compare the child supporting documents together. Do not answer group completeness from one file alone.
+- If a configured field value is not visible in that document, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
+- Inspect every attached supporting-document file when present.
+- Return visual_findings[] for useful visual observations from each file, such as equipment labels, before/after photos, energy labels, floor plans, fireplace/chimney photos, or unclear visual evidence.
+- visual_findings[] is one row per useful observation for that file, not one row per embedded PDF image object.
+- If a file has no useful visual evidence, return visual_findings=[] for that file.
 - Use legibility values: legible, partially_legible, illegible, or not_applicable.
 - Use confidence from 0 to 100.
-- Prefer concise evidence text that names the relevant child filename(s) or visible facts.
-$supporting_document_group_extraction$,
+- Prefer exact short evidence text copied from the OCR/DI content.
+- Do not make final eligibility decisions. Extract document evidence only.
+- If the DI text is too poor to locate a field, return null for that field rather than guessing.
+$supporting_document_extraction$,
     $user0$
 User record 0 (Document Intelligence / OCR context):
 The user message includes Azure Document Intelligence raw JSON from the invoice OCR result.
@@ -529,7 +477,6 @@ INSERT INTO claims.validationgenai_config (
   classifier_pdf_system_record,
   classifier_image_system_record,
   supporting_document_extraction_system_record,
-  supporting_document_group_extraction_system_record,
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
@@ -543,7 +490,6 @@ INSERT INTO claims.validationgenai_config (
     classifier_system_record,
     classifier_image_system_record,
     supporting_document_extraction_system_record,
-    supporting_document_group_extraction_system_record,
     user_record0,
     admin_advice_intro,
     admin_advice_closing,
@@ -556,7 +502,6 @@ INSERT INTO claims.validationgenai_config (
     classifier_pdf_system_record = EXCLUDED.classifier_pdf_system_record,
     classifier_image_system_record = EXCLUDED.classifier_image_system_record,
     supporting_document_extraction_system_record = EXCLUDED.supporting_document_extraction_system_record,
-    supporting_document_group_extraction_system_record = EXCLUDED.supporting_document_group_extraction_system_record,
     user_record0 = EXCLUDED.user_record0,
     admin_advice_intro = EXCLUDED.admin_advice_intro,
     admin_advice_closing = EXCLUDED.admin_advice_closing,

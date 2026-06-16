@@ -36,7 +36,6 @@ module Api
             classifier_pdf_system_record: "",
             classifier_image_system_record: "",
             supporting_document_extraction_system_record: "",
-            supporting_document_group_extraction_system_record: "",
             user_record0: "",
             admin_advice_intro: "",
             admin_advice_closing: "",
@@ -53,7 +52,6 @@ module Api
           classifier_pdf_system_record
           classifier_image_system_record
           supporting_document_extraction_system_record
-          supporting_document_group_extraction_system_record
           user_record0
           admin_advice_intro
           admin_advice_closing
@@ -80,8 +78,6 @@ module Api
             ),
           supporting_document_extraction_system_record:
             config.supporting_document_extraction_system_record,
-          supporting_document_group_extraction_system_record:
-            config.supporting_document_group_extraction_system_record,
           user_record0: config.user_record0,
           admin_advice_intro: config.admin_advice_intro,
           admin_advice_closing: config.admin_advice_closing,

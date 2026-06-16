@@ -59,7 +59,14 @@ module Claims
           di_read_raw_json: di_read_raw_json
         )
       classifier_payload =
-        call_node_genai!(contextwindowjson: contextwindowjson)
+        call_node_genai!(
+          contextwindowjson: contextwindowjson,
+          diagnostic_context:
+            genai_diagnostic_context(
+              invoice_version: invoice_version,
+              ingest_run_id: ingest_run_id
+            )
+        )
 
       unless classifier_payload.fetch("document_kind", nil).to_s == "invoice"
         raise "Replacement PDF classified as #{classifier_payload["document_kind"].inspect}, expected \"invoice\"."
@@ -199,13 +206,17 @@ module Claims
       JSON.parse(resp.body)
     end
 
-    def call_node_genai!(contextwindowjson:)
+    def call_node_genai!(contextwindowjson:, diagnostic_context: {})
       base = ENV.fetch("INV_NODE_BASE_URL")
       uri = URI("#{base}/inv/genai")
 
       req = Net::HTTP::Post.new(uri)
       req["Content-Type"] = "application/json"
-      req.body = JSON.generate(contextwindowjson: contextwindowjson)
+      req.body =
+        JSON.generate(
+          contextwindowjson: contextwindowjson,
+          diagnostic_context: diagnostic_context
+        )
 
       http = Net::HTTP.new(uri.host, uri.port)
       http.open_timeout = 10
@@ -217,6 +228,16 @@ module Claims
       end
 
       JSON.parse(resp.body)
+    end
+
+    def genai_diagnostic_context(invoice_version:, ingest_run_id:)
+      {
+        step_type: "plus1fix_classifier",
+        ingest_run_id: ingest_run_id,
+        invoice_version_id: invoice_version.id,
+        original_filename: invoice_version.original_filename,
+        content_type: invoice_version.content_type
+      }.compact
     end
 
     def enqueue_invoice_ocr!(invoice_version:, ingest_run_id:)

@@ -512,6 +512,182 @@ export class InvService {
     }
   }
 
+  private genAiDiagnosticId(): string {
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:.]/g, '')
+      .replace('T', 'T')
+      .replace('Z', 'Z');
+    return `genai_${timestamp}_${crypto.randomBytes(4).toString('hex')}`;
+  }
+
+  private genAiEndpointHost(): string | undefined {
+    try {
+      return new URL(process.env.GENAI_BASE_URL || '').host || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private boundedString(value: any, maxLength = 500): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    let text: string;
+    try {
+      text = typeof value === 'string' ? value : JSON.stringify(value, null, 0);
+    } catch {
+      text = String(value);
+    }
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  }
+
+  private safeDiagnosticContext(context: any): Record<string, any> {
+    if (!context || typeof context !== 'object' || Array.isArray(context)) {
+      return {};
+    }
+
+    const safeKeys = [
+      'step_type',
+      'ingest_run_id',
+      'ingest_document_id',
+      'invoice_version_id',
+      'invoice_upgrade_type_id',
+      'supporting_document_group_id',
+      'original_filename',
+      'content_type',
+    ];
+
+    const safe: Record<string, any> = {};
+    for (const key of safeKeys) {
+      const value = context[key];
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        safe[key] =
+          typeof value === 'string' ? this.boundedString(value, 200) : value;
+      }
+    }
+
+    return safe;
+  }
+
+  private genAiAttachmentSummary(attachments: any[]): Record<string, any> {
+    const safeAttachments = Array.isArray(attachments) ? attachments : [];
+    return {
+      attachment_count: safeAttachments.length,
+      attachments: safeAttachments.slice(0, 20).map((attachment) => ({
+        type: this.boundedString(attachment?.type, 80),
+        filename: this.boundedString(attachment?.filename, 200),
+        container: this.boundedString(attachment?.container, 120),
+        storage_key: this.boundedString(attachment?.storageKey, 300),
+      })),
+    };
+  }
+
+  private genAiInputSummary(
+    contextwindowjson: any,
+    attachments: any[],
+    diagnosticContext: Record<string, any>,
+    diagnosticId: string,
+  ): Record<string, any> {
+    const contextText = this.boundedString(contextwindowjson, 200_000) || '';
+    return {
+      event_source: 'claims_ai_service',
+      diagnostic_id: diagnosticId,
+      api_style: this.genaiApiStyle,
+      deployment: this.genaiDeployment,
+      endpoint_host: this.genAiEndpointHost(),
+      context_chars: contextText.length,
+      diagnostic_context: this.safeDiagnosticContext(diagnosticContext),
+      ...this.genAiAttachmentSummary(attachments),
+    };
+  }
+
+  private providerStatus(error: any): number | string | undefined {
+    return error?.status ?? error?.response?.status;
+  }
+
+  private providerCode(error: any): string | undefined {
+    return this.boundedString(error?.code ?? error?.error?.code, 120);
+  }
+
+  private providerRequestId(error: any): string | undefined {
+    const headers = error?.headers || error?.response?.headers || {};
+    return (
+      headers?.get?.('x-request-id') ||
+      headers?.get?.('apim-request-id') ||
+      headers?.get?.('x-ms-request-id') ||
+      headers?.['x-request-id'] ||
+      headers?.['apim-request-id'] ||
+      headers?.['x-ms-request-id']
+    );
+  }
+
+  private providerRetryAfter(error: any): string | undefined {
+    const headers = error?.headers || error?.response?.headers || {};
+    return (
+      headers?.get?.('retry-after') ||
+      headers?.['retry-after'] ||
+      error?.response?.headers?.['retry-after']
+    );
+  }
+
+  private providerResponseSnippet(error: any): string | undefined {
+    return this.boundedString(
+      error?.response?.data ?? error?.error ?? error?.message,
+      700,
+    );
+  }
+
+  private categorizeGenAiError(error: any): string {
+    const status = Number(this.providerStatus(error));
+    const code = String(this.providerCode(error) || '').toLowerCase();
+    const message = String(error?.message || '').toLowerCase();
+
+    if (
+      status === 408 ||
+      code.includes('timeout') ||
+      message.includes('timeout')
+    ) {
+      return 'provider_timeout';
+    }
+    if (
+      status === 429 ||
+      code.includes('rate') ||
+      message.includes('throttl')
+    ) {
+      return 'provider_throttled';
+    }
+    if (status === 401 || status === 403) return 'provider_auth_error';
+    if (status === 400) return 'provider_bad_request';
+    if ([502, 503, 504].includes(status) || status >= 500) {
+      return 'provider_gateway_error';
+    }
+    if (message.includes('content') && message.includes('filter')) {
+      return 'provider_content_filter';
+    }
+    if (
+      ['econnreset', 'enotfound', 'econnrefused', 'eai_again'].includes(code)
+    ) {
+      return 'provider_connection_error';
+    }
+
+    return 'provider_unknown_error';
+  }
+
+  private logGenAiDiagnostic(
+    event: string,
+    payload: Record<string, any>,
+  ): void {
+    const line = JSON.stringify({ event, ...payload });
+    if (event.endsWith('.failed')) {
+      console.error(line);
+    } else {
+      console.log(line);
+    }
+  }
+
   // called from curl for troubleshooting
   async genaiHelloWorld(): Promise<{ message: string }> {
     const arrConversation: any[] = [];
@@ -566,33 +742,79 @@ export class InvService {
     return { message: stripThinkBlocks(message).trim() };
   }
 
-  async genai(contextwindowjson: any, attachments: any[] = []): Promise<any> {
+  async genai(
+    contextwindowjson: any,
+    attachments: any[] = [],
+    diagnosticContext: Record<string, any> = {},
+  ): Promise<any> {
+    const diagnosticId = this.genAiDiagnosticId();
+    const startedAt = Date.now();
+    const diagnosticBase = this.genAiInputSummary(
+      contextwindowjson,
+      attachments,
+      diagnosticContext,
+      diagnosticId,
+    );
     let raw = '';
 
-    if (this.genaiApiStyle === 'responses') {
-      const responsesPrompt =
-        toResponsesInputAndInstructions(contextwindowjson);
-      const responsesInput = await this.withInputFileAttachments(
-        responsesPrompt.input,
-        attachments,
+    this.logGenAiDiagnostic('claims.genai.request.started', diagnosticBase);
+
+    try {
+      if (this.genaiApiStyle === 'responses') {
+        const responsesPrompt =
+          toResponsesInputAndInstructions(contextwindowjson);
+        const responsesInput = await this.withInputFileAttachments(
+          responsesPrompt.input,
+          attachments,
+        );
+        const resp = await this.withGenAiRetries(() =>
+          this.genaiClient.responses.create({
+            model: this.genaiDeployment,
+            instructions: responsesPrompt.instructions,
+            input: responsesInput,
+          }),
+        );
+        raw = resp.output_text ?? '';
+      } else {
+        const resp = await this.withGenAiRetries(() =>
+          this.genaiClient.chat.completions.create({
+            model: this.genaiDeployment,
+            messages: toChatMessages(contextwindowjson),
+          }),
+        );
+        raw = extractChatCompletionText(resp);
+      }
+    } catch (error: any) {
+      const elapsed_ms = Date.now() - startedAt;
+      const category = this.categorizeGenAiError(error);
+
+      this.logGenAiDiagnostic('claims.genai.request.failed', {
+        ...diagnosticBase,
+        elapsed_ms,
+        category,
+        provider_status: this.providerStatus(error),
+        provider_code: this.providerCode(error),
+        provider_request_id: this.providerRequestId(error),
+        retry_after: this.providerRetryAfter(error),
+        provider_response_snippet: this.providerResponseSnippet(error),
+      });
+
+      throw new HttpException(
+        {
+          message: 'GenAI provider request failed',
+          diagnostic_id: diagnosticId,
+          category,
+          elapsed_ms,
+        },
+        HttpStatus.BAD_GATEWAY,
       );
-      const resp = await this.withGenAiRetries(() =>
-        this.genaiClient.responses.create({
-          model: this.genaiDeployment,
-          instructions: responsesPrompt.instructions,
-          input: responsesInput,
-        }),
-      );
-      raw = resp.output_text ?? '';
-    } else {
-      const resp = await this.withGenAiRetries(() =>
-        this.genaiClient.chat.completions.create({
-          model: this.genaiDeployment,
-          messages: toChatMessages(contextwindowjson),
-        }),
-      );
-      raw = extractChatCompletionText(resp);
     }
+
+    this.logGenAiDiagnostic('claims.genai.request.succeeded', {
+      ...diagnosticBase,
+      elapsed_ms: Date.now() - startedAt,
+      output_chars: raw.length,
+    });
 
     const candidate = extractJsonPayloadText(raw);
 

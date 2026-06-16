@@ -312,4 +312,3 @@ Success condition:
 - Does the program expect the same qualifying list for both `air_to_water_heat_pump` and `combined_space_water_heat_pump`?
 - Are there any known real invoices for these upgrade types we can use as matching test cases?
 - Does the list include active/inactive/removed rows, or is every row in the latest PDF considered currently qualifying?
-

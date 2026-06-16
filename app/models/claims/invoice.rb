@@ -13,11 +13,6 @@ module Claims
              foreign_key: :invoice_id,
              dependent: :destroy
 
-    has_many :supporting_document_groups,
-             class_name: "Claims::SupportingDocumentGroup",
-             foreign_key: :invoice_id,
-             dependent: :destroy
-
     has_many :internal_notes,
              class_name: "Claims::InternalNote",
              foreign_key: :invoice_id,

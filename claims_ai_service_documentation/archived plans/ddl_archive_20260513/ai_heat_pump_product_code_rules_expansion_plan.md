@@ -102,4 +102,3 @@ Expected after rerunning GenAI:
   - `Code Rule 2 - Heat Pump Capacity At -5C Meets Minimum`
   - `Code Rule 3 - Heat Pump Efficiency Meets ESP Threshold`
 - All three should pass for AHRI `213617706`.
-
