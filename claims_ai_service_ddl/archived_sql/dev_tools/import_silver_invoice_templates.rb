@@ -3,12 +3,15 @@ require "json"
 PROGRAM_SLUG = "energy-savings-program".freeze
 SUBMISSION_TYPE_NAME = "Invoice".freeze
 EXPORT_GLOB =
-  Rails.root.join(
-    "claims_ai_service_ddl",
-    "reference_data",
-    "silver_templates",
-    "silver_template_*.json"
-  ).freeze
+  Rails
+    .root
+    .join(
+      "claims_ai_service_ddl",
+      "reference_data",
+      "silver_templates",
+      "silver_template_*.json"
+    )
+    .freeze
 
 def parse_bundle(path)
   raw = File.read(path)

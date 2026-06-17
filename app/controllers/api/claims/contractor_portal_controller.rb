@@ -133,7 +133,8 @@ module Api
           ::Claims::Ingest::CreateDraftBatch.call(
             contractor_id: contractor.id,
             files: files,
-            log_prefix: "contractor_upload_batch"
+            log_prefix: "contractor_upload_batch",
+            cleanup_failed_invoice_artifacts: true
           )
 
         render json: result, status: :ok
@@ -313,11 +314,17 @@ module Api
       # GET /api/claims/contractor/ingest/runs/:ingest_run_id
       def ingest_run_show
         run = contractor_ingest_run!
+        failure_payload = contractor_ingest_run_failure_payload(run)
 
         render json: {
                  id: run.id,
                  session_id: run.session_id,
                  status: run.status,
+                 failure_status: failure_payload[:failure_status],
+                 failure_status_subtype:
+                   failure_payload[:failure_status_subtype],
+                 failure_message: failure_payload[:failure_message],
+                 retry_guidance: failure_payload[:retry_guidance],
                  total_files: run.total_files,
                  completed_files: run.completed_files,
                  failed_files: run.failed_files,
@@ -341,8 +348,17 @@ module Api
             ingest_run_id: run.id,
             contractor_id: current_contractor.id
           )
+        failure_payload = contractor_ingest_run_failure_payload(run)
 
-        render json: { rows: rows }, status: :ok
+        render json: {
+                 rows: rows,
+                 failure_status: failure_payload[:failure_status],
+                 failure_status_subtype:
+                   failure_payload[:failure_status_subtype],
+                 failure_message: failure_payload[:failure_message],
+                 retry_guidance: failure_payload[:retry_guidance]
+               },
+               status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: {
                  rows: [],
@@ -658,6 +674,11 @@ module Api
         raise ActiveRecord::RecordNotFound if contractor.nil?
 
         run = ::Claims::IngestRun.find(params[:ingest_run_id].to_s.strip)
+        if run.contractor_id.present? &&
+             run.contractor_id.to_s == contractor.id.to_s
+          return run
+        end
+
         has_owned_invoice =
           ::Claims::Invoice.where(
             session_id: run.session_id,
@@ -667,6 +688,61 @@ module Api
         raise ActiveRecord::RecordNotFound unless has_owned_invoice
 
         run
+      end
+
+      def contractor_ingest_run_failure_payload(run)
+        messages = parse_messages(run.messages)
+        message_payload =
+          messages.reverse.find do |message|
+            message["contractor_message"].present?
+          end
+
+        if message_payload
+          return(
+            {
+              failure_status: message_payload["status"],
+              failure_status_subtype:
+                message_payload["status_subtype"] || message_payload["code"],
+              failure_message: message_payload["contractor_message"],
+              retry_guidance: nil
+            }
+          )
+        end
+
+        invoice =
+          ::Claims::Invoice
+            .where(
+              session_id: run.session_id,
+              contractor_id: run.contractor_id,
+              status: %w[package_needs_correction technical_failure]
+            )
+            .order(updated_at: :desc)
+            .first
+
+        return {} unless invoice
+
+        {
+          failure_status: invoice.status,
+          failure_status_subtype: invoice.status_subtype,
+          failure_message:
+            ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+              invoice.status,
+              invoice.status_subtype
+            ),
+          retry_guidance:
+            ::Claims::Invoices::StatusSubtypes.retry_guidance(
+              invoice.status,
+              invoice.status_subtype
+            )
+        }
+      end
+
+      def parse_messages(messages)
+        return messages if messages.is_a?(Array)
+
+        JSON.parse(messages.to_s)
+      rescue JSON::ParserError, TypeError
+        []
       end
     end
   end

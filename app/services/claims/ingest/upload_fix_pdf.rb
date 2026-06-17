@@ -120,6 +120,7 @@ module Claims
             ingest_run =
               ::Claims::IngestRun.create!(
                 session_id: locked_invoice.session_id,
+                contractor_id: locked_invoice.contractor_id,
                 status: "queued",
                 total_files: 1,
                 completed_files: 0,

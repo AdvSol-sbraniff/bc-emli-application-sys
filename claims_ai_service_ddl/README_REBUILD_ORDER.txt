@@ -9,15 +9,16 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 3. `3_insert_neea_sources.sql`
 4. `3_insert_awhp_sources.sql`
 5. `3_insert_ohpa_sources.sql`
-6. `3_insert_invoice_upgrade_types.sql`
-7. `3_insert_supporting_document_types.sql`
-8. `3_insert_supporting_document_type_upgrade_types.sql`
-9. `3_insert_supporting_document_type_located_fields.sql`
-10. `3_insert_code_rules.sql`
-11. `3_insert_code_located_fields.sql`
-12. `3_insert_validationgenai_config.sql`
-13. `3_insert_genai_normalized.sql`
-14. `4_create_views.sql`
+6. `3_insert_invoice_status_subtypes.sql`
+7. `3_insert_invoice_upgrade_types.sql`
+8. `3_insert_supporting_document_types.sql`
+9. `3_insert_supporting_document_type_upgrade_types.sql`
+10. `3_insert_supporting_document_type_located_fields.sql`
+11. `3_insert_code_rules.sql`
+12. `3_insert_code_located_fields.sql`
+13. `3_insert_validationgenai_config.sql`
+14. `3_insert_genai_normalized.sql`
+15. `4_create_views.sql`
 
 ## Optional local test data
 
@@ -31,10 +32,7 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 ## Not part of normal claims rebuild
 
 - `public_legacy_seed/` contains old/public-schema bootstrap scripts.
-- `archived_sql/` contains stale SQL, old existing-schema patch scripts, archived one-off local/admin/user repair scripts, and scratch notes kept only for archaeology. Do not use these for gold rebuilds.
-- `dev_tools/` contains Rails runner/debug helper scripts.
-- `plans/` contains AI/ruleset implementation plans and analysis notes.
-- `reference_data/` contains external files used by importers or historical local data loads.
-  - `reference_data/silver_templates/` contains legacy Silver template JSON exports used only by the optional importer script.
+- `archived_sql/` contains stale SQL, old existing-schema patch scripts, archived one-off local/admin/user repair scripts, historical local reference files, and scratch notes kept only for archaeology. Do not use these for gold rebuilds.
+- `dev_tools/` contains local Rails runner/debug helper scripts. Do not use these for gold rebuilds.
 
 Do not run public/legacy/one-off scripts as part of a claims-schema rebuild unless you explicitly intend to change public schema data.

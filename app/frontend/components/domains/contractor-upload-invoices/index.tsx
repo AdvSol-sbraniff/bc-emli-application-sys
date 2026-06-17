@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { keyframes } from '@emotion/react';
 import {
   Box,
   Button,
@@ -16,10 +17,9 @@ import {
   Tr,
   VStack,
 } from '@chakra-ui/react';
-import { XCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, WarningCircle, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
-import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 
 type ContractorPortalResponse = {
   contractor?: {
@@ -34,6 +34,10 @@ type RunHeader = {
   id: string;
   session_id: string;
   status: string;
+  failure_status?: string | null;
+  failure_status_subtype?: string | null;
+  failure_message?: string | null;
+  retry_guidance?: string | null;
 };
 
 type RunInvoiceRow = {
@@ -44,6 +48,140 @@ type RunInvoiceRow = {
   invoice_versionno?: number | null;
   original_filename?: string | null;
 };
+
+const orbitSpin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`;
+
+const pulseGlow = keyframes`
+  0%, 100% { opacity: 0.55; transform: scale(0.95); }
+  50% { opacity: 0.95; transform: scale(1.04); }
+`;
+
+const storyFade = keyframes`
+  0% { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(3px); }
+  18% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  82% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(-7px) scale(0.99); filter: blur(2px); }
+`;
+
+function ContractorUploadProcessingGraphic({ label }: { label: string }) {
+  return (
+    <VStack spacing={4} py={8} align="center">
+      <Box position="relative" w="168px" h="168px">
+        <Box
+          position="absolute"
+          inset="10px"
+          borderRadius="full"
+          bg="radial-gradient(circle at 35% 30%, rgba(255,255,255,0.98), rgba(188,229,255,0.42) 42%, rgba(0,104,183,0.08) 72%)"
+          boxShadow="0 22px 55px rgba(0, 85, 140, 0.22), inset 0 1px 18px rgba(255,255,255,0.9)"
+          animation={`${pulseGlow} 2.7s ease-in-out infinite`}
+          sx={{
+            '@media (prefers-reduced-motion: reduce)': {
+              animation: 'none',
+            },
+          }}
+        />
+        <Flex
+          position="absolute"
+          inset="0"
+          align="center"
+          justify="center"
+          borderRadius="full"
+          bg="conic-gradient(from 120deg, rgba(10,132,207,0), rgba(61,177,255,0.82), rgba(214,244,255,0.95), rgba(10,132,207,0.08), rgba(10,132,207,0))"
+          sx={{
+            mask: 'radial-gradient(circle, transparent 53%, black 55%)',
+            WebkitMask: 'radial-gradient(circle, transparent 53%, black 55%)',
+            animation: `${orbitSpin} 1.45s linear infinite`,
+            '@media (prefers-reduced-motion: reduce)': {
+              animation: `${orbitSpin} 5s linear infinite`,
+            },
+          }}
+        />
+        <Flex
+          position="absolute"
+          inset="0"
+          align="center"
+          justify="center"
+          color="#0068b7"
+          filter="drop-shadow(0 12px 20px rgba(0, 104, 183, 0.22))"
+          sx={{
+            animation: `${orbitSpin} 2.3s cubic-bezier(.62,.02,.32,1) infinite`,
+            '@media (prefers-reduced-motion: reduce)': {
+              animation: 'none',
+            },
+          }}
+        >
+          <ArrowClockwise size={104} weight="duotone" />
+        </Flex>
+        <Box
+          position="absolute"
+          right="22px"
+          top="30px"
+          w="16px"
+          h="16px"
+          borderRadius="full"
+          bg="linear-gradient(135deg, #ffffff, #42c7ff)"
+          boxShadow="0 0 24px rgba(66, 199, 255, 0.9)"
+        />
+      </Box>
+      <Text
+        key={label}
+        fontSize="xl"
+        fontWeight="700"
+        letterSpacing="0.02em"
+        color="rgba(15, 42, 67, 0.92)"
+        minH="32px"
+        textAlign="center"
+        animation={`${storyFade} 3s ease-in-out infinite`}
+        sx={{
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
+        }}
+      >
+        {label}
+      </Text>
+    </VStack>
+  );
+}
+
+function ContractorUploadFailureNotice({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  return (
+    <Flex
+      align="flex-start"
+      gap={3}
+      p={4}
+      borderRadius="18px"
+      bg="linear-gradient(135deg, rgba(255,245,240,0.96), rgba(255,255,255,0.98))"
+      border="1px solid rgba(194, 65, 12, 0.18)"
+      boxShadow="0 14px 38px rgba(124, 45, 18, 0.09)"
+    >
+      <Box color="orange.600" pt="1px">
+        <WarningCircle size={24} weight="duotone" />
+      </Box>
+      <Box flex="1">
+        <Text fontWeight="700" color="gray.800">
+          Upload needs attention
+        </Text>
+        <Text mt={1} fontSize="sm" color="gray.700">
+          {message}
+        </Text>
+      </Box>
+      <Button
+        leftIcon={<XCircle size={17} />}
+        size="sm"
+        variant="outline"
+        colorScheme="orange"
+        borderRadius="full"
+        onClick={onDismiss}
+      >
+        Clear message
+      </Button>
+    </Flex>
+  );
+}
 
 function getParam(search: string, key: string): string {
   return new URLSearchParams(search).get(key) ?? '';
@@ -81,7 +219,8 @@ export default function ContractorUploadInvoicesScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [submitOk, setSubmitOk] = useState('');
+  const [failureMessage, setFailureMessage] = useState('');
+  const [dismissedFailureRunId, setDismissedFailureRunId] = useState('');
   const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
   const [runError, setRunError] = useState('');
   const [invoiceRows, setInvoiceRows] = useState<RunInvoiceRow[]>([]);
@@ -130,6 +269,7 @@ export default function ContractorUploadInvoicesScreen() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setRunHeader(data as RunHeader);
+      if (data?.failure_message) setFailureMessage(String(data.failure_message));
     } catch (error: any) {
       setRunError(error?.message || 'Failed to check upload status.');
       setRunHeader(null);
@@ -149,15 +289,16 @@ export default function ContractorUploadInvoicesScreen() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setInvoiceRows(Array.isArray(data?.rows) ? data.rows : []);
+      if (data?.failure_message) setFailureMessage(String(data.failure_message));
     } catch (error: any) {
       setRowsError(error?.message || 'Failed to load uploaded invoices.');
       setInvoiceRows([]);
     }
   };
 
-  const refreshAll = async () => {
-    if (!runId) return;
-    await Promise.all([loadRunHeader(runId), loadRunInvoices(runId)]);
+  const refreshAll = async (id = runId) => {
+    if (!id) return;
+    await Promise.all([loadRunHeader(id), loadRunInvoices(id)]);
   };
 
   useEffect(() => {
@@ -181,7 +322,17 @@ export default function ContractorUploadInvoicesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldPoll, runId]);
 
+  const clearUploadAttention = () => {
+    setFailureMessage('');
+    setSubmitError('');
+    setRunError('');
+    setRowsError('');
+    if (runId) setDismissedFailureRunId(runId);
+  };
+
   const mergeStagedFiles = (files: File[]) => {
+    if (filesLocked) return;
+
     const supportedEvidenceFiles = files.filter((file) => {
       const type = String(file.type || '').toLowerCase();
       const byType = type === 'application/pdf' || type === 'image/jpeg' || type === 'image/png';
@@ -191,8 +342,16 @@ export default function ContractorUploadInvoicesScreen() {
 
     if (!supportedEvidenceFiles.length) return;
 
+    const startingFreshBatch = runTerminal || canContinue;
+    clearUploadAttention();
+    if (startingFreshBatch) {
+      setRunId('');
+      setRunHeader(null);
+      setInvoiceRows([]);
+      setParams(navigate, location, { ingest_run_id: '', session_id: '' });
+    }
     setSelectedFiles((prev) => {
-      const next = [...prev];
+      const next = startingFreshBatch ? [] : [...prev];
       supportedEvidenceFiles.forEach((file) => {
         const exists = next.some(
           (item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified,
@@ -211,6 +370,7 @@ export default function ContractorUploadInvoicesScreen() {
   const handleDropZoneDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    if (filesLocked) return;
     if (!isDragActive) setIsDragActive(true);
   };
 
@@ -224,13 +384,17 @@ export default function ContractorUploadInvoicesScreen() {
     event.preventDefault();
     event.stopPropagation();
     setIsDragActive(false);
+    if (filesLocked) return;
     mergeStagedFiles(Array.from(event.dataTransfer?.files || []));
   };
 
   const handleRunSubmission = async () => {
     setSubmitLoading(true);
     setSubmitError('');
-    setSubmitOk('');
+    setFailureMessage('');
+    setDismissedFailureRunId('');
+    setRunError('');
+    setRowsError('');
     try {
       if (!selectedFiles.length) throw new Error('Select an invoice package first.');
 
@@ -247,13 +411,12 @@ export default function ContractorUploadInvoicesScreen() {
 
       const nextRunId = String(data?.ingest_run_id || '').trim();
       const nextSessionId = String(data?.session_id || '').trim();
-      if (!nextRunId) throw new Error('Upload started but no upload id returned.');
+      if (!nextRunId) throw new Error('The upload response did not include an upload id.');
 
       setRunId(nextRunId);
-      setSelectedFiles([]);
       setParams(navigate, location, { ingest_run_id: nextRunId, session_id: nextSessionId });
-      setSubmitOk('Upload started. We are checking your invoice package now.');
-      await refreshAll();
+      if (data?.failure_message) setFailureMessage(String(data.failure_message));
+      await refreshAll(nextRunId);
     } catch (error: any) {
       setSubmitError(error?.message || 'Failed to upload invoice package.');
     } finally {
@@ -262,23 +425,55 @@ export default function ContractorUploadInvoicesScreen() {
   };
 
   const readyRows = invoiceRows.filter((row) => String(row.invoice_status || '').toLowerCase() === 'genai_complete');
-  const hasFailedRows = invoiceRows.some((row) =>
-    String(row.invoice_status || '')
-      .toLowerCase()
-      .endsWith('_failed'),
-  );
+  const failureDismissedForCurrentRun = !!runId && dismissedFailureRunId === runId;
+  const visibleFailureMessage = failureDismissedForCurrentRun ? '' : failureMessage;
+  const hasFailedRows =
+    !!visibleFailureMessage ||
+    invoiceRows.some((row) => {
+      const status = String(row.invoice_status || '').toLowerCase();
+      return status.endsWith('_failed') || status === 'package_needs_correction' || status === 'technical_failure';
+    });
   const hasProcessingRows = invoiceRows.some((row) => {
     const status = String(row.invoice_status || '').toLowerCase();
     return status.includes('queued') || status.includes('progress') || status === 'ocr_complete';
   });
   const canContinue = invoiceRows.length > 0 && readyRows.length === invoiceRows.length;
+  const runStatus = String(runHeader?.status || '').toLowerCase();
+  const runFailed = runStatus === 'failed';
+  const runTerminal = runStatus === 'failed' || runStatus === 'succeeded' || runStatus === 'partial';
+  const isProcessing =
+    submitLoading ||
+    (!failureMessage &&
+      !!runId &&
+      !canContinue &&
+      !runTerminal &&
+      (runStatus === 'queued' || runStatus === 'running' || hasProcessingRows || invoiceRows.length === 0));
+  const fallbackFailureMessage =
+    !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
+      ? 'We could not prepare your AI advice right now. Please try uploading the same files again later.'
+      : '';
+  const displayFailureMessage = submitError || runError || rowsError || visibleFailureMessage || fallbackFailureMessage;
+  const processingStoryLabel = (() => {
+    if (submitLoading || runStatus === 'queued') return 'Uploading your package';
+    if (!invoiceRows.length) return 'Reading your files';
+
+    const statuses = invoiceRows.map((row) => String(row.invoice_status || '').toLowerCase());
+    if (statuses.some((status) => status.startsWith('upload_'))) return 'Uploading your package';
+    if (statuses.some((status) => status.startsWith('ocr_'))) return 'Reading your files';
+    if (statuses.some((status) => status === 'ocr_complete')) return 'Sorting invoice and support documents';
+    if (statuses.some((status) => status.startsWith('genai_'))) return 'Preparing AI Advice';
+    if (runStatus === 'running') return 'Extracting invoice evidence';
+
+    return 'Preparing AI Advice';
+  })();
   const continueHelp = canContinue
     ? 'Your upload is ready. Continue to review the invoice checks.'
-    : hasFailedRows
-      ? 'We could not finish checking one or more invoices. Please contact support if this keeps happening.'
+    : hasFailedRows || runFailed
+      ? displayFailureMessage
       : hasProcessingRows
-        ? 'Please wait a few minutes while the automatic invoice checks finish. If it still does not finish, contact support.'
-        : 'Upload invoice PDFs first, then wait until checks are complete.';
+        ? 'Preparing AI Advice'
+        : 'Upload a package first.';
+  const filesLocked = submitLoading || isProcessing || canContinue;
 
   const continueToReview = () => {
     if (!canContinue) return;
@@ -304,11 +499,12 @@ export default function ContractorUploadInvoicesScreen() {
             multiple
             accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
             style={{ display: 'none' }}
+            disabled={filesLocked}
             onChange={handleFilesPicked}
           />
 
           <VStack spacing={4} align="stretch" mb={5}>
-            <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
+            <Box p={0} bg="transparent">
               <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
                 <Box>
                   <Text fontSize="lg" fontWeight="bold">
@@ -324,7 +520,7 @@ export default function ContractorUploadInvoicesScreen() {
                   ) : null}
                 </Box>
                 <HStack spacing={2}>
-                  <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} isDisabled={filesLocked}>
                     Add files
                   </Button>
                   <Tooltip label="Clear selected files">
@@ -334,7 +530,7 @@ export default function ContractorUploadInvoicesScreen() {
                       variant="ghost"
                       colorScheme="red"
                       onClick={() => setSelectedFiles([])}
-                      isDisabled={!selectedFiles.length}
+                      isDisabled={!selectedFiles.length || filesLocked}
                     />
                   </Tooltip>
                 </HStack>
@@ -345,8 +541,9 @@ export default function ContractorUploadInvoicesScreen() {
                 p={6}
                 borderWidth="2px"
                 borderStyle="dashed"
-                borderColor={isDragActive ? 'blue.400' : 'gray.300'}
-                bg={isDragActive ? 'blue.50' : 'gray.50'}
+                borderColor={isDragActive && !filesLocked ? 'blue.400' : 'gray.300'}
+                bg={isDragActive && !filesLocked ? 'blue.50' : 'gray.50'}
+                opacity={filesLocked ? 0.72 : 1}
                 borderRadius="md"
                 textAlign="center"
                 transition="all 0.15s ease"
@@ -385,6 +582,7 @@ export default function ContractorUploadInvoicesScreen() {
                             variant="ghost"
                             colorScheme="red"
                             onClick={() => setSelectedFiles((prev) => prev.filter((_, i) => i !== index))}
+                            isDisabled={filesLocked}
                           >
                             Remove
                           </Button>
@@ -410,74 +608,43 @@ export default function ContractorUploadInvoicesScreen() {
                   onClick={() => void handleRunSubmission()}
                   isLoading={submitLoading}
                   loadingText="Uploading..."
-                  isDisabled={!selectedFiles.length || !!contractorError}
+                  isDisabled={!selectedFiles.length || !!contractorError || filesLocked}
                 >
                   Upload package
                 </Button>
               </Flex>
             </Box>
 
-            {(submitError || submitOk || runError || rowsError) && (
-              <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
-                {submitError ? <Text color="red.700">{submitError}</Text> : null}
-                {submitOk ? <Text color="green.700">{submitOk}</Text> : null}
-                {runError ? <Text color="red.700">{runError}</Text> : null}
-                {rowsError ? <Text color="red.700">{rowsError}</Text> : null}
-              </Box>
-            )}
-          </VStack>
+            <Box
+              p={{ base: 4, md: 6 }}
+              borderRadius="28px"
+              bg="linear-gradient(145deg, rgba(247,252,255,0.98), rgba(255,255,255,0.92))"
+              boxShadow="0 24px 70px rgba(16, 73, 116, 0.10)"
+              border="1px solid rgba(30, 122, 181, 0.12)"
+            >
+              {isProcessing ? <ContractorUploadProcessingGraphic label={processingStoryLabel} /> : null}
 
-          <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
-            <Box>
-              <Text fontSize="lg" fontWeight="bold">
-                Uploaded package
-              </Text>
-              <Text fontSize="sm" opacity={0.75}>
-                When the invoice says With Contractor for Pre-check, continue to step 2.
-              </Text>
+              {!isProcessing && displayFailureMessage ? (
+                <ContractorUploadFailureNotice message={displayFailureMessage} onDismiss={clearUploadAttention} />
+              ) : null}
+
+              {!isProcessing && canContinue ? (
+                <VStack spacing={3} py={4}>
+                  <Text fontSize="lg" fontWeight="700" color="gray.800">
+                    Your AI advice is ready for pre-check.
+                  </Text>
+                </VStack>
+              ) : null}
+
+              <Flex justify="center" mt={isProcessing ? 0 : 5}>
+                <Tooltip label={continueHelp} shouldWrapChildren>
+                  <Button colorScheme="green" size="lg" isDisabled={!canContinue} onClick={continueToReview}>
+                    Continue to Step 2: Pre-check
+                  </Button>
+                </Tooltip>
+              </Flex>
             </Box>
-            <Tooltip label={continueHelp} shouldWrapChildren>
-              <Button colorScheme="green" isDisabled={!canContinue} onClick={continueToReview}>
-                Continue to Step 2: Pre-check
-              </Button>
-            </Tooltip>
-          </Flex>
-
-          {!canContinue && invoiceRows.length > 0 ? (
-            <Text fontSize="sm" color={hasFailedRows ? 'red.700' : 'gray.700'} mb={3}>
-              {continueHelp}
-            </Text>
-          ) : null}
-
-          <Box borderWidth="1px" borderRadius="md" overflow="auto">
-            <Table size="sm" minW="760px">
-              <Thead bg="gray.50">
-                <Tr>
-                  <Th>invoice</Th>
-                  <Th>status</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {invoiceRows.map((row) => (
-                  <Tr key={`${row.invoice_version_id}-${row.invoice_id}`}>
-                    <Td fontSize="sm">{row.original_filename || `Invoice ${row.invoice_versionno ?? ''}`}</Td>
-                    <Td fontSize="sm">
-                      <Text>{invoiceStatusCopy(row.invoice_status, row.invoice_status_subtype).label}</Text>
-                    </Td>
-                  </Tr>
-                ))}
-                {invoiceRows.length === 0 && (
-                  <Tr>
-                    <Td colSpan={2}>
-                      <Text fontSize="sm" opacity={0.7}>
-                        Your uploaded package will appear here after you click Upload package.
-                      </Text>
-                    </Td>
-                  </Tr>
-                )}
-              </Tbody>
-            </Table>
-          </Box>
+          </VStack>
         </Box>
       </Container>
     </Flex>

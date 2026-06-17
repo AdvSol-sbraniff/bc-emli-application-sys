@@ -803,15 +803,22 @@ module Claims
           status: shell_invoice_status,
           status_subtype: shell_invoice_status_subtype
         )
+        final_messages =
+          contractor_failure_messages(
+            run: run,
+            shell_invoice_id: shell_invoice_id,
+            messages: messages + extra_messages
+          )
         run.update!(
           status: "failed",
           total_files: total_files,
           completed_files: 0,
           failed_files: [failed_files, 0].max,
-          messages: messages + extra_messages,
+          messages: final_messages,
           completed_at: Time.current,
           updated_at: Time.current
         )
+        cleanup_failed_contractor_upload!(run)
       end
 
       def sync_shell_invoice_status!(
@@ -840,6 +847,49 @@ module Claims
         end
 
         "genai_in_progress"
+      end
+
+      def contractor_failure_messages(run:, shell_invoice_id:, messages:)
+        return messages unless run.cleanup_failed_invoice_artifacts
+        return messages if shell_invoice_id.blank?
+        if Array(messages).any? { |row| row["contractor_message"].present? }
+          return messages
+        end
+
+        invoice = ::Claims::Invoice.find_by(id: shell_invoice_id)
+        return messages unless invoice
+        unless %w[package_needs_correction technical_failure].include?(
+                 invoice.status.to_s
+               )
+          return messages
+        end
+
+        messages +
+          [
+            {
+              level: "error",
+              status: invoice.status,
+              status_subtype: invoice.status_subtype,
+              code: invoice.status_subtype,
+              contractor_message:
+                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+                  invoice.status,
+                  invoice.status_subtype
+                ),
+              message: "Invoice package processing failed."
+            }
+          ]
+      end
+
+      def cleanup_failed_contractor_upload!(run)
+        return unless run.cleanup_failed_invoice_artifacts
+        return if run.contractor_id.blank?
+
+        ::Claims::Ingest::CleanupFailedContractorUpload.call(ingest_run: run)
+      rescue => e
+        Rails.logger.error(
+          "[claims][ingest][advance_bundle_run] cleanup failed ingest_run_id=#{run.id}: #{e.class}: #{e.message}"
+        )
       end
 
       def parse_messages(messages)

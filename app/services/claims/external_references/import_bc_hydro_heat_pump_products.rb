@@ -10,17 +10,6 @@ require "zlib"
 module Claims
   module ExternalReferences
     class ImportBcHydroHeatPumpProducts
-      LOCAL_DEFAULT_PDF_PATHS = {
-        "https://app.bchydro.com/hero/HeatPumpLookup/DownloadMiniSplitSingleHeadListPDF" => {
-          default_pdf_path:
-            Rails.root.join(
-              "claims_ai_service_ddl",
-              "reference_data",
-              "Ductless mini-split heat pump List.pdf"
-            )
-        }
-      }.freeze
-
       COLUMNS = {
         ahri_reference_number: 47.68,
         heat_pump_type: 108.4,
@@ -49,7 +38,12 @@ module Claims
         capacity_maintenance_percent
       ].freeze
 
-      def self.call(ahri_source_id:, publishing_date: nil, publishing_notes: nil, pdf_path: nil)
+      def self.call(
+        ahri_source_id:,
+        publishing_date: nil,
+        publishing_notes: nil,
+        pdf_path: nil
+      )
         new(
           ahri_source_id: ahri_source_id,
           publishing_date: publishing_date,
@@ -62,15 +56,20 @@ module Claims
         Claims::AhriSource
           .order(:description, :id)
           .map do |source|
-          {
-            id: source.id,
-            description: source.description,
-            source_url: source.source_url
-          }
-        end
+            {
+              id: source.id,
+              description: source.description,
+              source_url: source.source_url
+            }
+          end
       end
 
-      def initialize(ahri_source_id:, publishing_date:, publishing_notes:, pdf_path:)
+      def initialize(
+        ahri_source_id:,
+        publishing_date:,
+        publishing_notes:,
+        pdf_path:
+      )
         @source = Claims::AhriSource.find(ahri_source_id)
         @ahri_source_id = @source.id
         @publishing_date = publishing_date.presence
@@ -81,7 +80,6 @@ module Claims
 
       def call
         now = Time.current
-        ensure_pdf_file!
         run =
           Claims::AhriImportRun.create!(
             ahri_source_id: @ahri_source_id,
@@ -93,12 +91,19 @@ module Claims
             updated_at: now,
             metadata_json: {
               parser: self.class.name,
-              pdf_path: @pdf_path.to_s
+              source_url: source_url,
+              input_mode:
+                @pdf_path.present? ? "explicit_pdf_path" : "remote_source_url",
+              requested_pdf_path: @pdf_path&.to_s
             }
           )
 
+        ensure_pdf_file!
+
         rows = parse_pdf_rows
-        raise "No heat pump product rows were parsed from #{@pdf_path}" if rows.empty?
+        if rows.empty?
+          raise "No heat pump product rows were parsed from #{@pdf_path}"
+        end
 
         node_resp = node_upload_source_pdf!(import_run_id: run.id)
         storage_key = node_resp.fetch("storage_key").to_s.strip
@@ -120,6 +125,10 @@ module Claims
             content_type: "application/pdf",
             byte_size: node_resp["byte_size"] || File.size(@pdf_path),
             file_sha256: Digest::SHA256.file(@pdf_path).hexdigest,
+            metadata_json:
+              (run.metadata_json || {}).merge(
+                resolved_pdf_path: @pdf_path.to_s
+              ),
             updated_at: Time.current
           )
         end
@@ -156,18 +165,26 @@ module Claims
       end
 
       def ensure_pdf_file!
-        return if @pdf_path&.exist?
+        if @pdf_path.present?
+          return if @pdf_path.exist?
 
-        default_path = LOCAL_DEFAULT_PDF_PATHS.dig(source_url, :default_pdf_path)
-        if default_path.present? && Pathname(default_path).exist?
-          @pdf_path = Pathname(default_path)
-          return
+          raise "Explicit AHRI product-list PDF path does not exist: #{@pdf_path}"
         end
 
         @downloaded_pdf =
           Tempfile.new(["ahri-#{@ahri_source_id}-", ".pdf"], binmode: true)
 
-        uri = URI(source_url)
+        uri =
+          begin
+            URI.parse(source_url.to_s)
+          rescue URI::InvalidURIError => e
+            raise "BC Hydro product-list source URL is invalid for #{@source.description}: #{e.message}"
+          end
+
+        unless uri.host.present?
+          raise "BC Hydro product-list source URL is missing or invalid for #{@source.description}"
+        end
+
         res =
           Net::HTTP.start(
             uri.host,
@@ -221,7 +238,9 @@ module Claims
           ) { |http| http.request(req) }
 
         body = res.body.to_s
-        raise "Node reference upload failed HTTP=#{res.code} body=#{body}" unless res.is_a?(Net::HTTPSuccess)
+        unless res.is_a?(Net::HTTPSuccess)
+          raise "Node reference upload failed HTTP=#{res.code} body=#{body}"
+        end
 
         JSON.parse(body)
       ensure
@@ -279,7 +298,7 @@ module Claims
         stream
           .force_encoding(Encoding::BINARY)
           .scan(
-            /1 0 0 1 ([0-9.]+) ([0-9.]+) Tm\s*(?:\/F\d+ [0-9.]+ Tf\s*)?\((.*?)\)Tj/m
+            %r{1 0 0 1 ([0-9.]+) ([0-9.]+) Tm\s*(?:/F\d+ [0-9.]+ Tf\s*)?\((.*?)\)Tj}m
           )
           .filter_map do |x, y, raw_text|
             text = clean_pdf_text(raw_text)
@@ -303,14 +322,16 @@ module Claims
 
       def build_parsed_row(row_items)
         grouped =
-          row_items.group_by { |item| item[:column] }.transform_values do |items|
-            items
-              .sort_by { |item| [-item[:y], item[:x]] }
-              .map { |item| item[:text] }
-              .join(" ")
-              .squish
-              .gsub(/-\s+/, "-")
-          end
+          row_items
+            .group_by { |item| item[:column] }
+            .transform_values do |items|
+              items
+                .sort_by { |item| [-item[:y], item[:x]] }
+                .map { |item| item[:text] }
+                .join(" ")
+                .squish
+                .gsub(/-\s+/, "-")
+            end
 
         ahri = grouped[:ahri_reference_number].to_s.strip
         return nil unless ahri.match?(/\A\d{8,10}\z/)

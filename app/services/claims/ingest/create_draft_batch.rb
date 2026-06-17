@@ -7,18 +7,30 @@ require "securerandom"
 module Claims
   module Ingest
     class CreateDraftBatch
-      def self.call(contractor_id:, files:, log_prefix: "draft_batch")
+      def self.call(
+        contractor_id:,
+        files:,
+        log_prefix: "draft_batch",
+        cleanup_failed_invoice_artifacts: false
+      )
         new(
           contractor_id: contractor_id,
           files: files,
-          log_prefix: log_prefix
+          log_prefix: log_prefix,
+          cleanup_failed_invoice_artifacts: cleanup_failed_invoice_artifacts
         ).call
       end
 
-      def initialize(contractor_id:, files:, log_prefix:)
+      def initialize(
+        contractor_id:,
+        files:,
+        log_prefix:,
+        cleanup_failed_invoice_artifacts:
+      )
         @contractor_id = contractor_id.to_s.strip
         @files = Array(files).flatten.compact
         @log_prefix = log_prefix
+        @cleanup_failed_invoice_artifacts = cleanup_failed_invoice_artifacts
       end
 
       def call
@@ -34,7 +46,9 @@ module Claims
         ingest_run =
           ::Claims::IngestRun.create!(
             session_id: session_id,
+            contractor_id: contractor_id,
             status: "queued",
+            cleanup_failed_invoice_artifacts: cleanup_failed_invoice_artifacts,
             total_files: files.size,
             completed_files: 0,
             failed_files: 0,
@@ -79,6 +93,11 @@ module Claims
             failure_status,
             status_subtype: failure_subtype
           )
+          failure_payload =
+            contractor_failure_payload(
+              status: failure_status,
+              status_subtype: shell_invoice.status_subtype
+            )
           stage_step.update!(
             status: "failed",
             error_text:
@@ -93,7 +112,10 @@ module Claims
                 [
                   {
                     level: "error",
+                    status: failure_status,
+                    status_subtype: shell_invoice.status_subtype,
                     code: shell_invoice.status_subtype,
+                    contractor_message: failure_payload[:failure_message],
                     message:
                       "One or more evidence files failed during upload package staging."
                   }
@@ -101,6 +123,7 @@ module Claims
             completed_at: Time.current,
             updated_at: Time.current
           )
+          cleanup_failed_contractor_upload!(ingest_run)
           return(
             {
               ok: true,
@@ -113,7 +136,7 @@ module Claims
               completed_files: ingest_run.completed_files,
               failed_files: ingest_run.failed_files,
               results: results
-            }
+            }.merge(failure_payload)
           )
         else
           stage_step.update!(
@@ -146,7 +169,10 @@ module Claims
 
       private
 
-      attr_reader :contractor_id, :files, :log_prefix
+      attr_reader :contractor_id,
+                  :files,
+                  :log_prefix,
+                  :cleanup_failed_invoice_artifacts
 
       def process_file(file, index, session_id, ingest_run, shell_invoice_id)
         name = file_safe_call(file, :original_filename) || "unknown"
@@ -275,6 +301,35 @@ module Claims
         end
 
         ["package_needs_correction", package_failure_subtype(failed_results)]
+      end
+
+      def contractor_failure_payload(status:, status_subtype:)
+        {
+          failure_status: status,
+          failure_status_subtype: status_subtype,
+          failure_message:
+            ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+              status,
+              status_subtype
+            ),
+          retry_guidance:
+            ::Claims::Invoices::StatusSubtypes.retry_guidance(
+              status,
+              status_subtype
+            )
+        }
+      end
+
+      def cleanup_failed_contractor_upload!(ingest_run)
+        return unless cleanup_failed_invoice_artifacts
+
+        ::Claims::Ingest::CleanupFailedContractorUpload.call(
+          ingest_run: ingest_run
+        )
+      rescue => e
+        Rails.logger.error(
+          "[claims][ingest][#{log_prefix}] cleanup failed ingest_run_id=#{ingest_run.id}: #{e.class}: #{e.message}"
+        )
       end
 
       def create_failed_step(ingest_run, session_id, ingest_document, error)

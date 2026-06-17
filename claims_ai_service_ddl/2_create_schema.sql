@@ -93,6 +93,34 @@ CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitter_id
   ON claims.invoices (submitter_id);
 
 
+-- ============================================================
+-- invoice_status_subtypes
+-- PURPOSE: Friendly/admin-safe copy for technical failure subtypes
+-- and package correction subtypes used by contractor-facing screens.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.invoice_status_subtypes (
+  status text NOT NULL,
+  status_subtype text NOT NULL,
+  admin_label text NOT NULL,
+  contractor_message text NOT NULL,
+  retry_guidance text NULL,
+  active boolean NOT NULL DEFAULT true,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT invoice_status_subtypes_pkey
+    PRIMARY KEY (status, status_subtype),
+
+  CONSTRAINT invoice_status_subtypes_status_chk
+    CHECK (status IN ('package_needs_correction', 'technical_failure'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_status_subtypes_active
+  ON claims.invoice_status_subtypes (status, active);
+
+
 
 -- ============================================================
 -- ahri_sources
@@ -1989,8 +2017,10 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   session_id uuid NOT NULL,
+  contractor_id uuid NULL,
 
   status text NOT NULL DEFAULT 'queued',  -- queued|running|succeeded|failed|partial
+  cleanup_failed_invoice_artifacts boolean NOT NULL DEFAULT false,
 
   total_files     integer NOT NULL DEFAULT 0,
   completed_files integer NOT NULL DEFAULT 0,
@@ -2009,6 +2039,10 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
     REFERENCES claims.sessions(id)
     ON DELETE CASCADE,
 
+  CONSTRAINT fk_ingest_runs_contractor
+    FOREIGN KEY (contractor_id)
+    REFERENCES public.contractors(id),
+
   CONSTRAINT ingest_runs_status_chk
     CHECK (status IN ('queued','running','succeeded','failed','partial')),
 
@@ -2024,6 +2058,9 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_session_created
   ON claims.ingest_runs (session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_contractor_created
+  ON claims.ingest_runs (contractor_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_status
   ON claims.ingest_runs (status);

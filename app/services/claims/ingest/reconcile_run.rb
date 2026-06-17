@@ -165,6 +165,8 @@ module Claims
           completed_at: completed_at,
           updated_at: Time.current
         )
+
+        cleanup_failed_contractor_upload_if_needed!(run) if status == "failed"
       end
 
       private
@@ -238,6 +240,50 @@ module Claims
         JSON.parse(messages.to_s)
       rescue JSON::ParserError, TypeError
         []
+      end
+
+      def cleanup_failed_contractor_upload_if_needed!(run)
+        return unless run.cleanup_failed_invoice_artifacts
+        return if run.contractor_id.blank?
+
+        invoice =
+          ::Claims::Invoice
+            .where(
+              session_id: run.session_id,
+              contractor_id: run.contractor_id,
+              status: %w[package_needs_correction technical_failure]
+            )
+            .order(updated_at: :desc)
+            .first
+
+        if invoice
+          messages = parse_messages(run.messages)
+          failure_message =
+            ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+              invoice.status,
+              invoice.status_subtype
+            )
+
+          unless messages.any? { |message|
+                   message["contractor_message"].present?
+                 }
+            messages << {
+              level: "error",
+              status: invoice.status,
+              status_subtype: invoice.status_subtype,
+              code: invoice.status_subtype,
+              contractor_message: failure_message,
+              message: "Invoice package processing failed."
+            }
+            run.update!(messages: messages, updated_at: Time.current)
+          end
+        end
+
+        ::Claims::Ingest::CleanupFailedContractorUpload.call(ingest_run: run)
+      rescue => e
+        Rails.logger.error(
+          "[claims][ingest][reconcile_run] cleanup failed ingest_run_id=#{run.id}: #{e.class}: #{e.message}"
+        )
       end
 
       def upsert_invoice_bundle_error(messages, payload)

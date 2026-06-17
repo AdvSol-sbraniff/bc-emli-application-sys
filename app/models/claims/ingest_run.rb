@@ -7,5 +7,10 @@ module Claims
              class_name: "Claims::IngestDocument",
              foreign_key: :ingest_run_id,
              dependent: :delete_all
+
+    belongs_to :contractor,
+               class_name: "Contractor",
+               foreign_key: :contractor_id,
+               optional: true
   end
 end

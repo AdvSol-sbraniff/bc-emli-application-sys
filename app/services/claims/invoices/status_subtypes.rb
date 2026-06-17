@@ -123,6 +123,62 @@ module Claims
       def self.hint(subtype)
         SUBTYPE_COPY[subtype.to_s]
       end
+
+      def self.contractor_message(status, subtype)
+        subtype = normalize(status, subtype)
+        return nil if subtype.blank?
+
+        subtype_record(status, subtype)&.contractor_message.presence ||
+          SUBTYPE_COPY[subtype]
+      end
+
+      def self.retry_guidance(status, subtype)
+        subtype = normalize(status, subtype)
+        return nil if subtype.blank?
+
+        subtype_record(status, subtype)&.retry_guidance.presence
+      end
+
+      def self.admin_label(status, subtype)
+        subtype = normalize(status, subtype)
+        return nil if subtype.blank?
+
+        subtype_record(status, subtype)&.admin_label.presence ||
+          subtype.tr("_", " ").titleize
+      end
+
+      def self.contractor_failure_message(status, subtype)
+        status = status.to_s
+        subtype = normalize(status, subtype)
+        message = contractor_message(status, subtype)
+
+        case status
+        when PACKAGE_NEEDS_CORRECTION
+          detail =
+            message.presence ||
+              "Upload a revised package with exactly one invoice PDF."
+          "We could not prepare your AI advice because the upload package needs a change: #{detail}"
+        when TECHNICAL_FAILURE
+          guidance =
+            retry_guidance(status, subtype).presence ||
+              "Please try uploading the same files again later."
+          base =
+            message.presence || "We could not prepare your AI advice right now."
+          "#{base} #{guidance}".squish
+        end
+      end
+
+      def self.subtype_record(status, subtype)
+        return nil if subtype.blank?
+
+        ::Claims::InvoiceStatusSubtype.active.find_by(
+          status: status.to_s,
+          status_subtype: subtype.to_s
+        )
+      rescue ActiveRecord::StatementInvalid,
+             ActiveRecord::ConnectionNotEstablished
+        nil
+      end
     end
   end
 end
