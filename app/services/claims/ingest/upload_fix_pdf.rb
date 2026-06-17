@@ -56,10 +56,46 @@ module Claims
         end
 
         if @files.empty?
-          raise "No files received. Expected multipart field pdfs[] (or pdfs)."
+          invoice.set_workflow_status!(
+            "package_needs_correction",
+            status_subtype: "package_missing_required_fix_file"
+          )
+          return(
+            Result.new(
+              false,
+              stage,
+              invoice.id,
+              nil,
+              nil,
+              invoice.session_id,
+              nil,
+              nil,
+              invoice.status,
+              nil,
+              "No corrected invoice file was provided."
+            )
+          )
         end
         if @files.size != 1
-          raise "Fix upload is single-file only. Received #{@files.size} file(s)."
+          invoice.set_workflow_status!(
+            "package_needs_correction",
+            status_subtype: "package_replacement_multiple_files"
+          )
+          return(
+            Result.new(
+              false,
+              stage,
+              invoice.id,
+              nil,
+              nil,
+              invoice.session_id,
+              nil,
+              nil,
+              invoice.status,
+              nil,
+              "Fix upload is single-file only. Received #{@files.size} file(s)."
+            )
+          )
         end
 
         file = @files.first
@@ -109,10 +145,9 @@ module Claims
                 updated_at: now
               )
 
-            locked_invoice.update_columns(
-              status: "upload_in_progress",
-              status_updated_at: now,
-              updated_at: now
+            locked_invoice.set_workflow_status_columns!(
+              "upload_in_progress",
+              now: now
             )
           end
         rescue ActiveRecord::RecordNotUnique
@@ -136,10 +171,10 @@ module Claims
             ::Claims::InvoiceVersion.lock.find(invoice_version.id)
 
           if final_storage_key.to_s.strip.empty?
-            locked_invoice.update_columns(
-              status: "upload_failed",
-              status_updated_at: Time.zone.now,
-              updated_at: Time.zone.now
+            locked_invoice.set_workflow_status_columns!(
+              "technical_failure",
+              status_subtype: "upload_storage_key_missing",
+              now: Time.zone.now
             )
 
             return(
@@ -172,10 +207,9 @@ module Claims
 
           locked_version.update_columns(version_updates)
 
-          locked_invoice.update_columns(
-            status: "ocr_queued",
-            status_updated_at: Time.zone.now,
-            updated_at: Time.zone.now
+          locked_invoice.set_workflow_status_columns!(
+            "ocr_queued",
+            now: Time.zone.now
           )
 
           ::Claims::IngestStepRun.create!(
@@ -227,6 +261,10 @@ module Claims
             )
             ::Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run.id)
           end
+          invoice&.set_workflow_status!(
+            "technical_failure",
+            status_subtype: upload_fix_failure_subtype(e)
+          )
         rescue StandardError
           # best-effort failure tracking only
         end
@@ -297,6 +335,17 @@ module Claims
 
       def extract_storage_key(node_resp)
         node_resp.fetch("storage_key")
+      end
+
+      def upload_fix_failure_subtype(error)
+        message = error.message.to_s.downcase
+        return "upload_service_error" if message.include?("node upload failed")
+        if error.is_a?(JSON::ParserError)
+          return "upload_service_malformed_response"
+        end
+        return "upload_storage_key_missing" if message.include?("storage_key")
+
+        "upload_unexpected_exception"
       end
     end
   end

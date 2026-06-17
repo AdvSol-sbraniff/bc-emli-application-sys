@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
   system_help_notes text NULL,
 
   status character varying NOT NULL DEFAULT 'upload_queued',
+  status_subtype character varying NULL,
   status_updated_at timestamp(6) without time zone NULL,
   submitted_at timestamp(6) without time zone NULL,
 
@@ -52,6 +53,8 @@ CHECK (status IN (
   'genai_in_progress',
   'genai_failed',
   'genai_complete',         -- AI processing complete; contractor-owned draft until explicit submit.
+  'package_needs_correction',
+  'technical_failure',
   'admin_review_inbox',    -- contractor submitted; waiting for admin review / screen-in.
   'contractor_revision_inbox', -- admin requested contractor revisions before business review resumes.
   'in_review',
@@ -73,6 +76,9 @@ CHECK (status IN (
 
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_status
   ON claims.invoices (status);
+
+CREATE INDEX IF NOT EXISTS index_claims_invoices_on_status_subtype
+  ON claims.invoices (status_subtype);
 
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitted_at
   ON claims.invoices (submitted_at);

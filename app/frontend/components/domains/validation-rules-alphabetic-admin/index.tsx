@@ -243,21 +243,13 @@ export default function ValidationRulesAlphabeticAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Rules at a Glance" />
+      <ThinBlueTitleBar title="Advice Checks at a Glance" />
       <Container maxW="container.2xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Box w="full" maxW="1320px" mx="auto">
-            <Flex justify="space-between" align={{ base: 'start', lg: 'center' }} gap={4} mb={5} flexWrap="wrap">
-              <Box>
-                <Text fontSize="lg" fontWeight="bold">
-                  Rules at a Glance
-                </Text>
-                <Text fontSize="sm" opacity={0.7}>
-                  Scan all code and GenAI rules alphabetically, then jump back to the upgrade-type portal when needed.
-                </Text>
-              </Box>
+            <Flex justify="flex-end" align={{ base: 'start', lg: 'center' }} gap={4} mb={5} flexWrap="wrap">
               <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-admin')}>
-                Rules and Fields Editor
+                Fields and Advice Editor
               </Button>
             </Flex>
 
@@ -437,18 +429,18 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                             ))}
                             <Td textAlign="right" py={0.5}>
                               <HStack justify="end" spacing={1}>
-                                <Tooltip label="Rule details">
+                                <Tooltip label="Advice check details">
                                   <IconButton
-                                    aria-label="Rule details"
+                                    aria-label="Advice check details"
                                     icon={<Info size={18} />}
                                     size="xs"
                                     variant="ghost"
                                     onClick={() => openInfo(row)}
                                   />
                                 </Tooltip>
-                                <Tooltip label="Edit in Rules and Fields Editor">
+                                <Tooltip label="Edit in Fields and Advice Editor">
                                   <IconButton
-                                    aria-label="Edit rule"
+                                    aria-label="Edit advice check"
                                     icon={<PencilSimple size={18} />}
                                     size="xs"
                                     variant="ghost"
@@ -520,18 +512,18 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                           </Td>
                           <Td textAlign="right" py={0.5}>
                             <HStack justify="end" spacing={1}>
-                              <Tooltip label="Rule details">
+                              <Tooltip label="Advice check details">
                                 <IconButton
-                                  aria-label="Rule details"
+                                  aria-label="Advice check details"
                                   icon={<Info size={18} />}
                                   size="xs"
                                   variant="ghost"
                                   onClick={() => openInfo(row)}
                                 />
                               </Tooltip>
-                              <Tooltip label="Edit in Rules and Fields Editor">
+                              <Tooltip label="Edit in Fields and Advice Editor">
                                 <IconButton
-                                  aria-label="Edit rule"
+                                  aria-label="Edit advice check"
                                   icon={<PencilSimple size={18} />}
                                   size="xs"
                                   variant="ghost"
@@ -656,7 +648,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                   </Text>
                 </Box>
                 <Button leftIcon={<PencilSimple size={16} />} onClick={() => openEdit(selectedRow)}>
-                  Edit in Rules and Fields Editor
+                  Edit in Fields and Advice Editor
                 </Button>
               </VStack>
             ) : null}

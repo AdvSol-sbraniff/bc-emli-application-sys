@@ -54,7 +54,7 @@ module Claims
 
       classifier_payload = classifier_payload_from_evidence(invoice_version: iv)
 
-      inv.update!(status: "genai_in_progress", status_updated_at: Time.current)
+      inv.set_workflow_status!("genai_in_progress")
 
       run_case_facts_step!(
         ingest_run_id: ingest_run_id,
@@ -105,7 +105,10 @@ module Claims
       end
 
       begin
-        inv&.update!(status: "genai_failed", status_updated_at: Time.current)
+        inv&.set_workflow_status!(
+          "technical_failure",
+          status_subtype: genai_failure_subtype(e)
+        )
       rescue StandardError
         # ignore
       end
@@ -162,7 +165,10 @@ module Claims
       )
     rescue => e
       begin
-        inv&.update!(status: "genai_failed", status_updated_at: Time.current)
+        inv&.set_workflow_status!(
+          "technical_failure",
+          status_subtype: genai_failure_subtype(e)
+        )
       rescue StandardError
         nil
       end
@@ -209,7 +215,10 @@ module Claims
           end
 
         if failed_step = step_rows.compact.find { |row| row.status == "failed" }
-          inv.update!(status: "genai_failed", status_updated_at: Time.current)
+          inv.set_workflow_status!(
+            "technical_failure",
+            status_subtype: "genai_unexpected_exception"
+          )
           raise(
             "GenAI validation step failed: " \
               "#{failed_step.step_type} #{failed_step.invoice_upgrade_type_id}"
@@ -267,7 +276,7 @@ module Claims
           )
         end
 
-        inv.update!(status: "genai_complete", status_updated_at: Time.current)
+        inv.set_workflow_status!("genai_complete")
       end
 
       advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
@@ -440,6 +449,22 @@ module Claims
       else
         Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
       end
+    end
+
+    def genai_failure_subtype(error)
+      message = error.message.to_s.downcase
+      return "genai_service_error" if message.include?("node genai failed")
+      if error.is_a?(JSON::ParserError)
+        return "genai_service_malformed_response"
+      end
+      if message.include?("timeout") || message.include?("timed out")
+        return "genai_provider_timeout"
+      end
+      if message.include?("missing env") || message.include?("config")
+        return "configuration_missing"
+      end
+
+      "genai_unexpected_exception"
     end
 
     def enqueue_genai_ruleset_job!(

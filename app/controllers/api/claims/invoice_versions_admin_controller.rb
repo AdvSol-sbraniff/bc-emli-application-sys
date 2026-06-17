@@ -78,7 +78,14 @@ module Api
 
         invoice_json =
           invoice&.as_json(
-            only: %i[id status created_at updated_at status_updated_at]
+            only: %i[
+              id
+              status
+              status_subtype
+              created_at
+              updated_at
+              status_updated_at
+            ]
           ) || {}
         invoice_json["session_created_at"] = invoice_grid&.session_created_at
         invoice_json[
@@ -172,6 +179,7 @@ module Api
                        id
                        session_id
                        status
+                       status_subtype
                        status_updated_at
                        created_at
                        updated_at
@@ -345,6 +353,7 @@ module Api
                        id
                        session_id
                        status
+                       status_subtype
                        status_updated_at
                        created_at
                        updated_at

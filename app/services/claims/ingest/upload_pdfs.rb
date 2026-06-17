@@ -159,6 +159,7 @@ module Claims
                 contractor_id: representative_invoice.contractor_id,
                 submitter_id: representative_invoice.submitter_id,
                 status: "upload_in_progress",
+                status_subtype: nil,
                 status_updated_at: now,
                 created_at: now,
                 updated_at: now
@@ -221,13 +222,14 @@ module Claims
             iv = ::Claims::InvoiceVersion.lock.find(rec[:invoice_version_id])
 
             if final_storage_key.to_s.strip.empty?
-              inv.update_columns(
-                status: "upload_failed",
-                status_updated_at: Time.zone.now,
-                updated_at: Time.zone.now
+              inv.set_workflow_status_columns!(
+                "technical_failure",
+                status_subtype: "upload_storage_key_missing",
+                now: Time.zone.now
               )
 
-              rec[:status] = "upload_failed"
+              rec[:status] = "technical_failure"
+              rec[:status_subtype] = "upload_storage_key_missing"
               rec[:node_response] = node_resp
               msgs << "file1: upload FAILED — Node returned no storage_key"
             else
@@ -264,10 +266,9 @@ module Claims
               # ============================================================
               iv.update_columns(iv_update)
 
-              inv.update_columns(
-                status: "upload_complete",
-                status_updated_at: Time.zone.now,
-                updated_at: Time.zone.now
+              inv.set_workflow_status_columns!(
+                "upload_complete",
+                now: Time.zone.now
               )
 
               rec[:status] = "upload_complete"
@@ -291,6 +292,14 @@ module Claims
           }
 
           msgs << "file1: FAILED — #{e.class}: #{e.message}"
+          if rec&.dig(:invoice_id)
+            ::Claims::Invoice.find_by(
+              id: rec[:invoice_id]
+            )&.set_workflow_status!(
+              "technical_failure",
+              status_subtype: upload_failure_subtype(e)
+            )
+          end
         end
 
         # ============================================================
@@ -383,6 +392,17 @@ module Claims
 
       def extract_storage_key(node_resp)
         node_resp.fetch("storage_key")
+      end
+
+      def upload_failure_subtype(error)
+        message = error.message.to_s.downcase
+        return "upload_service_error" if message.include?("node upload failed")
+        if error.is_a?(JSON::ParserError)
+          return "upload_service_malformed_response"
+        end
+        return "upload_storage_key_missing" if message.include?("storage_key")
+
+        "upload_unexpected_exception"
       end
     end
   end

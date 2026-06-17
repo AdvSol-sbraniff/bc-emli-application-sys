@@ -23,10 +23,7 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-      invoice.update!(
-        status: "ocr_in_progress",
-        status_updated_at: Time.current
-      )
+      invoice.set_workflow_status!("ocr_in_progress")
 
       read_payload =
         call_node_ocr!(
@@ -69,7 +66,20 @@ module Claims
         )
 
       unless classifier_payload.fetch("document_kind", nil).to_s == "invoice"
-        raise "Replacement PDF classified as #{classifier_payload["document_kind"].inspect}, expected \"invoice\"."
+        classifier_step.update!(
+          status: "failed",
+          genai_results_json: classifier_payload,
+          context_window_json: contextwindowjson,
+          error_text:
+            "Replacement PDF classified as #{classifier_payload["document_kind"].inspect}, expected \"invoice\".",
+          updated_at: Time.current
+        )
+        invoice.set_workflow_status!(
+          "package_needs_correction",
+          status_subtype: "package_replacement_not_invoice"
+        )
+        reconcile_run!(ingest_run_id: ingest_run_id)
+        return
       end
 
       result =
@@ -101,7 +111,10 @@ module Claims
         error_text: "#{e.class}: #{e.message}",
         updated_at: Time.current
       )
-      invoice&.update!(status: "ocr_failed", status_updated_at: Time.current)
+      invoice&.set_workflow_status!(
+        "technical_failure",
+        status_subtype: replacement_classifier_failure_subtype(e)
+      )
       reconcile_run!(ingest_run_id: ingest_run_id)
       raise
     end
@@ -242,7 +255,7 @@ module Claims
 
     def enqueue_invoice_ocr!(invoice_version:, ingest_run_id:)
       invoice = invoice_version.invoice
-      invoice.update!(status: "ocr_queued", status_updated_at: Time.current)
+      invoice.set_workflow_status!("ocr_queued")
 
       ::Claims::IngestStepRun.find_or_create_by!(
         ingest_run_id: ingest_run_id,
@@ -272,6 +285,18 @@ module Claims
       ::Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
     rescue StandardError
       nil
+    end
+
+    def replacement_classifier_failure_subtype(error)
+      message = error.message.to_s.downcase
+      return "ocr_service_error" if message.include?("node ocr failed")
+      return "genai_service_error" if message.include?("node genai failed")
+      return "ocr_service_malformed_response" if error.is_a?(JSON::ParserError)
+      if message.include?("timeout") || message.include?("timed out")
+        return "genai_provider_timeout"
+      end
+
+      "genai_unexpected_exception"
     end
   end
 end

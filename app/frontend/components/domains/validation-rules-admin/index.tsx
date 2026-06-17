@@ -655,7 +655,7 @@ export default function ValidationRulesAdminScreen() {
   if (!selectedUpgradeTypeId) {
     return (
       <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-        <ThinBlueTitleBar title="Rules and Fields Editor" />
+        <ThinBlueTitleBar title="Fields and Advice Editor" />
         <Container maxW="container.xl" pb={4} flex="1" pt={6}>
           <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
             <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4}>
@@ -666,7 +666,7 @@ export default function ValidationRulesAdminScreen() {
                   variant="outline"
                   onClick={() => navigate('/validation-rules-alphabetic-admin')}
                 >
-                  Rules at a Glance
+                  Advice Checks at a Glance
                 </Button>
               </HStack>
             </Flex>
@@ -885,7 +885,7 @@ export default function ValidationRulesAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Rules and Fields Editor" />
+      <ThinBlueTitleBar title="Fields and Advice Editor" />
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
           <Box mb={5}>

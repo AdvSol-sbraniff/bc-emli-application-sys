@@ -1,6 +1,6 @@
 BEGIN;
 
--- Depends on 4_insert_invoice_upgrade_types.sql.
+-- Depends on 3_insert_invoice_upgrade_types.sql.
 WITH config_row (
   id,
   system_record,

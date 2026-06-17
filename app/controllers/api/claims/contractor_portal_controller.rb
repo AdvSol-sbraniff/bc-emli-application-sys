@@ -60,6 +60,12 @@ module Api
               invoice_id: invoice.invoice_id,
               session_id: invoice.session_id,
               status: invoice.invoice_status,
+              status_subtype:
+                (
+                  if invoice.respond_to?(:invoice_status_subtype)
+                    invoice.invoice_status_subtype
+                  end
+                ),
               status_updated_at: invoice.invoice_status_updated_at,
               system_help_notes: invoice.system_help_notes,
               invoice_created_at: invoice.invoice_created_at,
@@ -273,13 +279,10 @@ module Api
           return
         end
 
-        now = Time.current
-        invoice.update!(
-          status: "admin_review_inbox",
+        invoice.set_workflow_status!(
+          "admin_review_inbox",
           submitter_id: invoice.submitter_id || current_user.id,
-          submitted_at: invoice.submitted_at || now,
-          status_updated_at: now,
-          updated_at: now
+          submitted_at: invoice.submitted_at || Time.current
         )
 
         render json: {
@@ -290,6 +293,7 @@ module Api
                        id
                        session_id
                        status
+                       status_subtype
                        submitted_at
                        status_updated_at
                        updated_at
@@ -426,6 +430,7 @@ module Api
             rows_by_invoice_id[invoice.id] = {
               invoice_id: invoice.id,
               invoice_status: invoice.status,
+              invoice_status_subtype: invoice.status_subtype,
               invoice_status_updated_at: invoice.status_updated_at,
               invoice_version_id: invoice_version&.id,
               invoice_versionno: invoice_version&.invoice_versionno,
@@ -454,6 +459,7 @@ module Api
             rows_by_invoice_id[invoice.id] ||= {
               invoice_id: invoice.id,
               invoice_status: invoice.status,
+              invoice_status_subtype: invoice.status_subtype,
               invoice_status_updated_at: invoice.status_updated_at,
               invoice_version_id: invoice_version.id,
               invoice_versionno: invoice_version.invoice_versionno,
@@ -521,6 +527,7 @@ module Api
               original_filename: document&.original_filename,
               document_kind: document&.document_kind,
               invoice_status: invoice.status,
+              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,
@@ -543,6 +550,7 @@ module Api
               original_filename: invoice_version&.original_filename,
               document_kind: "invoice",
               invoice_status: invoice.status,
+              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,

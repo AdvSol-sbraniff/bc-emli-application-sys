@@ -174,6 +174,7 @@ module Api
         end
 
         located_rows = located_fields_for(civ.id, "genai")
+        classifier_located_rows = located_fields_for(civ.id, "classifier")
         code_located_rows = located_fields_for(civ.id, "code")
         rule_rows = rulechecks_for(civ.id, "genai")
         code_rule_rows = rulechecks_for(civ.id, "code")
@@ -184,6 +185,8 @@ module Api
                  upgrade_type_results:
                    serialize_upgrade_type_results(upgrade_type_results),
                  located_fields: serialize_located_fields(located_rows),
+                 classifier_located_fields:
+                   serialize_located_fields(classifier_located_rows),
                  code_located_fields:
                    serialize_located_fields(code_located_rows),
                  rulechecks: serialize_rulechecks(rule_rows),

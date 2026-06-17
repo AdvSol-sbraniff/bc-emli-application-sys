@@ -45,6 +45,7 @@ import {
   INVOICE_UPGRADE_TYPE_FILTER_ORDER,
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
+import { INVOICE_STATUS_FILTER_GROUPS, invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 
 type DetectedUpgradeType = {
   confidence?: number | null;
@@ -63,6 +64,7 @@ type InvoiceGridRow = {
   session_id: string;
   session_created_at?: string | null;
   invoice_status?: string | null;
+  invoice_status_subtype?: string | null;
   invoice_status_updated_at?: string | null;
   invoice_created_at?: string | null;
   invoice_updated_at?: string | null;
@@ -182,103 +184,12 @@ function ResultDot({ val }: { val: unknown }) {
   );
 }
 
-const INVOICE_STATUS_COPY: Record<string, { label: string; hint: string }> = {
-  upload_in_progress: {
-    label: 'Uploading Package',
-    hint: 'The uploaded package is being staged before evidence preparation starts.',
-  },
-  ocr_in_progress: {
-    label: 'Preparing Evidence',
-    hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
-  },
-  evidence_prep: {
-    label: 'Preparing Evidence',
-    hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
-  },
-  genai_in_progress: {
-    label: 'Building AI Rule Advice',
-    hint: 'AI rule advice is being built: case facts, product lookup, GenAI rule advice, code rules, and final advice.',
-  },
-  validation_advice: {
-    label: 'Building AI Rule Advice',
-    hint: 'AI rule advice is being built: case facts, product lookup, GenAI rule advice, code rules, and final advice.',
-  },
-  genai_complete: {
-    label: 'AI Rule Advice Complete',
-    hint: 'AI rule advice is complete. The contractor can pre-check the advice, revise if needed, and submit when ready.',
-  },
-  admin_review_inbox: {
-    label: 'Waiting for Admin Review',
-    hint: 'The claim is waiting for an admin to review it.',
-  },
-  in_review: {
-    label: 'Admin Reviewing',
-    hint: 'An admin review is underway.',
-  },
-  contractor_revision_inbox: {
-    label: 'Waiting for Contractor Revision',
-    hint: 'Admin review sent the claim back to the contractor to revise the package or provide supporting information.',
-  },
-  approved_pending: {
-    label: 'Approved, Pending Payment',
-    hint: 'The claim is approved, but payment or final closeout is not complete yet.',
-  },
-  approved_paid: {
-    label: 'Approved and Paid',
-    hint: 'The claim has been approved and paid or closed.',
-  },
-  ineligible: {
-    label: 'Ineligible',
-    hint: 'The claim has been marked ineligible.',
-  },
-  failed: {
-    label: 'Processing Failed',
-    hint: 'Processing failed and needs troubleshooting.',
-  },
-  upload_failed: {
-    label: 'Processing Failed',
-    hint: 'Upload or package staging failed and needs troubleshooting.',
-  },
-  ocr_failed: {
-    label: 'Processing Failed',
-    hint: 'Evidence preparation failed and needs troubleshooting.',
-  },
-  genai_failed: {
-    label: 'Processing Failed',
-    hint: 'AI rule advice failed and needs troubleshooting.',
-  },
-};
-
-const humanizeStatus = (status: string) =>
-  status
-    .split('_')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-
-const invoiceStatusCopy = (status?: string | null) => {
-  const rawStatus = String(status || '').trim();
-  if (!rawStatus) {
-    return {
-      label: 'Unknown',
-      hint: 'No invoice status is available yet.',
-    };
-  }
-
-  return (
-    INVOICE_STATUS_COPY[rawStatus] || {
-      label: humanizeStatus(rawStatus),
-      hint: 'This invoice is in a workflow status that does not have custom help text yet.',
-    }
-  );
-};
-
 const aiResultHint = (result: unknown) => {
   const normalized = normalizeResult(result);
-  if (normalized === 'pass') return 'AI advice says the latest rule outputs pass.';
+  if (normalized === 'pass') return 'AI Advice says the latest checks pass.';
   if (normalized === 'warn')
     return 'AI advice includes warnings that may need contractor pre-check or admin attention.';
-  if (normalized === 'fail') return 'AI advice includes failing rule outcomes that need attention.';
+  if (normalized === 'fail') return 'AI Advice includes failing checks that need attention.';
   return 'AI advice result is not available yet.';
 };
 
@@ -289,6 +200,48 @@ const sortParts = (sort: string) => {
     direction: direction === 'asc' ? 'asc' : 'desc',
   };
 };
+
+const ADMIN_WORK_QUEUE_STATUS_FILTER = ['admin_review_inbox', 'in_review'];
+const DEFAULT_INVOICE_STATUS_FILTER = ADMIN_WORK_QUEUE_STATUS_FILTER.join(',');
+const ALL_STATUS_FILTER_URL_VALUE = 'all';
+
+const statusGroupValue = (statuses: string[]) => statuses.join(',');
+
+const normalizeStatusFilterFromUrl = (value: string | null) => {
+  if (value === null) return DEFAULT_INVOICE_STATUS_FILTER;
+  if (value === ALL_STATUS_FILTER_URL_VALUE) return '';
+  return value;
+};
+
+const selectedStatusGroupValuesFor = (invoiceStatus: string) => {
+  const selectedStatuses = new Set(
+    invoiceStatus
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  if (!selectedStatuses.size) return [];
+
+  return INVOICE_STATUS_FILTER_GROUPS.filter((group) =>
+    group.statuses.every((status) => selectedStatuses.has(status)),
+  ).map((group) => statusGroupValue(group.statuses));
+};
+
+const invoiceStatusFromGroupValues = (values: string[]) =>
+  Array.from(
+    new Set(
+      values
+        .flatMap((value) => value.split(','))
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ).join(',');
+
+const INVOICE_STATUS_FILTER_ITEMS = INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
+  label: group.label,
+  value: statusGroupValue(group.statuses),
+}));
 
 function SortableHeader({
   field,
@@ -359,7 +312,7 @@ export function InvoicesAdminScreen() {
   // URL-driven state
   const [sessionId, setSessionId] = useState<string>('');
   const [q, setQ] = useState<string>('');
-  const [invoiceStatus, setInvoiceStatus] = useState<string>(''); // single for PoC (can extend to multi later)
+  const [invoiceStatus, setInvoiceStatus] = useState<string>(DEFAULT_INVOICE_STATUS_FILTER);
   const [selectedUpgradeTypeKeys, setSelectedUpgradeTypeKeys] = useState<string[]>([]);
   const [sort, setSort] = useState<string>('latest_invoice_version_updated_at:desc');
   const [page, setPage] = useState<number>(1);
@@ -379,6 +332,8 @@ export function InvoicesAdminScreen() {
 
   const didInitFromUrl = useRef(false);
 
+  const selectedStatusGroupValues = useMemo(() => selectedStatusGroupValuesFor(invoiceStatus), [invoiceStatus]);
+
   // 1) initialize state from URL once (and whenever user manually edits URL)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -389,7 +344,7 @@ export function InvoicesAdminScreen() {
     const next = {
       session_id: params.get('session_id') || '',
       q: params.get('q') || '',
-      invoice_status: params.get('invoice_status') || '',
+      invoice_status: normalizeStatusFilterFromUrl(params.get('invoice_status')),
       upgrade_type_keys: (params.get('upgrade_type_keys') || '')
         .split(',')
         .map((value) => value.trim())
@@ -448,7 +403,10 @@ export function InvoicesAdminScreen() {
     const params = buildSearchParams({
       session_id: merged.sessionId || undefined,
       q: merged.q || undefined,
-      invoice_status: merged.invoiceStatus || undefined,
+      invoice_status:
+        merged.invoiceStatus === ''
+          ? ALL_STATUS_FILTER_URL_VALUE
+          : merged.invoiceStatus || DEFAULT_INVOICE_STATUS_FILTER,
       upgrade_type_keys: merged.selectedUpgradeTypeKeys.length ? merged.selectedUpgradeTypeKeys.join(',') : undefined,
       sort: merged.sort || undefined,
       page: String(merged.page || 1),
@@ -685,34 +643,22 @@ export function InvoicesAdminScreen() {
               />
             </Box>
 
-            <Box minW="180px" maxW="220px">
+            <Box minW="260px" maxW="360px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 status
               </Text>
-              <Select
-                value={invoiceStatus}
-                onChange={(e) => {
-                  setInvoiceStatus(e.target.value);
+              <MultiCheckSelect
+                selectedValues={selectedStatusGroupValues}
+                setSelectedValues={(values) => {
+                  const nextStatus = invoiceStatusFromGroupValues(values);
+                  setInvoiceStatus(nextStatus);
                   setPage(1);
-                  // push immediately
-                  pushUrl({ invoiceStatus: e.target.value, page: 1 });
+                  pushUrl({ invoiceStatus: nextStatus, page: 1 });
                 }}
-                bg="white"
-              >
-                <option value="">All statuses</option>
-                <option value="processing">Any Processing Status</option>
-                <option value="upload_in_progress">Uploading Package</option>
-                <option value="ocr_in_progress">Preparing Evidence</option>
-                <option value="genai_in_progress">Building AI Rule Advice</option>
-                <option value="genai_complete">AI Rule Advice Complete</option>
-                <option value="admin_review_inbox">Waiting for Admin Review</option>
-                <option value="contractor_revision_inbox">Waiting for Contractor Revision</option>
-                <option value="in_review">Admin Reviewing</option>
-                <option value="approved_pending">Approved, Pending Payment</option>
-                <option value="approved_paid">Approved and Paid</option>
-                <option value="ineligible">Ineligible</option>
-                <option value="failed">Processing Failed</option>
-              </Select>
+                allItems={INVOICE_STATUS_FILTER_ITEMS}
+                placeholder="All statuses"
+                menuListMinW="360px"
+              />
             </Box>
 
             <Box minW="240px" maxW="320px">
@@ -771,7 +717,7 @@ export function InvoicesAdminScreen() {
                   onClick={() => {
                     setSessionId('');
                     setQ('');
-                    setInvoiceStatus('');
+                    setInvoiceStatus(DEFAULT_INVOICE_STATUS_FILTER);
                     setSelectedUpgradeTypeKeys([]);
                     setSort('latest_invoice_version_updated_at:desc');
                     setPer(25);
@@ -779,7 +725,7 @@ export function InvoicesAdminScreen() {
                     pushUrl({
                       sessionId: '',
                       q: '',
-                      invoiceStatus: '',
+                      invoiceStatus: DEFAULT_INVOICE_STATUS_FILTER,
                       selectedUpgradeTypeKeys: [],
                       sort: 'latest_invoice_version_updated_at:desc',
                       per: 25,
@@ -850,7 +796,7 @@ export function InvoicesAdminScreen() {
               <Tbody>
                 {rows.map((r, idx) => {
                   const hasInvoice = Boolean(r.invoice_id && String(r.invoice_id).trim());
-                  const statusCopy = invoiceStatusCopy(r.invoice_status);
+                  const statusCopy = invoiceStatusCopy(r.invoice_status, r.invoice_status_subtype);
                   const technicalStatus = String(r.invoice_status || '').trim() || 'unknown';
                   return (
                     <Tr
@@ -879,7 +825,7 @@ export function InvoicesAdminScreen() {
 
                       <Td fontSize="sm" minW={0}>
                         {hasInvoice ? (
-                          <Tooltip label="Open PDF review">
+                          <Tooltip label="Open Reviewer">
                             <Text
                               as="button"
                               type="button"
@@ -901,10 +847,8 @@ export function InvoicesAdminScreen() {
                               onClick={() => handleOpenDetailsWithPdf(r)}
                               _hover={{
                                 bg: 'blue.50',
-                                color: 'blue.900',
-                                fontWeight: 'semibold',
+                                color: 'black',
                                 boxShadow: '0 8px 18px rgba(49, 130, 206, 0.14)',
-                                transform: 'translateY(-1px)',
                               }}
                               _focusVisible={{ boxShadow: 'outline', borderRadius: 'sm' }}
                             >

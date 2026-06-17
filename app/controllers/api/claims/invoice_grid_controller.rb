@@ -33,10 +33,21 @@ module Api
 
         if params[:invoice_status].present?
           invoice_status = params[:invoice_status].to_s.strip
+          invoice_statuses =
+            invoice_status
+              .split(",")
+              .map { |status| status.to_s.strip }
+              .select(&:present?)
           rel =
             if invoice_status == "failed"
               rel.where(
-                invoice_status: %w[upload_failed ocr_failed genai_failed]
+                invoice_status: %w[
+                  upload_failed
+                  ocr_failed
+                  genai_failed
+                  package_needs_correction
+                  technical_failure
+                ]
               )
             elsif invoice_status == "processing"
               rel.where(
@@ -49,6 +60,8 @@ module Api
                   genai_in_progress
                 ]
               )
+            elsif invoice_statuses.many?
+              rel.where(invoice_status: invoice_statuses)
             else
               rel.where(invoice_status: invoice_status)
             end
@@ -164,12 +177,7 @@ module Api
             raise ActiveRecord::Rollback
           end
 
-          now = Time.current
-          invoice.update!(
-            status: spec.fetch(:to),
-            status_updated_at: now,
-            updated_at: now
-          )
+          invoice.set_workflow_status!(spec.fetch(:to))
         end
 
         return if performed?
@@ -179,7 +187,14 @@ module Api
                  transition: transition_key,
                  invoice:
                    invoice.as_json(
-                     only: %i[id session_id status status_updated_at updated_at]
+                     only: %i[
+                       id
+                       session_id
+                       status
+                       status_subtype
+                       status_updated_at
+                       updated_at
+                     ]
                    ),
                  previous_status: previous_status,
                  status: invoice.status

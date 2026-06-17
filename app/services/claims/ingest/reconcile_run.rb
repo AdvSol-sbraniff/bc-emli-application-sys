@@ -103,7 +103,11 @@ module Claims
               succeeded += 1
             end
           elsif validation_steps.any? { |step| step.status == "failed" } ||
-                invoice_status == "genai_failed"
+                %w[
+                  genai_failed
+                  package_needs_correction
+                  technical_failure
+                ].include?(invoice_status)
             failed += 1
           elsif invoice_status == "genai_complete" &&
                 validation_steps.all? { |step| step.status == "succeeded" }

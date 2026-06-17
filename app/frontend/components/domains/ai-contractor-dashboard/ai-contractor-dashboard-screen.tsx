@@ -1,12 +1,11 @@
 import {
-  Badge,
   Box,
-  Button,
   Container,
   Flex,
   FormControl,
   FormLabel,
   Hide,
+  IconButton,
   Input,
   Select,
   Show,
@@ -19,25 +18,28 @@ import {
   Text,
   Tooltip,
 } from '@chakra-ui/react';
-import { PencilIcon } from '@phosphor-icons/react';
+import { PencilIcon, XCircle } from '@phosphor-icons/react';
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link as ReactRouterLink } from 'react-router-dom';
 import { useMst, useServerAPI } from '../../../setup/root';
 import { getRuntimeBooleanMetaValue } from '../../../utils/utility-functions';
 import { PerPageSelect } from '../../shared/base/inputs/per-page-select';
 import { Paginator } from '../../shared/base/inputs/paginator';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
-import { getInvoiceUpgradeTypeMeta, InvoiceUpgradeTypeTile } from '../../shared/claims/invoice-upgrade-type-visual';
+import { INVOICE_STATUS_FILTER_GROUPS, invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 import { GreenLineSmall } from '../../shared/base/decorative/green-line-small';
 import { SharedSpinner } from '../../shared/base/shared-spinner';
 import { RouterLinkButton } from '../../shared/navigation/router-link-button';
+import { MultiCheckSelect } from '../../shared/select/multi-check-select';
 import { ContractorProgramResourcesScreen } from '../contractor-management/contractor-program-resources-screen';
 
 type ContractorPortalRow = {
   invoiceId: string;
   sessionId: string;
   status: string;
+  statusSubtype?: string | null;
   statusUpdatedAt?: string | null;
   systemHelpNotes?: string | null;
   invoiceCreatedAt?: string | null;
@@ -86,51 +88,50 @@ function formatMoney(value?: number | string | null) {
   return n.toLocaleString(undefined, { style: 'currency', currency: 'CAD' });
 }
 
-function contractorStatusLabel(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-
-  if (value === 'genai_complete') return 'Draft';
-  if (value === 'admin_review_inbox') return 'Submitted';
-  if (value === 'contractor_revision_inbox') return 'Update needed';
-  if (value === 'in_review') return 'In review';
-  if (value === 'approved_pending') return 'Approved - pending';
-  if (value === 'approved_paid') return 'Approved - paid';
-  if (value === 'ineligible') return 'Ineligible';
-
-  return value || 'Unknown';
+function contractorStatusLabel(status?: string | null, statusSubtype?: string | null) {
+  return invoiceStatusCopy(status, statusSubtype).label;
 }
 
-function contractorStatusColor(status?: string | null) {
-  const value = String(status || '').toLowerCase();
+const contractorStatusFilterOptions = INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
+  label: group.label,
+  value: group.statuses.join(','),
+}));
 
-  if (value === 'genai_complete') return 'blue';
-  if (value === 'admin_review_inbox' || value === 'in_review') return 'yellow';
-  if (value === 'contractor_revision_inbox') return 'orange';
-  if (value === 'approved_pending' || value === 'approved_paid') return 'green';
-  if (value === 'ineligible' || value.endsWith('_failed')) return 'red';
+const DEFAULT_CONTRACTOR_STATUS_FILTER = 'genai_complete,contractor_revision_inbox';
 
-  return 'gray';
-}
+const selectedStatusGroupValuesFor = (statusFilter: string) => {
+  const selectedStatuses = new Set(
+    statusFilter
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 
-function actionLabel(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-  if (value === 'genai_complete' || value === 'contractor_revision_inbox') return 'Continue';
-  return 'View';
-}
+  if (!selectedStatuses.size) return [];
 
-function displayUpgradeTypeKeys(row: ContractorPortalRow) {
-  const keys = Array.isArray(row.latestDetectedUpgradeTypeKeys)
-    ? row.latestDetectedUpgradeTypeKeys.map((key) => String(key || '').trim()).filter(Boolean)
-    : [];
+  return contractorStatusFilterOptions
+    .filter((option) => option.value.split(',').every((status) => selectedStatuses.has(status)))
+    .map((option) => option.value);
+};
 
-  return [...new Set(keys)];
-}
+const statusFilterFromGroupValues = (values: string[]) =>
+  Array.from(
+    new Set(
+      values
+        .flatMap((value) => value.split(','))
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ).join(',');
 
-function upgradeTypeSummary(row: ContractorPortalRow) {
-  const keys = displayUpgradeTypeKeys(row);
-  if (!keys.length) return `Session ${row.sessionId.slice(0, 8)}`;
-  return keys.map((key) => getInvoiceUpgradeTypeMeta(key).label).join(', ');
-}
+const statusMatchesFilter = (status: string, filter: string) => {
+  if (!filter) return true;
+  return filter
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .includes(status);
+};
 
 function sortRows(rows: ContractorPortalRow[], sort: string) {
   const sorted = [...rows];
@@ -153,9 +154,13 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
           String(left.latestOriginalFilename || left.invoiceId),
         );
       case 'status:asc':
-        return contractorStatusLabel(left.status).localeCompare(contractorStatusLabel(right.status));
+        return contractorStatusLabel(left.status, left.statusSubtype).localeCompare(
+          contractorStatusLabel(right.status, right.statusSubtype),
+        );
       case 'status:desc':
-        return contractorStatusLabel(right.status).localeCompare(contractorStatusLabel(left.status));
+        return contractorStatusLabel(right.status, right.statusSubtype).localeCompare(
+          contractorStatusLabel(left.status, left.statusSubtype),
+        );
       case 'updated_at:asc':
         return String(leftUpdated).localeCompare(String(rightUpdated));
       case 'updated_at:desc':
@@ -169,9 +174,8 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
 
 function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
   const title = row.latestOriginalFilename || `Invoice ${row.invoiceId.slice(0, 8)}`;
-  const subtitle = upgradeTypeSummary(row);
-  const upgradeTypeKeys = displayUpgradeTypeKeys(row);
-  const statusHint = `Claims status: ${row.status || 'unknown'}`;
+  const statusCopy = invoiceStatusCopy(row.status, row.statusSubtype);
+  const statusHint = `${statusCopy.hint} Technical status: ${row.status || 'unknown'}.`;
   const ocrFacts = [
     row.latestDiOcrInvoiceId ? ['Invoice #', row.latestDiOcrInvoiceId] : null,
     row.latestDiOcrCustomerName ? ['Customer', row.latestDiOcrCustomerName] : null,
@@ -192,89 +196,11 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
       bg="greys.white"
     >
       <Flex flexDirection={{ base: 'column', md: 'row' }} gap={6} w="full">
-        <Flex
-          display={{ base: 'none', md: 'flex' }}
-          direction="column"
-          flex={{ base: 0, md: 1 }}
-          maxW={{ base: '100%', md: '20%' }}
-          justifyContent="center"
-        >
-          <Flex direction="column" gap={3}>
-            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.08em" color="greys.grey01">
-              Upgrade types
-            </Text>
-            <Flex gap={2} wrap="wrap" align="center">
-              {upgradeTypeKeys.length ? (
-                upgradeTypeKeys.map((upgradeTypeKey) => {
-                  const meta = getInvoiceUpgradeTypeMeta(upgradeTypeKey);
-
-                  return (
-                    <Tooltip key={`${row.invoiceId}-${upgradeTypeKey}`} label={meta.label}>
-                      <Box>
-                        <InvoiceUpgradeTypeTile upgradeTypeKey={upgradeTypeKey} description={meta.label} size={42} />
-                      </Box>
-                    </Tooltip>
-                  );
-                })
-              ) : (
-                <Tooltip label="Common invoice evidence">
-                  <Box>
-                    <InvoiceUpgradeTypeTile upgradeTypeKey="common" description="Common invoice evidence" size={42} />
-                  </Box>
-                </Tooltip>
-              )}
-            </Flex>
-          </Flex>
-        </Flex>
-
-        <Show below="md">
-          <Flex justify="space-between" alignItems="flex-start" gap={4}>
-            <Flex gap={2} wrap="wrap" flex={1}>
-              {upgradeTypeKeys.length ? (
-                upgradeTypeKeys.map((upgradeTypeKey) => {
-                  const meta = getInvoiceUpgradeTypeMeta(upgradeTypeKey);
-
-                  return (
-                    <Tooltip key={`${row.invoiceId}-${upgradeTypeKey}-mobile`} label={meta.label}>
-                      <Box>
-                        <InvoiceUpgradeTypeTile upgradeTypeKey={upgradeTypeKey} description={meta.label} size={34} />
-                      </Box>
-                    </Tooltip>
-                  );
-                })
-              ) : (
-                <Tooltip label="Common invoice evidence">
-                  <Box>
-                    <InvoiceUpgradeTypeTile upgradeTypeKey="common" description="Common invoice evidence" size={34} />
-                  </Box>
-                </Tooltip>
-              )}
-            </Flex>
-            <Tooltip label={statusHint}>
-              <Badge colorScheme={contractorStatusColor(row.status)} borderRadius="full" px={3} py={1} flexShrink={0}>
-                {contractorStatusLabel(row.status)}
-              </Badge>
-            </Tooltip>
-          </Flex>
-        </Show>
-
-        <Flex direction="column" gap={2} flex={{ base: 0, md: 5 }} maxW={{ base: '100%', md: '75%' }}>
+        <Flex direction="column" gap={2} flex="1" maxW="100%">
           <Flex direction="column" flex={1} gap={2}>
             <Text color="text.link" fontSize="lg" fontWeight="bold">
               {title}
             </Text>
-            <Text color="text.link" fontSize="lg" fontWeight="bold" flex="1">
-              {subtitle}
-            </Text>
-
-            <Show below="md">
-              <Text>
-                <Text as="span" fontWeight={700} mr="1">
-                  Session:
-                </Text>
-                {row.sessionId}
-              </Text>
-            </Show>
 
             <Box flex="1" alignContent="center">
               <GreenLineSmall />
@@ -341,24 +267,23 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
           </Flex>
         </Flex>
 
-        <Flex direction="column" align="flex-end" gap={4} flex={{ base: 0, md: 1 }} maxW={{ base: '100%', md: '25%' }}>
-          <Show above="md">
-            <Tooltip label={statusHint}>
-              <Badge colorScheme={contractorStatusColor(row.status)} borderRadius="full" px={3} py={1}>
-                {contractorStatusLabel(row.status)}
-              </Badge>
-            </Tooltip>
-          </Show>
+        <Flex direction="column" align={{ base: 'flex-start', md: 'flex-end' }} gap={4} flexShrink={0}>
+          <Tooltip label={statusHint}>
+            <Text fontSize="sm" fontWeight="semibold" color="gray.700">
+              {contractorStatusLabel(row.status, row.statusSubtype)}
+            </Text>
+          </Tooltip>
 
-          <RouterLinkButton
-            to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
-            variant="secondary"
-            w={{ base: 'full', md: 'fit-content' }}
-            aria-label={`${actionLabel(row.status)} invoice submission for ${title}`}
-            leftIcon={<PencilIcon />}
-          >
-            {actionLabel(row.status)}
-          </RouterLinkButton>
+          <Tooltip label="Edit or view" hasArrow>
+            <IconButton
+              as={ReactRouterLink}
+              to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
+              aria-label={`Edit or view invoice submission for ${title}`}
+              icon={<PencilIcon size={20} />}
+              variant="outline"
+              borderRadius="full"
+            />
+          </Tooltip>
         </Flex>
       </Flex>
     </Flex>
@@ -377,7 +302,7 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
   const [error, setError] = useState('');
   const [rows, setRows] = useState<ContractorPortalRow[]>([]);
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_CONTRACTOR_STATUS_FILTER);
   const [sort, setSort] = useState('updated_at:desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [countPerPage, setCountPerPage] = useState(10);
@@ -423,7 +348,7 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
     const normalizedQuery = query.trim().toLowerCase();
 
     const scopedRows = rows.filter((row) => {
-      if (statusFilter && row.status !== statusFilter) return false;
+      if (!statusMatchesFilter(row.status, statusFilter)) return false;
 
       if (!normalizedQuery) return true;
 
@@ -451,6 +376,7 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
   const totalCount = filteredRows.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / countPerPage));
   const pagedRows = filteredRows.slice((currentPage - 1) * countPerPage, currentPage * countPerPage);
+  const selectedStatusGroupValues = useMemo(() => selectedStatusGroupValuesFor(statusFilter), [statusFilter]);
 
   const selectedTabStyles = {
     color: 'theme.blueAlt',
@@ -554,22 +480,15 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                         </Box>
                       </FormControl>
 
-                      <FormControl w={{ base: 'full', md: '220px' }}>
+                      <FormControl w={{ base: 'full', md: '280px' }}>
                         <FormLabel>Status</FormLabel>
-                        <Select
-                          value={statusFilter}
-                          onChange={(event) => setStatusFilter(event.target.value)}
-                          bg="white"
-                        >
-                          <option value="">All statuses</option>
-                          <option value="genai_complete">Draft</option>
-                          <option value="admin_review_inbox">Submitted</option>
-                          <option value="contractor_revision_inbox">Update needed</option>
-                          <option value="in_review">In review</option>
-                          <option value="approved_pending">Approved - pending</option>
-                          <option value="approved_paid">Approved - paid</option>
-                          <option value="ineligible">Ineligible</option>
-                        </Select>
+                        <MultiCheckSelect
+                          selectedValues={selectedStatusGroupValues}
+                          setSelectedValues={(values) => setStatusFilter(statusFilterFromGroupValues(values))}
+                          allItems={contractorStatusFilterOptions}
+                          placeholder="All statuses"
+                          menuListMinW="360px"
+                        />
                       </FormControl>
 
                       <FormControl w={{ base: 'full', md: '220px' }}>
@@ -586,18 +505,20 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                         </Select>
                       </FormControl>
 
-                      {(query || statusFilter || sort !== 'updated_at:desc') && (
-                        <Button
-                          variant="link"
-                          mb={{ base: 0, md: 2 }}
-                          onClick={() => {
-                            setQuery('');
-                            setStatusFilter('');
-                            setSort('updated_at:desc');
-                          }}
-                        >
-                          {t('ui.resetFilters')}
-                        </Button>
+                      {(query || statusFilter !== DEFAULT_CONTRACTOR_STATUS_FILTER || sort !== 'updated_at:desc') && (
+                        <Tooltip label="Clear filters">
+                          <IconButton
+                            aria-label="Clear filters"
+                            icon={<XCircle size={18} />}
+                            variant="outline"
+                            mb={{ base: 0, md: 2 }}
+                            onClick={() => {
+                              setQuery('');
+                              setStatusFilter(DEFAULT_CONTRACTOR_STATUS_FILTER);
+                              setSort('updated_at:desc');
+                            }}
+                          />
+                        </Tooltip>
                       )}
                     </Flex>
                   </Flex>

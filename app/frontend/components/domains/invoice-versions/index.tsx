@@ -23,6 +23,7 @@ import {
   INVOICE_UPGRADE_TYPE_FILTER_ORDER,
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
+import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 import {
   ArrowClockwise,
   ArrowSquareOut,
@@ -116,7 +117,7 @@ const ruleDisplayTitle = (rulecheck: any) => {
   if (ruleKey) return ruleKey;
 
   const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
-  return num != null ? `rule_${num}` : 'rule';
+  return num != null ? `advice_${num}` : 'advice';
 };
 
 const ruleSourceLabel = (rulecheck: any) => {
@@ -193,7 +194,7 @@ const resultTooltip = (result: unknown): string => {
   if (normalized === 'info') return 'info: may show in advice as helpful context, not a requested fix.';
   if (normalized === 'warn') return 'warn: always show, framed for contractor pre-check or admin attention.';
   if (normalized === 'fail') return 'fail: always show, framed as a correction needed.';
-  return 'unknown: rule result was not recognized.';
+  return 'unknown: advice result was not recognized.';
 };
 
 const StatusDot = ({ result }: { result: unknown }) => {
@@ -207,96 +208,6 @@ const StatusDot = ({ result }: { result: unknown }) => {
 };
 
 type InvoiceStatusTransition = 'screen_in' | 'request_revision' | 'approve_pending' | 'mark_ineligible';
-
-const INVOICE_STATUS_COPY: Record<string, { label: string; hint: string }> = {
-  upload_in_progress: {
-    label: 'Uploading Package',
-    hint: 'The uploaded package is being staged before evidence preparation starts.',
-  },
-  ocr_in_progress: {
-    label: 'Preparing Evidence',
-    hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
-  },
-  evidence_prep: {
-    label: 'Preparing Evidence',
-    hint: 'OCR, document classification, invoice extraction, and supporting-document extraction are running.',
-  },
-  genai_in_progress: {
-    label: 'Building AI Rule Advice',
-    hint: 'AI rule advice is being built: case facts, product lookup, GenAI rule advice, code rules, and final advice.',
-  },
-  validation_advice: {
-    label: 'Building AI Rule Advice',
-    hint: 'AI rule advice is being built: case facts, product lookup, GenAI rule advice, code rules, and final advice.',
-  },
-  genai_complete: {
-    label: 'AI Rule Advice Complete',
-    hint: 'AI rule advice is complete. The contractor can pre-check the advice, revise if needed, and submit when ready.',
-  },
-  admin_review_inbox: {
-    label: 'Waiting for Admin Review',
-    hint: 'The claim is waiting for an admin to review it.',
-  },
-  in_review: {
-    label: 'Admin Reviewing',
-    hint: 'An admin review is underway.',
-  },
-  contractor_revision_inbox: {
-    label: 'Waiting for Contractor Revision',
-    hint: 'Admin review sent the claim back to the contractor to revise the package or provide supporting information.',
-  },
-  approved_pending: {
-    label: 'Approved, Pending Payment',
-    hint: 'The claim is approved, but payment or final closeout is not complete yet.',
-  },
-  approved_paid: {
-    label: 'Approved and Paid',
-    hint: 'The claim has been approved and paid or closed.',
-  },
-  ineligible: {
-    label: 'Ineligible',
-    hint: 'The claim has been marked ineligible.',
-  },
-  failed: {
-    label: 'Processing Failed',
-    hint: 'Processing failed and needs troubleshooting.',
-  },
-  upload_failed: {
-    label: 'Processing Failed',
-    hint: 'Upload or package staging failed and needs troubleshooting.',
-  },
-  ocr_failed: {
-    label: 'Processing Failed',
-    hint: 'Evidence preparation failed and needs troubleshooting.',
-  },
-  genai_failed: {
-    label: 'Processing Failed',
-    hint: 'AI rule advice failed and needs troubleshooting.',
-  },
-};
-
-const humanizeStatus = (status: string) =>
-  status
-    .split('_')
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-
-const invoiceStatusCopy = (status: unknown): { label: string; hint: string } => {
-  const value = String(status ?? '').trim();
-  if (!value) {
-    return {
-      label: 'Unknown',
-      hint: 'This invoice does not have a workflow status.',
-    };
-  }
-  return (
-    INVOICE_STATUS_COPY[value] ?? {
-      label: humanizeStatus(value),
-      hint: 'This invoice is in a workflow status that does not have custom help text yet.',
-    }
-  );
-};
 
 const invoiceStatusLabel = (status: unknown): string => invoiceStatusCopy(status).label;
 
@@ -747,6 +658,7 @@ export const InvoiceVersionShowScreen = () => {
           ? {
               ...read,
               invoice_status: read.invoice_status ?? invoice?.status ?? null,
+              invoice_status_subtype: read.invoice_status_subtype ?? invoice?.status_subtype ?? null,
               session_id: read.session_id ?? invoice?.session_id ?? null,
             }
           : null,
@@ -1044,11 +956,13 @@ export const InvoiceVersionShowScreen = () => {
       if (!resp.ok) throw new Error(data?.error || data?.message || `Status update failed (${resp.status}).`);
 
       const nextStatus = String(data?.status || data?.invoice?.status || action.targetStatus);
+      const nextStatusSubtype = data?.invoice?.status_subtype ?? null;
       setReadData((prev: any) =>
         prev
           ? {
               ...prev,
               invoice_status: nextStatus,
+              invoice_status_subtype: nextStatusSubtype,
             }
           : prev,
       );
@@ -1331,6 +1245,7 @@ export const InvoiceVersionShowScreen = () => {
   );
 
   const currentInvoiceStatus = String(readData?.invoice_status || '').trim();
+  const currentInvoiceStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
   const invoiceVersionNo = Number(readData?.invoice_versionno);
   const invoiceVersionLabel = Number.isFinite(invoiceVersionNo)
     ? invoiceVersionCount
@@ -1566,7 +1481,7 @@ export const InvoiceVersionShowScreen = () => {
                     <AccordionPanel px="0" pt="3px">
                       <Flex gap="18px" align="center" wrap="wrap" mb="8px">
                         {(() => {
-                          const statusCopy = invoiceStatusCopy(currentInvoiceStatus);
+                          const statusCopy = invoiceStatusCopy(currentInvoiceStatus, currentInvoiceStatusSubtype);
                           const technicalStatus = String(currentInvoiceStatus || '').trim() || 'unknown';
                           return (
                             <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`} hasArrow>
@@ -2618,7 +2533,7 @@ export const InvoiceVersionShowScreen = () => {
                       <h2>
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
-                            <Text size="sm">Energy Savings Program Rule Advice</Text>
+                            <Text size="sm">Energy Savings Program Advice</Text>
                           </Box>
                           <AccordionIcon />
                         </AccordionButton>
@@ -2640,7 +2555,7 @@ export const InvoiceVersionShowScreen = () => {
                               <Flex flex="1" align="center" gap="8px" textAlign="left" minW={0}>
                                 <Box minW={0}>
                                   <Text fontSize="md" lineHeight="1.25" fontWeight="bold" noOfLines={1}>
-                                    {meta.label} - Fields & Rules
+                                    {meta.label} - Fields & Advice
                                   </Text>
                                 </Box>
                                 <InvoiceUpgradeTypeTile
@@ -2722,7 +2637,7 @@ export const InvoiceVersionShowScreen = () => {
                                   <AccordionButton px="10px" py="5px" _hover={{ bg: 'transparent' }}>
                                     <Box flex="1" textAlign="left">
                                       <Text fontSize="sm" fontWeight="bold">
-                                        Rules
+                                        Advice
                                       </Text>
                                     </Box>
                                     <AccordionIcon />
@@ -2737,7 +2652,7 @@ export const InvoiceVersionShowScreen = () => {
                                   )}
                                   {group.rulechecks.length === 0 ? (
                                     <Text fontSize="sm" opacity={0.7}>
-                                      No rules for this upgrade type.
+                                      No advice for this upgrade type.
                                     </Text>
                                   ) : (
                                     <Box display="flex" flexDirection="column" gap="6px">
@@ -3219,7 +3134,7 @@ export const InvoiceVersionShowScreen = () => {
                         <h2>
                           <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                             <Box flex="1" textAlign="left">
-                              <Text size="sm">Rule Checks</Text>
+                              <Text size="sm">Advice Checks</Text>
                             </Box>
                             <AccordionIcon />
                           </AccordionButton>
@@ -3285,7 +3200,7 @@ export const InvoiceVersionShowScreen = () => {
                           {/* empty */}
                           {!genAiRulechecksError && genAiRulechecks.length === 0 && (
                             <Text fontSize="sm" opacity={0.7}>
-                              No rulechecks found.
+                              No advice checks found.
                             </Text>
                           )}
 

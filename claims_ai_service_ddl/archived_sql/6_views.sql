@@ -7,6 +7,7 @@ CREATE OR REPLACE VIEW claims.v_current_invoice_versions AS
 SELECT DISTINCT ON (iv.invoice_id)
   i.session_id,
   i.status AS invoice_status,
+  i.status_subtype AS invoice_status_subtype,
   iv.id,
   iv.invoice_id,
   iv.invoice_versionno,
@@ -259,6 +260,7 @@ SELECT
   i.id                AS invoice_id,
   s.id                AS session_id,
   i.status            AS invoice_status,
+  i.status_subtype    AS invoice_status_subtype,
   i.status_updated_at AS invoice_status_updated_at,
   i.system_help_notes AS system_help_notes,
   i.created_at        AS invoice_created_at,

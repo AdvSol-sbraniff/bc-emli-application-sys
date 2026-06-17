@@ -4,7 +4,12 @@ class Claims::CurrentInvoiceVersionBlueprint < Blueprinter::Base
 
   view :read_screen do
     # ---- identifiers / linkage ----
-    fields :session_id, :invoice_id, :invoice_status, :id, :invoice_versionno
+    fields :session_id,
+           :invoice_id,
+           :invoice_status,
+           :invoice_status_subtype,
+           :id,
+           :invoice_versionno
 
     # ---- GenAI fields ----
     fields :genai_overall_confidence, :genai_result, :genai_admin_advice

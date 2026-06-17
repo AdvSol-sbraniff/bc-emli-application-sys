@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge,
   Box,
   Button,
   Container,
@@ -17,9 +16,10 @@ import {
   Tr,
   VStack,
 } from '@chakra-ui/react';
-import { ArrowsClockwise, XCircle } from '@phosphor-icons/react';
+import { XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 
 type ContractorPortalResponse = {
   contractor?: {
@@ -39,12 +39,10 @@ type RunHeader = {
 type RunInvoiceRow = {
   invoice_id: string;
   invoice_status?: string | null;
-  invoice_status_updated_at?: string | null;
+  invoice_status_subtype?: string | null;
   invoice_version_id: string;
   invoice_versionno?: number | null;
   original_filename?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
 };
 
 function getParam(search: string, key: string): string {
@@ -65,47 +63,8 @@ function setParams(
   navigate(`${location.pathname}${qs ? `?${qs}` : ''}`, { replace: true });
 }
 
-function fmtTs(value?: string | null) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 function fileSizeMb(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function contractorUploadStatusLabel(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-
-  if (value === 'genai_complete') return 'Ready to review';
-  if (value.endsWith('_failed')) return 'Needs help';
-  if (value.includes('queued') || value.includes('progress') || value === 'ocr_complete') return 'Checking invoice...';
-  if (value === 'admin_review_inbox') return 'Submitted to admin';
-  if (value === 'contractor_revision_inbox') return 'Update requested';
-  if (value === 'in_review') return 'With admin';
-  if (value === 'approved_pending' || value === 'approved_paid') return 'Approved';
-
-  return value || 'Waiting';
-}
-
-function contractorUploadStatusColor(status?: string | null) {
-  const value = String(status || '').toLowerCase();
-
-  if (value === 'genai_complete') return 'green';
-  if (value.endsWith('_failed')) return 'red';
-  if (value.includes('queued') || value.includes('progress') || value === 'ocr_complete') return 'yellow';
-  if (value === 'contractor_revision_inbox') return 'orange';
-  if (value === 'approved_pending' || value === 'approved_paid') return 'green';
-
-  return 'gray';
 }
 
 export default function ContractorUploadInvoicesScreen() {
@@ -139,6 +98,7 @@ export default function ContractorUploadInvoicesScreen() {
           method: 'GET',
           headers: { Accept: 'application/json' },
           credentials: 'include',
+          cache: 'no-store',
         });
         const data: ContractorPortalResponse = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -165,6 +125,7 @@ export default function ContractorUploadInvoicesScreen() {
         method: 'GET',
         headers: { Accept: 'application/json' },
         credentials: 'include',
+        cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -183,6 +144,7 @@ export default function ContractorUploadInvoicesScreen() {
         method: 'GET',
         headers: { Accept: 'application/json' },
         credentials: 'include',
+        cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
@@ -220,19 +182,18 @@ export default function ContractorUploadInvoicesScreen() {
   }, [shouldPoll, runId]);
 
   const mergeStagedFiles = (files: File[]) => {
-    const pdfsOnly = files.filter((file) => {
-      const byType = String(file.type || '').toLowerCase() === 'application/pdf';
-      const byExt = String(file.name || '')
-        .toLowerCase()
-        .endsWith('.pdf');
+    const supportedEvidenceFiles = files.filter((file) => {
+      const type = String(file.type || '').toLowerCase();
+      const byType = type === 'application/pdf' || type === 'image/jpeg' || type === 'image/png';
+      const byExt = /\.(pdf|jpe?g|png)$/.test(String(file.name || '').toLowerCase());
       return byType || byExt;
     });
 
-    if (!pdfsOnly.length) return;
+    if (!supportedEvidenceFiles.length) return;
 
     setSelectedFiles((prev) => {
       const next = [...prev];
-      pdfsOnly.forEach((file) => {
+      supportedEvidenceFiles.forEach((file) => {
         const exists = next.some(
           (item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified,
         );
@@ -271,10 +232,10 @@ export default function ContractorUploadInvoicesScreen() {
     setSubmitError('');
     setSubmitOk('');
     try {
-      if (!selectedFiles.length) throw new Error('Select one or more PDF files.');
+      if (!selectedFiles.length) throw new Error('Select an invoice package first.');
 
       const form = new FormData();
-      selectedFiles.forEach((file) => form.append('pdfs[]', file, file.name));
+      selectedFiles.forEach((file) => form.append('files[]', file, file.name));
 
       const res = await fetch('/api/claims/contractor/invoices/upload_batch', {
         method: 'POST',
@@ -291,10 +252,10 @@ export default function ContractorUploadInvoicesScreen() {
       setRunId(nextRunId);
       setSelectedFiles([]);
       setParams(navigate, location, { ingest_run_id: nextRunId, session_id: nextSessionId });
-      setSubmitOk('Upload started. We are checking your invoice now.');
+      setSubmitOk('Upload started. We are checking your invoice package now.');
       await refreshAll();
     } catch (error: any) {
-      setSubmitError(error?.message || 'Failed to upload invoices.');
+      setSubmitError(error?.message || 'Failed to upload invoice package.');
     } finally {
       setSubmitLoading(false);
     }
@@ -316,7 +277,7 @@ export default function ContractorUploadInvoicesScreen() {
     : hasFailedRows
       ? 'We could not finish checking one or more invoices. Please contact support if this keeps happening.'
       : hasProcessingRows
-        ? 'Please wait a few minutes, then click Check upload status. If it still does not finish, contact support.'
+        ? 'Please wait a few minutes while the automatic invoice checks finish. If it still does not finish, contact support.'
         : 'Upload invoice PDFs first, then wait until checks are complete.';
 
   const continueToReview = () => {
@@ -333,7 +294,7 @@ export default function ContractorUploadInvoicesScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Upload Invoice(s)" />
+      <BlueTitleBar title="Upload Invoice Package" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -341,7 +302,7 @@ export default function ContractorUploadInvoicesScreen() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="application/pdf,.pdf"
+            accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
             style={{ display: 'none' }}
             onChange={handleFilesPicked}
           />
@@ -351,10 +312,10 @@ export default function ContractorUploadInvoicesScreen() {
               <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
                 <Box>
                   <Text fontSize="lg" fontWeight="bold">
-                    Step 1: Upload invoices
+                    Step 1: Upload invoice package
                   </Text>
                   <Text fontSize="sm" opacity={0.75}>
-                    These invoices will be uploaded for {contractorName || 'your company'} and checked automatically.
+                    Upload one invoice plus any supporting documents for {contractorName || 'your company'}.
                   </Text>
                   {contractorError ? (
                     <Text fontSize="sm" color="red.700" mt={2}>
@@ -364,7 +325,7 @@ export default function ContractorUploadInvoicesScreen() {
                 </Box>
                 <HStack spacing={2}>
                   <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                    Add PDFs
+                    Add files
                   </Button>
                   <Tooltip label="Clear selected files">
                     <IconButton
@@ -395,10 +356,10 @@ export default function ContractorUploadInvoicesScreen() {
                 onDrop={handleDropZoneDrop}
               >
                 <Text fontSize="sm" fontWeight="bold">
-                  Drag PDF invoices here
+                  Drag invoice and support files here
                 </Text>
                 <Text fontSize="xs" opacity={0.75} mt={1}>
-                  or use Add PDFs to browse from your device
+                  PDF, JPG, JPEG, and PNG files are supported.
                 </Text>
               </Box>
 
@@ -407,7 +368,7 @@ export default function ContractorUploadInvoicesScreen() {
                   <Thead bg="gray.50">
                     <Tr>
                       <Th>#</Th>
-                      <Th>selected PDF</Th>
+                      <Th>selected file</Th>
                       <Th>size</Th>
                       <Th>action</Th>
                     </Tr>
@@ -434,7 +395,7 @@ export default function ContractorUploadInvoicesScreen() {
                       <Tr>
                         <Td colSpan={4}>
                           <Text fontSize="sm" opacity={0.7}>
-                            No PDFs selected yet.
+                            No files selected yet.
                           </Text>
                         </Td>
                       </Tr>
@@ -451,18 +412,8 @@ export default function ContractorUploadInvoicesScreen() {
                   loadingText="Uploading..."
                   isDisabled={!selectedFiles.length || !!contractorError}
                 >
-                  Upload invoice(s)
+                  Upload package
                 </Button>
-                <Tooltip label="Check whether the automatic invoice checks are finished">
-                  <Button
-                    variant="outline"
-                    leftIcon={<ArrowsClockwise size={18} />}
-                    onClick={refreshAll}
-                    isDisabled={!runId}
-                  >
-                    Check upload status
-                  </Button>
-                </Tooltip>
               </Flex>
             </Box>
 
@@ -479,15 +430,15 @@ export default function ContractorUploadInvoicesScreen() {
           <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={3}>
             <Box>
               <Text fontSize="lg" fontWeight="bold">
-                Uploaded invoices
+                Uploaded package
               </Text>
               <Text fontSize="sm" opacity={0.75}>
-                When all uploaded invoices say Ready to review, continue to step 2.
+                When the invoice says With Contractor for Pre-check, continue to step 2.
               </Text>
             </Box>
             <Tooltip label={continueHelp} shouldWrapChildren>
               <Button colorScheme="green" isDisabled={!canContinue} onClick={continueToReview}>
-                Continue to Step 2: Review uploads
+                Continue to Step 2: Pre-check
               </Button>
             </Tooltip>
           </Flex>
@@ -504,28 +455,22 @@ export default function ContractorUploadInvoicesScreen() {
                 <Tr>
                   <Th>invoice</Th>
                   <Th>status</Th>
-                  <Th>last checked</Th>
-                  <Th>uploaded</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {invoiceRows.map((row) => (
                   <Tr key={`${row.invoice_version_id}-${row.invoice_id}`}>
                     <Td fontSize="sm">{row.original_filename || `Invoice ${row.invoice_versionno ?? ''}`}</Td>
-                    <Td>
-                      <Badge colorScheme={contractorUploadStatusColor(row.invoice_status)}>
-                        {contractorUploadStatusLabel(row.invoice_status)}
-                      </Badge>
+                    <Td fontSize="sm">
+                      <Text>{invoiceStatusCopy(row.invoice_status, row.invoice_status_subtype).label}</Text>
                     </Td>
-                    <Td fontSize="sm">{fmtTs(row.invoice_status_updated_at || row.updated_at)}</Td>
-                    <Td fontSize="sm">{fmtTs(row.created_at)}</Td>
                   </Tr>
                 ))}
                 {invoiceRows.length === 0 && (
                   <Tr>
-                    <Td colSpan={4}>
+                    <Td colSpan={2}>
                       <Text fontSize="sm" opacity={0.7}>
-                        Uploaded invoices will appear here after you click Upload invoice(s).
+                        Your uploaded package will appear here after you click Upload package.
                       </Text>
                     </Td>
                   </Tr>

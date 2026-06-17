@@ -56,7 +56,8 @@ module Claims
               failed_files: 1,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
+              shell_invoice_status: "technical_failure",
+              shell_invoice_status_subtype: "ocr_unexpected_exception",
               extra_messages: [
                 {
                   code: "bundle_read_ocr_failed",
@@ -113,7 +114,8 @@ module Claims
               failed_files: 1,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
+              shell_invoice_status: "technical_failure",
+              shell_invoice_status_subtype: "genai_unexpected_exception",
               extra_messages: [
                 {
                   code: "bundle_triage_failed",
@@ -146,7 +148,9 @@ module Claims
               failed_files: unknown_docs.size,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
+              shell_invoice_status: "package_needs_correction",
+              shell_invoice_status_subtype:
+                "package_invoice_classification_conflict",
               extra_messages: [
                 {
                   code: BUNDLE_UNKNOWN_ERROR_CODE,
@@ -162,6 +166,14 @@ module Claims
 
         invoice_docs = documents.select { |doc| doc.document_kind == "invoice" }
         if invoice_docs.size != 1
+          package_status_subtype =
+            (
+              if invoice_docs.empty?
+                "package_no_invoice_pdf"
+              else
+                "package_multiple_invoice_pdfs"
+              end
+            )
           return(
             update_failed!(
               run: run,
@@ -169,7 +181,8 @@ module Claims
               failed_files: [invoice_docs.size, 1].max,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
+              shell_invoice_status: "package_needs_correction",
+              shell_invoice_status_subtype: package_status_subtype,
               extra_messages: [
                 {
                   code: BUNDLE_INVALID_ERROR_CODE,
@@ -179,6 +192,31 @@ module Claims
                   invoice_candidate_count: invoice_docs.size,
                   invoice_candidate_filenames:
                     invoice_docs.map(&:original_filename).compact.sort
+                }
+              ]
+            )
+          )
+        end
+
+        non_pdf_invoice_docs =
+          invoice_docs.reject { |document| pdf_document?(document) }
+        unless non_pdf_invoice_docs.empty?
+          return(
+            update_failed!(
+              run: run,
+              total_files: total_files,
+              failed_files: non_pdf_invoice_docs.size,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id,
+              shell_invoice_status: "package_needs_correction",
+              shell_invoice_status_subtype: "package_invoice_not_pdf",
+              extra_messages: [
+                {
+                  code: BUNDLE_INVALID_ERROR_CODE,
+                  level: "error",
+                  message: "The primary invoice must be uploaded as a PDF.",
+                  invoice_candidate_filenames:
+                    non_pdf_invoice_docs.map(&:original_filename).compact.sort
                 }
               ]
             )
@@ -257,7 +295,8 @@ module Claims
               failed_files: 1,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
+              shell_invoice_status: "technical_failure",
+              shell_invoice_status_subtype: "genai_unexpected_exception",
               extra_messages: [
                 {
                   code: "bundle_supporting_document_extraction_failed",
@@ -312,7 +351,8 @@ module Claims
               failed_files: 1,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "ocr_failed",
+              shell_invoice_status: "technical_failure",
+              shell_invoice_status_subtype: "ocr_unexpected_exception",
               extra_messages: [
                 {
                   code: "bundle_invoice_ocr_failed",
@@ -341,7 +381,11 @@ module Claims
         validation_steps =
           latest_validation_steps(run.id, resolved_invoice_version_id)
         if validation_steps.any? { |row| row.status == "failed" } ||
-             resolved_invoice_status == "genai_failed"
+             %w[
+               genai_failed
+               package_needs_correction
+               technical_failure
+             ].include?(resolved_invoice_status)
           return(
             update_failed!(
               run: run,
@@ -349,7 +393,8 @@ module Claims
               failed_files: 1,
               messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "genai_failed",
+              shell_invoice_status: "technical_failure",
+              shell_invoice_status_subtype: "genai_unexpected_exception",
               extra_messages: [
                 {
                   code: "bundle_invoice_genai_failed",
@@ -575,6 +620,13 @@ module Claims
         filename.end_with?(".jpg", ".jpeg", ".png")
       end
 
+      def pdf_document?(document)
+        content_type = document.content_type.to_s.downcase
+        return true if content_type == "application/pdf"
+
+        document.original_filename.to_s.downcase.end_with?(".pdf")
+      end
+
       def ensure_resolved_invoice!(run:, resolved_document:)
         resolved_document.with_lock do
           if resolved_document.resolved_invoice_version_id.present?
@@ -678,7 +730,7 @@ module Claims
       def enqueue_invoice_finalize_ocr!(invoice_version_id:)
         iv = ::Claims::InvoiceVersion.find(invoice_version_id)
         inv = ::Claims::Invoice.find(iv.invoice_id)
-        inv.update!(status: "ocr_queued", status_updated_at: Time.current)
+        inv.set_workflow_status!("ocr_queued")
 
         ::Claims::IngestStepRun.find_or_create_by!(
           ingest_run_id: @ingest_run_id,
@@ -717,11 +769,13 @@ module Claims
         total_files:,
         messages:,
         shell_invoice_id: nil,
-        shell_invoice_status: "ocr_in_progress"
+        shell_invoice_status: "ocr_in_progress",
+        shell_invoice_status_subtype: nil
       )
         sync_shell_invoice_status!(
           shell_invoice_id: shell_invoice_id,
-          status: shell_invoice_status
+          status: shell_invoice_status,
+          status_subtype: shell_invoice_status_subtype
         )
         run.update!(
           status: "running",
@@ -741,11 +795,13 @@ module Claims
         messages:,
         extra_messages:,
         shell_invoice_id: nil,
-        shell_invoice_status: "ocr_failed"
+        shell_invoice_status: "ocr_failed",
+        shell_invoice_status_subtype: nil
       )
         sync_shell_invoice_status!(
           shell_invoice_id: shell_invoice_id,
-          status: shell_invoice_status
+          status: shell_invoice_status,
+          status_subtype: shell_invoice_status_subtype
         )
         run.update!(
           status: "failed",
@@ -758,17 +814,20 @@ module Claims
         )
       end
 
-      def sync_shell_invoice_status!(shell_invoice_id:, status:)
+      def sync_shell_invoice_status!(
+        shell_invoice_id:,
+        status:,
+        status_subtype: nil
+      )
         return if shell_invoice_id.blank? || status.blank?
 
         invoice = ::Claims::Invoice.find_by(id: shell_invoice_id)
-        return if invoice.nil? || invoice.status == status
+        return if invoice.nil?
+        subtype =
+          ::Claims::Invoices::StatusSubtypes.normalize(status, status_subtype)
+        return if invoice.status == status && invoice.status_subtype == subtype
 
-        invoice.update!(
-          status: status,
-          status_updated_at: Time.current,
-          updated_at: Time.current
-        )
+        invoice.set_workflow_status!(status, status_subtype: status_subtype)
       rescue StandardError
         nil
       end

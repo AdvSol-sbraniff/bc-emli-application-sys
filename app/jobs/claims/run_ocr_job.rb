@@ -71,7 +71,7 @@ module Claims
       )
 
       # 2) set invoice status
-      inv.update!(status: "ocr_in_progress", status_updated_at: Time.current)
+      inv.set_workflow_status!("ocr_in_progress")
 
       # 3) call node
       base = ENV.fetch("INV_NODE_BASE_URL") # e.g. http://host.docker.internal:3001
@@ -130,10 +130,10 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-      inv.update!(status: "ocr_complete", status_updated_at: Time.current)
+      inv.set_workflow_status!("ocr_complete")
 
       if enqueue_genai_after
-        inv.update!(status: "genai_queued", status_updated_at: Time.current)
+        inv.set_workflow_status!("genai_queued")
 
         Claims::RunGenaiJob.perform_async(
           sess.id,
@@ -164,7 +164,10 @@ module Claims
       end
 
       begin
-        inv&.update!(status: "ocr_failed", status_updated_at: Time.current)
+        inv&.set_workflow_status!(
+          "technical_failure",
+          status_subtype: ocr_failure_subtype(e)
+        )
       rescue StandardError
         # ignore
       end
@@ -189,6 +192,20 @@ module Claims
 
     def bundle_ingest_run?(ingest_run_id)
       Claims::IngestDocument.exists?(ingest_run_id: ingest_run_id)
+    end
+
+    def ocr_failure_subtype(error)
+      message = error.message.to_s.downcase
+      return "ocr_service_error" if message.include?("node ocr failed")
+      return "ocr_service_malformed_response" if error.is_a?(JSON::ParserError)
+      if message.include?("storage") || message.include?("blob")
+        return "ocr_storage_read_failure"
+      end
+      if message.include?("timeout") || message.include?("timed out")
+        return "ocr_provider_timeout"
+      end
+
+      "ocr_unexpected_exception"
     end
   end
 end

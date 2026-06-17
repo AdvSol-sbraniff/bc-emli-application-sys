@@ -73,11 +73,47 @@ module Claims
 
         failed_results = results.select { |row| row[:status].to_s == "failed" }
         if failed_results.any?
+          failure_status, failure_subtype =
+            staging_failure_status_and_subtype(failed_results)
+          shell_invoice.set_workflow_status!(
+            failure_status,
+            status_subtype: failure_subtype
+          )
           stage_step.update!(
             status: "failed",
             error_text:
               "One or more evidence files failed during upload package staging.",
             updated_at: Time.current
+          )
+          ingest_run.update!(
+            status: "failed",
+            failed_files: failed_results.size,
+            messages:
+              parse_ingest_messages(ingest_run.messages) +
+                [
+                  {
+                    level: "error",
+                    code: shell_invoice.status_subtype,
+                    message:
+                      "One or more evidence files failed during upload package staging."
+                  }
+                ],
+            completed_at: Time.current,
+            updated_at: Time.current
+          )
+          return(
+            {
+              ok: true,
+              ingest_run_id: ingest_run.id,
+              session_id: session_id,
+              invoice_id: shell_invoice.id,
+              created_session: true,
+              status: ingest_run.status,
+              total_files: ingest_run.total_files,
+              completed_files: ingest_run.completed_files,
+              failed_files: ingest_run.failed_files,
+              results: results
+            }
           )
         else
           stage_step.update!(
@@ -87,11 +123,7 @@ module Claims
           )
         end
 
-        shell_invoice.update!(
-          status: "ocr_in_progress",
-          status_updated_at: Time.current,
-          updated_at: Time.current
-        )
+        shell_invoice.set_workflow_status!("ocr_in_progress")
 
         ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload
@@ -122,11 +154,12 @@ module Claims
           file_safe_call(file, :content_type) || "application/octet-stream"
         size = file_safe_call(file, :size)
         ingest_document = nil
-        unless supported_evidence_file?(name, content_type)
-          raise "Only PDF, JPG, JPEG, and PNG evidence files are supported."
-        end
 
         begin
+          unless supported_evidence_file?(name, content_type)
+            raise "Only PDF, JPG, JPEG, and PNG evidence files are supported."
+          end
+
           ingest_document =
             ::Claims::IngestDocument.create!(
               ingest_run_id: ingest_run.id,
@@ -217,6 +250,31 @@ module Claims
             ingest_document_id: ingest_document&.id
           }
         end
+      end
+
+      def package_failure_subtype(failed_results)
+        errors =
+          failed_results.map { |row| row[:error].to_s.downcase }.join(" ")
+        return "package_unsupported_file_type" if errors.include?("supported")
+        return "package_unreadable_file" if errors.include?("read")
+
+        "package_no_processable_files"
+      end
+
+      def staging_failure_status_and_subtype(failed_results)
+        errors =
+          failed_results.map { |row| row[:error].to_s.downcase }.join(" ")
+        if errors.include?("node upload failed")
+          return "technical_failure", "upload_service_error"
+        end
+        if errors.include?("storage_key")
+          return "technical_failure", "upload_storage_key_missing"
+        end
+        if errors.include?("missing env")
+          return "technical_failure", "configuration_missing"
+        end
+
+        ["package_needs_correction", package_failure_subtype(failed_results)]
       end
 
       def create_failed_step(ingest_run, session_id, ingest_document, error)

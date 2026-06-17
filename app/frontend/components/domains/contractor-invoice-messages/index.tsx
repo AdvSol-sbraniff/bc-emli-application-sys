@@ -1,6 +1,6 @@
-import { Box, Button, Container, Flex, Heading, Spinner, Text, Textarea, useToast } from '@chakra-ui/react';
+import { Box, Button, Container, Flex, Spinner, Text, Textarea, useToast } from '@chakra-ui/react';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { fmtDate } from '../invoice-versions/display';
 
@@ -23,8 +23,7 @@ const messageTypeLabel = (type: unknown): string => {
 };
 
 export default function ContractorInvoiceMessagesScreen() {
-  const { sessionId, invoiceId } = useParams();
-  const navigate = useNavigate();
+  const { invoiceId } = useParams();
   const toast = useToast();
   const [rows, setRows] = useState<MessageRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -105,26 +104,6 @@ export default function ContractorInvoiceMessagesScreen() {
       <ThinBlueTitleBar title="Messages & Requested Changes" />
       <Container maxW="5xl" py={6}>
         <Box borderWidth="1px" borderRadius="lg" bg="white" p={5}>
-          <Flex justify="space-between" align="center" gap={3} mb={5} flexWrap="wrap">
-            <Box>
-              <Heading size="md">Messages & Requested Changes</Heading>
-              <Text fontSize="sm" opacity={0.75} mt={1}>
-                Review admin requests and send simple notes back to admins. Each message is saved separately.
-              </Text>
-            </Box>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (!sessionId || !invoiceId) return;
-                navigate(
-                  `/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/review?source=portal`,
-                );
-              }}
-            >
-              Back to invoice
-            </Button>
-          </Flex>
-
           {error ? (
             <Box mb={4} p={3} borderWidth="1px" borderColor="red.200" bg="red.50" borderRadius="md">
               <Text color="red.700" fontSize="sm">

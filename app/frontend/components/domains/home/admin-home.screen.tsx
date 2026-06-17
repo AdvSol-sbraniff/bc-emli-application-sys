@@ -19,7 +19,7 @@ export const AdminHomeScreen = () => {
               href="/submission-simulator-admin"
             />
             <HomeScreenBox
-              title="AI Rules and Fields Editor"
+              title="Fields and Advice Editor"
               description=""
               icon={<ClipboardText size={24} />}
               href="/validation-rules-admin"

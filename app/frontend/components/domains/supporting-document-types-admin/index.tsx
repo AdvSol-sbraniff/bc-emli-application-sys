@@ -435,15 +435,7 @@ export default function SupportingDocumentTypesAdminScreen() {
       <ThinBlueTitleBar title="Supporting Document Types" />
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4}>
-            <Box>
-              <Text fontSize="lg" fontWeight="bold">
-                Supporting document type registry
-              </Text>
-              <Text fontSize="sm" opacity={0.7}>
-                Manage the supporting-document classifications used by the mixed upload pipeline.
-              </Text>
-            </Box>
+          <Flex justify="flex-end" align={{ base: 'start', md: 'center' }} gap={3} mb={4}>
             <Button leftIcon={<Plus size={16} />} onClick={openCreate}>
               Add Type
             </Button>
