@@ -105,6 +105,8 @@ Rails.application.routes.draw do
       delete "admin/invoices/:id", to: "invoice_grid#destroy"
       post "admin/invoices/:id/status_transition",
            to: "invoice_grid#status_transition"
+      post "admin/invoices/:id/reanalyze_advice",
+           to: "invoice_grid#reanalyze_advice"
       get "admin/invoices/:invoice_id/supporting_documents/context",
           to: "invoice_supporting_documents#context"
       get "admin/invoices/:invoice_id/supporting_documents",
@@ -131,9 +133,8 @@ Rails.application.routes.draw do
       # SECTION 30 — INGEST (AI Admin / POC)
       # ============================================================
 
-      # New upload button (POST PDFs for an existing session_id)
-      post "sessions/:session_id/upload", to: "ingest#upload"
-      post "invoices/:invoice_id/upload_fix", to: "ingest#upload_fix"
+      post "invoices/:invoice_id/upload_fix_package",
+           to: "ingest#upload_fix_package"
 
       # ============================================================
       # SECTION 40 — RUN TRACKER (AI Admin / POC)

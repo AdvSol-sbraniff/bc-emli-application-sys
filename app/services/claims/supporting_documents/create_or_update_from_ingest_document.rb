@@ -2,25 +2,29 @@
 
 module Claims
   module SupportingDocuments
-    class PromoteFromIngestDocument
-      def self.call(resolved_invoice_id:, ingest_document_id:)
+    class CreateOrUpdateFromIngestDocument
+      def self.call(resolved_invoice_version_id:, ingest_document_id:)
         new(
-          resolved_invoice_id: resolved_invoice_id,
+          resolved_invoice_version_id: resolved_invoice_version_id,
           ingest_document_id: ingest_document_id
         ).call
       end
 
-      def initialize(resolved_invoice_id:, ingest_document_id:)
-        @resolved_invoice_id = resolved_invoice_id
+      def initialize(resolved_invoice_version_id:, ingest_document_id:)
+        @resolved_invoice_version_id = resolved_invoice_version_id
         @ingest_document_id = ingest_document_id
       end
 
       def call
+        invoice_version =
+          ::Claims::InvoiceVersion.select(:id, :invoice_id).find(
+            @resolved_invoice_version_id
+          )
         ingest_document = ::Claims::IngestDocument.find(@ingest_document_id)
 
         document =
           ::Claims::SupportingDocument.find_or_initialize_by(
-            invoice_id: @resolved_invoice_id,
+            invoice_version_id: invoice_version.id,
             storage_key: ingest_document.storage_key
           )
 
@@ -48,6 +52,8 @@ module Claims
         document.save!
 
         ingest_document.update!(
+          resolved_invoice_id: invoice_version.invoice_id,
+          resolved_invoice_version_id: invoice_version.id,
           promoted_supporting_document_id: document.id,
           updated_at: Time.current
         )

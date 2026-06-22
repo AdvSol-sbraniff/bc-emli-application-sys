@@ -45,9 +45,18 @@ module Api
 
       def index
         invoice = ::Claims::Invoice.find(params[:invoice_id])
+        latest_version =
+          ::Claims::InvoiceVersion
+            .where(invoice_id: invoice.id)
+            .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+            .first
+        if latest_version.nil?
+          render json: { rows: [] }, status: :ok
+          return
+        end
 
         rows =
-          invoice
+          latest_version
             .supporting_documents
             .includes(
               :supporting_document_type,
@@ -157,7 +166,7 @@ module Api
 
         {
           id: row.id,
-          invoice_id: row.invoice_id,
+          invoice_version_id: row.invoice_version_id,
           supporting_document_type_id: row.supporting_document_type_id,
           supporting_document_type_key: row.supporting_document_type&.type_key,
           supporting_document_type_description:

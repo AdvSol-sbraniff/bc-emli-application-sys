@@ -8,10 +8,16 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_genai, retry: 3
 
-    def perform(invoice_id, supporting_document_type_id, ingest_run_id = nil)
-      invoice = ::Claims::Invoice.find(invoice_id)
+    def perform(
+      invoice_version_id,
+      supporting_document_type_id,
+      ingest_run_id = nil,
+      requested_step_type = nil
+    )
+      invoice_version = ::Claims::InvoiceVersion.find(invoice_version_id)
+      invoice = invoice_version.invoice
       type = ::Claims::SupportingDocumentType.find(supporting_document_type_id)
-      documents = documents_for(invoice: invoice, type: type)
+      documents = documents_for(invoice_version: invoice_version, type: type)
       if documents.empty?
         raise "No supporting documents found for #{type.type_key}"
       end
@@ -19,9 +25,10 @@ module Claims
       step =
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
+          invoice_version: invoice_version,
           invoice: invoice,
           supporting_document_type: type,
-          step_type: "supporting_document_type_extraction"
+          step_type: extraction_step_type_for(requested_step_type)
         )
       step.update!(
         status: "in_progress",
@@ -39,6 +46,7 @@ module Claims
           diagnostic_context:
             genai_diagnostic_context(
               invoice: invoice,
+              invoice_version: invoice_version,
               type: type,
               documents: documents,
               step_type: step.step_type,
@@ -48,7 +56,7 @@ module Claims
 
       located_result =
         ::Claims::SupportingDocuments::ApplyTypeLocatedFields.call(
-          invoice_id: invoice.id,
+          invoice_version_id: invoice_version.id,
           supporting_document_type_id: type.id,
           located_fields_payload: payload
         )
@@ -66,9 +74,16 @@ module Claims
 
       advance_run!(ingest_run_id: ingest_run_id)
     rescue => e
+      status_subtype = ::Claims::Invoices::FailureSubtypes.genai(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
+        genai_results_json:
+          ::Claims::Invoices::FailureSubtypes.payload(
+            status: "technical_failure",
+            status_subtype: status_subtype,
+            error: e
+          ),
         updated_at: Time.current
       )
       advance_run!(ingest_run_id: ingest_run_id)
@@ -77,8 +92,20 @@ module Claims
 
     private
 
-    def documents_for(invoice:, type:)
-      invoice
+    def extraction_step_type_for(requested_step_type)
+      requested = requested_step_type.to_s
+      if %w[
+           supporting_document_extraction
+           fix_supporting_document_extraction
+         ].include?(requested)
+        return requested
+      end
+
+      "supporting_document_extraction"
+    end
+
+    def documents_for(invoice_version:, type:)
+      invoice_version
         .supporting_documents
         .where(supporting_document_type_id: type.id)
         .order(:created_at, :id)
@@ -87,6 +114,7 @@ module Claims
 
     def find_or_create_step!(
       ingest_run_id:,
+      invoice_version:,
       invoice:,
       supporting_document_type:,
       step_type:
@@ -98,6 +126,7 @@ module Claims
           ::Claims::IngestStepRun
             .where(
               ingest_run_id: ingest_run_id,
+              invoice_version_id: invoice_version.id,
               supporting_document_type_id: supporting_document_type.id,
               step_type: step_type
             )
@@ -110,6 +139,7 @@ module Claims
         ::Claims::IngestStepRun.create!(
           ingest_run_id: ingest_run_id,
           session_id: invoice.session_id,
+          invoice_version_id: invoice_version.id,
           supporting_document_type_id: supporting_document_type.id,
           step_type: step_type,
           status: "queued",
@@ -220,6 +250,7 @@ module Claims
 
     def genai_diagnostic_context(
       invoice:,
+      invoice_version:,
       type:,
       documents:,
       step_type:,
@@ -229,6 +260,7 @@ module Claims
         step_type: step_type,
         ingest_run_id: ingest_run_id,
         invoice_id: invoice.id,
+        invoice_version_id: invoice_version.id,
         supporting_document_type_id: type.id,
         supporting_document_type_key: type.type_key,
         supporting_document_count: documents.size,

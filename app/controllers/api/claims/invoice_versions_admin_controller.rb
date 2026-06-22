@@ -171,7 +171,7 @@ module Api
                          iv.id
                        ),
                      "uploaded_supporting_documents" =>
-                       serialize_uploaded_supporting_documents(invoice.id)
+                       serialize_uploaded_supporting_documents(iv.id)
                    ),
                  invoice:
                    invoice.as_json(
@@ -345,7 +345,7 @@ module Api
                          iv.id
                        ),
                      "uploaded_supporting_documents" =>
-                       serialize_uploaded_supporting_documents(iv.invoice_id)
+                       serialize_uploaded_supporting_documents(iv.id)
                    ),
                  invoice:
                    invoice&.as_json(
@@ -720,9 +720,9 @@ module Api
         end
       end
 
-      def serialize_uploaded_supporting_documents(invoice_id)
+      def serialize_uploaded_supporting_documents(invoice_version_id)
         ::Claims::SupportingDocument
-          .where(invoice_id: invoice_id)
+          .where(invoice_version_id: invoice_version_id)
           .includes(
             :supporting_document_type,
             :supporting_document_visual_findings
@@ -735,7 +735,7 @@ module Api
 
             {
               id: row.id,
-              invoice_id: row.invoice_id,
+              invoice_version_id: row.invoice_version_id,
               supporting_document_type_id: row.supporting_document_type_id,
               supporting_document_type_key:
                 row.supporting_document_type&.type_key,

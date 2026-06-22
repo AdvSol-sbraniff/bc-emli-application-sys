@@ -21,7 +21,6 @@ import {
   ModalBody,
   ModalCloseButton,
   ModalContent,
-  ModalFooter,
   ModalHeader,
   ModalOverlay,
   Spinner,
@@ -31,14 +30,12 @@ import {
   useDisclosure,
   useToast,
 } from '@chakra-ui/react';
-import { keyframes } from '@emotion/react';
 import {
   ArrowClockwise,
   ArrowSquareOut,
   CaretLeft,
   CaretRight,
   ChatDots,
-  CheckCircle,
   CornersOut,
   FrameCorners,
   MagnifyingGlassMinus,
@@ -46,9 +43,8 @@ import {
   PaperPlaneTilt,
   Question,
   UploadSimple,
-  WarningCircle,
 } from '@phosphor-icons/react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -75,105 +71,6 @@ type FieldRowProps = {
 
 type RuleResult = 'pass' | 'info' | 'warn' | 'fail' | null | undefined;
 type FitMode = 'width' | 'page';
-type UploadFixModalState = 'idle' | 'uploading' | 'processing' | 'succeeded' | 'failed';
-
-const orbitSpin = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
-
-const pulseGlow = keyframes`
-  0%, 100% { opacity: 0.55; transform: scale(0.95); }
-  50% { opacity: 0.95; transform: scale(1.04); }
-`;
-
-const storyFade = keyframes`
-  0% { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(3px); }
-  18% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  82% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translateY(-7px) scale(0.99); filter: blur(2px); }
-`;
-
-const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-const UploadFixProcessingGraphic = ({ label }: { label: string }) => (
-  <Flex direction="column" align="center" gap={4} py={8}>
-    <Box position="relative" w="168px" h="168px">
-      <Box
-        position="absolute"
-        inset="10px"
-        borderRadius="full"
-        bg="radial-gradient(circle at 35% 30%, rgba(255,255,255,0.98), rgba(188,229,255,0.42) 42%, rgba(0,104,183,0.08) 72%)"
-        boxShadow="0 22px 55px rgba(0, 85, 140, 0.22), inset 0 1px 18px rgba(255,255,255,0.9)"
-        animation={`${pulseGlow} 2.7s ease-in-out infinite`}
-        sx={{
-          '@media (prefers-reduced-motion: reduce)': {
-            animation: 'none',
-          },
-        }}
-      />
-      <Flex
-        position="absolute"
-        inset="0"
-        align="center"
-        justify="center"
-        borderRadius="full"
-        bg="conic-gradient(from 120deg, rgba(10,132,207,0), rgba(61,177,255,0.82), rgba(214,244,255,0.95), rgba(10,132,207,0.08), rgba(10,132,207,0))"
-        sx={{
-          mask: 'radial-gradient(circle, transparent 53%, black 55%)',
-          WebkitMask: 'radial-gradient(circle, transparent 53%, black 55%)',
-          animation: `${orbitSpin} 1.45s linear infinite`,
-          '@media (prefers-reduced-motion: reduce)': {
-            animation: `${orbitSpin} 5s linear infinite`,
-          },
-        }}
-      />
-      <Flex
-        position="absolute"
-        inset="0"
-        align="center"
-        justify="center"
-        color="#0068b7"
-        filter="drop-shadow(0 12px 20px rgba(0, 104, 183, 0.22))"
-        sx={{
-          animation: `${orbitSpin} 2.3s cubic-bezier(.62,.02,.32,1) infinite`,
-          '@media (prefers-reduced-motion: reduce)': {
-            animation: 'none',
-          },
-        }}
-      >
-        <ArrowClockwise size={104} weight="duotone" />
-      </Flex>
-      <Box
-        position="absolute"
-        right="22px"
-        top="30px"
-        w="16px"
-        h="16px"
-        borderRadius="full"
-        bg="linear-gradient(135deg, #ffffff, #42c7ff)"
-        boxShadow="0 0 24px rgba(66, 199, 255, 0.9)"
-      />
-    </Box>
-    <Text
-      key={label}
-      fontSize="xl"
-      fontWeight="700"
-      letterSpacing="0.02em"
-      color="rgba(15, 42, 67, 0.92)"
-      minH="32px"
-      textAlign="center"
-      animation={`${storyFade} 3s ease-in-out infinite`}
-      sx={{
-        '@media (prefers-reduced-motion: reduce)': {
-          animation: 'none',
-        },
-      }}
-    >
-      {label}
-    </Text>
-  </Flex>
-);
 
 const FieldRow = ({ label, value, active, disabled, onClick, inline }: FieldRowProps) => (
   <Box
@@ -402,12 +299,9 @@ export default function ContractorInvoiceReviewScreen() {
   const { sessionId, invoiceId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pdfWrapRef = useRef<HTMLDivElement | null>(null);
-  const isMountedRef = useRef(true);
   const { isOpen: isHelpOpen, onOpen: onHelpOpen, onClose: onHelpClose } = useDisclosure();
   const { isOpen: isSubmitWarningOpen, onOpen: onSubmitWarningOpen, onClose: onSubmitWarningClose } = useDisclosure();
-  const { isOpen: isUploadFixOpen, onOpen: onUploadFixOpen, onClose: onUploadFixClose } = useDisclosure();
 
   const [showPdf, setShowPdf] = useState<boolean>(true);
   const [readData, setReadData] = useState<any>(null);
@@ -437,12 +331,6 @@ export default function ContractorInvoiceReviewScreen() {
   const [rotate, setRotate] = useState<number>(0);
   const [pageInput, setPageInput] = useState<string>('1');
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [uploadLoading, setUploadLoading] = useState(false);
-  const [uploadFixState, setUploadFixState] = useState<UploadFixModalState>('idle');
-  const [uploadFixStory, setUploadFixStory] = useState('Uploading corrected invoice');
-  const [uploadFixErrorTitle, setUploadFixErrorTitle] = useState('Upload needs attention');
-  const [uploadFixErrorMessage, setUploadFixErrorMessage] = useState('');
-  const [uploadFixSuccessVersion, setUploadFixSuccessVersion] = useState<number | null>(null);
 
   const currentStatus = String(readData?.invoice_status || '').trim();
   const currentStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
@@ -455,87 +343,76 @@ export default function ContractorInvoiceReviewScreen() {
     [genAiRulechecks],
   );
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+  const loadReviewData = useCallback(async () => {
+    if (!sessionId || !invoiceId) return;
 
-  useEffect(() => {
-    const run = async () => {
-      if (!sessionId || !invoiceId) return;
-
-      const [readResp, pdfResp, genaiResp] = await Promise.all([
-        fetch(`/api/claims/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read`, {
+    const [readResp, pdfResp, genaiResp] = await Promise.all([
+      fetch(`/api/claims/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      }),
+      fetch(`/api/claims/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/pdf_url`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      }),
+      fetch(
+        `/api/claims/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read_genai`,
+        {
           headers: { Accept: 'application/json' },
           credentials: 'include',
-        }),
-        fetch(
-          `/api/claims/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/pdf_url`,
-          {
-            headers: { Accept: 'application/json' },
-            credentials: 'include',
-          },
-        ),
-        fetch(
-          `/api/claims/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/read_genai`,
-          {
-            headers: { Accept: 'application/json' },
-            credentials: 'include',
-          },
-        ),
-      ]);
+        },
+      ),
+    ]);
 
-      const readJson = await readResp.json().catch(() => ({}));
-      const read = readJson?.read ?? null;
-      const invoice = readJson?.invoice ?? null;
-      setReadData(
-        read
-          ? {
-              ...read,
-              invoice_status: read.invoice_status ?? invoice?.status ?? null,
-              invoice_status_subtype: read.invoice_status_subtype ?? invoice?.status_subtype ?? null,
-              session_id: read.session_id ?? invoice?.session_id ?? null,
-            }
-          : null,
-      );
-      setLineitems(Array.isArray(readJson?.lineitems) ? readJson.lineitems : []);
-      const pdfJson = await pdfResp.json().catch(() => ({}));
-      if (!pdfResp.ok || !pdfJson?.sas_url) {
-        setPdfUrl(null);
-        setPdfUrlError(pdfJson?.error || `Could not load PDF URL (${pdfResp.status}).`);
-      } else {
-        setPdfUrl(String(pdfJson.sas_url));
-        setPdfUrlError(null);
-      }
+    const readJson = await readResp.json().catch(() => ({}));
+    const read = readJson?.read ?? null;
+    const invoice = readJson?.invoice ?? null;
+    setReadData(
+      read
+        ? {
+            ...read,
+            invoice_status: read.invoice_status ?? invoice?.status ?? null,
+            invoice_status_subtype: read.invoice_status_subtype ?? invoice?.status_subtype ?? null,
+            session_id: read.session_id ?? invoice?.session_id ?? null,
+          }
+        : null,
+    );
+    setLineitems(Array.isArray(readJson?.lineitems) ? readJson.lineitems : []);
+    const pdfJson = await pdfResp.json().catch(() => ({}));
+    if (!pdfResp.ok || !pdfJson?.sas_url) {
+      setPdfUrl(null);
+      setPdfUrlError(pdfJson?.error || `Could not load PDF URL (${pdfResp.status}).`);
+    } else {
+      setPdfUrl(String(pdfJson.sas_url));
+      setPdfUrlError(null);
+    }
 
-      if (!genaiResp.ok) {
-        const txt = await genaiResp.text();
-        setGenAiFields([]);
-        setClassifierFields([]);
-        setCodeFields([]);
-        setUpgradeTypeResults([]);
-        setGenAiRulechecks([]);
-        setGenAiError(`read_genai failed (${genaiResp.status}): ${txt}`);
-        return;
-      }
+    if (!genaiResp.ok) {
+      const txt = await genaiResp.text();
+      setGenAiFields([]);
+      setClassifierFields([]);
+      setCodeFields([]);
+      setUpgradeTypeResults([]);
+      setGenAiRulechecks([]);
+      setGenAiError(`read_genai failed (${genaiResp.status}): ${txt}`);
+      return;
+    }
 
-      const genaiJson = await genaiResp.json().catch(() => ({}));
-      setGenAiFields(Array.isArray(genaiJson?.located_fields) ? genaiJson.located_fields : []);
-      setClassifierFields(
-        Array.isArray(genaiJson?.classifier_located_fields) ? genaiJson.classifier_located_fields : [],
-      );
-      setCodeFields(Array.isArray(genaiJson?.code_located_fields) ? genaiJson.code_located_fields : []);
-      setUpgradeTypeResults(Array.isArray(genaiJson?.upgrade_type_results) ? genaiJson.upgrade_type_results : []);
-      setGenAiRulechecks([
-        ...(Array.isArray(genaiJson?.code_rulechecks) ? genaiJson.code_rulechecks : []),
-        ...(Array.isArray(genaiJson?.rulechecks) ? genaiJson.rulechecks : []),
-      ]);
-      setGenAiError(null);
-    };
-    run();
+    const genaiJson = await genaiResp.json().catch(() => ({}));
+    setGenAiFields(Array.isArray(genaiJson?.located_fields) ? genaiJson.located_fields : []);
+    setClassifierFields(Array.isArray(genaiJson?.classifier_located_fields) ? genaiJson.classifier_located_fields : []);
+    setCodeFields(Array.isArray(genaiJson?.code_located_fields) ? genaiJson.code_located_fields : []);
+    setUpgradeTypeResults(Array.isArray(genaiJson?.upgrade_type_results) ? genaiJson.upgrade_type_results : []);
+    setGenAiRulechecks([
+      ...(Array.isArray(genaiJson?.code_rulechecks) ? genaiJson.code_rulechecks : []),
+      ...(Array.isArray(genaiJson?.rulechecks) ? genaiJson.rulechecks : []),
+    ]);
+    setGenAiError(null);
   }, [invoiceId, sessionId]);
+
+  useEffect(() => {
+    void loadReviewData();
+  }, [loadReviewData]);
 
   useEffect(() => {
     if (!showPdf) return;
@@ -770,38 +647,13 @@ export default function ContractorInvoiceReviewScreen() {
     void submitToAdmin();
   };
 
-  const uploadCorrectedInvoice = async (file?: File) => {
-    if (!file || !currentInvoiceId) return;
-    setUploadLoading(true);
-    try {
-      const form = new FormData();
-      form.append('pdfs[]', file);
-      const resp = await fetch(`/api/claims/invoices/${encodeURIComponent(currentInvoiceId)}/upload_fix`, {
-        method: 'POST',
-        body: form,
-        credentials: 'include',
-      });
-      const json = await resp.json().catch(() => ({}));
-      if (!resp.ok || json?.ok === false) throw new Error(json?.error || `Upload failed (${resp.status}).`);
-      toast({
-        title: 'Corrected invoice uploaded',
-        description: 'The corrected invoice was uploaded. OCR and AI processing may still need to run before resubmit.',
-        status: 'success',
-        duration: 7000,
-        isClosable: true,
-      });
-    } catch (e: any) {
-      toast({
-        title: 'Upload failed',
-        description: e?.message || 'Please try again.',
-        status: 'error',
-        duration: 6000,
-        isClosable: true,
-      });
-    } finally {
-      setUploadLoading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+  const openFixUpload = () => {
+    if (!sessionId || !currentInvoiceId) return;
+    window.open(
+      `/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(currentInvoiceId)}/fix`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   };
 
   return (
@@ -858,31 +710,23 @@ export default function ContractorInvoiceReviewScreen() {
             <Tooltip
               label={
                 canUploadFix
-                  ? 'Upload a corrected invoice PDF for this invoice.'
-                  : 'Corrected upload is available after the pre-check finishes, or when the program team has requested a revision.'
+                  ? 'Open the fix upload screen in a new tab.'
+                  : 'Fix upload is available after the pre-check finishes, or when the program team has requested a revision.'
               }
               hasArrow
             >
               <IconButton
-                aria-label="Upload corrected invoice"
+                aria-label="Open fix upload"
                 icon={<UploadSimple size={25} weight="bold" />}
                 size="md"
                 colorScheme="orange"
                 variant={canUploadFix ? 'solid' : 'outline'}
                 borderRadius="full"
                 boxShadow={canUploadFix ? '0 8px 18px rgba(221, 107, 32, 0.18)' : 'none'}
-                isDisabled={!canUploadFix}
-                isLoading={uploadLoading}
-                onClick={() => fileInputRef.current?.click()}
+                isDisabled={!canUploadFix || !sessionId || !currentInvoiceId}
+                onClick={openFixUpload}
               />
             </Tooltip>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf"
-              style={{ display: 'none' }}
-              onChange={(event) => void uploadCorrectedInvoice(event.target.files?.[0])}
-            />
             <Box ml="auto">
               <Tooltip label="Help: how this viewer is grouped and what each section means">
                 <IconButton

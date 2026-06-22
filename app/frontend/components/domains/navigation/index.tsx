@@ -76,11 +76,11 @@ const InvoiceVersionsAdminScreen = lazy(() =>
   import('../invoice-versions-admin').then((module) => ({ default: module.InvoiceVersionsAdminScreen })),
 );
 
-const UploadInvoiceAdminScreen = lazy(() =>
-  import('../upload-invoice-admin').then((module) => ({ default: module.default })),
+const ContractorFixSimulationAdminScreen = lazy(() =>
+  import('../contractor-fix-simulation-admin').then((module) => ({ default: module.default })),
 );
-const UploadInvoiceFixAdminScreen = lazy(() =>
-  import('../upload-invoice-fix-admin').then((module) => ({ default: module.default })),
+const AdviceRefreshSimulationAdminScreen = lazy(() =>
+  import('../advice-refresh-simulation-admin').then((module) => ({ default: module.default })),
 );
 const SubmissionSimulatorAdminScreen = lazy(() =>
   import('../submission-simulator-admin').then((module) => ({ default: module.default })),
@@ -90,6 +90,9 @@ const InvoiceSupportingDocumentsAdminScreen = lazy(() =>
 );
 const ContractorInvoiceReviewScreen = lazy(() =>
   import('../contractor-invoice-review').then((module) => ({ default: module.default })),
+);
+const ContractorFixUploadScreen = lazy(() =>
+  import('../contractor-fix-upload').then((module) => ({ default: module.default })),
 );
 const ContractorInvoiceMessagesScreen = lazy(() =>
   import('../contractor-invoice-messages').then((module) => ({ default: module.default })),
@@ -698,6 +701,10 @@ const AppRoutes = observer(() => {
             element={<ContractorInvoiceReviewScreen />}
           />
           <Route
+            path="/contractor/sessions/:sessionId/invoices/:invoiceId/fix"
+            element={<ContractorFixUploadScreen />}
+          />
+          <Route
             path="/contractor/sessions/:sessionId/invoices/:invoiceId/messages"
             element={<ContractorInvoiceMessagesScreen />}
           />
@@ -849,8 +856,8 @@ const AppRoutes = observer(() => {
           <Route path="/awhp-product-list-admin" element={<AwhpProductListAdminScreen />} />
           <Route path="/ohpa-product-list-admin" element={<OhpaProductListAdminScreen />} />
           <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
-          <Route path="/upload-invoice-admin" element={<UploadInvoiceAdminScreen />} />
-          <Route path="/upload-invoice-fix-admin" element={<UploadInvoiceFixAdminScreen />} />
+          <Route path="/contractorfixsimulation" element={<ContractorFixSimulationAdminScreen />} />
+          <Route path="/advice-refresh-simulation-admin" element={<AdviceRefreshSimulationAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
           <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
           <Route path="/contractors-admin" element={<ContractorsAdminScreen />} />

@@ -25,9 +25,9 @@ module Claims
             ::Claims::InvoiceVersion.where(invoice_id: invoice_ids).pluck(:id)
 
           supporting_document_ids =
-            ::Claims::SupportingDocument.where(invoice_id: invoice_ids).pluck(
-              :id
-            )
+            ::Claims::SupportingDocument.where(
+              invoice_version_id: invoice_version_ids
+            ).pluck(:id)
 
           ingest_document_ids =
             ::Claims::IngestDocument

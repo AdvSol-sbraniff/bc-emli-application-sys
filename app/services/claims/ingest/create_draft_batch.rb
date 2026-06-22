@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "json"
-require "net/http"
 require "securerandom"
 
 module Claims
@@ -175,14 +174,20 @@ module Claims
                   :cleanup_failed_invoice_artifacts
 
       def process_file(file, index, session_id, ingest_run, shell_invoice_id)
-        name = file_safe_call(file, :original_filename) || "unknown"
-        content_type =
-          file_safe_call(file, :content_type) || "application/octet-stream"
-        size = file_safe_call(file, :size)
+        name =
+          ::Claims::Ingest::EvidenceFile.original_filename(
+            file,
+            fallback: "unknown"
+          )
+        content_type = ::Claims::Ingest::EvidenceFile.content_type(file)
+        size = ::Claims::Ingest::EvidenceFile.byte_size(file)
         ingest_document = nil
 
         begin
-          unless supported_evidence_file?(name, content_type)
+          unless ::Claims::Ingest::EvidenceFile.supported?(
+                   filename: name,
+                   content_type: content_type
+                 )
             raise "Only PDF, JPG, JPEG, and PNG evidence files are supported."
           end
 
@@ -195,7 +200,11 @@ module Claims
               resolved_invoice_id: shell_invoice_id,
               storage_provider: "azure_blob",
               storage_key:
-                "PENDING/session=#{session_id}/ingest_document=#{SecureRandom.uuid}/#{SecureRandom.uuid}#{storage_extension_for(name, content_type)}",
+                pending_storage_key(
+                  session_id: session_id,
+                  filename: name,
+                  content_type: content_type
+                ),
               original_filename: name,
               content_type: content_type,
               byte_size: size,
@@ -207,9 +216,9 @@ module Claims
             )
 
           node_resp =
-            ingest_node_upload_pdf!(
+            ::Claims::Ingest::UploadEvidenceFileToNode.call(
               session_id: session_id,
-              ingest_document_id: ingest_document.id,
+              upload_scope_id: ingest_document.id,
               file: file
             )
 
@@ -290,17 +299,33 @@ module Claims
       def staging_failure_status_and_subtype(failed_results)
         errors =
           failed_results.map { |row| row[:error].to_s.downcase }.join(" ")
-        if errors.include?("node upload failed")
-          return "technical_failure", "upload_service_error"
-        end
-        if errors.include?("storage_key")
-          return "technical_failure", "upload_storage_key_missing"
-        end
-        if errors.include?("missing env")
-          return "technical_failure", "configuration_missing"
+
+        if upload_technical_failure?(errors)
+          return [
+            "technical_failure",
+            ::Claims::Invoices::FailureSubtypes.upload(errors)
+          ]
         end
 
         ["package_needs_correction", package_failure_subtype(failed_results)]
+      end
+
+      def upload_technical_failure?(message)
+        [
+          "node upload failed",
+          "storage_key",
+          "missing env",
+          "failed to open tcp connection",
+          "connection refused",
+          "getaddrinfo",
+          "no route to host",
+          "network is unreachable",
+          "timed out",
+          "timeout",
+          "json::parsererror",
+          "unexpected token",
+          "malformed response"
+        ].any? { |marker| message.include?(marker) }
       end
 
       def contractor_failure_payload(status:, status_subtype:)
@@ -335,6 +360,7 @@ module Claims
       def create_failed_step(ingest_run, session_id, ingest_document, error)
         return unless ingest_document&.id
 
+        status_subtype = ::Claims::Invoices::FailureSubtypes.upload(error)
         ::Claims::IngestStepRun.create!(
           ingest_run_id: ingest_run.id,
           session_id: session_id,
@@ -342,6 +368,12 @@ module Claims
           step_type: "ocr_read",
           status: "failed",
           error_text: "ocr_enqueue_or_upload_failed: #{error.message}",
+          di_results_json:
+            ::Claims::Invoices::FailureSubtypes.payload(
+              status: "technical_failure",
+              status_subtype: status_subtype,
+              error: error
+            ),
           created_at: Time.current,
           updated_at: Time.current
         )
@@ -349,81 +381,13 @@ module Claims
         nil
       end
 
-      def file_safe_call(obj, method_name)
-        return nil unless obj.respond_to?(method_name)
-
-        obj.public_send(method_name)
-      rescue StandardError
-        nil
-      end
-
-      def ingest_node_upload_pdf!(session_id:, ingest_document_id:, file:)
-        base = ENV["INV_NODE_BASE_URL"].to_s.strip
-        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
-
-        uri = URI("#{base.sub(%r{/\z}, "")}/inv/upload-pdf")
-        req = Net::HTTP::Post.new(uri)
-
-        io = File.open(file.path, "rb")
-        filename =
-          file_safe_call(file, :original_filename) || File.basename(file.path)
-        content_type =
-          file_safe_call(file, :content_type) || "application/octet-stream"
-
-        req.set_form(
-          [
-            ["sessionId", session_id.to_s],
-            ["invoiceVersionId", ingest_document_id.to_s],
-            ["file", io, { filename: filename, content_type: content_type }]
-          ],
-          "multipart/form-data"
-        )
-
-        res =
-          Net::HTTP.start(
-            uri.host,
-            uri.port,
-            use_ssl: (uri.scheme == "https"),
-            read_timeout: 120
-          ) { |http| http.request(req) }
-
-        body = res.body.to_s
-        unless res.is_a?(Net::HTTPSuccess)
-          raise "Node upload failed HTTP=#{res.code} body=#{body}"
-        end
-
-        JSON.parse(body)
-      ensure
-        io&.close
-      end
-
-      def supported_evidence_file?(filename, content_type)
-        supported_content_type?(content_type) ||
-          %w[.pdf .jpg .jpeg .png].include?(
-            File.extname(filename.to_s).downcase
+      def pending_storage_key(session_id:, filename:, content_type:)
+        extension =
+          ::Claims::Ingest::EvidenceFile.storage_extension_for(
+            filename: filename,
+            content_type: content_type
           )
-      end
-
-      def supported_content_type?(content_type)
-        %w[application/pdf image/jpeg image/png].include?(
-          content_type.to_s.downcase
-        )
-      end
-
-      def storage_extension_for(filename, content_type)
-        ext = File.extname(filename.to_s).downcase
-        return ext if %w[.pdf .jpg .jpeg .png].include?(ext)
-
-        case content_type.to_s.downcase
-        when "application/pdf"
-          ".pdf"
-        when "image/jpeg"
-          ".jpg"
-        when "image/png"
-          ".png"
-        else
-          ".bin"
-        end
+        "PENDING/session=#{session_id}/ingest_document=#{SecureRandom.uuid}/#{SecureRandom.uuid}#{extension}"
       end
 
       def mark_orphaned_ingest_failures!(ingest_run:, results:)

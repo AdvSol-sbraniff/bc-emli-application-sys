@@ -136,7 +136,7 @@ module Claims
             .joins(:supporting_document)
             .where(
               ::Claims::SupportingDocument.table_name => {
-                invoice_id: invoice_version.invoice_id
+                invoice_version_id: invoice_version.id
               }
             )
             .where(field_key: SUPPORTING_DOCUMENT_FIELD_KEYS)

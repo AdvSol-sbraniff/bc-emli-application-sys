@@ -128,7 +128,7 @@ export const ContractorOnboardingScreen = ({ ...rest }: IContractorOnboardingScr
           navigate(`/applications/${onboardApplicationId}/successful-submission`);
           break;
         case 'approved':
-          navigate('/contractor-dashboard');
+          navigate('/ai-contractor-dashboard');
           break;
         default:
           navigate('/onboarding/ineligible');

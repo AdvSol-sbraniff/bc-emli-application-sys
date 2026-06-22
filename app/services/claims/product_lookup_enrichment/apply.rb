@@ -32,7 +32,6 @@ module Claims
           cshp_product_list_reference
         ]
       }.freeze
-
       def self.call(invoice_version_id:, invoice_upgrade_types:)
         new(
           invoice_version_id: invoice_version_id,

@@ -532,7 +532,7 @@ export function InvoicesAdminScreen() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleOpenUploadFix = (row: InvoiceGridRow) => {
+  const handleOpenPackageFix = (row: InvoiceGridRow) => {
     const params = new URLSearchParams();
     if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
     if (row.session_id) params.set('session_id', String(row.session_id));
@@ -542,7 +542,21 @@ export function InvoicesAdminScreen() {
     if (row.contractor_business_name) params.set('contractor_business_name', String(row.contractor_business_name));
     if (row.latest_di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
 
-    const url = `/upload-invoice-fix-admin?${params.toString()}`;
+    const url = `/contractorfixsimulation?${params.toString()}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleOpenAdviceRefresh = (row: InvoiceGridRow) => {
+    const params = new URLSearchParams();
+    if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
+    if (row.session_id) params.set('session_id', String(row.session_id));
+    if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
+    if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined)
+      params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
+    if (row.contractor_business_name) params.set('contractor_business_name', String(row.contractor_business_name));
+    if (row.latest_di_ocr_invoice_id) params.set('di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
+
+    const url = `/advice-refresh-simulation-admin?${params.toString()}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -789,7 +803,7 @@ export function InvoicesAdminScreen() {
                   <Th w="220px">Invoice #</Th>
                   <Th w="190px"></Th>
                   <Th w="46px">AI</Th>
-                  <Th w="220px" textAlign="right"></Th>
+                  <Th w="270px" textAlign="right"></Th>
                 </Tr>
               </Thead>
 
@@ -941,12 +955,22 @@ export function InvoicesAdminScreen() {
 
                           <Divider orientation="vertical" h="18px" borderColor="gray.300" mx={1} />
 
-                          <Tooltip label="upload a +1 version fixing a problem with prior pdf invoice (not a net new invoice)">
+                          <Tooltip label="Upload a revised package">
                             <IconButton
-                              aria-label="Upload fix invoice version"
+                              aria-label="Upload a revised package"
                               {...rowActionButtonProps}
                               icon={<Wrench size={rowActionIconSize} />}
-                              onClick={() => handleOpenUploadFix(r)}
+                              onClick={() => handleOpenPackageFix(r)}
+                              isDisabled={!hasInvoice || !r.latest_invoice_version_id}
+                            />
+                          </Tooltip>
+
+                          <Tooltip label="Refresh AI Advice">
+                            <IconButton
+                              aria-label="Refresh AI Advice"
+                              {...rowActionButtonProps}
+                              icon={<ArrowsClockwise size={rowActionIconSize} />}
+                              onClick={() => handleOpenAdviceRefresh(r)}
                               isDisabled={!hasInvoice || !r.latest_invoice_version_id}
                             />
                           </Tooltip>

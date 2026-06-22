@@ -85,22 +85,28 @@ module Claims
         end
 
         def income_level_evaluation
-          raw_income_level = income_level_field&.value_text
+          eligibility_code_record = matched_eligibility_code_record
+          raw_income_level =
+            eligibility_code_record&.income_level ||
+              income_level_field&.value_text
           income_level = parsed_income_level
-          eligibility_code = eligibility_code_field&.value_text.to_s.strip
+          eligibility_code =
+            eligibility_code_record&.eligibility_code.presence ||
+              eligibility_code_field&.value_text.to_s.strip
           evidence_text =
             evidence_text_for(
               income_level: raw_income_level,
-              eligibility_code: eligibility_code
+              eligibility_code: eligibility_code,
+              users_eligibilitycode_id: eligibility_code_record&.id
             )
 
           if raw_income_level.blank?
             return [
               "warn",
               0,
-              "No stored users_eligibilitycodes.income_level code-located field was available for this invoice version.",
+              "No matched users_eligibilitycode_id or stored users_eligibilitycodes.income_level code-located field was available for this invoice version.",
               evidence_text,
-              "The matched eligibility-code record did not produce a stored income_level fact for deterministic validation. Code cannot safely decide the Income Level 1/2 requirement without that database fact. Admin should confirm the eligibility-code match and rerun case-fact generation if the record exists."
+              "The deterministic enrichment step did not populate a matched eligibility-code record, and no fallback income_level fact was available. Code cannot safely decide the Income Level 1/2 requirement without that database fact. Admin should confirm the eligibility-code match and rerun enrichment if the record exists."
             ]
           end
 
@@ -108,9 +114,9 @@ module Claims
             return [
               "warn",
               0,
-              "Stored users_eligibilitycodes.income_level value could not be parsed as 1, 2, or 3: #{raw_income_level}.",
+              "Matched users_eligibilitycodes.income_level value could not be parsed as 1, 2, or 3: #{raw_income_level}.",
               evidence_text,
-              "The stored income_level value is present but not parseable as a supported ESP income level. Admin should correct the eligibility-code record or investigate why the code-located field contains an unexpected value."
+              "The matched income_level value is present but not parseable as a supported ESP income level. Admin should correct the eligibility-code record or investigate why the fallback code-located field contains an unexpected value."
             ]
           end
 
@@ -136,7 +142,11 @@ module Claims
         def parsed_income_level
           @parsed_income_level ||=
             begin
-              value = income_level_field&.value_text.to_s.strip
+              value =
+                (
+                  matched_eligibility_code_record&.income_level ||
+                    income_level_field&.value_text
+                ).to_s.strip
               if value.blank?
                 nil
               else
@@ -157,6 +167,11 @@ module Claims
             best_code_field(ELIGIBILITY_CODE_FIELD_KEY)
         end
 
+        def matched_eligibility_code_record
+          @matched_eligibility_code_record ||=
+            invoice_version.users_eligibilitycode
+        end
+
         def best_code_field(field_key)
           ::Claims::InvoiceVersionLocatedField
             .where(
@@ -168,13 +183,21 @@ module Claims
             .first
         end
 
-        def evidence_text_for(income_level:, eligibility_code:)
+        def evidence_text_for(
+          income_level:,
+          eligibility_code:,
+          users_eligibilitycode_id:
+        )
           values = []
           if eligibility_code.present?
             values << "eligibility_code=#{eligibility_code}"
           end
+          if users_eligibilitycode_id.present?
+            values << "users_eligibilitycode_id=#{users_eligibilitycode_id}"
+          end
           values << "income_level=#{income_level}" if income_level.present?
-          values.presence&.join("; ") || "claims.users_eligibilitycodes"
+          values.presence&.join("; ") ||
+            "invoice_versions.users_eligibilitycode_id + claims.users_eligibilitycodes"
         end
 
         def replace_rulechecks!(rows)

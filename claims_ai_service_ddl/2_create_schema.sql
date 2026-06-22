@@ -689,6 +689,74 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ohpa_products_source_row_unique
   );
 
 
+--
+-- users_eligibilitycodes
+-- how we get the participant_id
+--
+CREATE TABLE IF NOT EXISTS claims.users_eligibilitycodes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  user_id uuid NOT NULL,
+
+  eligibility_code character varying NOT NULL,
+  income_level integer NOT NULL,
+
+  applied_at timestamp(6) without time zone NOT NULL,
+  approved_at timestamp(6) without time zone NOT NULL,
+  expires_at timestamp(6) without time zone NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL,
+  updated_at timestamp(6) without time zone NOT NULL,
+
+  CONSTRAINT users_eligibilitycodes_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_users_eligibilitycodes_user
+    FOREIGN KEY (user_id) REFERENCES public.users(id),
+
+  -- code must be globally unique
+  CONSTRAINT users_eligibilitycodes_code_uniq
+    UNIQUE (eligibility_code),
+
+  -- a user shouldn't have duplicate code records (defensive)
+  CONSTRAINT users_eligibilitycodes_user_code_uniq
+    UNIQUE (user_id, eligibility_code),
+
+  CONSTRAINT users_eligibilitycodes_dates_chk
+    CHECK (expires_at > applied_at),
+
+  CONSTRAINT users_eligibilitycodes_income_level_chk
+    CHECK (income_level IN (1, 2, 3)),
+
+  CONSTRAINT users_eligibilitycodes_income_level_code_chk
+    CHECK (
+      (
+        (
+          upper(trim(eligibility_code)) LIKE 'ESP1%'
+          OR upper(trim(eligibility_code)) LIKE 'ESPI%'
+        )
+        AND income_level = 1
+      )
+      OR (
+        upper(trim(eligibility_code)) LIKE 'ESP2%'
+        AND income_level = 2
+      )
+      OR (
+        upper(trim(eligibility_code)) LIKE 'ESP3%'
+        AND income_level = 3
+      )
+    )
+);
+
+CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_user_id
+  ON claims.users_eligibilitycodes (user_id);
+
+CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_expires_at
+  ON claims.users_eligibilitycodes (expires_at);
+
+CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_income_level
+  ON claims.users_eligibilitycodes (income_level);
+
+
 
   -- 
   -- invoice_versions
@@ -776,6 +844,9 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   awhp_product_id uuid NULL,
   -- code-owned point-in-time NRCan OHPA BC product-list match
   ohpa_product_id uuid NULL,
+  -- code-owned point-in-time eligibility-code / participant match
+  users_eligibilitycode_id uuid NULL,
+  participant_user_id uuid NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
@@ -801,6 +872,14 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
     FOREIGN KEY (ohpa_product_id)
     REFERENCES claims.ohpa_products(id),
 
+  CONSTRAINT fk_invoice_versions_users_eligibilitycode
+    FOREIGN KEY (users_eligibilitycode_id)
+    REFERENCES claims.users_eligibilitycodes(id),
+
+  CONSTRAINT fk_invoice_versions_participant_user
+    FOREIGN KEY (participant_user_id)
+    REFERENCES public.users(id),
+
   CONSTRAINT invoice_versions_invoice_id_versionno_uniq
     UNIQUE (invoice_id, invoice_versionno),
 
@@ -823,10 +902,6 @@ CREATE INDEX IF NOT EXISTS index_invoice_versions_on_invoice_id_and_versionno_de
 CREATE INDEX IF NOT EXISTS index_invoice_versions_on_storage_key
   ON claims.invoice_versions (storage_key);
 
--- Optional: prevent reusing the same blob path within the same invoice
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoice_versions_invoice_storage_key
-  ON claims.invoice_versions (invoice_id, storage_key);
-
 -- Enables composite FKs so other tables can prove "this version belongs to this invoice"
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_invoice_versions_id_invoice_id
   ON claims.invoice_versions (id, invoice_id);
@@ -842,6 +917,12 @@ CREATE INDEX IF NOT EXISTS idx_invoice_versions_awhp_product
 
 CREATE INDEX IF NOT EXISTS idx_invoice_versions_ohpa_product
   ON claims.invoice_versions (ohpa_product_id);
+
+CREATE INDEX IF NOT EXISTS index_invoice_versions_on_users_eligibilitycode_id
+  ON claims.invoice_versions (users_eligibilitycode_id);
+
+CREATE INDEX IF NOT EXISTS index_invoice_versions_on_participant_user_id
+  ON claims.invoice_versions (participant_user_id);
 
 
 --
@@ -1357,7 +1438,7 @@ CREATE INDEX IF NOT EXISTS idx_supporting_document_type_upgrade_types_upgrade_ty
 CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
-  invoice_id uuid NOT NULL,
+  invoice_version_id uuid NOT NULL,
   supporting_document_type_id uuid NULL,
 
   -- storage pointer(s)
@@ -1385,8 +1466,10 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
 
   CONSTRAINT supporting_documents_pkey PRIMARY KEY (id),
 
-  CONSTRAINT fk_claims_supporting_documents_invoice
-    FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
+  CONSTRAINT fk_claims_supporting_documents_invoice_version
+    FOREIGN KEY (invoice_version_id)
+    REFERENCES claims.invoice_versions(id)
+    ON DELETE CASCADE,
 
   CONSTRAINT fk_claims_supporting_documents_type
     FOREIGN KEY (supporting_document_type_id)
@@ -1402,15 +1485,15 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
     )
 );
 
-CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_invoice_id
-  ON claims.supporting_documents (invoice_id);
+CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_invoice_version_id
+  ON claims.supporting_documents (invoice_version_id);
 
 CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_type_id
   ON claims.supporting_documents (supporting_document_type_id);
 
--- Optional: prevent duplicate uploads of same blob/key under the same invoice
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_supporting_documents_invoice_storage_key
-  ON claims.supporting_documents (invoice_id, storage_key);
+-- Prevent duplicate uploads of same blob/key under the same invoice version snapshot.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_supporting_documents_invoice_version_storage_key
+  ON claims.supporting_documents (invoice_version_id, storage_key);
 
 
 
@@ -2223,7 +2306,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   supporting_document_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload | upload_package_stage | ocr | classifier | genai | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice | ocr_read | triage_classifier | classifier_pdfs | classifier_imagefiles | supporting_document_extraction | supporting_document_type_extraction | plus1fix_ocr_read | plus1fix_classifier | ocr_invoice
+  step_type text NOT NULL,  -- upload_package_stage | ocr_read | classifier_files | supporting_document_extraction | ocr_invoice | fix_upload_package_stage | fix_ocr_read | fix_classifier_files | fix_clone_existing_evidence | fix_supporting_document_extraction | fix_ocr_invoice | ruleclone_clone_existing_evidence | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -2272,7 +2355,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     ON DELETE CASCADE,
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload','upload_package_stage','ocr','classifier','genai','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice','ocr_read','triage_classifier','classifier_pdfs','classifier_imagefiles','supporting_document_extraction','supporting_document_type_extraction','plus1fix_ocr_read','plus1fix_classifier','ocr_invoice')),
+    CHECK (step_type IN ('upload_package_stage','fix_upload_package_stage','ocr_read','fix_ocr_read','classifier_files','fix_classifier_files','supporting_document_extraction','fix_supporting_document_extraction','ocr_invoice','fix_ocr_invoice','fix_clone_existing_evidence','ruleclone_clone_existing_evidence','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -2297,7 +2380,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   CONSTRAINT ingest_step_runs_target_required_chk
     CHECK (
-      step_type = 'upload_package_stage'
+      step_type IN ('upload_package_stage','fix_upload_package_stage')
       OR (
         invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
@@ -2309,7 +2392,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
         AND supporting_document_type_id IS NULL
       )
       OR (
-        invoice_version_id IS NULL
+        invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
         AND supporting_document_type_id IS NOT NULL
       )
@@ -2318,51 +2401,28 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   CONSTRAINT ingest_step_runs_target_compatibility_chk
     CHECK (
       (
-        step_type = 'upload_package_stage'
+        step_type IN ('upload_package_stage','fix_upload_package_stage')
         AND invoice_version_id IS NULL
         AND ingest_document_id IS NULL
         AND supporting_document_type_id IS NULL
       )
       OR
       (
-        step_type IN ('ocr_read','triage_classifier','classifier_imagefiles','supporting_document_extraction')
+        step_type IN ('ocr_read','fix_ocr_read','classifier_files','fix_classifier_files')
         AND ingest_document_id IS NOT NULL
         AND invoice_version_id IS NULL
         AND supporting_document_type_id IS NULL
       )
       OR
       (
-        step_type = 'classifier_pdfs'
-        AND supporting_document_type_id IS NULL
-        AND (
-          (
-            ingest_document_id IS NOT NULL
-            AND invoice_version_id IS NULL
-          )
-          OR
-          (
-            ingest_document_id IS NULL
-            AND invoice_version_id IS NOT NULL
-          )
-        )
-      )
-      OR
-      (
-        step_type IN ('plus1fix_ocr_read','plus1fix_classifier')
+        step_type IN ('supporting_document_extraction','fix_supporting_document_extraction')
+        AND supporting_document_type_id IS NOT NULL
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
-        AND supporting_document_type_id IS NULL
       )
       OR
       (
-        step_type = 'supporting_document_type_extraction'
-        AND supporting_document_type_id IS NOT NULL
-        AND invoice_version_id IS NULL
-        AND ingest_document_id IS NULL
-      )
-      OR
-      (
-        step_type NOT IN ('ocr_read','triage_classifier','classifier_pdfs','classifier_imagefiles','supporting_document_extraction','supporting_document_type_extraction')
+        step_type NOT IN ('upload_package_stage','fix_upload_package_stage','ocr_read','fix_ocr_read','classifier_files','fix_classifier_files','supporting_document_extraction','fix_supporting_document_extraction')
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
         AND supporting_document_type_id IS NULL
@@ -2405,71 +2465,3 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_supporting_document_type_step
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
   ON claims.ingest_step_runs (invoice_version_id, invoice_upgrade_type_id, step_type, created_at DESC);
-
-
-  --
-  -- users_eligibilitycodes
-  -- how we get the participant_id
-  --
-  CREATE TABLE IF NOT EXISTS claims.users_eligibilitycodes (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-
-  user_id uuid NOT NULL,
-
-  eligibility_code character varying NOT NULL,
-  income_level integer NOT NULL,
-
-  applied_at timestamp(6) without time zone NOT NULL,
-  approved_at timestamp(6) without time zone NOT NULL,
-  expires_at timestamp(6) without time zone NOT NULL,
-
-  created_at timestamp(6) without time zone NOT NULL,
-  updated_at timestamp(6) without time zone NOT NULL,
-
-  CONSTRAINT users_eligibilitycodes_pkey PRIMARY KEY (id),
-
-  CONSTRAINT fk_users_eligibilitycodes_user
-    FOREIGN KEY (user_id) REFERENCES public.users(id),
-
-  -- code must be globally unique
-  CONSTRAINT users_eligibilitycodes_code_uniq
-    UNIQUE (eligibility_code),
-
-  -- a user shouldn't have duplicate code records (defensive)
-  CONSTRAINT users_eligibilitycodes_user_code_uniq
-    UNIQUE (user_id, eligibility_code),
-
-  CONSTRAINT users_eligibilitycodes_dates_chk
-    CHECK (expires_at > applied_at),
-
-  CONSTRAINT users_eligibilitycodes_income_level_chk
-    CHECK (income_level IN (1, 2, 3)),
-
-  CONSTRAINT users_eligibilitycodes_income_level_code_chk
-    CHECK (
-      (
-        (
-          upper(trim(eligibility_code)) LIKE 'ESP1%'
-          OR upper(trim(eligibility_code)) LIKE 'ESPI%'
-        )
-        AND income_level = 1
-      )
-      OR (
-        upper(trim(eligibility_code)) LIKE 'ESP2%'
-        AND income_level = 2
-      )
-      OR (
-        upper(trim(eligibility_code)) LIKE 'ESP3%'
-        AND income_level = 3
-      )
-    )
-);
-
-CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_user_id
-  ON claims.users_eligibilitycodes (user_id);
-
-CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_expires_at
-  ON claims.users_eligibilitycodes (expires_at);
-
-CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_income_level
-  ON claims.users_eligibilitycodes (income_level);

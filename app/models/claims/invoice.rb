@@ -10,11 +10,6 @@ module Claims
              foreign_key: :invoice_id,
              dependent: :destroy
 
-    has_many :supporting_documents,
-             class_name: "Claims::SupportingDocument",
-             foreign_key: :invoice_id,
-             dependent: :destroy
-
     has_many :internal_notes,
              class_name: "Claims::InternalNote",
              foreign_key: :invoice_id,
@@ -24,10 +19,6 @@ module Claims
              class_name: "Claims::IngestDocument",
              foreign_key: :invoice_id,
              dependent: :nullify
-
-    has_many :supporting_document_types,
-             through: :supporting_documents,
-             source: :supporting_document_type
 
     def set_workflow_status!(status, status_subtype: nil, **attrs)
       status = status.to_s

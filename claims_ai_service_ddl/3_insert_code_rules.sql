@@ -181,6 +181,19 @@ else:
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53207'::uuid,
+    'prior_same_upgrade_type_rebate_payment_found',
+    'Checks whether the matched participant already has a paid or active claim for the same exact detected upgrade type. This is a V1 exact-upgrade-type check and does not yet group all primary-heating-system upgrade types together.',
+    true,
+    'No prior paid or active claim was found for the same participant and same exact detected upgrade type.',
+    'Review the duplicate-payment detail before moving forward. This may mean another active or payment-pending claim exists, or that participant identity could not be resolved.',
+    'This participant appears to already have a paid rebate for the same exact detected upgrade type. Review the prior invoice before approving another payment.',
+    NULL,
+    'Uses invoice_versions.participant_user_id and the latest invoice_version per other invoice parent. V1 compares exact invoice_upgrade_type_id only and intentionally does not group primary-heating-system families.',
+    TIMESTAMP '2026-06-18 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53205'::uuid,
     'income_level_1_or_2_required',
     'Checks whether the matched participant eligibility-code record has stored income_level 1 or 2 for upgrade types that are explicitly limited to Income Level 1 or 2 in the ESP requirements.',
@@ -282,6 +295,7 @@ WITH code_rule_upgrade_type_seed (
   ('submission_within_six_months', 'common'),
   ('eligibility_code_valid_for_invoice_date', 'common'),
   ('eligibility_code_found_in_database', 'common'),
+  ('prior_same_upgrade_type_rebate_payment_found', 'common'),
   ('income_level_1_or_2_required', 'insulation'),
   ('income_level_1_or_2_required', 'windows_doors'),
   ('income_level_1_or_2_required', 'air_source_heat_pump_electric'),

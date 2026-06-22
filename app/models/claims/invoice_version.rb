@@ -25,6 +25,16 @@ module Claims
                foreign_key: :ohpa_product_id,
                optional: true
 
+    belongs_to :users_eligibilitycode,
+               class_name: "Claims::UsersEligibilitycode",
+               foreign_key: :users_eligibilitycode_id,
+               optional: true
+
+    belongs_to :participant_user,
+               class_name: "::User",
+               foreign_key: :participant_user_id,
+               optional: true
+
     has_many :located_fields,
              class_name: "Claims::InvoiceVersionLocatedField",
              foreign_key: :invoice_version_id,
@@ -34,6 +44,12 @@ module Claims
     has_many :rulechecks,
              class_name: "Claims::InvoiceVersionRulecheck",
              foreign_key: :invoice_version_id,
+             dependent: :destroy
+
+    has_many :supporting_documents,
+             class_name: "Claims::SupportingDocument",
+             foreign_key: :invoice_version_id,
+             inverse_of: :invoice_version,
              dependent: :destroy
 
     has_many :upload_runs,

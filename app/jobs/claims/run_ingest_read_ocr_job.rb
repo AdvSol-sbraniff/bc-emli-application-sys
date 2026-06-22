@@ -8,14 +8,14 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_ocr, retry: 3
 
-    def perform(ingest_document_id, ingest_run_id = nil)
+    def perform(ingest_document_id, ingest_run_id = nil, step_type = "ocr_read")
       document = ::Claims::IngestDocument.find(ingest_document_id)
 
       step =
         find_or_create_step!(
           ingest_run_id: ingest_run_id,
           document: document,
-          step_type: "ocr_read"
+          step_type: step_type
         )
       step.update!(
         status: "in_progress",
@@ -42,9 +42,16 @@ module Claims
 
       advance_run!(ingest_run_id: ingest_run_id)
     rescue => e
+      status_subtype = ::Claims::Invoices::FailureSubtypes.ocr(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
+        di_results_json:
+          ::Claims::Invoices::FailureSubtypes.payload(
+            status: "technical_failure",
+            status_subtype: status_subtype,
+            error: e
+          ),
         updated_at: Time.current
       )
       advance_run!(ingest_run_id: ingest_run_id)

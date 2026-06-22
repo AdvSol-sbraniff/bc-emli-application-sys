@@ -7,13 +7,40 @@ module Api
 
       # POC: no auth/policy for now (match your SessionsController approach)
       skip_before_action :authenticate_user!,
-                         only: %i[index destroy status_transition]
+                         only: %i[
+                           index
+                           destroy
+                           status_transition
+                           reanalyze_advice
+                         ]
+      skip_before_action :require_claims_admin!,
+                         only: %i[
+                           index
+                           destroy
+                           status_transition
+                           reanalyze_advice
+                         ]
       skip_before_action :require_confirmation,
-                         only: %i[index destroy status_transition]
+                         only: %i[
+                           index
+                           destroy
+                           status_transition
+                           reanalyze_advice
+                         ]
       skip_after_action :verify_authorized,
-                        only: %i[index destroy status_transition]
+                        only: %i[
+                          index
+                          destroy
+                          status_transition
+                          reanalyze_advice
+                        ]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[index destroy status_transition]
+      skip_forgery_protection only: %i[
+                                index
+                                destroy
+                                status_transition
+                                reanalyze_advice
+                              ]
 
       # GET /api/claims/admin/invoices
       # Query:
@@ -205,6 +232,24 @@ module Api
       rescue => e
         Rails.logger.error(
           "[CLAIMS][INVOICE_GRID] status_transition failed id=#{params[:id]} transition=#{params[:transition]}: #{e.class}: #{e.message}"
+        )
+        Rails.logger.error(e.backtrace.join("\n"))
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/claims/admin/invoices/:id/reanalyze_advice
+      # Clones current evidence into a new invoice version and reruns advice with
+      # the current prompts/rules/configuration.
+      def reanalyze_advice
+        result =
+          ::Claims::Ingest::CreateRuleChangeRun.call(invoice_id: params[:id])
+
+        render json: result.to_h, status: :accepted
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue => e
+        Rails.logger.error(
+          "[CLAIMS][INVOICE_GRID] reanalyze_advice failed id=#{params[:id]}: #{e.class}: #{e.message}"
         )
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :unprocessable_entity

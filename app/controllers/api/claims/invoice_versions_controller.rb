@@ -77,7 +77,11 @@ module Api
                      awhp_product_match:
                        serialize_awhp_product_match(invoice_version),
                      ohpa_product_match:
-                       serialize_ohpa_product_match(invoice_version)
+                       serialize_ohpa_product_match(invoice_version),
+                     uploaded_supporting_documents:
+                       serialize_uploaded_supporting_documents(
+                         invoice_version&.id
+                       )
                    ),
                  lineitems: lineitems
                }
@@ -426,6 +430,44 @@ module Api
               row.read_attribute("upgrade_type_description")
           )
         end
+      end
+
+      def serialize_uploaded_supporting_documents(invoice_version_id)
+        return [] if invoice_version_id.blank?
+
+        ::Claims::SupportingDocument
+          .where(invoice_version_id: invoice_version_id)
+          .includes(:supporting_document_type)
+          .order(created_at: :desc, id: :desc)
+          .map do |row|
+            display_type =
+              row.supporting_document_type&.description ||
+                row.supporting_document_type&.type_key || row.content_type
+
+            {
+              id: row.id,
+              invoice_version_id: row.invoice_version_id,
+              supporting_document_type_id: row.supporting_document_type_id,
+              supporting_document_type_key:
+                row.supporting_document_type&.type_key,
+              supporting_document_type_description:
+                row.supporting_document_type&.description,
+              classification_status: row.classification_status,
+              classification_confidence: row.classification_confidence,
+              classification_reason: row.classification_reason,
+              supporting_document_routing_quality:
+                row.supporting_document_routing_quality,
+              supporting_document_routing_quality_reason:
+                row.supporting_document_routing_quality_reason,
+              classified_at: row.classified_at,
+              original_filename: row.original_filename,
+              content_type: display_type,
+              mime_content_type: row.content_type,
+              byte_size: row.byte_size,
+              created_at: row.created_at,
+              updated_at: row.updated_at
+            }
+          end
       end
 
       def serialize_ahri_product_match(invoice_version)

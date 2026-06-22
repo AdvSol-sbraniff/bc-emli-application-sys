@@ -90,6 +90,11 @@ module Claims
           participant = ::User.find(elig.user_id) if elig
         end
 
+        identity_references = {
+          users_eligibilitycode_id: elig&.id,
+          participant_user_id: participant&.id
+        }
+
         # 3) Build facts blob (keep it small + deterministic)
         esp_database_values = {
           invoices: {
@@ -126,17 +131,18 @@ module Claims
 
         {
           case_facts: case_facts,
-          classifier_eligibility_code: eligibility_code
+          classifier_eligibility_code: eligibility_code,
+          identity_references: identity_references
         }
       end
 
       def self.supporting_document_context_for_upgrade_type(
-        invoice:,
+        invoice_version:,
         invoice_upgrade_type:
       )
         build_supporting_document_summary_for_upgrade_type(
           supporting_document_summary:
-            build_supporting_document_summary(invoice: invoice),
+            build_supporting_document_summary(invoice_version: invoice_version),
           invoice_upgrade_type: invoice_upgrade_type
         )
       end
@@ -205,6 +211,17 @@ module Claims
 
           Claims::InvoiceVersionLocatedField.insert_all!(rows)
         end
+      end
+
+      def self.persist_identity_references!(
+        invoice_version_id:,
+        identity_references:
+      )
+        refs = identity_references.to_h.with_indifferent_access
+        Claims::InvoiceVersion.find(invoice_version_id).update!(
+          users_eligibilitycode_id: refs[:users_eligibilitycode_id],
+          participant_user_id: refs[:participant_user_id]
+        )
       end
 
       # ============================================================
@@ -291,9 +308,9 @@ module Claims
         end
       end
 
-      def self.build_supporting_document_summary(invoice:)
+      def self.build_supporting_document_summary(invoice_version:)
         docs =
-          invoice
+          invoice_version
             .supporting_documents
             .includes(
               :supporting_document_type,

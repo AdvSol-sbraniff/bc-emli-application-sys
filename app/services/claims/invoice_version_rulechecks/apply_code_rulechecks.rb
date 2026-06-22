@@ -5,12 +5,23 @@ module Claims
     class ApplyCodeRulechecks
       SOURCE_VINTAGE_DATE = Date.new(2026, 4, 1)
       COMMON_RULE_FALLBACK_ENABLED = false
+      PRIOR_REBATE_RULE_KEY = "prior_same_upgrade_type_rebate_payment_found"
+      PAID_PRIOR_REBATE_STATUSES = %w[approved_paid].freeze
+      ACTIVE_PRIOR_REBATE_STATUSES = %w[
+        genai_complete
+        admin_review_inbox
+        contractor_revision_inbox
+        in_review
+        approved_pending
+      ].freeze
+      EXCLUDED_DUPLICATE_REBATE_UPGRADE_TYPE_KEYS = %w[common].freeze
       COMMON_RULE_KEYS = %w[
         source_vintage_applies
         first_class_invoice_fields_present
         submission_within_six_months
         eligibility_code_valid_for_invoice_date
         eligibility_code_found_in_database
+        prior_same_upgrade_type_rebate_payment_found
       ].freeze
       COMMON_RULE_BUILDERS = {
         "source_vintage_applies" => :source_vintage_applies,
@@ -20,7 +31,8 @@ module Claims
         "eligibility_code_valid_for_invoice_date" =>
           :eligibility_code_valid_for_invoice_date,
         "eligibility_code_found_in_database" =>
-          :eligibility_code_found_in_database
+          :eligibility_code_found_in_database,
+        PRIOR_REBATE_RULE_KEY => :prior_same_upgrade_type_rebate_payment_found
       }.freeze
 
       def self.call(invoice_version_id:)
@@ -198,15 +210,19 @@ module Claims
         end
 
         invoice_date = invoice_version.di_ocr_invoice_date
+        eligibility_code_record = matched_eligibility_code_record
         approved_at =
-          first_field_value(code_fields, "users_eligibilitycodes.approved_at")
+          eligibility_code_record&.approved_at ||
+            first_field_value(code_fields, "users_eligibilitycodes.approved_at")
         expires_at =
-          first_field_value(code_fields, "users_eligibilitycodes.expires_at")
+          eligibility_code_record&.expires_at ||
+            first_field_value(code_fields, "users_eligibilitycodes.expires_at")
         eligibility_code =
-          first_field_value(
-            code_fields,
-            "users_eligibilitycodes.eligibility_code"
-          )
+          eligibility_code_record&.eligibility_code ||
+            first_field_value(
+              code_fields,
+              "users_eligibilitycodes.eligibility_code"
+            )
 
         missing = []
         missing << "invoice date" if invoice_date.blank?
@@ -237,11 +253,11 @@ module Claims
           expected_text:
             "Invoice date is on or after eligibility-code approval and on or before eligibility-code expiry.",
           detail_text:
-            "eligibility_code=#{eligibility_code.presence || "missing"}; approved_at=#{approved_date.iso8601}; expiry=#{deadline.iso8601}; invoice_date=#{invoice_date.iso8601}.",
+            "eligibility_code=#{eligibility_code.presence || "missing"}; users_eligibilitycode_id=#{invoice_version.users_eligibilitycode_id.presence || "missing"}; approved_at=#{approved_date.iso8601}; expiry=#{deadline.iso8601}; invoice_date=#{invoice_date.iso8601}.",
           calculation:
             "#{approved_date.iso8601} <= #{invoice_date.iso8601} <= #{deadline.iso8601} => #{pass}",
           evidence_text:
-            "claims.users_eligibilitycodes + invoice_versions.di_ocr_invoice_date"
+            "invoice_versions.users_eligibilitycode_id + claims.users_eligibilitycodes + invoice_versions.di_ocr_invoice_date"
         )
       rescue ArgumentError
         warn_row(
@@ -258,13 +274,18 @@ module Claims
           return nil
         end
 
+        eligibility_code_record = matched_eligibility_code_record
         db_code =
-          first_field_value(
-            code_fields,
-            "users_eligibilitycodes.eligibility_code"
-          ).to_s.strip
+          eligibility_code_record&.eligibility_code.presence ||
+            first_field_value(
+              code_fields,
+              "users_eligibilitycodes.eligibility_code"
+            ).to_s.strip
+        classifier_code =
+          first_field_value(classifier_fields, "classifier.eligibility_code") ||
+            first_field_value(classifier_fields, "eligibility_code")
 
-        if db_code.present?
+        if eligibility_code_record.present?
           return(
             row(
               rule_number: 5,
@@ -274,11 +295,11 @@ module Claims
               expected_text:
                 "The classifier-located eligibility code resolves to a populated claims.users_eligibilitycodes record.",
               detail_text:
-                "Code-located users_eligibilitycodes.eligibility_code=#{db_code}.",
+                "classifier eligibility code=#{classifier_code.presence || "missing"}; matched users_eligibilitycode_id=#{eligibility_code_record.id}; matched eligibility_code=#{db_code}.",
               calculation:
-                "claims.invoice_version_located_fields[source_engine=code, field_key=users_eligibilitycodes.eligibility_code] is populated => true",
+                "invoice_versions.users_eligibilitycode_id is populated => true",
               evidence_text:
-                "claims.invoice_version_located_fields source_engine=code field_key=users_eligibilitycodes.eligibility_code"
+                "invoice_versions.users_eligibilitycode_id + claims.users_eligibilitycodes"
             )
           )
         end
@@ -291,13 +312,114 @@ module Claims
           expected_text:
             "The classifier-located eligibility code resolves to a populated claims.users_eligibilitycodes record.",
           detail_text:
-            "No code-located users_eligibilitycodes.eligibility_code value was populated for this invoice version.",
+            "classifier eligibility code=#{classifier_code.presence || "missing"}; invoice_versions.users_eligibilitycode_id is missing.",
           calculation:
-            "claims.invoice_version_located_fields[source_engine=code, field_key=users_eligibilitycodes.eligibility_code] is populated => false",
-          evidence_text:
-            "claims.invoice_version_located_fields source_engine=code field_key=users_eligibilitycodes.eligibility_code",
+            "invoice_versions.users_eligibilitycode_id is populated => false",
+          evidence_text: "invoice_versions.users_eligibilitycode_id",
           reason_and_likely_causes:
-            "The case-facts build did not populate the matched database eligibility code, so the classifier-located eligibility code did not resolve to a usable users_eligibilitycodes record."
+            "The deterministic enrichment step did not populate invoice_versions.users_eligibilitycode_id, so the classifier-located eligibility code did not resolve to a usable users_eligibilitycodes record."
+        )
+      end
+
+      def prior_same_upgrade_type_rebate_payment_found
+        return nil unless enabled_common_rule?(PRIOR_REBATE_RULE_KEY)
+
+        if invoice_version.participant_user_id.blank?
+          return(
+            row(
+              rule_number: 6,
+              rule_key: PRIOR_REBATE_RULE_KEY,
+              rule_result: "warn",
+              confidence: 0,
+              expected_text:
+                "Matched participant is available before checking prior same-upgrade rebate payments.",
+              detail_text:
+                "invoice_versions.participant_user_id is missing; duplicate-payment history cannot be checked.",
+              calculation: "participant_user_id is populated => false",
+              evidence_text: "invoice_versions.participant_user_id",
+              reason_and_likely_causes:
+                "The deterministic enrichment step did not populate participant_user_id, so code cannot safely compare this invoice against the participant's prior invoices."
+            )
+          )
+        end
+
+        current_upgrade_types = distinct_current_duplicate_rebate_upgrade_types
+
+        if current_upgrade_types.empty?
+          return(
+            row(
+              rule_number: 6,
+              rule_key: PRIOR_REBATE_RULE_KEY,
+              rule_result: "warn",
+              confidence: 0,
+              expected_text:
+                "At least one detected upgrade type is available for duplicate-payment comparison.",
+              detail_text:
+                "No non-common detected upgrade types were found for this invoice version.",
+              calculation:
+                "distinct non-common invoice_version_upgrade_types count = 0",
+              evidence_text: "claims.invoice_version_upgrade_types",
+              reason_and_likely_causes:
+                "The classifier did not leave a non-common detected upgrade type for this invoice version, so code cannot compare prior rebate payments."
+            )
+          )
+        end
+
+        evaluations =
+          current_upgrade_types.map do |upgrade_type|
+            prior_matches =
+              latest_prior_same_upgrade_type_matches(
+                invoice_upgrade_type_id: upgrade_type.id
+              )
+            failed_matches =
+              prior_matches.select do |match|
+                PAID_PRIOR_REBATE_STATUSES.include?(match.status)
+              end
+            warning_matches =
+              prior_matches.select do |match|
+                ACTIVE_PRIOR_REBATE_STATUSES.include?(match.status)
+              end
+            ignored_matches = prior_matches - failed_matches - warning_matches
+            result =
+              if failed_matches.any?
+                "fail"
+              elsif warning_matches.any?
+                "warn"
+              else
+                "pass"
+              end
+
+            {
+              upgrade_type: upgrade_type,
+              prior_matches: prior_matches,
+              failed_matches: failed_matches,
+              warning_matches: warning_matches,
+              ignored_matches: ignored_matches,
+              result: result
+            }
+          end
+
+        rule_result =
+          if evaluations.any? { |evaluation| evaluation[:result] == "fail" }
+            "fail"
+          elsif evaluations.any? { |evaluation| evaluation[:result] == "warn" }
+            "warn"
+          else
+            "pass"
+          end
+
+        row(
+          rule_number: 6,
+          rule_key: PRIOR_REBATE_RULE_KEY,
+          rule_result: rule_result,
+          confidence: 100,
+          expected_text:
+            "Participant has no prior paid or active claim for the same exact detected upgrade type.",
+          detail_text: prior_rebate_detail_text(evaluations),
+          calculation: prior_rebate_calculation(evaluations),
+          evidence_text:
+            "invoice_versions.participant_user_id + latest invoice_versions per invoice_id + claims.invoice_version_upgrade_types + claims.invoices.status",
+          reason_and_likely_causes: prior_rebate_reason(rule_result)
         )
       end
 
@@ -306,6 +428,149 @@ module Claims
           invoice_version_id: invoice_version.id,
           source_engine: source_engine
         ).to_a
+      end
+
+      def classifier_fields
+        @classifier_fields ||= load_fields("classifier")
+      end
+
+      def matched_eligibility_code_record
+        @matched_eligibility_code_record ||=
+          invoice_version.users_eligibilitycode
+      end
+
+      def distinct_current_duplicate_rebate_upgrade_types
+        @distinct_current_duplicate_rebate_upgrade_types ||=
+          ::Claims::InvoiceUpgradeType
+            .joins(
+              "INNER JOIN claims.invoice_version_upgrade_types ivut " \
+                "ON ivut.invoice_upgrade_type_id = " \
+                "#{::Claims::InvoiceUpgradeType.table_name}.id"
+            )
+            .where(ivut: { invoice_version_id: invoice_version.id })
+            .where.not(
+              upgrade_type_key: EXCLUDED_DUPLICATE_REBATE_UPGRADE_TYPE_KEYS
+            )
+            .distinct
+            .order(:upgrade_type_key)
+            .to_a
+      end
+
+      def latest_prior_same_upgrade_type_matches(invoice_upgrade_type_id:)
+        latest_versions_sql =
+          ::Claims::InvoiceVersion
+            .select(
+              "DISTINCT ON (invoice_id) " \
+                "id, invoice_id, invoice_versionno, participant_user_id, " \
+                "users_eligibilitycode_id"
+            )
+            .where(participant_user_id: invoice_version.participant_user_id)
+            .where.not(invoice_id: invoice.id)
+            .order(:invoice_id, invoice_versionno: :desc)
+            .to_sql
+
+        ::Claims::Invoice
+          .from("claims.invoices AS prior_invoices")
+          .joins(
+            "INNER JOIN (#{latest_versions_sql}) latest_versions " \
+              "ON latest_versions.invoice_id = prior_invoices.id"
+          )
+          .joins(
+            "INNER JOIN claims.invoice_version_upgrade_types prior_ivut " \
+              "ON prior_ivut.invoice_version_id = latest_versions.id"
+          )
+          .where(
+            prior_ivut: {
+              invoice_upgrade_type_id: invoice_upgrade_type_id
+            }
+          )
+          .select(
+            "prior_invoices.id AS invoice_id",
+            "prior_invoices.status AS status",
+            "prior_invoices.submitted_at AS submitted_at",
+            "latest_versions.id AS invoice_version_id",
+            "latest_versions.invoice_versionno AS invoice_versionno"
+          )
+          .order(
+            Arel.sql(
+              "CASE prior_invoices.status " \
+                "WHEN 'approved_paid' THEN 0 " \
+                "WHEN 'approved_pending' THEN 1 " \
+                "WHEN 'in_review' THEN 2 " \
+                "WHEN 'admin_review_inbox' THEN 3 " \
+                "WHEN 'contractor_revision_inbox' THEN 4 " \
+                "WHEN 'genai_complete' THEN 5 " \
+                "ELSE 6 END"
+            ),
+            Arel.sql("prior_invoices.created_at DESC")
+          )
+          .to_a
+          .uniq { |match| match.invoice_version_id }
+      end
+
+      def prior_rebate_detail_text(evaluations)
+        [
+          "participant_user_id=#{invoice_version.participant_user_id}",
+          "users_eligibilitycode_id=#{invoice_version.users_eligibilitycode_id.presence || "missing"}",
+          "current_invoice_id=#{invoice.id}",
+          "current_invoice_version_id=#{invoice_version.id}",
+          "upgrade checks: #{prior_rebate_upgrade_summaries(evaluations).join(" | ")}"
+        ].join("; ")
+      end
+
+      def prior_rebate_upgrade_summaries(evaluations)
+        evaluations.map do |evaluation|
+          upgrade_type = evaluation[:upgrade_type]
+          parts = ["#{upgrade_type.upgrade_type_key}=#{evaluation[:result]}"]
+          if evaluation[:failed_matches].any?
+            parts << "paid prior #{prior_rebate_match_list(evaluation[:failed_matches])}"
+          end
+          if evaluation[:warning_matches].any?
+            parts << "active prior #{prior_rebate_match_list(evaluation[:warning_matches])}"
+          end
+          if evaluation[:ignored_matches].any?
+            parts << "ignored prior #{prior_rebate_match_list(evaluation[:ignored_matches])}"
+          end
+
+          if parts.size == 1
+            parts.first
+          else
+            "#{parts.first} (#{parts.drop(1).join("; ")})"
+          end
+        end
+      end
+
+      def prior_rebate_match_list(matches)
+        matches
+          .map do |match|
+            "#{match.status}:invoice_id=#{match.invoice_id}," \
+              "invoice_version_id=#{match.invoice_version_id}," \
+              "version=#{match.invoice_versionno}"
+          end
+          .join(", ")
+      end
+
+      def prior_rebate_calculation(evaluations)
+        evaluations
+          .map do |evaluation|
+            "#{evaluation[:upgrade_type].upgrade_type_key}: " \
+              "paid_matches=#{evaluation[:failed_matches].size}, " \
+              "active_matches=#{evaluation[:warning_matches].size}, " \
+              "ignored_matches=#{evaluation[:ignored_matches].size} " \
+              "=> #{evaluation[:result]}"
+          end
+          .join("; ")
+      end
+
+      def prior_rebate_reason(rule_result)
+        case rule_result
+        when "fail"
+          "A latest invoice version on another invoice parent for this participant has the same exact detected upgrade type and an approved-paid status."
+        when "warn"
+          "A latest invoice version on another invoice parent for this participant has the same exact detected upgrade type in an active or payment-pending status."
+        else
+          nil
+        end
       end
 
       def first_field_value(fields, key)
@@ -321,6 +586,7 @@ module Claims
 
       def parse_date(value)
         return value if value.is_a?(Date)
+        return value.to_date if value.respond_to?(:to_date)
 
         Date.iso8601(value.to_s)
       end

@@ -55,6 +55,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 type SessionRow = {
   // session fields (from s.* in the view)
   id: string;
+  contractor_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -196,8 +197,11 @@ export default function SessionsAdminScreen() {
   // SECTION 04 — OPEN INVOICES GRID
   // ============================================================
 
-  const openUploadNewInvoice = (sessionId: string) => {
-    const url = `/upload-invoice-admin?session_id=${encodeURIComponent(sessionId)}`;
+  const openContractorDraftSimulator = (row: SessionRow) => {
+    const contractorId = String(row.contractor_id || '').trim();
+    const url = contractorId
+      ? `/submission-simulator-admin?contractor_id=${encodeURIComponent(contractorId)}`
+      : '/submission-simulator-admin';
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -467,10 +471,10 @@ export default function SessionsAdminScreen() {
               size="sm"
               variant="outline"
               leftIcon={<FileArrowUp size={16} />}
-              onClick={() => selectedSessionForUpload?.id && openUploadNewInvoice(selectedSessionForUpload.id)}
+              onClick={() => selectedSessionForUpload && openContractorDraftSimulator(selectedSessionForUpload)}
               isDisabled={!selectedSessionForUpload?.id}
             >
-              Add net new invoice to selected session
+              Open contractor draft simulator
             </Button>
             {selectedSessionForUpload?.id && (
               <Text fontSize="xs" opacity={0.7}>

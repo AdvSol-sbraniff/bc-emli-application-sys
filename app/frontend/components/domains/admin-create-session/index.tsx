@@ -417,7 +417,9 @@ export default observer(function AdminCreateSessionScreen() {
                             page: '1',
                           });
                         }}
-                        isDisabled={!q.trim() && !qDraft.trim() && sort === 'business_name:asc' && per === 25 && page === 1}
+                        isDisabled={
+                          !q.trim() && !qDraft.trim() && sort === 'business_name:asc' && per === 25 && page === 1
+                        }
                       />
                     </Tooltip>
                   </HStack>
@@ -470,7 +472,9 @@ export default observer(function AdminCreateSessionScreen() {
                               onClick={() => handleSelectContractor(r)}
                             >
                               <Td fontSize="sm">{r.business_name ?? '--'}</Td>
-                              <Td fontFamily="mono" fontSize="xs">{r.contractor_number ?? '--'}</Td>
+                              <Td fontFamily="mono" fontSize="xs">
+                                {r.contractor_number ?? '--'}
+                              </Td>
                               <Td fontSize="sm">{r.email ?? '--'}</Td>
                               <Td fontSize="sm">{r.phone_number ?? '--'}</Td>
                               <Td fontSize="sm">{r.city ?? '--'}</Td>
@@ -508,7 +512,9 @@ export default observer(function AdminCreateSessionScreen() {
                         isDisabled={page <= 1}
                       />
                     </Tooltip>
-                    <Text fontSize="sm">Page {page} of {totalPages}</Text>
+                    <Text fontSize="sm">
+                      Page {page} of {totalPages}
+                    </Text>
                     <Tooltip label="Next page">
                       <IconButton
                         aria-label="Next contractor page"
@@ -533,19 +539,26 @@ export default observer(function AdminCreateSessionScreen() {
                       value={submitterQDraft}
                       onChange={(e) => setSubmitterQDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') setParams(navigate, location, { submitter_q: submitterQDraft.trim(), submitter_page: '1' });
+                        if (e.key === 'Enter')
+                          setParams(navigate, location, { submitter_q: submitterQDraft.trim(), submitter_page: '1' });
                       }}
-                      onBlur={() => setParams(navigate, location, { submitter_q: submitterQDraft.trim(), submitter_page: '1' })}
+                      onBlur={() =>
+                        setParams(navigate, location, { submitter_q: submitterQDraft.trim(), submitter_page: '1' })
+                      }
                       placeholder="Search users..."
                       bg="white"
                     />
                   </Box>
 
                   <Box minW="220px" maxW="280px">
-                    <Text fontSize="xs" opacity={0.7} mb={1}>sort</Text>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      sort
+                    </Text>
                     <Select
                       value={submitterSort}
-                      onChange={(e) => setParams(navigate, location, { submitter_sort: e.target.value, submitter_page: '1' })}
+                      onChange={(e) =>
+                        setParams(navigate, location, { submitter_sort: e.target.value, submitter_page: '1' })
+                      }
                       bg="white"
                     >
                       <option value="email:asc">email A-Z</option>
@@ -558,10 +571,14 @@ export default observer(function AdminCreateSessionScreen() {
                   </Box>
 
                   <Box minW="100px" maxW="120px">
-                    <Text fontSize="xs" opacity={0.7} mb={1}>per</Text>
+                    <Text fontSize="xs" opacity={0.7} mb={1}>
+                      per
+                    </Text>
                     <Select
                       value={String(submitterPer)}
-                      onChange={(e) => setParams(navigate, location, { submitter_per: e.target.value, submitter_page: '1' })}
+                      onChange={(e) =>
+                        setParams(navigate, location, { submitter_per: e.target.value, submitter_page: '1' })
+                      }
                       bg="white"
                     >
                       <option value="25">25</option>
@@ -596,7 +613,14 @@ export default observer(function AdminCreateSessionScreen() {
                             submitter_id: '',
                           });
                         }}
-                        isDisabled={!submitterQ.trim() && !submitterQDraft.trim() && submitterSort === 'email:asc' && submitterPer === 25 && submitterPage === 1 && !submitterIdFromUrl}
+                        isDisabled={
+                          !submitterQ.trim() &&
+                          !submitterQDraft.trim() &&
+                          submitterSort === 'email:asc' &&
+                          submitterPer === 25 &&
+                          submitterPage === 1 &&
+                          !submitterIdFromUrl
+                        }
                       />
                     </Tooltip>
                   </HStack>
@@ -604,7 +628,9 @@ export default observer(function AdminCreateSessionScreen() {
 
                 {submitterGridError && (
                   <Box mb={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-                    <Text as="div" fontSize="sm" color="red.700">{submitterGridError}</Text>
+                    <Text as="div" fontSize="sm" color="red.700">
+                      {submitterGridError}
+                    </Text>
                   </Box>
                 )}
 
@@ -612,10 +638,14 @@ export default observer(function AdminCreateSessionScreen() {
                   <Box bg="gray.50" px={3} py={2}>
                     <Flex justify="space-between" align="center">
                       <Flex align="center" gap={2}>
-                        <Text as="div" fontSize="sm" fontWeight="bold">Rows</Text>
+                        <Text as="div" fontSize="sm" fontWeight="bold">
+                          Rows
+                        </Text>
                         {submitterGridLoading ? <Spinner size="sm" /> : null}
                       </Flex>
-                      <Text as="div" fontSize="xs" opacity={0.7}>total: {submitterTotal}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        total: {submitterTotal}
+                      </Text>
                     </Flex>
                   </Box>
 
@@ -651,7 +681,9 @@ export default observer(function AdminCreateSessionScreen() {
                         {!submitterGridLoading && submitterRows.length === 0 && (
                           <Tr>
                             <Td colSpan={4}>
-                              <Text as="div" fontSize="sm" opacity={0.7} p={3}>No users found.</Text>
+                              <Text as="div" fontSize="sm" opacity={0.7} p={3}>
+                                No users found.
+                              </Text>
                             </Td>
                           </Tr>
                         )}
@@ -661,7 +693,9 @@ export default observer(function AdminCreateSessionScreen() {
                 </Box>
 
                 <Flex mt={4} justify="space-between" align="center" wrap="wrap" gap={3}>
-                  <Text fontSize="sm" opacity={0.8}>Total: {submitterTotal}</Text>
+                  <Text fontSize="sm" opacity={0.8}>
+                    Total: {submitterTotal}
+                  </Text>
                   <HStack>
                     <Tooltip label="Previous page">
                       <IconButton
@@ -669,18 +703,26 @@ export default observer(function AdminCreateSessionScreen() {
                         size="sm"
                         variant="outline"
                         icon={<CaretLeft size={16} />}
-                        onClick={() => setParams(navigate, location, { submitter_page: String(Math.max(1, submitterPage - 1)) })}
+                        onClick={() =>
+                          setParams(navigate, location, { submitter_page: String(Math.max(1, submitterPage - 1)) })
+                        }
                         isDisabled={submitterPage <= 1}
                       />
                     </Tooltip>
-                    <Text fontSize="sm">Page {submitterPage} of {submitterTotalPages}</Text>
+                    <Text fontSize="sm">
+                      Page {submitterPage} of {submitterTotalPages}
+                    </Text>
                     <Tooltip label="Next page">
                       <IconButton
                         aria-label="Next submitter page"
                         size="sm"
                         variant="outline"
                         icon={<CaretRight size={16} />}
-                        onClick={() => setParams(navigate, location, { submitter_page: String(Math.min(submitterTotalPages, submitterPage + 1)) })}
+                        onClick={() =>
+                          setParams(navigate, location, {
+                            submitter_page: String(Math.min(submitterTotalPages, submitterPage + 1)),
+                          })
+                        }
                         isDisabled={submitterPage >= submitterTotalPages}
                       />
                     </Tooltip>
@@ -690,73 +732,121 @@ export default observer(function AdminCreateSessionScreen() {
 
               <TabPanel px={0}>
                 <Box mb={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
-                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>Selected contractor details</Text>
+                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>
+                    Selected contractor details
+                  </Text>
 
                   <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor ID</Text>
-                      <Text as="div" fontSize="xs" fontFamily="mono">{contractorIdFromUrl || '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Contractor ID
+                      </Text>
+                      <Text as="div" fontSize="xs" fontFamily="mono">
+                        {contractorIdFromUrl || '--'}
+                      </Text>
                     </Box>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Business name</Text>
-                      <Text as="div" fontSize="sm">{selectedContractor?.business_name ?? '--'}</Text>
-                    </Box>
-                  </Flex>
-
-                  <Flex mt={3} direction={{ base: 'column', md: 'row' }} gap={6}>
-                    <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Contractor number</Text>
-                      <Text as="div" fontSize="sm" fontFamily="mono">{selectedContractor?.contractor_number ?? '--'}</Text>
-                    </Box>
-                    <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Email</Text>
-                      <Text as="div" fontSize="sm">{selectedContractor?.email ?? '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Business name
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {selectedContractor?.business_name ?? '--'}
+                      </Text>
                     </Box>
                   </Flex>
 
                   <Flex mt={3} direction={{ base: 'column', md: 'row' }} gap={6}>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Phone number</Text>
-                      <Text as="div" fontSize="sm">{selectedContractor?.phone_number ?? '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Contractor number
+                      </Text>
+                      <Text as="div" fontSize="sm" fontFamily="mono">
+                        {selectedContractor?.contractor_number ?? '--'}
+                      </Text>
                     </Box>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>City</Text>
-                      <Text as="div" fontSize="sm">{selectedContractor?.city ?? '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Email
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {selectedContractor?.email ?? '--'}
+                      </Text>
+                    </Box>
+                  </Flex>
+
+                  <Flex mt={3} direction={{ base: 'column', md: 'row' }} gap={6}>
+                    <Box flex="1">
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Phone number
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {selectedContractor?.phone_number ?? '--'}
+                      </Text>
+                    </Box>
+                    <Box flex="1">
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        City
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {selectedContractor?.city ?? '--'}
+                      </Text>
                     </Box>
                   </Flex>
                 </Box>
 
                 <Box mb={3} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
-                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>Selected submitter details</Text>
+                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>
+                    Selected submitter details
+                  </Text>
 
                   <Flex direction={{ base: 'column', md: 'row' }} gap={6}>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Submitter ID</Text>
-                      <Text as="div" fontSize="xs" fontFamily="mono">{submitterIdFromUrl || '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Submitter ID
+                      </Text>
+                      <Text as="div" fontSize="xs" fontFamily="mono">
+                        {submitterIdFromUrl || '--'}
+                      </Text>
                     </Box>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Email</Text>
-                      <Text as="div" fontSize="sm">{selectedSubmitter?.email ?? '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Email
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {selectedSubmitter?.email ?? '--'}
+                      </Text>
                     </Box>
                   </Flex>
 
                   <Flex mt={3} direction={{ base: 'column', md: 'row' }} gap={6}>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Name</Text>
-                      <Text as="div" fontSize="sm">{displayName(selectedSubmitter)}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Name
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {displayName(selectedSubmitter)}
+                      </Text>
                     </Box>
                     <Box flex="1">
-                      <Text as="div" fontSize="xs" opacity={0.7}>Role</Text>
-                      <Text as="div" fontSize="sm">{selectedSubmitter?.role ?? '--'}</Text>
+                      <Text as="div" fontSize="xs" opacity={0.7}>
+                        Role
+                      </Text>
+                      <Text as="div" fontSize="sm">
+                        {selectedSubmitter?.role ?? '--'}
+                      </Text>
                     </Box>
                   </Flex>
                 </Box>
 
                 <Box mb={4} p={3} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="white">
-                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>Submission fields</Text>
+                  <Text as="div" fontSize="sm" fontWeight="bold" mb={3}>
+                    Submission fields
+                  </Text>
 
                   <Box maxW="260px">
-                    <Text as="div" fontSize="xs" opacity={0.7} mb={1}>submitted_at</Text>
+                    <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                      submitted_at
+                    </Text>
                     <Input
                       type="date"
                       value={submittedAtDraft}
@@ -793,14 +883,20 @@ export default observer(function AdminCreateSessionScreen() {
 
                 {createError && (
                   <Box mt={3} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-                    <Text as="div" fontSize="sm" color="red.700">{createError}</Text>
+                    <Text as="div" fontSize="sm" color="red.700">
+                      {createError}
+                    </Text>
                   </Box>
                 )}
 
                 {createdSessionId && (
                   <Box mt={3} p={3} bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md">
-                    <Text as="div" fontSize="sm" color="green.800" fontWeight="bold">Session created</Text>
-                    <Text as="div" fontSize="xs" fontFamily="mono" color="green.900">session_id: {createdSessionId}</Text>
+                    <Text as="div" fontSize="sm" color="green.800" fontWeight="bold">
+                      Session created
+                    </Text>
+                    <Text as="div" fontSize="xs" fontFamily="mono" color="green.900">
+                      session_id: {createdSessionId}
+                    </Text>
 
                     <HStack mt={2} spacing={2}>
                       <Button
@@ -826,13 +922,20 @@ export default observer(function AdminCreateSessionScreen() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          window.open(`/upload-invoice-admin?session_id=${encodeURIComponent(createdSessionId)}`, '_blank');
+                          window.open(
+                            `/submission-simulator-admin?contractor_id=${encodeURIComponent(contractorIdFromUrl)}`,
+                            '_blank',
+                          );
                         }}
                       >
-                        Upload new invoice
+                        Open draft simulator
                       </Button>
 
-                      <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(createdSessionId)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigator.clipboard.writeText(createdSessionId)}
+                      >
                         Copy session_id
                       </Button>
                     </HStack>
@@ -841,7 +944,9 @@ export default observer(function AdminCreateSessionScreen() {
 
                 {lastCreateResponse && (
                   <Box mt={4}>
-                    <Text as="div" fontSize="xs" opacity={0.7} mb={1}>Last create-session response</Text>
+                    <Text as="div" fontSize="xs" opacity={0.7} mb={1}>
+                      Last create-session response
+                    </Text>
                     <Box
                       borderWidth="1px"
                       borderColor="greys.grey20"

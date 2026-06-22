@@ -124,9 +124,21 @@ module Api
             ).delete_all
           end
 
-          deleted[:supporting_documents] = ::Claims::SupportingDocument.where(
-            invoice_id: invoice_ids
-          ).delete_all if invoice_ids.any?
+          if invoice_version_ids.any?
+            supporting_document_ids =
+              ::Claims::SupportingDocument.where(
+                invoice_version_id: invoice_version_ids
+              ).pluck(:id)
+            ::Claims::SupportingDocumentLocatedField.where(
+              supporting_document_id: supporting_document_ids
+            ).delete_all
+            ::Claims::SupportingDocumentVisualFinding.where(
+              supporting_document_id: supporting_document_ids
+            ).delete_all
+            deleted[:supporting_documents] = ::Claims::SupportingDocument.where(
+              id: supporting_document_ids
+            ).delete_all
+          end
 
           # Clean run trackers tied to this session before removing invoices/session.
           deleted[:ingest_step_runs] += ::Claims::IngestStepRun.where(

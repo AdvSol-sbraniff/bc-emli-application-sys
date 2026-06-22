@@ -5,21 +5,15 @@ module Claims
     class ApplyDocumentTriageResult
       ALLOWED_DOCUMENT_KINDS = %w[invoice supporting_document unknown].freeze
 
-      def self.call(
-        ingest_document_id: nil,
-        invoice_version_id: nil,
-        triage_payload:
-      )
+      def self.call(ingest_document_id:, triage_payload:)
         new(
           ingest_document_id: ingest_document_id,
-          invoice_version_id: invoice_version_id,
           triage_payload: triage_payload
         ).call
       end
 
-      def initialize(ingest_document_id:, invoice_version_id:, triage_payload:)
+      def initialize(ingest_document_id:, triage_payload:)
         @ingest_document_id = ingest_document_id
-        @invoice_version_id = invoice_version_id
         @triage_payload = triage_payload
       end
 
@@ -30,12 +24,6 @@ module Claims
           ::Claims::SupportingDocumentType.find_by(
             type_key: type_key
           ) if type_key.present?
-
-        if @ingest_document_id.blank? && @invoice_version_id.present?
-          return(
-            apply_legacy_invoice_version_result(document_kind: document_kind)
-          )
-        end
 
         ingest_document = ::Claims::IngestDocument.find(@ingest_document_id)
         ingest_document.update!(
@@ -148,42 +136,6 @@ module Claims
           @triage_payload["supporting_document_routing_quality_reason"] ||
             @triage_payload[:supporting_document_routing_quality_reason]
         ).to_s.presence
-      end
-
-      def apply_legacy_invoice_version_result(document_kind:)
-        ::Claims::InvoiceVersionUpgradeType.transaction do
-          if document_kind == "invoice"
-            result =
-              ::Claims::InvoiceVersionUpgradeTypes::ApplyClassifierResult.call(
-                invoice_version_id: @invoice_version_id,
-                classifier_payload: @triage_payload
-              )
-            unless result[:ok]
-              raise "ApplyClassifierResult failed: #{result.inspect}"
-            end
-          else
-            ::Claims::InvoiceVersionUpgradeType.where(
-              invoice_version_id: @invoice_version_id,
-              source_engine: "classifier"
-            ).delete_all
-          end
-        end
-
-        {
-          ok: true,
-          document_kind: document_kind,
-          document_kind_confidence:
-            coerce_confidence(
-              @triage_payload["document_kind_confidence"] ||
-                @triage_payload[:document_kind_confidence]
-            ),
-          supporting_document_type_key: supporting_document_type_key,
-          supporting_document_type_confidence:
-            coerce_confidence(
-              @triage_payload["supporting_document_type_confidence"] ||
-                @triage_payload[:supporting_document_type_confidence]
-            )
-        }
       end
 
       def coerce_confidence(value)

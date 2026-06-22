@@ -516,9 +516,12 @@ module Api
           end
 
         invoice_step_scope =
-          ::Claims::IngestStepRun.joins(
-            "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
-          ).where("iv.invoice_id = ?", invoice.id)
+          ::Claims::IngestStepRun
+            .joins(
+              "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
+            )
+            .where("iv.invoice_id = ?", invoice.id)
+            .where(supporting_document_type_id: nil)
         invoice_step_scope =
           invoice_step_scope.where(
             ingest_run_id: ingest_run_id

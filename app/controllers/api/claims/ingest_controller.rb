@@ -2,10 +2,9 @@
 
 # ============================================================
 # SECTION 00 — FILE OVERVIEW
-# PURPOSE: Claims ingest endpoints (POC)
+# PURPOSE: Claims ingest endpoints
 # NOTES:
-# - Currently exposes only: POST upload (multipart pdfs[])
-# - Returns structured "run report" JSON for React admin screen
+# - Exposes package/fix upload entry points plus run tracker endpoints.
 # - Logs via Rails.logger (docker compose logs -f app)
 # ============================================================
 
@@ -22,16 +21,12 @@ module Api
     class IngestController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
 
-      # POC: don’t require login + don’t require policy checks
-
       # ============================================================
-      # SECTION 01.01 — AUTH / POLICY BYPASSES (POC ONLY)
-      # PURPOSE: Allow testing without login/policy/CSRF friction.
+      # SECTION 01.01 — AUTH / POLICY BYPASSES
       # ============================================================
 
       skip_before_action :authenticate_user!,
                          only: %i[
-                           upload
                            runs_index
                            steps_index
                            steps_by_session_index
@@ -40,12 +35,12 @@ module Api
                            run_invoices_index
                            steps_by_invoice_index
                            admin_submit_batch
+                           upload_fix_package
                          ]
-      skip_before_action :require_claims_admin!, only: %i[upload_fix]
-      before_action :require_upload_fix_actor!, only: %i[upload_fix]
+      skip_before_action :require_claims_admin!, only: %i[upload_fix_package]
+      before_action :require_upload_fix_actor!, only: %i[upload_fix_package]
       skip_before_action :require_confirmation,
                          only: %i[
-                           upload
                            runs_index
                            steps_index
                            steps_by_session_index
@@ -54,11 +49,11 @@ module Api
                            run_invoices_index
                            steps_by_invoice_index
                            admin_submit_batch
+                           upload_fix_package
                          ]
       skip_after_action :verify_authorized,
                         only: %i[
-                          upload
-                          upload_fix
+                          upload_fix_package
                           runs_index
                           steps_index
                           steps_by_session_index
@@ -69,8 +64,7 @@ module Api
                           admin_submit_batch
                         ]
       skip_forgery_protection only: %i[
-                                upload
-                                upload_fix
+                                upload_fix_package
                                 runs_index
                                 steps_index
                                 steps_by_session_index
@@ -228,82 +222,39 @@ module Api
                status: :unprocessable_entity
       end
 
-      # ============================================================
-      # SECTION 02 — ACTION: upload
-      # ROUTE: POST /api/claims/sessions/:session_id/upload
-      # PURPOSE:
-      # - Accept multipart pdfs[] (or pdfs/files/file fallbacks)
-      # - Call service Claims::Ingest::UploadPdfs
-      # - Return run report JSON for GUI troubleshooting
-      # ============================================================
-
-      def upload
-        # ============================================================
-        # SECTION 02.01 — INPUT PARSING
-        # ============================================================
-
-        session_id = params[:session_id].to_s
-
-        files =
-          Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
-            Array(params[:files]) + Array(params[:file])
-
-        files = files.flatten.compact
-
-        # ============================================================
-        # SECTION 02.02 — SERVICE CALL
-        # ============================================================
-
-        result =
-          ::Claims::Ingest::UploadPdfs.call(
-            session_id: session_id,
-            files: files
-          )
-
-        render json: result.to_h, status: :ok
-      rescue => e
-        Rails.logger.error(
-          "[claims][ingest][upload] ERROR: #{e.class}: #{e.message}"
-        )
-        render json: {
-                 ok: false,
-                 stage: "upload_pdfs",
-                 error: e.message
-               },
-               status: :unprocessable_entity
-      end
-
-      # ============================================================
-      # SECTION 02.05 — ACTION: upload_fix
-      # ROUTE: POST /api/claims/invoices/:invoice_id/upload_fix
-      # PURPOSE:
-      # - Accept multipart pdfs[] (or pdfs/files/file fallbacks)
-      # - Insert next invoice_version (+1) for an existing invoice
-      # ============================================================
-
-      def upload_fix
+      def upload_fix_package
         invoice_id = params[:invoice_id].to_s
-
         files =
-          Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
-            Array(params[:files]) + Array(params[:file])
-
+          Array(params[:"files[]"]) + Array(params[:files]) +
+            Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
+            Array(params[:file])
         files = files.flatten.compact
 
         result =
-          ::Claims::Ingest::UploadFixPdf.call(
+          ::Claims::Ingest::UploadFixPackage.call(
             invoice_id: invoice_id,
-            files: files
+            clone_invoice_version_id: params[:clone_invoice_version_id],
+            clone_supporting_document_ids:
+              Array(params[:"clone_supporting_document_ids[]"]) +
+                Array(params[:clone_supporting_document_ids]),
+            clone_all_current_supporting_documents:
+              ActiveModel::Type::Boolean.new.cast(
+                params[:clone_all_current_supporting_documents]
+              ),
+            files: files,
+            file_roles:
+              Array(params[:"file_roles[]"]) + Array(params[:file_roles])
           )
 
-        render json: result.to_h, status: :ok
+        render json: result.to_h,
+               status: (result.ok ? :accepted : :unprocessable_entity)
       rescue => e
         Rails.logger.error(
-          "[claims][ingest][upload_fix] ERROR: #{e.class}: #{e.message}"
+          "[claims][ingest][upload_fix_package] ERROR: #{e.class}: #{e.message}"
         )
         render json: {
                  ok: false,
-                 stage: "upload_fix_pdf",
+                 stage: "upload_fix_package",
                  error: e.message
                },
                status: :unprocessable_entity
@@ -613,27 +564,35 @@ module Api
           end
 
         invoice_step_scope =
-          ::Claims::IngestStepRun.joins(
-            "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
-          ).where("iv.invoice_id = ?", invoice.id)
+          ::Claims::IngestStepRun
+            .joins(
+              "JOIN claims.invoice_versions iv ON iv.id = claims.ingest_step_runs.invoice_version_id"
+            )
+            .where("iv.invoice_id = ?", invoice.id)
+            .where(supporting_document_type_id: nil)
         invoice_step_scope =
           invoice_step_scope.where(
             ingest_run_id: ingest_run_id
           ) if ingest_run_id
         invoice_steps = invoice_step_scope.to_a
         invoice_versions_by_id =
-          ::Claims::InvoiceVersion.where(
-            id: invoice_steps.map(&:invoice_version_id).compact.uniq
-          ).index_by(&:id)
+          ::Claims::InvoiceVersion.where(invoice_id: invoice.id).index_by(&:id)
 
-        supporting_documents_by_type_id =
-          invoice
-            .supporting_documents
+        supporting_documents =
+          ::Claims::SupportingDocument
+            .where(invoice_version_id: invoice_versions_by_id.keys)
             .includes(:supporting_document_type)
             .where.not(supporting_document_type_id: nil)
             .order(:created_at, :id)
             .to_a
-            .group_by { |doc| doc.supporting_document_type_id.to_s }
+        supporting_documents_by_type_id =
+          supporting_documents.group_by do |doc|
+            doc.supporting_document_type_id.to_s
+          end
+        supporting_documents_by_version_and_type_id =
+          supporting_documents.group_by do |doc|
+            [doc.invoice_version_id.to_s, doc.supporting_document_type_id.to_s]
+          end
         type_ids = supporting_documents_by_type_id.keys
         type_steps =
           if type_ids.empty?
@@ -642,8 +601,12 @@ module Api
             scope =
               ::Claims::IngestStepRun
                 .where(
+                  invoice_version_id: invoice_versions_by_id.keys,
                   supporting_document_type_id: type_ids,
-                  step_type: "supporting_document_type_extraction"
+                  step_type: %w[
+                    supporting_document_extraction
+                    fix_supporting_document_extraction
+                  ]
                 )
                 .where.not(supporting_document_type_id: nil)
             scope = scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
@@ -687,6 +650,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
+              state_label: step_state_label(step),
+              step_note: step_note(step),
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -709,6 +674,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
+              state_label: step_state_label(step),
+              step_note: step_note(step),
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -719,17 +686,24 @@ module Api
         rows.concat(
           type_steps.map do |step|
             documents_for_type =
-              supporting_documents_by_type_id[
-                step.supporting_document_type_id.to_s
-              ] || []
+              supporting_documents_by_version_and_type_id[
+                [
+                  step.invoice_version_id.to_s,
+                  step.supporting_document_type_id.to_s
+                ]
+              ] ||
+                supporting_documents_by_type_id[
+                  step.supporting_document_type_id.to_s
+                ] || []
+            invoice_version = invoice_versions_by_id[step.invoice_version_id]
             {
               id: step.id,
               ingest_run_id: step.ingest_run_id,
               session_id: step.session_id,
               invoice_id: invoice.id,
               ingest_document_id: nil,
-              invoice_version_id: nil,
-              invoice_versionno: nil,
+              invoice_version_id: step.invoice_version_id,
+              invoice_versionno: invoice_version&.invoice_versionno,
               original_filename:
                 supporting_document_type_step_label(documents_for_type),
               document_kind: "supporting_document_type",
@@ -737,6 +711,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
+              state_label: step_state_label(step),
+              step_note: step_note(step),
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -761,6 +737,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
+              state_label: step_state_label(step),
+              step_note: step_note(step),
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -772,6 +750,30 @@ module Api
           .sort_by { |row| row[:created_at] || Time.at(0) }
           .reverse
           .first(limit)
+      end
+
+      def step_state_label(step)
+        return "reused" if reused_invoice_ocr_step?(step)
+
+        nil
+      end
+
+      def step_note(step)
+        return nil unless reused_invoice_ocr_step?(step)
+
+        "Reused prior invoice OCR because the invoice PDF was cloned unchanged."
+      end
+
+      def reused_invoice_ocr_step?(step)
+        return false unless step.step_type == "fix_ocr_invoice"
+
+        payload = step.di_results_json
+        return false unless payload.is_a?(Hash)
+
+        payload.key?("reused_invoice_ocr") ||
+          payload.key?(:reused_invoice_ocr) ||
+          payload.key?("reused_from_invoice_version_id") ||
+          payload.key?(:reused_from_invoice_version_id)
       end
 
       def supporting_document_type_step_label(documents)

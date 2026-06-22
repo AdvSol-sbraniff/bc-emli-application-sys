@@ -2,7 +2,9 @@ module Claims
   class SupportingDocument < ApplicationRecord
     self.table_name = "claims.supporting_documents"
 
-    belongs_to :invoice, class_name: "Claims::Invoice", foreign_key: :invoice_id
+    belongs_to :invoice_version,
+               class_name: "Claims::InvoiceVersion",
+               foreign_key: :invoice_version_id
 
     belongs_to :supporting_document_type,
                class_name: "Claims::SupportingDocumentType",

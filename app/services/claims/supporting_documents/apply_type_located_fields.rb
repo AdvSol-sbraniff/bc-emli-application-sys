@@ -4,23 +4,23 @@ module Claims
   module SupportingDocuments
     class ApplyTypeLocatedFields
       def self.call(
-        invoice_id:,
+        invoice_version_id:,
         supporting_document_type_id:,
         located_fields_payload:
       )
         new(
-          invoice_id: invoice_id,
+          invoice_version_id: invoice_version_id,
           supporting_document_type_id: supporting_document_type_id,
           located_fields_payload: located_fields_payload
         ).call
       end
 
       def initialize(
-        invoice_id:,
+        invoice_version_id:,
         supporting_document_type_id:,
         located_fields_payload:
       )
-        @invoice_id = invoice_id
+        @invoice_version_id = invoice_version_id
         @supporting_document_type_id = supporting_document_type_id
         @located_fields_payload = located_fields_payload
       end
@@ -29,7 +29,7 @@ module Claims
         documents_by_id =
           ::Claims::SupportingDocument
             .where(
-              invoice_id: @invoice_id,
+              invoice_version_id: @invoice_version_id,
               supporting_document_type_id: @supporting_document_type_id
             )
             .index_by { |document| document.id.to_s }

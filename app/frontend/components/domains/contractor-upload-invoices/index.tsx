@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { keyframes } from '@emotion/react';
 import {
   Box,
   Button,
@@ -7,6 +6,13 @@ import {
   Flex,
   HStack,
   IconButton,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   Table,
   Tbody,
   Td,
@@ -17,9 +23,10 @@ import {
   Tr,
   VStack,
 } from '@chakra-ui/react';
-import { ArrowClockwise, WarningCircle, XCircle } from '@phosphor-icons/react';
+import { CheckCircle, WarningCircle, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
+import { ContractorProcessingGraphic } from '../../shared/claims/contractor-processing-graphic';
 
 type ContractorPortalResponse = {
   contractor?: {
@@ -48,140 +55,6 @@ type RunInvoiceRow = {
   invoice_versionno?: number | null;
   original_filename?: string | null;
 };
-
-const orbitSpin = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
-
-const pulseGlow = keyframes`
-  0%, 100% { opacity: 0.55; transform: scale(0.95); }
-  50% { opacity: 0.95; transform: scale(1.04); }
-`;
-
-const storyFade = keyframes`
-  0% { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(3px); }
-  18% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  82% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  100% { opacity: 0; transform: translateY(-7px) scale(0.99); filter: blur(2px); }
-`;
-
-function ContractorUploadProcessingGraphic({ label }: { label: string }) {
-  return (
-    <VStack spacing={4} py={8} align="center">
-      <Box position="relative" w="168px" h="168px">
-        <Box
-          position="absolute"
-          inset="10px"
-          borderRadius="full"
-          bg="radial-gradient(circle at 35% 30%, rgba(255,255,255,0.98), rgba(188,229,255,0.42) 42%, rgba(0,104,183,0.08) 72%)"
-          boxShadow="0 22px 55px rgba(0, 85, 140, 0.22), inset 0 1px 18px rgba(255,255,255,0.9)"
-          animation={`${pulseGlow} 2.7s ease-in-out infinite`}
-          sx={{
-            '@media (prefers-reduced-motion: reduce)': {
-              animation: 'none',
-            },
-          }}
-        />
-        <Flex
-          position="absolute"
-          inset="0"
-          align="center"
-          justify="center"
-          borderRadius="full"
-          bg="conic-gradient(from 120deg, rgba(10,132,207,0), rgba(61,177,255,0.82), rgba(214,244,255,0.95), rgba(10,132,207,0.08), rgba(10,132,207,0))"
-          sx={{
-            mask: 'radial-gradient(circle, transparent 53%, black 55%)',
-            WebkitMask: 'radial-gradient(circle, transparent 53%, black 55%)',
-            animation: `${orbitSpin} 1.45s linear infinite`,
-            '@media (prefers-reduced-motion: reduce)': {
-              animation: `${orbitSpin} 5s linear infinite`,
-            },
-          }}
-        />
-        <Flex
-          position="absolute"
-          inset="0"
-          align="center"
-          justify="center"
-          color="#0068b7"
-          filter="drop-shadow(0 12px 20px rgba(0, 104, 183, 0.22))"
-          sx={{
-            animation: `${orbitSpin} 2.3s cubic-bezier(.62,.02,.32,1) infinite`,
-            '@media (prefers-reduced-motion: reduce)': {
-              animation: 'none',
-            },
-          }}
-        >
-          <ArrowClockwise size={104} weight="duotone" />
-        </Flex>
-        <Box
-          position="absolute"
-          right="22px"
-          top="30px"
-          w="16px"
-          h="16px"
-          borderRadius="full"
-          bg="linear-gradient(135deg, #ffffff, #42c7ff)"
-          boxShadow="0 0 24px rgba(66, 199, 255, 0.9)"
-        />
-      </Box>
-      <Text
-        key={label}
-        fontSize="xl"
-        fontWeight="700"
-        letterSpacing="0.02em"
-        color="rgba(15, 42, 67, 0.92)"
-        minH="32px"
-        textAlign="center"
-        animation={`${storyFade} 3s ease-in-out infinite`}
-        sx={{
-          '@media (prefers-reduced-motion: reduce)': {
-            animation: 'none',
-          },
-        }}
-      >
-        {label}
-      </Text>
-    </VStack>
-  );
-}
-
-function ContractorUploadFailureNotice({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  return (
-    <Flex
-      align="flex-start"
-      gap={3}
-      p={4}
-      borderRadius="18px"
-      bg="linear-gradient(135deg, rgba(255,245,240,0.96), rgba(255,255,255,0.98))"
-      border="1px solid rgba(194, 65, 12, 0.18)"
-      boxShadow="0 14px 38px rgba(124, 45, 18, 0.09)"
-    >
-      <Box color="orange.600" pt="1px">
-        <WarningCircle size={24} weight="duotone" />
-      </Box>
-      <Box flex="1">
-        <Text fontWeight="700" color="gray.800">
-          Upload needs attention
-        </Text>
-        <Text mt={1} fontSize="sm" color="gray.700">
-          {message}
-        </Text>
-      </Box>
-      <Button
-        leftIcon={<XCircle size={17} />}
-        size="sm"
-        variant="outline"
-        colorScheme="orange"
-        borderRadius="full"
-        onClick={onDismiss}
-      >
-        Clear message
-      </Button>
-    </Flex>
-  );
-}
 
 function getParam(search: string, key: string): string {
   return new URLSearchParams(search).get(key) ?? '';
@@ -213,6 +86,7 @@ export default function ContractorUploadInvoicesScreen() {
   const [contractorName, setContractorName] = useState('');
   const [contractorError, setContractorError] = useState('');
   const [runId, setRunId] = useState(runIdFromUrl);
+  const [uploadModalOpen, setUploadModalOpen] = useState(!!runIdFromUrl);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -330,6 +204,16 @@ export default function ContractorUploadInvoicesScreen() {
     if (runId) setDismissedFailureRunId(runId);
   };
 
+  const closeUploadModal = () => {
+    if (submitLoading || isProcessing) return;
+    setUploadModalOpen(false);
+  };
+
+  const clearUploadModalAttention = () => {
+    clearUploadAttention();
+    setUploadModalOpen(false);
+  };
+
   const mergeStagedFiles = (files: File[]) => {
     if (filesLocked) return;
 
@@ -389,6 +273,7 @@ export default function ContractorUploadInvoicesScreen() {
   };
 
   const handleRunSubmission = async () => {
+    setUploadModalOpen(true);
     setSubmitLoading(true);
     setSubmitError('');
     setFailureMessage('');
@@ -474,6 +359,12 @@ export default function ContractorUploadInvoicesScreen() {
         ? 'Preparing AI Advice'
         : 'Upload a package first.';
   const filesLocked = submitLoading || isProcessing || canContinue;
+
+  useEffect(() => {
+    if (submitLoading || isProcessing || displayFailureMessage || canContinue) {
+      setUploadModalOpen(true);
+    }
+  }, [canContinue, displayFailureMessage, isProcessing, submitLoading]);
 
   const continueToReview = () => {
     if (!canContinue) return;
@@ -615,35 +506,106 @@ export default function ContractorUploadInvoicesScreen() {
               </Flex>
             </Box>
 
-            <Box
-              p={{ base: 4, md: 6 }}
-              borderRadius="28px"
-              bg="linear-gradient(145deg, rgba(247,252,255,0.98), rgba(255,255,255,0.92))"
-              boxShadow="0 24px 70px rgba(16, 73, 116, 0.10)"
-              border="1px solid rgba(30, 122, 181, 0.12)"
+            <Modal
+              isOpen={uploadModalOpen && (submitLoading || isProcessing || !!displayFailureMessage || canContinue)}
+              onClose={closeUploadModal}
+              closeOnOverlayClick={!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue}
+              closeOnEsc={!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue}
+              size="2xl"
+              isCentered
             >
-              {isProcessing ? <ContractorUploadProcessingGraphic label={processingStoryLabel} /> : null}
-
-              {!isProcessing && displayFailureMessage ? (
-                <ContractorUploadFailureNotice message={displayFailureMessage} onDismiss={clearUploadAttention} />
-              ) : null}
-
-              {!isProcessing && canContinue ? (
-                <VStack spacing={3} py={4}>
-                  <Text fontSize="lg" fontWeight="700" color="gray.800">
-                    Your AI advice is ready for pre-check.
+              <ModalOverlay bg="rgba(15, 23, 42, 0.38)" backdropFilter="blur(5px)" />
+              <ModalContent borderRadius="28px" overflow="hidden" boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)">
+                <ModalHeader
+                  px={7}
+                  pt={6}
+                  pb={3}
+                  bg="linear-gradient(135deg, rgba(239,248,255,0.98), rgba(255,255,255,0.98))"
+                >
+                  <Text fontSize="lg" fontWeight="800">
+                    Upload Invoice Package
                   </Text>
-                </VStack>
-              ) : null}
-
-              <Flex justify="center" mt={isProcessing ? 0 : 5}>
-                <Tooltip label={continueHelp} shouldWrapChildren>
-                  <Button colorScheme="green" size="lg" isDisabled={!canContinue} onClick={continueToReview}>
-                    Continue to Step 2: Pre-check
-                  </Button>
-                </Tooltip>
-              </Flex>
-            </Box>
+                  <Text mt={1} fontSize="sm" color="gray.600" fontWeight="500">
+                    We are preparing the package for AI Advice.
+                  </Text>
+                </ModalHeader>
+                {!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue ? (
+                  <ModalCloseButton />
+                ) : null}
+                <ModalBody px={7} py={7}>
+                  {submitLoading || isProcessing ? (
+                    <ContractorProcessingGraphic label={processingStoryLabel} />
+                  ) : displayFailureMessage ? (
+                    <Flex
+                      align="flex-start"
+                      gap={4}
+                      p={5}
+                      borderRadius="22px"
+                      bg="linear-gradient(135deg, rgba(255,245,240,0.96), rgba(255,255,255,0.98))"
+                      border="1px solid rgba(194, 65, 12, 0.18)"
+                      boxShadow="0 14px 38px rgba(124, 45, 18, 0.09)"
+                    >
+                      <Box color="orange.600" pt="1px">
+                        <WarningCircle size={30} weight="duotone" />
+                      </Box>
+                      <Box flex="1">
+                        <Text fontWeight="800" color="gray.800">
+                          {runHeader?.failure_status === 'technical_failure' ||
+                          invoiceRows.some(
+                            (row) => String(row.invoice_status || '').toLowerCase() === 'technical_failure',
+                          )
+                            ? 'Upload needs technical help'
+                            : 'Upload needs attention'}
+                        </Text>
+                        <Text mt={1} fontSize="sm" color="gray.700">
+                          {displayFailureMessage}
+                        </Text>
+                      </Box>
+                    </Flex>
+                  ) : canContinue ? (
+                    <Flex direction="column" align="center" gap={4} py={8} textAlign="center">
+                      <Box
+                        color="green.500"
+                        bg="green.50"
+                        borderRadius="full"
+                        p={4}
+                        boxShadow="0 18px 44px rgba(47, 133, 90, 0.16)"
+                      >
+                        <CheckCircle size={72} weight="duotone" />
+                      </Box>
+                      <Box>
+                        <Text fontSize="2xl" fontWeight="800" color="gray.800">
+                          AI Advice is ready
+                        </Text>
+                        <Text mt={2} fontSize="sm" color="gray.600" maxW="460px">
+                          Your package has been processed. Continue to pre-check the invoice before submitting it.
+                        </Text>
+                      </Box>
+                    </Flex>
+                  ) : null}
+                </ModalBody>
+                {displayFailureMessage && !submitLoading && !isProcessing ? (
+                  <ModalFooter px={7} pt={0} pb={7} gap={3}>
+                    <Button
+                      leftIcon={<XCircle size={17} />}
+                      colorScheme="orange"
+                      borderRadius="full"
+                      onClick={clearUploadModalAttention}
+                    >
+                      Try Again
+                    </Button>
+                  </ModalFooter>
+                ) : canContinue ? (
+                  <ModalFooter px={7} pt={0} pb={7}>
+                    <Tooltip label={continueHelp} shouldWrapChildren>
+                      <Button colorScheme="green" size="lg" borderRadius="full" onClick={continueToReview}>
+                        Continue to Step 2: Pre-check
+                      </Button>
+                    </Tooltip>
+                  </ModalFooter>
+                ) : null}
+              </ModalContent>
+            </Modal>
           </VStack>
         </Box>
       </Container>

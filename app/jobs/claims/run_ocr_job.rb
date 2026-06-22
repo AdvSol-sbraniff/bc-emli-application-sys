@@ -22,7 +22,7 @@ module Claims
       model_id = "prebuilt-invoice",
       enqueue_genai_after = true,
       genai_mode = "use_existing_classifier",
-      step_type = "ocr"
+      step_type = "ocr_invoice"
     )
       Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
 
@@ -144,19 +144,21 @@ module Claims
       end
 
       if ingest_run_id.present?
-        if bundle_ingest_run?(ingest_run_id) &&
-             %w[ocr_read ocr_invoice].include?(step_type)
-          Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
-        else
-          Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
-        end
+        Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
       end
     rescue => e
+      status_subtype = ocr_failure_subtype(e)
       # mark failed (best-effort)
       begin
         step&.update!(
           status: "failed",
           error_text: e.message,
+          di_results_json:
+            ::Claims::Invoices::FailureSubtypes.payload(
+              status: "technical_failure",
+              status_subtype: status_subtype,
+              error: e
+            ),
           updated_at: Time.current
         )
       rescue StandardError
@@ -166,7 +168,7 @@ module Claims
       begin
         inv&.set_workflow_status!(
           "technical_failure",
-          status_subtype: ocr_failure_subtype(e)
+          status_subtype: status_subtype
         )
       rescue StandardError
         # ignore
@@ -174,12 +176,7 @@ module Claims
 
       begin
         if ingest_run_id.present?
-          if bundle_ingest_run?(ingest_run_id) &&
-               %w[ocr_read ocr_invoice].include?(step_type)
-            Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
-          else
-            Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
-          end
+          Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
         end
       rescue StandardError
         # ignore
@@ -190,22 +187,8 @@ module Claims
 
     private
 
-    def bundle_ingest_run?(ingest_run_id)
-      Claims::IngestDocument.exists?(ingest_run_id: ingest_run_id)
-    end
-
     def ocr_failure_subtype(error)
-      message = error.message.to_s.downcase
-      return "ocr_service_error" if message.include?("node ocr failed")
-      return "ocr_service_malformed_response" if error.is_a?(JSON::ParserError)
-      if message.include?("storage") || message.include?("blob")
-        return "ocr_storage_read_failure"
-      end
-      if message.include?("timeout") || message.include?("timed out")
-        return "ocr_provider_timeout"
-      end
-
-      "ocr_unexpected_exception"
+      ::Claims::Invoices::FailureSubtypes.ocr(error)
     end
   end
 end

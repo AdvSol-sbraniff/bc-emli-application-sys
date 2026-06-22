@@ -63,7 +63,7 @@ type SupportingDocumentVisualFinding = {
 
 type SupportingDocumentRow = {
   id: string;
-  invoice_id: string;
+  invoice_version_id: string;
   supporting_document_type_id?: string | null;
   supporting_document_type_key?: string | null;
   supporting_document_type_description?: string | null;

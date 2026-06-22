@@ -139,13 +139,13 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/hello-ai-admin', title: 'Test AI Network Connectivity' },
       ],
-      '/upload-invoice-admin': [
+      '/contractorfixsimulation': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/upload-invoice-admin', title: 'Upload New Invoice' },
+        { href: '/contractorfixsimulation', title: 'Contractor Fix Simulation' },
       ],
-      '/upload-invoice-fix-admin': [
+      '/advice-refresh-simulation-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/upload-invoice-fix-admin', title: 'Upload Invoice Fix' },
+        { href: '/advice-refresh-simulation-admin', title: 'Refresh AI Advice' },
       ],
       '/invoice-supporting-documents-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },

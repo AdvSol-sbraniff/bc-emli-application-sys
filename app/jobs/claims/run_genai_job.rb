@@ -93,11 +93,23 @@ module Claims
         )
       end
     rescue => e
+      failed_step =
+        latest_failed_validation_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: iv&.id
+        )
+      status_subtype =
+        failure_subtype_from_step(
+          failed_step,
+          fallback: genai_failure_subtype(e)
+        )
       # mark failed (best-effort)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
+          genai_results_json:
+            failure_payload(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -107,7 +119,7 @@ module Claims
       begin
         inv&.set_workflow_status!(
           "technical_failure",
-          status_subtype: genai_failure_subtype(e)
+          status_subtype: status_subtype
         )
       rescue StandardError
         # ignore
@@ -164,10 +176,22 @@ module Claims
         "finish_validation"
       )
     rescue => e
+      failed_step =
+        latest_step(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: step_type.to_s,
+          invoice_upgrade_type_id: invoice_upgrade_type_id
+        )
+      status_subtype =
+        failure_subtype_from_step(
+          failed_step,
+          fallback: genai_failure_subtype(e)
+        )
       begin
         inv&.set_workflow_status!(
           "technical_failure",
-          status_subtype: genai_failure_subtype(e)
+          status_subtype: status_subtype
         )
       rescue StandardError
         nil
@@ -215,9 +239,14 @@ module Claims
           end
 
         if failed_step = step_rows.compact.find { |row| row.status == "failed" }
+          status_subtype =
+            failure_subtype_from_step(
+              failed_step,
+              fallback: "genai_unexpected_exception"
+            )
           inv.set_workflow_status!(
             "technical_failure",
-            status_subtype: "genai_unexpected_exception"
+            status_subtype: status_subtype
           )
           raise(
             "GenAI validation step failed: " \
@@ -321,11 +350,16 @@ module Claims
         classifier_eligibility_code:
           shared_context[:classifier_eligibility_code]
       )
+      Claims::GenaiCaseFacts::Build.persist_identity_references!(
+        invoice_version_id: invoice_version.id,
+        identity_references: shared_context.fetch(:identity_references)
+      )
 
       payload = {
         case_facts: case_facts,
         classifier_eligibility_code:
-          shared_context[:classifier_eligibility_code]
+          shared_context[:classifier_eligibility_code],
+        identity_references: shared_context[:identity_references]
       }
 
       step.update!(
@@ -337,10 +371,13 @@ module Claims
 
       payload
     rescue => e
+      status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
+          genai_results_json:
+            failure_payload(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -386,10 +423,13 @@ module Claims
 
       result
     rescue => e
+      status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
+          genai_results_json:
+            failure_payload(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -431,10 +471,13 @@ module Claims
         updated_at: Time.current
       )
     rescue => e
+      status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
+          genai_results_json:
+            failure_payload(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -444,27 +487,27 @@ module Claims
     end
 
     def advance_run!(ingest_run_id:)
-      if Claims::IngestDocument.exists?(ingest_run_id: ingest_run_id)
-        Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
-      else
-        Claims::Ingest::ReconcileRun.call(ingest_run_id: ingest_run_id)
-      end
+      Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
     end
 
     def genai_failure_subtype(error)
-      message = error.message.to_s.downcase
-      return "genai_service_error" if message.include?("node genai failed")
-      if error.is_a?(JSON::ParserError)
-        return "genai_service_malformed_response"
-      end
-      if message.include?("timeout") || message.include?("timed out")
-        return "genai_provider_timeout"
-      end
-      if message.include?("missing env") || message.include?("config")
-        return "configuration_missing"
-      end
+      ::Claims::Invoices::FailureSubtypes.genai(error)
+    end
 
-      "genai_unexpected_exception"
+    def runtime_failure_subtype(error)
+      ::Claims::Invoices::FailureSubtypes.runtime(error)
+    end
+
+    def failure_payload(status_subtype:, error:)
+      ::Claims::Invoices::FailureSubtypes.payload(
+        status: "technical_failure",
+        status_subtype: status_subtype,
+        error: error
+      )
+    end
+
+    def failure_subtype_from_step(step, fallback:)
+      ::Claims::Invoices::FailureSubtypes.from_step(step, fallback: fallback)
     end
 
     def enqueue_genai_ruleset_job!(
@@ -517,6 +560,32 @@ module Claims
           invoice_upgrade_type_id: invoice_upgrade_type_id
         ) if invoice_upgrade_type_id.present?
       scope.order(created_at: :desc).first
+    end
+
+    def latest_failed_validation_step(ingest_run_id:, invoice_version_id:)
+      return nil if ingest_run_id.blank? || invoice_version_id.blank?
+
+      Claims::IngestStepRun
+        .where(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version_id,
+          step_type: validation_step_types,
+          status: "failed"
+        )
+        .order(created_at: :desc)
+        .first
+    end
+
+    def validation_step_types
+      %w[
+        case_facts
+        product_lookup_enrichment
+        genai_common
+        genai_upgrade
+        code_common
+        code_upgrade
+        aggregate_advice
+      ]
     end
 
     def case_facts_from_step!(invoice_version_id, ingest_run_id)
@@ -814,6 +883,7 @@ module Claims
         build_contextwindowjson(
           compiled_user_record1: compiled_user_record1,
           case_facts: case_facts,
+          invoice_version_id: invoice_version_id,
           invoice: invoice,
           upgrade_type: upgrade_type,
           classifier_payload: classifier_payload,
@@ -872,6 +942,7 @@ module Claims
 
       { upgrade_type: upgrade_type, payload: payload }
     rescue => e
+      status_subtype = genai_failure_subtype(e)
       begin
         upsert_genai_manifest!(
           invoice_version_id: invoice_version_id,
@@ -886,6 +957,8 @@ module Claims
           status: "failed",
           context_window_json: contextwindowjson,
           error_text: "#{e.class}: #{e.message}",
+          genai_results_json:
+            failure_payload(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -941,10 +1014,13 @@ module Claims
 
       result
     rescue => e
+      status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
+          genai_results_json:
+            failure_payload(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -1175,7 +1251,9 @@ module Claims
     def product_enrichment_context(invoice_version:, lookup_result:)
       lookups = lookup_result[:lookups] || lookup_result["lookups"] || {}
       matches =
-        lookups.map do |family, lookup|
+        lookups.filter_map do |family, lookup|
+          next if family.to_s == "eligibility_code"
+
           lookup = lookup.with_indifferent_access
           product_id = lookup[:product_id]
 
@@ -1380,6 +1458,7 @@ module Claims
     def build_contextwindowjson(
       compiled_user_record1:,
       case_facts:,
+      invoice_version_id:,
       invoice:,
       upgrade_type:,
       classifier_payload:,
@@ -1401,7 +1480,7 @@ module Claims
 
       supporting_document_context =
         Claims::GenaiCaseFacts::Build.supporting_document_context_for_upgrade_type(
-          invoice: invoice,
+          invoice_version: Claims::InvoiceVersion.find(invoice_version_id),
           invoice_upgrade_type: upgrade_type
         )
 
