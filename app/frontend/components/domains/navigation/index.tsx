@@ -433,12 +433,152 @@ const RedirectScreen = lazy(() =>
 
 const Footer = lazy(() => import('../../shared/base/footer').then((module) => ({ default: module.Footer })));
 
+const APP_TITLE_SUFFIX = 'ESP';
+const DEFAULT_ROUTE_TITLE = 'Energy Savings Program';
+
+const ROUTE_TITLE_BY_PATH: Record<string, string> = {
+  '/': 'Home',
+  '/admin': 'Admin Login',
+  '/admin-mgr': 'Admin Manager Login',
+  '/ai-contractor-dashboard': 'AI Contractor Dashboard',
+  '/api-settings/api-mappings': 'API Mappings',
+  '/applications': 'Applications',
+  '/audit-log': 'Audit Log',
+  '/awhp-product-list-admin': 'AWHP Product List Admin',
+  '/blank-applications': 'Blank Applications',
+  '/check-eligible': 'Eligibility Check',
+  '/configuration-management': 'Configuration Management',
+  '/configuration-management/help-drawer-setup': 'Help Drawer Setup',
+  '/configuration-management/invite-employee': 'Invite Employee',
+  '/configuration-management/landing-setup': 'Landing Setup',
+  '/configuration-management/revision-reason-setup': 'Revision Reason Setup',
+  '/configuration-management/sitewide-banner': 'Sitewide Banner',
+  '/configuration-management/users': 'Admin Users',
+  '/configuration-management/users/invite': 'Invite Admin User',
+  '/configure-users': 'Configure Users',
+  '/contact': 'Contact',
+  '/confirmed': 'Email Confirmed',
+  '/contractor': 'Contractor Login',
+  '/contractor-dashboard': 'Contractor Dashboard',
+  '/contractor/upload-invoices': 'Upload Invoices',
+  '/contractor-management': 'Contractor Management',
+  '/contractor-program-resources': 'Contractor Program Resources',
+  '/contractorfixsimulation': 'Contractor Fix Simulation',
+  '/contractors-admin': 'Contractors Admin',
+  '/digital-building-permits': 'Digital Building Permits',
+  '/downloads-admin': 'Downloads Admin',
+  '/early-access': 'Early Access',
+  '/early-access/requirement-templates': 'Early Access Requirement Templates',
+  '/early-access/requirement-templates/new': 'New Early Access Requirement Template',
+  '/early-access/requirements-library': 'Early Access Requirements Library',
+  '/eligibilitycode-editor': 'Eligibility Code Editor',
+  '/eligibilitycodes-admin': 'Eligibility Codes Admin',
+  '/get-support': 'Support',
+  '/heat-pump-product-list-admin': 'Heat Pump Product List Admin',
+  '/hello-ai-admin': 'Hello AI Admin',
+  '/hpwh-product-list-admin': 'HPWH Product List Admin',
+  '/invoice-supporting-documents-admin': 'Invoice Supporting Documents Admin',
+  '/invoice-versions-admin': 'Invoice Versions Admin',
+  '/invoices-admin': 'Invoices Admin',
+  '/login': 'Login',
+  '/new-application': 'New Application',
+  '/new-invoice': 'New Invoice',
+  '/not-found': 'Not Found',
+  '/ohpa-product-list-admin': 'OHPA Product List Admin',
+  '/profile': 'Profile',
+  '/profile/eula': 'Terms',
+  '/programs': 'Programs',
+  '/programs/new-program': 'New Program',
+  '/reporting': 'Reporting',
+  '/reporting/export-template-summary': 'Export Template Summary',
+  '/reports-volume-value': 'Volume Value Report',
+  '/requirement-templates': 'Requirement Templates',
+  '/requirement-templates/new-template': 'New Requirement Template',
+  '/requirements-library': 'Requirements Library',
+  '/revision-requests-admin': 'Revision Requests Admin',
+  '/submission-inbox': 'Submission Inbox',
+  '/submission-simulator-admin': 'New Invoice Simulator',
+  '/supported-applications': 'Supported Applications',
+  '/supporting-document-type-fields-admin': 'Supporting Document Type Fields Admin',
+  '/supporting-document-types-admin': 'Supporting Document Types Admin',
+  '/sys-admin': 'System Admin Login',
+  '/terms': 'Terms',
+  '/user-editor': 'User Editor',
+  '/users-admin': 'Users Admin',
+  '/validation-rules-admin': 'Validation Rules Admin',
+  '/validation-rules-alphabetic-admin': 'Validation Rules Alphabetic Admin',
+  '/validation-rules-config': 'Validation Rules Config',
+  '/welcome': 'Welcome',
+  '/welcome/contractor': 'Contractor Welcome',
+  '/welcome/contractor/invite': 'Contractor Invite',
+};
+
+const ROUTE_TITLE_PATTERNS: Array<[RegExp, string]> = [
+  [/^\/advice-refresh-simulation-admin$/, 'AI Advice Refresh Simulator'],
+  [/^\/applications\/[^/]+$/, 'Application Review'],
+  [/^\/applications\/[^/]+\/edit$/, 'Edit Application'],
+  [/^\/applications\/[^/]+\/edit\/step-code$/, 'Step Code'],
+  [/^\/applications\/[^/]+\/withdrawl-success$/, 'Withdrawal Success'],
+  [/^\/applications\/[^/]+\/ineligible-success$/, 'Ineligible Success'],
+  [/^\/applications\/[^/]+\/screened-in-success$/, 'Screened In Success'],
+  [/^\/applications\/[^/]+\/approved-pending-success$/, 'Approved Pending Success'],
+  [/^\/applications\/[^/]+\/approved-paid-success$/, 'Approved Paid Success'],
+  [/^\/applications\/[^/]+\/successful-submission$/, 'Submission Success'],
+  [/^\/applications\/[^/]+\/successful-training-pending$/, 'Training Pending Success'],
+  [/^\/applications\/[^/]+\/onboarding-approved$/, 'Onboarding Approved'],
+  [/^\/applications\/[^/]+\/successful-update$/, 'Update Success'],
+  [/^\/blank-template\/[^/]+$/, 'Blank Template'],
+  [/^\/configuration-management\/users\/invite$/, 'Invite Admin User'],
+  [/^\/configure-users\/[^/]+\/invite$/, 'Invite Program User'],
+  [/^\/configure-users\/[^/]+\/users$/, 'Program Users'],
+  [/^\/contractor\/applications\/[^/]+\/edit$/, 'Contractor Application Edit'],
+  [/^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/fix$/, 'Contractor Invoice Fix'],
+  [/^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/messages$/, 'Invoice Messages'],
+  [/^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/review$/, 'Contractor Invoice Review'],
+  [/^\/contractor-management\/[^/]+\/employees$/, 'Contractor Employees'],
+  [/^\/contractor-management\/[^/]+\/invite-employee$/, 'Invite Contractor Employee'],
+  [/^\/contractor-management\/[^/]+\/remove\/removal-confirmation$/, 'Contractor Remove Confirmation'],
+  [/^\/contractor-management\/[^/]+\/remove\/removal-reason$/, 'Contractor Remove Reason'],
+  [/^\/contractor-management\/[^/]+\/suspend\/confirmation$/, 'Contractor Suspend Confirmation'],
+  [/^\/contractor-management\/[^/]+\/suspend\/reason$/, 'Contractor Suspend Reason'],
+  [/^\/contractor-management\/[^/]+\/unsuspend-confirmation$/, 'Contractor Unsuspend Confirmation'],
+  [/^\/digital-building-permits\/[^/]+\/edit$/, 'Edit Digital Building Permit'],
+  [/^\/early-access\/requirement-templates\/[^/]+$/, 'Early Access Requirement Template'],
+  [/^\/early-access\/requirement-templates\/[^/]+\/edit$/, 'Edit Early Access Requirement Template'],
+  [/^\/invoice-versions\/[^/]+$/, 'Invoice Version'],
+  [/^\/invoice-versions\/[^/]+\/review$/, 'Invoice Version Review'],
+  [/^\/invoice-versions-by-version\/[^/]+\/read$/, 'Invoice Version Read'],
+  [/^\/invoices\/[^/]+\/review$/, 'Invoice Review'],
+  [/^\/jurisdictions\/[^/]+$/, 'Jurisdiction'],
+  [/^\/jurisdictions\/[^/]+\/api-settings\/api-mappings\/digital-building-permits\/[^/]+\/edit$/, 'Edit API Mapping'],
+  [/^\/jurisdictions\/[^/]+\/configuration-management$/, 'Jurisdiction Configuration'],
+  [/^\/programs\/[^/]+\/accept-invitation$/, 'Accept Invitation'],
+  [/^\/programs\/[^/]+\/api-settings$/, 'Program API Settings'],
+  [/^\/programs\/[^/]+\/edit$/, 'Edit Program'],
+  [/^\/programs\/[^/]+\/invite$/, 'Invite Program User'],
+  [/^\/programs\/[^/]+\/users$/, 'Program Users'],
+  [/^\/rejection-reason\/[^/]+$/, 'Rejection Reason'],
+  [/^\/requirement-templates\/[^/]+\/edit$/, 'Edit Requirement Template'],
+  [/^\/sessions\/[^/]+\/invoices\/[^/]+\/read$/, 'Invoice Read'],
+  [/^\/template-versions\/[^/]+$/, 'Template Version'],
+];
+
+const getRouteTitle = (pathname: string) => {
+  const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+  const exactTitle = ROUTE_TITLE_BY_PATH[normalizedPath];
+  if (exactTitle) return exactTitle;
+
+  const matchedRouteTitle = ROUTE_TITLE_PATTERNS.find(([routePattern]) => routePattern.test(normalizedPath))?.[1];
+  return matchedRouteTitle || DEFAULT_ROUTE_TITLE;
+};
+
+const getDocumentTitle = (pathname: string) => `${getRouteTitle(pathname)} - ${APP_TITLE_SUFFIX}`;
+
 export const Navigation = observer(() => {
   const { sessionStore, siteConfigurationStore } = useMst();
   const { isLoggingOut } = sessionStore;
   const { displaySitewideMessage, sitewideMessage } = siteConfigurationStore;
   const { validateToken, isValidating } = sessionStore;
-  const { t } = useTranslation();
 
   useEffect(() => {
     validateToken();
@@ -500,6 +640,10 @@ const AppRoutes = observer(() => {
     }
 
     trackPageViewEvent();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    document.title = getDocumentTitle(location.pathname);
   }, [location.pathname]);
 
   useEffect(() => {

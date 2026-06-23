@@ -201,9 +201,9 @@ const sortParts = (sort: string) => {
   };
 };
 
-const ADMIN_WORK_QUEUE_STATUS_FILTER = ['admin_review_inbox', 'in_review'];
-const DEFAULT_INVOICE_STATUS_FILTER = ADMIN_WORK_QUEUE_STATUS_FILTER.join(',');
+const DEFAULT_INVOICE_STATUS_FILTER = '';
 const ALL_STATUS_FILTER_URL_VALUE = 'all';
+const ALL_STATUS_FILTER_ITEM_VALUE = '__all_statuses__';
 
 const statusGroupValue = (statuses: string[]) => statuses.join(',');
 
@@ -238,10 +238,16 @@ const invoiceStatusFromGroupValues = (values: string[]) =>
     ),
   ).join(',');
 
-const INVOICE_STATUS_FILTER_ITEMS = INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
-  label: group.label,
-  value: statusGroupValue(group.statuses),
-}));
+const INVOICE_STATUS_FILTER_ITEMS = [
+  {
+    label: 'All statuses',
+    value: ALL_STATUS_FILTER_ITEM_VALUE,
+  },
+  ...INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
+    label: group.label,
+    value: statusGroupValue(group.statuses),
+  })),
+];
 
 function SortableHeader({
   field,
@@ -332,7 +338,10 @@ export function InvoicesAdminScreen() {
 
   const didInitFromUrl = useRef(false);
 
-  const selectedStatusGroupValues = useMemo(() => selectedStatusGroupValuesFor(invoiceStatus), [invoiceStatus]);
+  const selectedStatusFilterValues = useMemo(
+    () => (invoiceStatus.trim() ? selectedStatusGroupValuesFor(invoiceStatus) : [ALL_STATUS_FILTER_ITEM_VALUE]),
+    [invoiceStatus],
+  );
 
   // 1) initialize state from URL once (and whenever user manually edits URL)
   useEffect(() => {
@@ -662,9 +671,19 @@ export function InvoicesAdminScreen() {
                 status
               </Text>
               <MultiCheckSelect
-                selectedValues={selectedStatusGroupValues}
+                selectedValues={selectedStatusFilterValues}
                 setSelectedValues={(values) => {
-                  const nextStatus = invoiceStatusFromGroupValues(values);
+                  let nextValues = values;
+                  if (values.includes(ALL_STATUS_FILTER_ITEM_VALUE)) {
+                    nextValues =
+                      selectedStatusFilterValues.includes(ALL_STATUS_FILTER_ITEM_VALUE) && values.length > 1
+                        ? values.filter((value) => value !== ALL_STATUS_FILTER_ITEM_VALUE)
+                        : [ALL_STATUS_FILTER_ITEM_VALUE];
+                  }
+
+                  const nextStatus = nextValues.includes(ALL_STATUS_FILTER_ITEM_VALUE)
+                    ? ''
+                    : invoiceStatusFromGroupValues(nextValues);
                   setInvoiceStatus(nextStatus);
                   setPage(1);
                   pushUrl({ invoiceStatus: nextStatus, page: 1 });
