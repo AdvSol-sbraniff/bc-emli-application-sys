@@ -12,6 +12,8 @@ module Claims
       invoice_upgrade_type_id,
       step_type
     )
+      raise "Missing ingest_run_id for GenAI ruleset." if ingest_run_id.blank?
+
       unless %w[genai_common genai_upgrade].include?(step_type.to_s)
         raise "Unsupported GenAI ruleset step_type=#{step_type.inspect}"
       end

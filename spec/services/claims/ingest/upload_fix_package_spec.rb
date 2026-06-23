@@ -54,6 +54,9 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         )
 
       run_id = result.ingest_run_id
+      expect(Claims::IngestRun.find(run_id).resolved_invoice_version_id).to eq(
+        result.invoice_version_id
+      )
       cloned_invoice_document =
         Claims::IngestDocument.find_by!(
           ingest_run_id: run_id,

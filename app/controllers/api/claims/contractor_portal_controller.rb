@@ -319,7 +319,10 @@ module Api
         render json: {
                  id: run.id,
                  session_id: run.session_id,
+                 resolved_invoice_version_id: run.resolved_invoice_version_id,
                  status: run.status,
+                 pipeline_error_code: run.pipeline_error_code,
+                 pipeline_error_description: run.pipeline_error_description,
                  failure_status: failure_payload[:failure_status],
                  failure_status_subtype:
                    failure_payload[:failure_status_subtype],

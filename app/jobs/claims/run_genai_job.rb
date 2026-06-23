@@ -15,9 +15,13 @@ module Claims
     def perform(
       session_id,
       invoice_version_id,
-      ingest_run_id = nil,
+      ingest_run_id,
       mode = "use_existing_classifier"
     )
+      if ingest_run_id.blank?
+        raise "Missing ingest_run_id for GenAI validation."
+      end
+
       Rails.logger.info(
         "[CLAIMS][RUN_GENAI_JOB] START session_id=#{session_id} invoice_version_id=#{invoice_version_id} mode=#{mode}"
       )

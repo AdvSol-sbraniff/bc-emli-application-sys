@@ -136,6 +136,10 @@ module Claims
                 now: now
               )
             end
+          ingest_run.update!(
+            resolved_invoice_version_id: new_invoice_version.id,
+            updated_at: now
+          )
 
           if @clone_invoice_version_id.present?
             clone_invoice_document!(

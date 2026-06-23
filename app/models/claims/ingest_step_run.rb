@@ -2,6 +2,10 @@ module Claims
   class IngestStepRun < ApplicationRecord
     self.table_name = "claims.ingest_step_runs"
 
+    belongs_to :ingest_run,
+               class_name: "Claims::IngestRun",
+               foreign_key: :ingest_run_id
+
     belongs_to :invoice_version,
                class_name: "Claims::InvoiceVersion",
                foreign_key: :invoice_version_id,

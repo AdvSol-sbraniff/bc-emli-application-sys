@@ -8,7 +8,9 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_ocr, retry: 3
 
-    def perform(ingest_document_id, ingest_run_id = nil, step_type = "ocr_read")
+    def perform(ingest_document_id, ingest_run_id, step_type = "ocr_read")
+      raise "Missing ingest_run_id for ingest read OCR." if ingest_run_id.blank?
+
       document = ::Claims::IngestDocument.find(ingest_document_id)
 
       step =

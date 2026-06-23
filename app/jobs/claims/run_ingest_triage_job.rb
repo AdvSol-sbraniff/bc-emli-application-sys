@@ -8,11 +8,9 @@ module Claims
     include Sidekiq::Job
     sidekiq_options queue: :claims_genai, retry: 3
 
-    def perform(
-      ingest_document_id,
-      ingest_run_id = nil,
-      requested_step_type = nil
-    )
+    def perform(ingest_document_id, ingest_run_id, requested_step_type = nil)
+      raise "Missing ingest_run_id for ingest triage." if ingest_run_id.blank?
+
       document = ::Claims::IngestDocument.find(ingest_document_id)
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"

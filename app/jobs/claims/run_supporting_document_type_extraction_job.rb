@@ -11,9 +11,13 @@ module Claims
     def perform(
       invoice_version_id,
       supporting_document_type_id,
-      ingest_run_id = nil,
+      ingest_run_id,
       requested_step_type = nil
     )
+      if ingest_run_id.blank?
+        raise "Missing ingest_run_id for supporting document extraction."
+      end
+
       invoice_version = ::Claims::InvoiceVersion.find(invoice_version_id)
       invoice = invoice_version.invoice
       type = ::Claims::SupportingDocumentType.find(supporting_document_type_id)

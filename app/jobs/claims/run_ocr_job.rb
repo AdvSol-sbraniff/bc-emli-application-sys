@@ -11,19 +11,21 @@ module Claims
 
     # args:
     # - invoice_version_id (required)
-    # - ingest_run_id (optional)  => link to batch run
+    # - ingest_run_id (required)  => parent pipeline run
     # - model_id (optional) => DI model, default prebuilt-invoice
     # - enqueue_genai_after (optional) => whether to queue RunGenaiJob after OCR
     # - genai_mode (optional) => classifier payload handling when enqueueing GenAI
     # - step_type (optional) => ingest step type
     def perform(
       invoice_version_id,
-      ingest_run_id = nil,
+      ingest_run_id,
       model_id = "prebuilt-invoice",
       enqueue_genai_after = true,
       genai_mode = "use_existing_classifier",
       step_type = "ocr_invoice"
     )
+      raise "Missing ingest_run_id for invoice OCR." if ingest_run_id.blank?
+
       Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
 
       iv = Claims::InvoiceVersion.find(invoice_version_id)

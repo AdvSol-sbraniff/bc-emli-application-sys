@@ -25,6 +25,8 @@ type RunHeader = {
   total_files: number;
   completed_files: number;
   failed_files: number;
+  pipeline_error_code?: string | null;
+  pipeline_error_description?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   completed_at?: string | null;
@@ -59,6 +61,8 @@ type StepRow = {
   created_at?: string | null;
   updated_at?: string | null;
 };
+
+type FailedAttemptDisplay = 'retrying' | 'retried';
 
 type ClassifierResultRow = {
   id: string;
@@ -141,7 +145,63 @@ function isActiveStepStatus(status?: string | null) {
   return v === 'queued' || v === 'in_progress';
 }
 
-function renderStepState(step: StepRow) {
+function checkerStatusText(runHeader: RunHeader | null) {
+  if (!runHeader) return 'Pipeline checker status will appear after a run starts.';
+  if (isActiveRunStatus(runHeader.status)) return 'Pipeline checker pending until the run succeeds.';
+  if (runHeader.pipeline_error_code) return runHeader.pipeline_error_description || 'Pipeline checker found a problem.';
+  if (String(runHeader.status || '').toLowerCase() === 'succeeded') return 'No pipeline checker error recorded.';
+  return 'Pipeline checker did not run because this pipeline did not finish successfully.';
+}
+
+function checkerBadge(runHeader: RunHeader | null) {
+  if (!runHeader) return { label: 'pending', colorScheme: 'gray' };
+  if (runHeader.pipeline_error_code) return { label: runHeader.pipeline_error_code, colorScheme: 'red' };
+  if (isActiveRunStatus(runHeader.status)) return { label: 'pending', colorScheme: 'yellow' };
+  if (String(runHeader.status || '').toLowerCase() === 'succeeded')
+    return { label: 'no_error_recorded', colorScheme: 'green' };
+  return { label: 'not_run', colorScheme: 'gray' };
+}
+
+function stepAttemptKey(step: StepRow) {
+  return [
+    step.step_type || '',
+    step.ingest_document_id || '',
+    step.invoice_version_id || '',
+    step.original_filename || '',
+    step.document_kind || '',
+  ].join('|');
+}
+
+function stepTimeMs(step: StepRow) {
+  const value = Date.parse(String(step.created_at || ''));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function buildFailedAttemptDisplay(steps: StepRow[], runIsActive: boolean): Record<string, FailedAttemptDisplay> {
+  const ordered = [...steps].sort((a, b) => stepTimeMs(a) - stepTimeMs(b));
+  const laterNonFailedByKey = new Set<string>();
+  const displayById: Record<string, FailedAttemptDisplay> = {};
+
+  for (let index = ordered.length - 1; index >= 0; index -= 1) {
+    const step = ordered[index];
+    const key = stepAttemptKey(step);
+    const status = String(step.status || '').toLowerCase();
+
+    if (status === 'failed') {
+      if (laterNonFailedByKey.has(key)) {
+        displayById[step.id] = 'retried';
+      } else if (runIsActive) {
+        displayById[step.id] = 'retrying';
+      }
+    } else if (status === 'queued' || status === 'in_progress' || status === 'succeeded') {
+      laterNonFailedByKey.add(key);
+    }
+  }
+
+  return displayById;
+}
+
+function renderStepState(step: StepRow, failedAttemptDisplay?: FailedAttemptDisplay) {
   if (String(step.state_label || '').toLowerCase() === 'reused') {
     return <Badge colorScheme="green">reused</Badge>;
   }
@@ -149,7 +209,11 @@ function renderStepState(step: StepRow) {
   const stepStatus = String(step.status || '').toLowerCase();
 
   if (stepStatus === 'succeeded') return <Badge colorScheme="green">succeeded</Badge>;
-  if (stepStatus === 'failed') return <Badge colorScheme="red">failed</Badge>;
+  if (stepStatus === 'failed') {
+    if (failedAttemptDisplay === 'retried') return <Badge colorScheme="gray">retried</Badge>;
+    if (failedAttemptDisplay === 'retrying') return <Badge colorScheme="orange">retrying</Badge>;
+    return <Badge colorScheme="red">failed</Badge>;
+  }
   if (stepStatus === 'queued') return <Badge colorScheme="yellow">queued</Badge>;
   if (stepStatus === 'in_progress') {
     return (
@@ -339,6 +403,12 @@ export function IngestRunMonitorTabs({
     );
   }, [invoiceRows, runHeader?.status, runIdValue, steps]);
 
+  const failedAttemptDisplayById = useMemo(
+    () => buildFailedAttemptDisplay(steps, isActiveRunStatus(runHeader?.status)),
+    [runHeader?.status, steps],
+  );
+  const checkerBadgeInfo = checkerBadge(runHeader);
+
   useEffect(() => {
     if (!shouldPoll) return;
     const id = window.setInterval(() => {
@@ -353,6 +423,27 @@ export function IngestRunMonitorTabs({
         <Text fontSize="sm" color="red.700" mb={4}>
           {runError}
         </Text>
+      )}
+
+      {runIdValue && (
+        <Box
+          borderWidth="1px"
+          borderRadius="md"
+          mb={4}
+          p={3}
+          bg={runHeader?.pipeline_error_code ? 'red.50' : 'gray.50'}
+          borderColor={runHeader?.pipeline_error_code ? 'red.200' : 'gray.200'}
+        >
+          <HStack mb={1} spacing={2}>
+            <Text fontSize="sm" fontWeight="bold">
+              Pipeline checker
+            </Text>
+            <Badge colorScheme={checkerBadgeInfo.colorScheme}>{checkerBadgeInfo.label}</Badge>
+          </HStack>
+          <Text fontSize="sm" whiteSpace="pre-wrap">
+            {checkerStatusText(runHeader)}
+          </Text>
+        </Box>
       )}
 
       <Tabs variant="line" isFitted colorScheme="gray">
@@ -501,7 +592,7 @@ export function IngestRunMonitorTabs({
                       <Td fontSize="xs">{s.original_filename || '-'}</Td>
                       <Td fontSize="xs">{s.document_kind || '-'}</Td>
                       <Td fontSize="xs">{s.step_type || '-'}</Td>
-                      <Td fontSize="xs">{renderStepState(s)}</Td>
+                      <Td fontSize="xs">{renderStepState(s, failedAttemptDisplayById[s.id])}</Td>
                       <Td fontSize="xs">{s.error_text || s.step_note || '-'}</Td>
                     </Tr>
                   ))}

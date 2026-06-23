@@ -157,6 +157,13 @@ const ProductMatchAccordion = ({ title, rows }: { title: string; rows: Array<[st
   </AccordionItem>
 );
 
+const fmtBytes = (n?: number | null) => {
+  if (n === null || n === undefined) return '-';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+};
+
 const normalizeResult = (result: unknown): RuleResult => {
   const value = String(result ?? '')
     .trim()
@@ -314,13 +321,24 @@ export default function ContractorInvoiceReviewScreen() {
   const [upgradeTypeResults, setUpgradeTypeResults] = useState<any[]>([]);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
+  const [viewerFile, setViewerFile] = useState<{
+    source: 'invoice' | 'supporting_document';
+    url: string;
+    filename?: string;
+    mimeType?: string;
+    documentId?: string;
+  } | null>(null);
+  const [viewerPageMetaByPage, setViewerPageMetaByPage] = useState<
+    Record<number, { width: number; height: number; unit: string }>
+  >({});
   const [numPages, setNumPages] = useState<number>(0);
   const [activeHighlightKey, setActiveHighlightKey] = useState<string>('invoice_id');
   const [activePageNumber, setActivePageNumber] = useState<number>(1);
   const [activeHighlight, setActiveHighlight] = useState<{
-    source: 'di' | 'genai' | 'code' | 'classifier';
+    source: 'di' | 'genai' | 'code' | 'classifier' | 'supporting_document';
     key?: string;
     genaiId?: number;
+    supportingDocumentId?: string;
     pageNumber: number | null;
     polygon: any | null;
   } | null>(null);
@@ -385,6 +403,13 @@ export default function ContractorInvoiceReviewScreen() {
     } else {
       setPdfUrl(String(pdfJson.sas_url));
       setPdfUrlError(null);
+      setViewerFile({
+        source: 'invoice',
+        url: String(pdfJson.sas_url),
+        filename: read?.original_filename || 'Invoice',
+        mimeType: read?.content_type || 'application/pdf',
+      });
+      setViewerPageMetaByPage({});
     }
 
     if (!genaiResp.ok) {
@@ -456,10 +481,25 @@ export default function ContractorInvoiceReviewScreen() {
   }, [activeHighlight?.pageNumber]);
 
   useEffect(() => {
+    if (!activeHighlight || activeHighlight.source === 'supporting_document' || !pdfUrl) return;
+    setViewerFile({
+      source: 'invoice',
+      url: pdfUrl,
+      filename: readData?.original_filename || 'Invoice',
+      mimeType: readData?.content_type || 'application/pdf',
+    });
+  }, [activeHighlight, pdfUrl, readData?.content_type, readData?.original_filename]);
+
+  useEffect(() => {
     setPageInput(String(activePageNumber));
   }, [activePageNumber]);
 
   const activePageMeta = useMemo(() => {
+    if (viewerFile?.source === 'supporting_document') {
+      const pageNumber = activeHighlight?.pageNumber || activePageNumber || 1;
+      return viewerPageMetaByPage[Number(pageNumber)] ?? null;
+    }
+
     const pages = readData?.di_page_map;
     const pageNumber = activeHighlight?.pageNumber;
     if (!pages || !pageNumber) return null;
@@ -470,7 +510,7 @@ export default function ContractorInvoiceReviewScreen() {
       height: Number(found.height),
       unit: String(found.unit || ''),
     };
-  }, [activeHighlight?.pageNumber, readData?.di_page_map]);
+  }, [activeHighlight?.pageNumber, activePageNumber, readData?.di_page_map, viewerFile?.source, viewerPageMetaByPage]);
 
   const renderWidthPx = useMemo(() => {
     if (!activePageMeta) return Math.floor(pageWidthPx * zoom);
@@ -487,7 +527,8 @@ export default function ContractorInvoiceReviewScreen() {
   const svgPolygonPoints = useMemo(() => {
     const poly = activeHighlight?.polygon;
     const meta = activePageMeta;
-    if (!poly || !meta || meta.unit !== 'inch') return null;
+    if (!poly || !meta) return null;
+    if (meta.unit !== 'inch' && meta.unit !== 'pixel') return null;
 
     let parsedPoly: any = poly;
     if (typeof poly === 'string') {
@@ -522,6 +563,18 @@ export default function ContractorInvoiceReviewScreen() {
       .map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`)
       .join(' ');
   }, [activeHighlight?.polygon, activePageMeta, renderWidthPx]);
+
+  const shouldShowActivePolygon =
+    !!svgPolygonPoints &&
+    activeHighlight?.pageNumber != null &&
+    Number(activeHighlight.pageNumber) === Number(activePageNumber);
+
+  const overlayWidthPx = renderWidthPx;
+  const viewerUrl = viewerFile?.url || pdfUrl;
+  const viewerFilename = String(viewerFile?.filename || 'Invoice').trim();
+  const viewerMimeType = String(viewerFile?.mimeType || '').toLowerCase();
+  const viewerIsImage =
+    viewerMimeType.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|tiff?)($|\?)/i.test(viewerUrl || viewerFilename);
 
   const reviewGroups = useMemo(() => {
     const groups = new Map<
@@ -588,6 +641,155 @@ export default function ContractorInvoiceReviewScreen() {
   const neeaProduct = readData?.neea_product_match?.product;
   const awhpProduct = readData?.awhp_product_match?.product;
   const ohpaProduct = readData?.ohpa_product_match?.product;
+  const supportingDocumentTypeGroups = useMemo(
+    () =>
+      Array.isArray(readData?.supporting_document_types_by_upgrade_type)
+        ? readData.supporting_document_types_by_upgrade_type
+        : [],
+    [readData?.supporting_document_types_by_upgrade_type],
+  );
+  const uploadedSupportingDocuments = useMemo(
+    () => (Array.isArray(readData?.uploaded_supporting_documents) ? readData.uploaded_supporting_documents : []),
+    [readData?.uploaded_supporting_documents],
+  );
+  const supportingDocumentEvidenceSections = useMemo(() => {
+    const sectionMap = new Map<string, { key: string; title: string; documents: any[] }>();
+    const ensureSection = (rawKey: unknown, rawTitle: unknown) => {
+      const title = String(rawTitle || rawKey || 'Unclassified document').trim() || 'Unclassified document';
+      const key =
+        String(rawKey || title)
+          .trim()
+          .toLowerCase() || 'unclassified-document';
+      const existing = sectionMap.get(key);
+      if (existing) return existing;
+      const section = { key, title, documents: [] as any[] };
+      sectionMap.set(key, section);
+      return section;
+    };
+
+    uploadedSupportingDocuments.forEach((doc: any) => {
+      ensureSection(
+        doc?.supporting_document_type_key || doc?.supporting_document_type_description || doc?.content_type,
+        doc?.supporting_document_type_description || doc?.supporting_document_type_key || doc?.content_type,
+      ).documents.push(doc);
+    });
+
+    return Array.from(sectionMap.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [uploadedSupportingDocuments]);
+
+  const supportingDocumentUrl = (docId: string) =>
+    `/api/claims/sessions/${encodeURIComponent(String(sessionId || ''))}/invoices/${encodeURIComponent(
+      String(invoiceId || ''),
+    )}/supporting_documents/${encodeURIComponent(docId)}/pdf_url`;
+
+  const openSupportingDocumentFile = async (doc: any) => {
+    const docId = String(doc?.id || '').trim();
+    if (!docId || !sessionId || !invoiceId) {
+      toast({
+        title: 'Cannot open file',
+        description: 'This supporting document is missing its file context.',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    try {
+      const resp = await fetch(supportingDocumentUrl(docId), {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+      const fileUrl = String(json?.sas_url || '').trim();
+      if (!resp.ok || !fileUrl) throw new Error(json?.error || `File URL request failed (${resp.status})`);
+      window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    } catch (e: any) {
+      toast({
+        title: 'Could not open supporting document',
+        description: String(e?.message || e),
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const showSupportingDocumentInViewer = async (doc: any, field?: any) => {
+    const docId = String(doc?.id || '').trim();
+    const filename = String(doc?.original_filename || 'Supporting document').trim();
+    const mimeType = String(doc?.mime_content_type || doc?.content_type || '').trim();
+
+    const setSupportingDocumentHighlight = () => {
+      if (field) {
+        const highlightKey = `supporting_field_${String(field?.id || field?.field_key || 'unknown')}`;
+        setActiveHighlight({
+          source: 'supporting_document',
+          key: highlightKey,
+          supportingDocumentId: docId,
+          pageNumber: field?.page != null ? Number(field.page) : 1,
+          polygon: field?.polygon ?? null,
+        });
+        setActiveHighlightKey(highlightKey);
+      } else {
+        setActiveHighlight({
+          source: 'supporting_document',
+          key: `supporting_document_${docId}`,
+          supportingDocumentId: docId,
+          pageNumber: 1,
+          polygon: null,
+        });
+        setActiveHighlightKey(`supporting_document_${docId}`);
+        setActivePageNumber(1);
+      }
+    };
+
+    if (!docId || !sessionId || !invoiceId) {
+      toast({
+        title: 'Cannot show file',
+        description: 'This supporting document is missing its file context.',
+        status: 'error',
+        duration: 3500,
+        isClosable: true,
+      });
+      return;
+    }
+
+    if (viewerFile?.source === 'supporting_document' && viewerFile.documentId === docId && viewerFile.url) {
+      setSupportingDocumentHighlight();
+      setShowPdf(true);
+      return;
+    }
+
+    try {
+      const resp = await fetch(supportingDocumentUrl(docId), {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const json = await resp.json().catch(() => ({}));
+      const fileUrl = String(json?.sas_url || '').trim();
+      if (!resp.ok || !fileUrl) throw new Error(json?.error || `File URL request failed (${resp.status})`);
+
+      setViewerPageMetaByPage({});
+      setViewerFile({
+        source: 'supporting_document',
+        url: fileUrl,
+        filename,
+        mimeType,
+        documentId: docId,
+      });
+      setSupportingDocumentHighlight();
+      setShowPdf(true);
+    } catch (e: any) {
+      toast({
+        title: 'Could not show supporting document',
+        description: String(e?.message || e),
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
 
   const submitToAdmin = async () => {
     if (!currentInvoiceId || !canSubmit) return;
@@ -827,6 +1029,279 @@ export default function ContractorInvoiceReviewScreen() {
                     </Box>
                   </AccordionPanel>
                 </AccordionItem>
+
+                {supportingDocumentEvidenceSections.length === 0 ? (
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Supporting documents
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+                    <AccordionPanel px="0" pt="8px">
+                      <Text fontSize="sm" opacity={0.7}>
+                        No supporting-document evidence stored for this invoice.
+                      </Text>
+                    </AccordionPanel>
+                  </AccordionItem>
+                ) : (
+                  supportingDocumentEvidenceSections.map((section) => (
+                    <AccordionItem key={section.key} borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left" minW={0}>
+                            <Text size="sm" fontWeight="bold" noOfLines={1}>
+                              Supporting document - {section.title}
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Accordion
+                          allowMultiple
+                          defaultIndex={[0, 1]}
+                          sx={{
+                            '& .chakra-accordion__button': {
+                              pl: '10px',
+                              pr: '8px',
+                            },
+                            '& .chakra-accordion__panel': {
+                              ml: '8px',
+                              pl: '10px',
+                            },
+                          }}
+                        >
+                          {section.documents.map((doc: any) => {
+                            const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
+                            const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
+                            const filename = String(doc?.original_filename || 'Unnamed file');
+
+                            return (
+                              <AccordionItem
+                                key={String(doc?.id || doc?.storage_key || 'supporting-doc')}
+                                borderTopWidth="1px"
+                                borderColor="gray.200"
+                              >
+                                <h3>
+                                  <AccordionButton py="6px" _hover={{ bg: 'transparent' }}>
+                                    <Box flex="1" textAlign="left" minW={0}>
+                                      <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                                        Uploaded file - {filename}
+                                      </Text>
+                                    </Box>
+                                    <AccordionIcon />
+                                  </AccordionButton>
+                                </h3>
+                                <AccordionPanel px="0" pt="6px">
+                                  <Box px="10px" py="3px">
+                                    <Flex justify="flex-end" gap="8px" mb="6px">
+                                      <Tooltip label={`Show ${filename} in application`}>
+                                        <IconButton
+                                          aria-label={`Show ${filename} in application`}
+                                          icon={<FrameCorners size={24} weight="bold" />}
+                                          size="lg"
+                                          variant="outline"
+                                          colorScheme="green"
+                                          onClick={() => void showSupportingDocumentInViewer(doc)}
+                                        />
+                                      </Tooltip>
+                                      <Tooltip label={`Open ${filename} in browser`}>
+                                        <IconButton
+                                          aria-label={`Open ${filename} in browser`}
+                                          icon={<ArrowSquareOut size={24} weight="bold" />}
+                                          size="lg"
+                                          variant="outline"
+                                          colorScheme="blue"
+                                          onClick={() => void openSupportingDocumentFile(doc)}
+                                        />
+                                      </Tooltip>
+                                    </Flex>
+
+                                    <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
+                                      File details
+                                    </Text>
+                                    <Box
+                                      display="grid"
+                                      gridTemplateColumns="160px minmax(0, 1fr)"
+                                      columnGap="8px"
+                                      rowGap="2px"
+                                      alignItems="baseline"
+                                      pl="12px"
+                                      mt="2px"
+                                    >
+                                      <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                        details
+                                      </Text>
+                                      <Text fontSize="sm" noOfLines={1}>
+                                        {[
+                                          `size ${fmtBytes(doc?.byte_size)}`,
+                                          doc?.classification_confidence != null
+                                            ? `confidence ${String(doc.classification_confidence)}`
+                                            : '',
+                                          String(doc?.supporting_document_routing_quality || '').trim()
+                                            ? `routing ${String(doc.supporting_document_routing_quality)}`
+                                            : '',
+                                        ]
+                                          .filter(Boolean)
+                                          .join('  ')}
+                                      </Text>
+                                    </Box>
+
+                                    {fields.length > 0 && (
+                                      <Box
+                                        mt="3px"
+                                        display="grid"
+                                        gridTemplateColumns="160px minmax(0, 1fr)"
+                                        columnGap="8px"
+                                        rowGap="2px"
+                                        alignItems="baseline"
+                                        pl="12px"
+                                      >
+                                        {fields.map((field: any) => {
+                                          const clickable = field?.page != null && field?.polygon != null;
+                                          const fieldKey = `supporting_field_${String(
+                                            field?.id || field?.field_key || 'unknown',
+                                          )}`;
+                                          const isActive =
+                                            activeHighlight?.source === 'supporting_document' &&
+                                            activeHighlight?.supportingDocumentId === String(doc?.id) &&
+                                            activeHighlight?.key === fieldKey;
+                                          const fieldValue =
+                                            field?.value_text != null
+                                              ? String(field.value_text)
+                                              : field?.value_json != null
+                                                ? JSON.stringify(field.value_json)
+                                                : 'not found';
+                                          const handleClick = clickable
+                                            ? () => void showSupportingDocumentInViewer(doc, field)
+                                            : undefined;
+
+                                          return (
+                                            <React.Fragment key={String(field?.id || field?.field_key)}>
+                                              <Text
+                                                fontSize="sm"
+                                                opacity={0.7}
+                                                noOfLines={1}
+                                                cursor={clickable ? 'pointer' : 'default'}
+                                                bg={isActive ? 'red.50' : 'transparent'}
+                                                borderRadius="sm"
+                                                onClick={handleClick}
+                                              >
+                                                {String(field?.field_key || 'field')}
+                                              </Text>
+                                              <Text
+                                                fontSize="sm"
+                                                noOfLines={1}
+                                                cursor={clickable ? 'pointer' : 'default'}
+                                                bg={isActive ? 'red.50' : 'transparent'}
+                                                borderRadius="sm"
+                                                onClick={handleClick}
+                                                _hover={clickable ? { bg: 'gray.50' } : undefined}
+                                              >
+                                                {fieldValue}
+                                              </Text>
+                                            </React.Fragment>
+                                          );
+                                        })}
+                                      </Box>
+                                    )}
+
+                                    {findings.length > 0 && (
+                                      <Box mt="10px" display="flex" flexDirection="column" gap="6px">
+                                        {findings.map((finding: any) => {
+                                          const rawRelevantText = finding?.relevant_text_seen;
+                                          const relevantText = Array.isArray(rawRelevantText)
+                                            ? rawRelevantText.filter(Boolean).join(', ')
+                                            : rawRelevantText != null && rawRelevantText !== ''
+                                              ? typeof rawRelevantText === 'string'
+                                                ? rawRelevantText
+                                                : JSON.stringify(rawRelevantText)
+                                              : '';
+                                          const findingType = String(finding?.finding_type || 'visual finding');
+                                          const findingMeta = [
+                                            finding?.page != null ? `page ${String(finding.page)}` : '',
+                                            finding?.confidence != null
+                                              ? `confidence ${String(finding.confidence)}`
+                                              : '',
+                                            String(finding?.legibility || '').trim()
+                                              ? `legibility ${String(finding.legibility)}`
+                                              : '',
+                                          ]
+                                            .filter(Boolean)
+                                            .join('  ');
+
+                                          return (
+                                            <Box
+                                              key={String(finding?.id || finding?.finding_seqno || finding?.summary)}
+                                              pb="6px"
+                                              _first={{ pt: 0 }}
+                                              _last={{ pb: 0 }}
+                                            >
+                                              <Flex align="baseline" justify="space-between" gap="16px">
+                                                <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
+                                                  Visual findings - {findingType}
+                                                </Text>
+                                                {findingMeta && (
+                                                  <Text fontSize="sm" opacity={0.7} noOfLines={1} textAlign="right">
+                                                    {findingMeta}
+                                                  </Text>
+                                                )}
+                                              </Flex>
+                                              <Box
+                                                display="grid"
+                                                gridTemplateColumns="160px minmax(0, 1fr)"
+                                                columnGap="8px"
+                                                rowGap="2px"
+                                                alignItems="baseline"
+                                                mt="2px"
+                                                pl="12px"
+                                              >
+                                                <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                                  summary
+                                                </Text>
+                                                <Text fontSize="sm" noOfLines={2}>
+                                                  {String(finding?.summary || '')}
+                                                </Text>
+                                              </Box>
+                                              {relevantText && (
+                                                <Box
+                                                  display="grid"
+                                                  gridTemplateColumns="160px minmax(0, 1fr)"
+                                                  columnGap="8px"
+                                                  rowGap="2px"
+                                                  alignItems="baseline"
+                                                  mt="2px"
+                                                  pl="12px"
+                                                >
+                                                  <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                                    text seen
+                                                  </Text>
+                                                  <Text fontSize="sm" noOfLines={2}>
+                                                    {relevantText}
+                                                  </Text>
+                                                </Box>
+                                              )}
+                                            </Box>
+                                          );
+                                        })}
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </AccordionPanel>
+                              </AccordionItem>
+                            );
+                          })}
+                        </Accordion>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  ))
+                )}
 
                 <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                   <h2>
@@ -1421,6 +1896,79 @@ export default function ContractorInvoiceReviewScreen() {
                     );
                   })
                 )}
+
+                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                  <h2>
+                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                      <Box flex="1" textAlign="left">
+                        <Text size="sm" fontWeight="bold">
+                          Possible Supporting Documents
+                        </Text>
+                      </Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel px="0" pt="3px">
+                    {supportingDocumentTypeGroups.length === 0 ? (
+                      <Text fontSize="sm" opacity={0.7}>
+                        No supporting-document type mappings are configured for the detected upgrade types.
+                      </Text>
+                    ) : (
+                      <Box display="flex" flexDirection="column" gap="6px">
+                        {supportingDocumentTypeGroups.map((group: any) => {
+                          const types = Array.isArray(group?.supporting_document_types)
+                            ? group.supporting_document_types
+                            : [];
+                          const title = String(
+                            group?.upgrade_type_description ||
+                              getInvoiceUpgradeTypeMeta(String(group?.upgrade_type_key || 'common')).label,
+                          );
+
+                          return (
+                            <Box
+                              key={String(group?.invoice_upgrade_type_id || group?.upgrade_type_key || 'group')}
+                              borderRadius="md"
+                              px="10px"
+                              py="2px"
+                            >
+                              <Flex align="center" gap="8px" mb="2px" wrap="wrap">
+                                <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                                  {title}
+                                </Text>
+                                <InvoiceUpgradeTypeTile
+                                  upgradeTypeKey={String(group?.upgrade_type_key || 'common')}
+                                  description={group?.upgrade_type_description}
+                                  size={24}
+                                />
+                                <Text fontSize="sm" opacity={0.7}>
+                                  {types.length} configured
+                                </Text>
+                              </Flex>
+
+                              {types.length === 0 ? (
+                                <Text fontSize="sm" opacity={0.7}>
+                                  No supporting document types mapped to this upgrade type.
+                                </Text>
+                              ) : (
+                                <Box pl="12px">
+                                  {types.map((typeRow: any) => (
+                                    <Text
+                                      key={String(typeRow?.supporting_document_type_id || typeRow?.type_key || 'type')}
+                                      fontSize="sm"
+                                      noOfLines={1}
+                                    >
+                                      {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
+                                    </Text>
+                                  ))}
+                                </Box>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </AccordionPanel>
+                </AccordionItem>
               </Accordion>
             </Box>
 
@@ -1565,32 +2113,74 @@ export default function ContractorInvoiceReviewScreen() {
                           onClick={() => setRotate((value) => (value + 90) % 360)}
                         />
                       </Tooltip>
-                      <Tooltip label="Open image in browser" hasArrow>
+                      <Tooltip label={`Open ${viewerFilename} in browser`} hasArrow>
                         <IconButton
-                          aria-label="Open image in browser"
+                          aria-label={`Open ${viewerFilename} in browser`}
                           icon={<ArrowSquareOut size={18} weight="bold" />}
                           size="sm"
                           variant="ghost"
                           borderRadius="full"
                           onClick={() => {
-                            if (!pdfUrl) return;
-                            window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+                            if (!viewerUrl) return;
+                            window.open(viewerUrl, '_blank', 'noopener,noreferrer');
                           }}
-                          isDisabled={!pdfUrl}
+                          isDisabled={!viewerUrl}
                         />
                       </Tooltip>
                     </Flex>
                   </Box>
 
-                  {pdfUrlError ? (
+                  {pdfUrlError && !viewerUrl ? (
                     <Text color="red.700">PDF URL error: {pdfUrlError}</Text>
-                  ) : !pdfUrl ? (
+                  ) : !viewerUrl ? (
                     <Flex align="center" justify="center" minH="300px">
                       <Spinner />
                     </Flex>
+                  ) : viewerIsImage ? (
+                    <Box
+                      position="relative"
+                      width={`${overlayWidthPx}px`}
+                      height={`${overlayHeightPx}px`}
+                      mx="auto"
+                      bg="white"
+                      boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
+                      borderRadius="sm"
+                      overflow="hidden"
+                    >
+                      <svg
+                        width={overlayWidthPx}
+                        height={overlayHeightPx}
+                        style={{ position: 'absolute', left: 0, top: 0, zIndex: 10, pointerEvents: 'none' }}
+                      >
+                        {shouldShowActivePolygon && (
+                          <polygon points={svgPolygonPoints} fill="rgba(255,0,0,0.20)" stroke="red" strokeWidth={2} />
+                        )}
+                      </svg>
+                      <Box
+                        as="img"
+                        src={viewerUrl}
+                        alt={viewerFilename}
+                        width={`${renderWidthPx}px`}
+                        height="auto"
+                        display="block"
+                        onLoad={(event: any) => {
+                          const img = event.currentTarget as HTMLImageElement;
+                          if (!img?.naturalWidth || !img?.naturalHeight) return;
+                          setNumPages(1);
+                          setViewerPageMetaByPage({
+                            1: {
+                              width: img.naturalWidth,
+                              height: img.naturalHeight,
+                              unit: 'pixel',
+                            },
+                          });
+                        }}
+                      />
+                    </Box>
                   ) : (
                     <Document
-                      file={pdfUrl}
+                      key={viewerUrl}
+                      file={viewerUrl}
                       onLoadSuccess={({ numPages: pages }) => {
                         setNumPages(pages);
                         setActivePageNumber((page) => Math.min(Math.max(1, page), pages));
@@ -1607,11 +2197,11 @@ export default function ContractorInvoiceReviewScreen() {
                         borderRadius="sm"
                       >
                         <svg
-                          width={renderWidthPx}
+                          width={overlayWidthPx}
                           height={overlayHeightPx}
                           style={{ position: 'absolute', left: 0, top: 0, zIndex: 10, pointerEvents: 'none' }}
                         >
-                          {svgPolygonPoints && (
+                          {shouldShowActivePolygon && (
                             <polygon points={svgPolygonPoints} fill="rgba(255,0,0,0.20)" stroke="red" strokeWidth={2} />
                           )}
                         </svg>
@@ -1622,14 +2212,28 @@ export default function ContractorInvoiceReviewScreen() {
                             pageNumber={activePageNumber}
                             width={renderWidthPx}
                             rotate={rotate}
+                            onLoadSuccess={(page: any) => {
+                              if (!page?.getViewport) return;
+                              const viewport = page.getViewport({ scale: 1 });
+                              if (!viewport?.width || !viewport?.height) return;
+                              setViewerPageMetaByPage((current) => ({
+                                ...current,
+                                [activePageNumber]: {
+                                  width: Number(viewport.width) / 72,
+                                  height: Number(viewport.height) / 72,
+                                  unit: 'inch',
+                                },
+                              }));
+                            }}
                           />
                         </Box>
                       </Box>
-                      <Text fontSize="xs" opacity={0.6} mt="8px">
-                        active page {activePageNumber} / {numPages || '-'} | unit {activePageMeta?.unit ?? '-'}
-                      </Text>
                     </Document>
                   )}
+                  <Text fontSize="xs" opacity={0.6} mt="8px">
+                    active file {viewerFilename} | active page {activePageNumber} / {numPages || '-'} | unit{' '}
+                    {activePageMeta?.unit ?? '-'}
+                  </Text>
                 </Box>
               </Box>
             ) : null}

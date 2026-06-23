@@ -5,9 +5,23 @@ module Api
       # For the POC: don’t require login + don’t require policy checks
 
       before_action :require_claims_invoice_reader!,
-                    only: %i[current_invoices read read_genai pdf_url pdf]
+                    only: %i[
+                      current_invoices
+                      read
+                      read_genai
+                      pdf_url
+                      pdf
+                      supporting_document_pdf_url
+                    ]
       skip_after_action :verify_authorized,
-                        only: %i[current_invoices read read_genai pdf_url pdf]
+                        only: %i[
+                          current_invoices
+                          read
+                          read_genai
+                          pdf_url
+                          pdf
+                          supporting_document_pdf_url
+                        ]
 
       # ============================================================
       # GET /api/claims/sessions/:session_id/current_invoices
@@ -78,6 +92,10 @@ module Api
                        serialize_awhp_product_match(invoice_version),
                      ohpa_product_match:
                        serialize_ohpa_product_match(invoice_version),
+                     supporting_document_types_by_upgrade_type:
+                       serialize_supporting_document_types_by_upgrade_type(
+                         invoice_version&.id
+                       ),
                      uploaded_supporting_documents:
                        serialize_uploaded_supporting_documents(
                          invoice_version&.id
@@ -134,6 +152,42 @@ module Api
                  sas_url:
                    node_mint_sas!(
                      storage_key: civ.storage_key,
+                     container: ENV["AZURE_BLOB_CONTAINER"].presence
+                   ).fetch("sas_url")
+               }
+      end
+
+      # GET /api/claims/sessions/:session_id/invoices/:invoice_id/supporting_documents/:id/pdf_url
+      def supporting_document_pdf_url
+        civ =
+          ::Claims::CurrentInvoiceVersion.find_by(
+            session_id: params[:session_id],
+            invoice_id: params[:invoice_id]
+          )
+
+        if civ.nil?
+          render json: { error: "Not found" }, status: :not_found
+          return
+        end
+
+        doc =
+          ::Claims::SupportingDocument.find_by(
+            id: params[:id],
+            invoice_version_id: civ.id
+          )
+
+        if doc.nil?
+          render json: {
+                   error: "Supporting document not found"
+                 },
+                 status: :not_found
+          return
+        end
+
+        render json: {
+                 sas_url:
+                   node_mint_sas!(
+                     storage_key: doc.storage_key,
                      container: ENV["AZURE_BLOB_CONTAINER"].presence
                    ).fetch("sas_url")
                }
@@ -432,12 +486,72 @@ module Api
         end
       end
 
+      def serialize_supporting_document_types_by_upgrade_type(
+        invoice_version_id
+      )
+        return [] if invoice_version_id.blank?
+
+        rows = upgrade_type_results_for(invoice_version_id).to_a
+        upgrade_types = []
+        seen_upgrade_type_ids = {}
+
+        rows.each do |row|
+          upgrade_type_id = row.invoice_upgrade_type_id
+          if upgrade_type_id.blank? || seen_upgrade_type_ids[upgrade_type_id]
+            next
+          end
+
+          seen_upgrade_type_ids[upgrade_type_id] = true
+          upgrade_types << {
+            invoice_upgrade_type_id: upgrade_type_id,
+            upgrade_type_key: row.read_attribute("upgrade_type_key"),
+            upgrade_type_description:
+              row.read_attribute("upgrade_type_description")
+          }
+        end
+
+        return [] if upgrade_types.empty?
+
+        mappings =
+          ::Claims::SupportingDocumentTypeUpgradeType
+            .includes(:supporting_document_type)
+            .where(
+              invoice_upgrade_type_id:
+                upgrade_types.map { |row| row[:invoice_upgrade_type_id] }
+            )
+            .references(:supporting_document_type)
+            .merge(::Claims::SupportingDocumentType.where(enabled: true))
+            .order("claims.supporting_document_types.type_key ASC")
+            .to_a
+            .group_by(&:invoice_upgrade_type_id)
+
+        upgrade_types.map do |row|
+          type_rows = Array(mappings[row[:invoice_upgrade_type_id]])
+
+          row.merge(
+            supporting_document_types:
+              type_rows.map do |mapping|
+                type = mapping.supporting_document_type
+                {
+                  supporting_document_type_id: type.id,
+                  type_key: type.type_key,
+                  description: type.description
+                }
+              end
+          )
+        end
+      end
+
       def serialize_uploaded_supporting_documents(invoice_version_id)
         return [] if invoice_version_id.blank?
 
         ::Claims::SupportingDocument
           .where(invoice_version_id: invoice_version_id)
-          .includes(:supporting_document_type)
+          .includes(
+            :supporting_document_type,
+            :supporting_document_located_fields,
+            :supporting_document_visual_findings
+          )
           .order(created_at: :desc, id: :desc)
           .map do |row|
             display_type =
@@ -459,6 +573,9 @@ module Api
                 row.supporting_document_routing_quality,
               supporting_document_routing_quality_reason:
                 row.supporting_document_routing_quality_reason,
+              located_fields: serialize_supporting_document_located_fields(row),
+              visual_findings:
+                serialize_supporting_document_visual_findings(row),
               classified_at: row.classified_at,
               original_filename: row.original_filename,
               content_type: display_type,
@@ -467,6 +584,63 @@ module Api
               created_at: row.created_at,
               updated_at: row.updated_at
             }
+          end
+      end
+
+      def serialize_supporting_document_visual_findings(row)
+        row
+          .supporting_document_visual_findings
+          .sort_by do |finding|
+            [finding.finding_seqno.to_i, finding.created_at]
+          end
+          .map do |finding|
+            finding.as_json(
+              only: %i[
+                id
+                supporting_document_id
+                finding_seqno
+                source_engine
+                finding_type
+                page
+                summary
+                legibility
+                relevant_text_seen
+                confidence
+                raw_json
+                created_at
+                updated_at
+              ]
+            )
+          end
+      end
+
+      def serialize_supporting_document_located_fields(row)
+        row
+          .supporting_document_located_fields
+          .sort_by { |field| [field.field_key.to_s, field.created_at] }
+          .map do |field|
+            definition = field.supporting_document_type_located_field
+            field.as_json(
+              only: %i[
+                id
+                supporting_document_id
+                supporting_document_type_located_field_id
+                source_engine
+                field_key
+                value_type
+                value_text
+                value_json
+                confidence
+                page
+                polygon
+                evidence_text
+                created_at
+                updated_at
+              ]
+            ).merge(
+              "field_number" => definition&.field_number,
+              "prompt_text" => definition&.prompt_text
+            )
           end
       end
 

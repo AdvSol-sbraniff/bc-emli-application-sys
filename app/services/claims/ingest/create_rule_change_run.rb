@@ -83,6 +83,7 @@ module Claims
             ::Claims::IngestRun.create!(
               session_id: invoice.session_id,
               contractor_id: invoice.contractor_id,
+              resolved_invoice_version_id: new_invoice_version.id,
               status: "queued",
               total_files: 0,
               completed_files: 0,

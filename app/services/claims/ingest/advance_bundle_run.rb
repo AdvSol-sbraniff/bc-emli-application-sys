@@ -6,6 +6,7 @@ module Claims
       BUNDLE_INVALID_ERROR_CODE = "invoice_bundle_count_invalid"
       BUNDLE_UNKNOWN_ERROR_CODE = "invoice_bundle_unknown_documents"
       SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE = "supporting_documents_attached"
+      DEFAULT_WORKER_ATTEMPT_LIMIT = 4
 
       def self.call(ingest_run_id:)
         new(ingest_run_id: ingest_run_id).call
@@ -57,6 +58,17 @@ module Claims
           )
         end
         if failed_row = read_steps.values.find { |row| row.status == "failed" }
+          if step_failure_retry_pending?(failed_row)
+            return(
+              update_running!(
+                run: run,
+                total_files: total_files,
+                messages: messages,
+                shell_invoice_id: shell_invoice_id
+              )
+            )
+          end
+
           failed_doc =
             read_documents.detect do |doc|
               doc.id == failed_row.ingest_document_id
@@ -120,6 +132,17 @@ module Claims
         end
         if failed_row =
              triage_steps.values.find { |row| row.status == "failed" }
+          if step_failure_retry_pending?(failed_row)
+            return(
+              update_running!(
+                run: run,
+                total_files: total_files,
+                messages: messages,
+                shell_invoice_id: shell_invoice_id
+              )
+            )
+          end
+
           failed_doc =
             classifier_documents.detect do |doc|
               doc.id == failed_row.ingest_document_id
@@ -257,6 +280,10 @@ module Claims
             run: run,
             resolved_document: resolved_document
           )
+        mark_run_resolved_invoice_version!(
+          run: run,
+          resolved_invoice_version_id: resolved_invoice_version_id
+        )
         resolved_invoice_id = resolved_document.reload.resolved_invoice_id
         supporting_document_rows =
           documents.select { |doc| doc.document_kind == "supporting_document" }
@@ -270,7 +297,8 @@ module Claims
 
         extraction_type_ids =
           supporting_document_type_ids_requiring_extraction(
-            supporting_document_rows
+            run: run,
+            supporting_document_rows: supporting_document_rows
           )
         extraction_steps =
           latest_type_steps_map(
@@ -314,6 +342,17 @@ module Claims
 
         if failed_row =
              extraction_steps.values.find { |row| row.status == "failed" }
+          if step_failure_retry_pending?(failed_row)
+            return(
+              update_running!(
+                run: run,
+                total_files: total_files,
+                messages: messages,
+                shell_invoice_id: shell_invoice_id
+              )
+            )
+          end
+
           failed_type =
             ::Claims::SupportingDocumentType.find_by(
               id: failed_row.supporting_document_type_id
@@ -363,18 +402,31 @@ module Claims
             resolved_invoice_version_id,
             invoice_ocr_step_type
           )
-        if invoice_ocr_step.nil?
-          invoice_ocr_step =
-            reusable_invoice_ocr_step_for(
+        invoice_ocr_satisfied_by_cloned_evidence =
+          invoice_ocr_step.nil? &&
+            invoice_ocr_satisfied_by_cloned_evidence?(
               run: run,
               invoice_version_id: resolved_invoice_version_id,
               step_type: invoice_ocr_step_type
             )
-          if invoice_ocr_step.nil?
-            enqueue_invoice_finalize_ocr!(
-              invoice_version_id: resolved_invoice_version_id,
-              step_type: invoice_ocr_step_type
+
+        if invoice_ocr_step.nil? && !invoice_ocr_satisfied_by_cloned_evidence
+          enqueue_invoice_finalize_ocr!(
+            invoice_version_id: resolved_invoice_version_id,
+            step_type: invoice_ocr_step_type
+          )
+          return(
+            update_running!(
+              run: run,
+              total_files: total_files,
+              messages: messages,
+              shell_invoice_id: shell_invoice_id
             )
+          )
+        end
+
+        if invoice_ocr_step&.status == "failed"
+          if step_failure_retry_pending?(invoice_ocr_step)
             return(
               update_running!(
                 run: run,
@@ -384,9 +436,7 @@ module Claims
               )
             )
           end
-        end
 
-        if invoice_ocr_step.status == "failed"
           return(
             update_failed!(
               run: run,
@@ -412,7 +462,7 @@ module Claims
             )
           )
         end
-        unless invoice_ocr_step.status == "succeeded"
+        if invoice_ocr_step && invoice_ocr_step.status != "succeeded"
           return(
             update_running!(
               run: run,
@@ -427,7 +477,11 @@ module Claims
           invoice_status_for(resolved_invoice_version_id)
         validation_steps =
           latest_validation_steps(run.id, resolved_invoice_version_id)
-        if validation_steps.empty? && cloned_invoice_ocr_step?(invoice_ocr_step)
+        if validation_steps.empty? &&
+             (
+               invoice_ocr_satisfied_by_cloned_evidence ||
+                 cloned_invoice_ocr_step?(invoice_ocr_step)
+             )
           enqueue_validation_for_cloned_invoice!(
             run: run,
             invoice_version_id: resolved_invoice_version_id
@@ -456,6 +510,19 @@ module Claims
              ].include?(resolved_invoice_status)
           failed_validation_step =
             validation_steps.find { |row| row.status == "failed" }
+          if failed_validation_step &&
+               step_failure_retry_pending?(failed_validation_step)
+            return(
+              update_running!(
+                run: run,
+                total_files: total_files,
+                messages: messages,
+                shell_invoice_id: shell_invoice_id,
+                shell_invoice_status: "genai_in_progress"
+              )
+            )
+          end
+
           failure_status =
             if %w[package_needs_correction technical_failure].include?(
                  resolved_invoice_status
@@ -534,6 +601,7 @@ module Claims
           completed_at: Time.current,
           updated_at: Time.current
         )
+        ::Claims::PipelineAudit::CheckRun.call(ingest_run_id: run.id)
       end
 
       private
@@ -625,11 +693,28 @@ module Claims
         }
       end
 
-      def reusable_invoice_ocr_step_for(run:, invoice_version_id:, step_type:)
-        return nil unless step_type == "fix_ocr_invoice"
+      def mark_run_resolved_invoice_version!(run:, resolved_invoice_version_id:)
+        return if resolved_invoice_version_id.blank?
+        if run.resolved_invoice_version_id.to_s ==
+             resolved_invoice_version_id.to_s
+          return
+        end
+
+        run.update!(
+          resolved_invoice_version_id: resolved_invoice_version_id,
+          updated_at: Time.current
+        )
+      end
+
+      def invoice_ocr_satisfied_by_cloned_evidence?(
+        run:,
+        invoice_version_id:,
+        step_type:
+      )
+        return false unless step_type == "fix_ocr_invoice"
 
         invoice_version = ::Claims::InvoiceVersion.find(invoice_version_id)
-        return nil if invoice_version.di_raw_json.blank?
+        return false if invoice_version.di_raw_json.blank?
 
         cloned_document =
           ::Claims::IngestDocument.find_by(
@@ -637,31 +722,7 @@ module Claims
             resolved_invoice_version_id: invoice_version.id,
             document_kind: "invoice"
           )
-        unless cloned_document && reused_ingest_document?(cloned_document)
-          return nil
-        end
-
-        source_invoice_version_id =
-          ::Claims::InvoiceVersion
-            .where(invoice_id: invoice_version.invoice_id)
-            .where.not(id: invoice_version.id)
-            .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
-            .pick(:id)
-
-        ::Claims::IngestStepRun.create!(
-          ingest_run_id: run.id,
-          session_id: cloned_document.session_id,
-          invoice_version_id: invoice_version.id,
-          step_type: step_type,
-          status: "succeeded",
-          di_results_json: {
-            reused_from_invoice_version_id: source_invoice_version_id,
-            reused_invoice_ocr: true
-          }.compact,
-          error_text: nil,
-          created_at: Time.current,
-          updated_at: Time.current
-        )
+        cloned_document.present? && reused_ingest_document?(cloned_document)
       end
 
       def latest_document_steps_map(ingest_run_id, document_ids, step_type)
@@ -836,32 +897,43 @@ module Claims
         )
       end
 
-      def supporting_document_type_ids_requiring_extraction(documents)
-        supporting_document_rows =
-          documents.select do |doc|
-            doc.document_kind == "supporting_document" &&
-              doc.supporting_document_type_id.present?
+      def supporting_document_type_ids_requiring_extraction(
+        run:,
+        supporting_document_rows:
+      )
+        candidate_rows =
+          supporting_document_rows.select do |doc|
+            doc.supporting_document_type_id.present?
           end
-        return [] if supporting_document_rows.empty?
+        return [] if candidate_rows.empty?
 
-        candidate_type_ids =
-          supporting_document_rows
-            .map { |row| row.supporting_document_type_id.to_s }
-            .uniq
+        affected_rows =
+          if fix_run?(run)
+            candidate_rows.reject { |doc| reused_ingest_document?(doc) }
+          else
+            candidate_rows
+          end
+        return [] if affected_rows.empty?
+
+        type_ids_with_affected_evidence =
+          affected_rows.map { |row| row.supporting_document_type_id.to_s }.uniq
+
+        supporting_document_type_ids_configured_for_extraction(
+          type_ids_with_affected_evidence
+        )
+      end
+
+      def supporting_document_type_ids_configured_for_extraction(type_ids)
+        return [] if type_ids.empty?
 
         type_ids_with_fields =
           ::Claims::SupportingDocumentTypeLocatedField
-            .where(
-              supporting_document_type_id: candidate_type_ids,
-              enabled: true
-            )
+            .where(supporting_document_type_id: type_ids, enabled: true)
             .distinct
             .pluck(:supporting_document_type_id)
             .map(&:to_s)
 
-        candidate_type_ids.select do |type_id|
-          type_ids_with_fields.include?(type_id)
-        end
+        type_ids.select { |type_id| type_ids_with_fields.include?(type_id) }
       end
 
       def latest_classifier_steps_map(ingest_run_id, documents)
@@ -1083,6 +1155,46 @@ module Claims
 
       def failure_subtype_from_step(step, fallback:)
         ::Claims::Invoices::FailureSubtypes.from_step(step, fallback: fallback)
+      end
+
+      def step_failure_retry_pending?(step)
+        return false unless step&.status == "failed"
+
+        same_target_step_attempts(step) < worker_attempt_limit
+      end
+
+      def worker_attempt_limit
+        raw =
+          ENV.fetch(
+            "CLAIMS_INGEST_STEP_ATTEMPT_LIMIT",
+            DEFAULT_WORKER_ATTEMPT_LIMIT
+          )
+        value =
+          begin
+            Integer(raw)
+          rescue StandardError
+            DEFAULT_WORKER_ATTEMPT_LIMIT
+          end
+        [value, 1].max
+      end
+
+      def same_target_step_attempts(step)
+        scope =
+          ::Claims::IngestStepRun.where(
+            ingest_run_id: step.ingest_run_id,
+            step_type: step.step_type
+          )
+
+        %i[
+          ingest_document_id
+          invoice_version_id
+          supporting_document_type_id
+          invoice_upgrade_type_id
+        ].each do |column|
+          scope = scope.where(column => step.public_send(column))
+        end
+
+        scope.count
       end
 
       def update_running!(

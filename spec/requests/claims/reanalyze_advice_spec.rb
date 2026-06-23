@@ -169,6 +169,7 @@ RSpec.describe "Claims advice refresh", type: :request do
       )
       expect(new_version.invoice_id).to eq(invoice.id)
       expect(new_version.invoice_versionno).to eq(4)
+      expect(ingest_run.resolved_invoice_version_id).to eq(new_version.id)
       expect(new_version.di_raw_json).to eq("invoice" => "di")
       expect(new_version.genai_raw_json).to be_nil
       expect(new_version.genai_overall_confidence).to eq(0)

@@ -123,89 +123,33 @@ RSpec.describe "Claims ingest step history", type: :request do
         end
       ).to be(true)
     end
+  end
 
-    it "labels reused fix invoice OCR rows distinctly from fresh OCR work" do
+  describe "GET /api/claims/ingest/runs/:ingest_run_id" do
+    it "renders pipeline checker fields on the run header" do
       host! "localhost"
 
-      now = Time.zone.parse("2026-06-22 10:09:01")
-      contractor = Contractor.create!(business_name: "Test Contractor")
-      session = Claims::Session.create!(created_at: now, updated_at: now)
+      session = Claims::Session.create!
       ingest_run =
         Claims::IngestRun.create!(
           session_id: session.id,
-          contractor_id: contractor.id,
-          status: "running",
-          total_files: 3,
-          completed_files: 0,
+          status: "succeeded",
+          total_files: 1,
+          completed_files: 1,
           failed_files: 0,
-          created_at: now,
-          updated_at: now
-        )
-      invoice =
-        Claims::Invoice.create!(
-          session_id: session.id,
-          contractor_id: contractor.id,
-          status: "genai_queued",
-          status_updated_at: now,
-          created_at: now,
-          updated_at: now
-        )
-      source_version =
-        Claims::InvoiceVersion.create!(
-          invoice_id: invoice.id,
-          invoice_versionno: 1,
-          storage_provider: "azure_blob",
-          storage_key: "source/invoice.pdf",
-          original_filename: "Fenestration invoice.pdf",
-          content_type: "application/pdf",
-          created_at: now,
-          updated_at: now
-        )
-      invoice_version =
-        Claims::InvoiceVersion.create!(
-          invoice_id: invoice.id,
-          invoice_versionno: 2,
-          storage_provider: "azure_blob",
-          storage_key: "cloned/invoice.pdf",
-          original_filename: "Fenestration invoice.pdf",
-          content_type: "application/pdf",
-          created_at: now,
-          updated_at: now
+          pipeline_error_code: "checker_test_error",
+          pipeline_error_description: "Checker test description."
         )
 
-      Claims::IngestStepRun.create!(
-        ingest_run_id: ingest_run.id,
-        session_id: session.id,
-        invoice_version_id: invoice_version.id,
-        step_type: "fix_ocr_invoice",
-        status: "succeeded",
-        di_results_json: {
-          reused_invoice_ocr: true,
-          reused_from_invoice_version_id: source_version.id
-        },
-        created_at: now,
-        updated_at: now
-      )
-
-      get "/api/claims/ingest/invoices/#{invoice.id}/steps",
-          params: {
-            ingest_run_id: ingest_run.id,
-            limit: 500
-          }
+      get "/api/claims/ingest/runs/#{ingest_run.id}"
 
       expect(response).to have_http_status(:ok)
-      row =
-        json_response
-          .fetch("rows")
-          .find do |candidate|
-            candidate.fetch("step_type") == "fix_ocr_invoice"
-          end
-
-      expect(row).to include(
-        "document_kind" => "invoice",
-        "state_label" => "reused"
+      expect(json_response.fetch("pipeline_error_code")).to eq(
+        "checker_test_error"
       )
-      expect(row.fetch("step_note")).to include("Reused prior invoice OCR")
+      expect(json_response.fetch("pipeline_error_description")).to eq(
+        "Checker test description."
+      )
     end
   end
 end

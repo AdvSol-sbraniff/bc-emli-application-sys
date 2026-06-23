@@ -177,7 +177,7 @@ module Api
       # ROUTE: GET /api/claims/ingest/steps?session_id=<uuid>
       # PURPOSE:
       # - Returns ingest_step_runs filtered by session_id
-      # - Supports orphan/manual steps (ingest_run_id NULL) because session_id is on the table
+      # - Useful for seeing all pipeline runs in one session
       # ============================================================
 
       def steps_by_session_index
@@ -263,7 +263,7 @@ module Api
       # ============================================================
       # SECTION 02.10 — ACTION: run_ocr
       # ROUTE: POST /api/claims/ingest/run_ocr
-      # BODY: { invoice_version_id: "uuid", ingest_run_id?: "uuid" }
+      # BODY: { invoice_version_id: "uuid", ingest_run_id: "uuid" }
       # PURPOSE:
       # - enqueue Sidekiq job that calls Node /inv/ocr
       # - creates ingest_step_runs row inside the job
@@ -273,7 +273,9 @@ module Api
         raise "Missing invoice_version_id" if invoice_version_id.empty?
 
         ingest_run_id = params[:ingest_run_id].to_s.strip
-        ingest_run_id = nil if ingest_run_id.empty?
+        raise "Missing ingest_run_id" if ingest_run_id.empty?
+
+        ::Claims::IngestRun.find(ingest_run_id)
 
         jid =
           ::Claims::RunOcrJob.perform_async(invoice_version_id, ingest_run_id)
@@ -311,7 +313,10 @@ module Api
         render json: {
                  id: run.id,
                  session_id: run.session_id,
+                 resolved_invoice_version_id: run.resolved_invoice_version_id,
                  status: run.status,
+                 pipeline_error_code: run.pipeline_error_code,
+                 pipeline_error_description: run.pipeline_error_description,
                  total_files: run.total_files,
                  completed_files: run.completed_files,
                  failed_files: run.failed_files,
@@ -650,8 +655,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
-              state_label: step_state_label(step),
-              step_note: step_note(step),
+              state_label: nil,
+              step_note: nil,
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -674,8 +679,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
-              state_label: step_state_label(step),
-              step_note: step_note(step),
+              state_label: nil,
+              step_note: nil,
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -711,8 +716,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
-              state_label: step_state_label(step),
-              step_note: step_note(step),
+              state_label: nil,
+              step_note: nil,
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -737,8 +742,8 @@ module Api
               invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
-              state_label: step_state_label(step),
-              step_note: step_note(step),
+              state_label: nil,
+              step_note: nil,
               error_text: step.error_text,
               created_at: step.created_at,
               updated_at: step.updated_at
@@ -750,30 +755,6 @@ module Api
           .sort_by { |row| row[:created_at] || Time.at(0) }
           .reverse
           .first(limit)
-      end
-
-      def step_state_label(step)
-        return "reused" if reused_invoice_ocr_step?(step)
-
-        nil
-      end
-
-      def step_note(step)
-        return nil unless reused_invoice_ocr_step?(step)
-
-        "Reused prior invoice OCR because the invoice PDF was cloned unchanged."
-      end
-
-      def reused_invoice_ocr_step?(step)
-        return false unless step.step_type == "fix_ocr_invoice"
-
-        payload = step.di_results_json
-        return false unless payload.is_a?(Hash)
-
-        payload.key?("reused_invoice_ocr") ||
-          payload.key?(:reused_invoice_ocr) ||
-          payload.key?("reused_from_invoice_version_id") ||
-          payload.key?(:reused_from_invoice_version_id)
       end
 
       def supporting_document_type_step_label(documents)

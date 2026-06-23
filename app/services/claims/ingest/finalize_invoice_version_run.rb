@@ -81,6 +81,9 @@ module Claims
           completed_at: TERMINAL_STATUSES.include?(status) ? Time.current : nil,
           updated_at: Time.current
         )
+        if status == "succeeded"
+          ::Claims::PipelineAudit::CheckRun.call(ingest_run_id: run.id)
+        end
       end
 
       private

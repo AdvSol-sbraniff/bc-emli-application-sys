@@ -2101,6 +2101,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
 
   session_id uuid NOT NULL,
   contractor_id uuid NULL,
+  resolved_invoice_version_id uuid NULL,
 
   status text NOT NULL DEFAULT 'queued',  -- queued|running|succeeded|failed|partial
   cleanup_failed_invoice_artifacts boolean NOT NULL DEFAULT false,
@@ -2110,6 +2111,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
   failed_files    integer NOT NULL DEFAULT 0,
 
   messages jsonb NULL, -- array of strings, optional
+  pipeline_error_code text NULL,
+  pipeline_error_description text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -2125,6 +2128,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
   CONSTRAINT fk_ingest_runs_contractor
     FOREIGN KEY (contractor_id)
     REFERENCES public.contractors(id),
+
+  CONSTRAINT fk_ingest_runs_resolved_invoice_version
+    FOREIGN KEY (resolved_invoice_version_id)
+    REFERENCES claims.invoice_versions(id)
+    ON DELETE SET NULL,
 
   CONSTRAINT ingest_runs_status_chk
     CHECK (status IN ('queued','running','succeeded','failed','partial')),
@@ -2144,6 +2152,9 @@ CREATE INDEX IF NOT EXISTS idx_ingest_runs_session_created
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_contractor_created
   ON claims.ingest_runs (contractor_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_resolved_invoice_version
+  ON claims.ingest_runs (resolved_invoice_version_id);
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_status
   ON claims.ingest_runs (status);
@@ -2280,17 +2291,17 @@ CREATE INDEX IF NOT EXISTS idx_ingest_documents_on_promoted_supporting_document_
 -- PURPOSE: Single table combining upload_runs + ocr_runs + genai_runs
 -- DESIGN: Keep ALL former validation_runs fields (nullable as needed)
 -- NOTE:
--- - session_id is REQUIRED so orphan/manual steps can always be filtered.
+-- - Every step belongs to an ingest_run; session_id remains required for filtering/debugging.
 -- - status is authoritative lifecycle state for each step attempt.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
-  -- Parent batch run (nullable so 1-off troubleshooting steps can exist)
-  ingest_run_id uuid NULL,
+  -- Parent pipeline run. Every step row belongs to exactly one run.
+  ingest_run_id uuid NOT NULL,
 
-  -- Session is ALWAYS known (even for orphans)
+  -- Session is always known for filtering/debugging.
   session_id uuid NOT NULL,
 
   -- Target invoice version (required for resolved-invoice work)
@@ -2328,7 +2339,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   CONSTRAINT fk_ingest_step_runs_ingest_run
     FOREIGN KEY (ingest_run_id)
     REFERENCES claims.ingest_runs(id)
-    ON DELETE SET NULL,
+    ON DELETE CASCADE,
 
   CONSTRAINT fk_ingest_step_runs_session
     FOREIGN KEY (session_id)
@@ -2437,7 +2448,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_ingest_run_id
   ON claims.ingest_step_runs (ingest_run_id, created_at DESC);
 
--- Session filtering (works for BOTH pipeline + orphan steps)
+-- Session filtering across pipeline runs
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_session_id
   ON claims.ingest_step_runs (session_id, created_at DESC);
 
