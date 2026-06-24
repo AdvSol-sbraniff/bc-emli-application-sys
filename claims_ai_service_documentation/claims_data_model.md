@@ -2026,30 +2026,29 @@ The result pattern is:
 
 Because income level can affect eligibility, this check is deterministic and should not depend on GenAI interpretation.
 
-### 10.4 Approval and expiry dates
+### 10.4 Eligibility approval date window
 
-Approval and expiry dates are used to decide whether the invoice date falls inside the eligibility-code validity window.
+The matched eligibility-code approval date is used to decide whether the invoice date falls inside the six-month completion window.
 
 The case-facts builder snapshots:
 
 - `users_eligibilitycodes.approved_at`
-- `users_eligibilitycodes.expires_at`
 
-The common code rule `eligibility_code_valid_for_invoice_date` compares those dates with `claims.invoice_versions.di_ocr_invoice_date`.
+The common code rule `eligibility_code_valid_for_invoice_date` compares `claims.users_eligibilitycodes.approved_at` with `claims.invoice_versions.di_ocr_invoice_date`. The invoice date is currently used as the system proxy for upgrade completed date.
 
 The core calculation is:
 
 ```text
-approved_at <= invoice_date <= expires_at
+approved_at <= invoice_date <= approved_at + 6 months
 ```
 
-If `expires_at` is missing in code, the rule logic can use an approval-plus-six-month fallback, but the schema itself requires `expires_at`, so a normal eligibility-code record should have it.
+This rule intentionally does not use `claims.users_eligibilitycodes.expires_at`; the six-month deadline is calculated from the approval date.
 
 The rule returns:
 
-- `pass` when the invoice date is inside the approval/expiry window.
-- `fail` when the invoice date is outside the window.
-- `warn` when required dates are missing or not parseable.
+- `pass` when the invoice date is on or after the approval date and on or before six months after approval.
+- `fail` when the invoice date falls outside that six-month approval window.
+- `warn` when the invoice date, matched eligibility-code record, or approval date is missing or not parseable.
 
 This rule is separate from visible invoice-code matching. A code can be visible and found in the database but still fail the date-window check.
 
@@ -2096,7 +2095,6 @@ The case-facts builder finds a matching `claims.users_eligibilitycodes` row:
 eligibility_code: ESP2-123456
 income_level: 2
 approved_at: 2026-04-15
-expires_at: 2026-10-15
 user_id: matched public.users.id
 ```
 
@@ -2111,12 +2109,9 @@ value_text: 2
 
 field_key: users_eligibilitycodes.approved_at
 value_text: 2026-04-15
-
-field_key: users_eligibilitycodes.expires_at
-value_text: 2026-10-15
 ```
 
-If the invoice date is `2026-06-01`, the common eligibility date rule can pass because the invoice date falls inside the approval/expiry window. If the upgrade type requires Income Level 1 or 2, the income-level rule can also pass.
+If the invoice date is `2026-06-01`, the common eligibility date rule can pass because the invoice date falls within six months of the approval date. If the upgrade type requires Income Level 1 or 2, the income-level rule can also pass.
 
 ### 10.7 Example: eligibility code missing or expired
 
@@ -2128,15 +2123,14 @@ The resulting checks can behave differently:
 - `eligibility_code_valid_for_invoice_date` warns when it cannot evaluate the date window because the approval date is missing.
 - GenAI identity rules may warn when they cannot compare invoice homeowner evidence to a matched participant record.
 
-If the code is found but expired, the database fields are populated, but the date-window calculation fails. For example:
+If the code is found but the invoice date is outside the six-month approval window, the database fields are populated, but the date-window calculation fails. For example:
 
 ```text
 approved_at: 2026-01-01
-expires_at: 2026-03-31
-invoice_date: 2026-05-10
+invoice_date: 2026-08-01
 ```
 
-The eligibility-code lookup succeeds, but `eligibility_code_valid_for_invoice_date` fails because `2026-05-10` is after `2026-03-31`.
+The eligibility-code lookup succeeds, but `eligibility_code_valid_for_invoice_date` fails because `2026-08-01` is after six months from `2026-01-01`.
 
 ## 11. Admin, Revision, And History Tables
 

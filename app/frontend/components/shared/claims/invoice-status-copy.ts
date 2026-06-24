@@ -19,6 +19,7 @@ const STATUS_SUBTYPE_HINTS: Record<string, string> = {
   package_no_processable_files: 'No processable files were found in the upload.',
   package_invoice_classification_conflict:
     'The uploaded files could not be safely classified into one invoice and supporting documents.',
+  package_no_supported_upgrade_type: 'The invoice was found, but no supported ESP rebate upgrade type was detected.',
   package_missing_required_fix_file: 'No corrected invoice file was provided.',
   package_file_too_large: 'One or more files are too large to process.',
   upload_service_no_response: 'The upload service did not respond.',

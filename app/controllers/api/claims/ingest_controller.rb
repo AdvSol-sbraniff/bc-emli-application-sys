@@ -509,7 +509,7 @@ module Api
               storage_key: invoice_version&.storage_key,
               created_at: invoice.created_at,
               updated_at: invoice.updated_at
-            }
+            }.merge(invoice_status_subtype_copy(invoice))
           end
 
         invoice_version_ids =
@@ -536,12 +536,19 @@ module Api
               storage_key: invoice_version.storage_key,
               created_at: invoice.created_at,
               updated_at: invoice.updated_at
-            }
+            }.merge(invoice_status_subtype_copy(invoice))
           end
 
         rows_by_invoice_id.values.sort_by do |row|
           row[:created_at] || Time.at(0)
         end
+      end
+
+      def invoice_status_subtype_copy(invoice)
+        ::Claims::Invoices::StatusSubtypes.invoice_row_copy(
+          invoice.status,
+          invoice.status_subtype
+        )
       end
 
       def ingest_invoice_step_rows(invoice_id:, ingest_run_id:, limit:)

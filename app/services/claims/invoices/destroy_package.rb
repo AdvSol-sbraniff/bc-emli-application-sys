@@ -70,10 +70,14 @@ module Claims
 
           invoice.destroy!
 
-          deleted[:ingest_step_runs] += delete_orphaned_session_step_runs(
-            session_id
-          )
-          deleted[:sessions] = delete_session_if_orphaned(session_id)
+          if session_has_no_invoices?(session_id)
+            deleted[:ingest_step_runs] += delete_session_step_runs(session_id)
+            deleted[:ingest_documents] += delete_session_ingest_documents(
+              session_id
+            )
+            deleted[:ingest_runs] += delete_session_ingest_runs(session_id)
+            deleted[:sessions] = delete_session(session_id)
+          end
         end
 
         deleted
@@ -191,24 +195,34 @@ module Claims
         ::Claims::IngestRun.where(id: ingest_run_ids).delete_all
       end
 
-      def delete_orphaned_session_step_runs(session_id)
-        return 0 unless orphaned_session?(session_id)
+      def delete_session_step_runs(session_id)
+        return 0 if session_id.blank?
 
         ::Claims::IngestStepRun.where(session_id: session_id).delete_all
       end
 
-      def delete_session_if_orphaned(session_id)
-        return 0 unless orphaned_session?(session_id)
+      def delete_session_ingest_documents(session_id)
+        return 0 if session_id.blank?
+
+        ::Claims::IngestDocument.where(session_id: session_id).delete_all
+      end
+
+      def delete_session_ingest_runs(session_id)
+        return 0 if session_id.blank?
+
+        ::Claims::IngestRun.where(session_id: session_id).delete_all
+      end
+
+      def delete_session(session_id)
+        return 0 if session_id.blank?
 
         ::Claims::Session.where(id: session_id).delete_all
       end
 
-      def orphaned_session?(session_id)
+      def session_has_no_invoices?(session_id)
         return false if session_id.blank?
 
-        ::Claims::Invoice.where(session_id: session_id).none? &&
-          ::Claims::IngestDocument.where(session_id: session_id).none? &&
-          ::Claims::IngestRun.where(session_id: session_id).none?
+        ::Claims::Invoice.where(session_id: session_id).none?
       end
     end
   end

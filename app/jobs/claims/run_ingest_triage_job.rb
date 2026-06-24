@@ -18,16 +18,17 @@ module Claims
       step_type = classifier_step_type_for(document, requested_step_type)
 
       step =
-        find_or_create_step!(
+        claim_step!(
           ingest_run_id: ingest_run_id,
           document: document,
           step_type: step_type
         )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
+      unless step
+        advance_run!(ingest_run_id: ingest_run_id)
+        return
+      end
+
+      step.update!(error_text: nil, updated_at: Time.current)
 
       contextwindowjson =
         build_classifier_contextwindowjson(
@@ -83,33 +84,57 @@ module Claims
 
     private
 
-    def find_or_create_step!(ingest_run_id:, document:, step_type:)
-      step = nil
+    def claim_step!(ingest_run_id:, document:, step_type:)
+      document.with_lock do
+        if succeeded_step_exists?(
+             ingest_run_id: ingest_run_id,
+             document: document,
+             step_type: step_type
+           )
+          return nil
+        end
 
-      if ingest_run_id.present?
         step =
           ::Claims::IngestStepRun
             .where(
               ingest_run_id: ingest_run_id,
               ingest_document_id: document.id,
-              step_type: step_type
+              step_type: step_type,
+              status: %w[queued in_progress]
             )
-            .where(status: %w[queued in_progress])
-            .order(created_at: :asc)
+            .order(created_at: :asc, id: :asc)
             .first
-      end
 
-      step ||=
-        ::Claims::IngestStepRun.create!(
-          ingest_run_id: ingest_run_id,
-          session_id: document.session_id,
-          ingest_document_id: document.id,
-          step_type: step_type,
-          status: "queued",
+        return nil if step&.status == "in_progress"
+
+        step ||=
+          ::Claims::IngestStepRun.create!(
+            ingest_run_id: ingest_run_id,
+            session_id: document.session_id,
+            ingest_document_id: document.id,
+            step_type: step_type,
+            status: "queued",
+            error_text: nil,
+            created_at: Time.current,
+            updated_at: Time.current
+          )
+
+        step.update!(
+          status: "in_progress",
           error_text: nil,
-          created_at: Time.current,
           updated_at: Time.current
         )
+        step
+      end
+    end
+
+    def succeeded_step_exists?(ingest_run_id:, document:, step_type:)
+      ::Claims::IngestStepRun.exists?(
+        ingest_run_id: ingest_run_id,
+        ingest_document_id: document.id,
+        step_type: step_type,
+        status: "succeeded"
+      )
     end
 
     def build_classifier_contextwindowjson(document:, step_type:)

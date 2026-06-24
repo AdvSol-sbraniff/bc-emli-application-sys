@@ -420,12 +420,15 @@ Set rule_result="warn" only when required values are missing, unreadable, duplic
 Set rule_result="fail" when the visible values clearly do not reconcile under either acceptable model.
 In reason_and_likely_causes, name which model appears to fit the invoice.
 In calculation, show both the formula and visible values used, for example: invoice_total - customer_payment_or_deposit = amount_due, and amount_due equals visible rebate total.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('overall_rebate_not_over_invoice_total', 'Check whether the overall CleanBC / Better Homes / ESP rebate shown on the invoice is not greater than the visible invoice total.
-Use the best-supported visible invoice total from OCR/DI JSON and the overall rebate line amount from the invoice.
-Set rule_result="pass" only when both values are clear and overall_rebate_line_amount is less than or equal to the visible invoice total.
-Set rule_result="warn" when the rebate amount or invoice total is missing/ambiguous and admin should verify the totals section.
-Set rule_result="fail" when the visible rebate clearly exceeds the visible invoice total.
-In calculation, show the visible invoice total and overall rebate comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('overall_rebate_not_over_invoice_total', 'Check whether the overall CleanBC / Better Homes / ESP rebate shown on the invoice does not exceed the invoice cost or paid/customer-responsible cost.
+Use these field keys when available:
+- overall_rebate_line_amount: the visible total program rebate amount.
+- amount_due_after_rebate: the visible customer amount owing after rebates, deposits, credits, or prior payments, when the invoice clearly shows it.
+Also use the best-supported visible gross invoice total from OCR/DI JSON or the invoice totals section. Do not treat amount_due_after_rebate as the gross invoice total.
+Set rule_result="pass" only when the overall_rebate_line_amount is clear and does not exceed the visible gross invoice total. If the invoice clearly shows an after-rebate/customer-owing amount, also confirm the rebate does not create an impossible or negative customer-paid-cost relationship based on the visible arithmetic.
+Set rule_result="warn" when the rebate amount, gross invoice total, or after-rebate/customer-owing amount is missing, ambiguous, or labelled in a way that prevents a confident comparison, and admin should verify the totals section.
+Set rule_result="fail" when the visible overall rebate clearly exceeds the visible gross invoice total, or when visible invoice arithmetic clearly shows the rebate exceeds the paid/customer-responsible cost of the upgrade.
+In calculation, show the field keys and values used, including overall_rebate_line_amount, gross invoice total, and amount_due_after_rebate when available.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('rebate_line_evidence_present', 'Check whether the invoice visibly identifies CleanBC / Better Homes / ESP rebate amounts and makes the rebate amount understandable.
 Set rule_result="pass" when one overall program rebate amount is clearly labelled and no useful extra context is needed.
 Set rule_result="info" when multiple upgrade-specific CleanBC / Better Homes / ESP rebate amounts are clearly labelled, summable, and useful to call out as context. A split rebate presentation is acceptable when the amounts are clear; do not warn merely because rebates are split by upgrade type.
@@ -714,7 +717,9 @@ WITH genai_located_fields_seed (
   updated_at
 ) AS (
   VALUES
-  ('amount_due_after_rebate', 'Locate amount due / customer owing after rebate and deposits.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('amount_due_after_rebate', 'Locate the visible customer amount owing after CleanBC / Better Homes / ESP rebates, deposits, credits, or prior payments have been applied.
+This field is distinct from the generic Document Intelligence amount_due field. The DI amount_due field may represent a gross balance, net customer balance, program receivable, or another invoice total depending on the invoice layout. For this field, return the invoice-visible after-rebate/customer-owing amount only when the label, totals section, or surrounding arithmetic supports that meaning.
+Use value=null when the invoice does not clearly show a customer amount due after rebates/deposits/credits/payments. In evidence_text, cite the exact label or totals-line wording that supports the value.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_equipment_type', 'Locate air-to-water heat pump evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_line_amount', 'Locate air-to-water heat pump line-item totals.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_product_list_reference', 'Locate air-to-water qualifying product list references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),

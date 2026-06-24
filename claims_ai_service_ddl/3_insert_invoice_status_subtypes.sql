@@ -21,6 +21,7 @@ VALUES
   ('package_needs_correction', 'package_duplicate_file_conflict', 'Duplicate file conflict', 'Duplicate files were found and the package cannot be checked safely. Remove duplicates and upload again.', 'Upload a revised package.', true, NOW(), NOW()),
   ('package_needs_correction', 'package_no_processable_files', 'No processable files', 'No processable files were found. Upload one invoice PDF plus any supporting documents.', 'Upload a revised package.', true, NOW(), NOW()),
   ('package_needs_correction', 'package_invoice_classification_conflict', 'Invoice classification conflict', 'The uploaded files could not be safely sorted into one invoice and supporting documents. Upload a clearer package with exactly one invoice PDF.', 'Upload a revised package.', true, NOW(), NOW()),
+  ('package_needs_correction', 'package_no_supported_upgrade_type', 'No supported rebate upgrade detected', 'The invoice was found, but no supported ESP rebate upgrade type was detected. Upload an invoice that includes a supported ESP rebate upgrade claim.', 'Upload a revised package.', true, NOW(), NOW()),
   ('package_needs_correction', 'package_missing_required_fix_file', 'Missing required fix file', 'No corrected invoice file was provided. Upload one corrected invoice PDF.', 'Upload a revised package.', true, NOW(), NOW()),
   ('package_needs_correction', 'package_file_too_large', 'File too large', 'One or more files are too large to process. Upload a smaller version of the file.', 'Upload a revised package.', true, NOW(), NOW()),
 

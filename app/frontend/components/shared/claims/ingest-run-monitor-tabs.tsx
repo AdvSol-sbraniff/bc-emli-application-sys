@@ -15,6 +15,7 @@ import {
   Text,
   Th,
   Thead,
+  Tooltip,
   Tr,
 } from '@chakra-ui/react';
 
@@ -35,6 +36,10 @@ type RunHeader = {
 type RunInvoiceRow = {
   invoice_id: string;
   invoice_status?: string | null;
+  invoice_status_subtype?: string | null;
+  invoice_status_subtype_admin_label?: string | null;
+  invoice_status_subtype_hint?: string | null;
+  invoice_status_subtype_retry_guidance?: string | null;
   invoice_status_updated_at?: string | null;
   invoice_version_id?: string | null;
   invoice_versionno?: number | null;
@@ -89,7 +94,7 @@ function fmtTs(s?: string | null) {
 
 function statusColor(status?: string | null) {
   const v = String(status || '').toLowerCase();
-  if (v.includes('fail')) return 'red';
+  if (v.includes('fail') || v === 'package_needs_correction') return 'red';
   if (v.includes('complete') || v.includes('succeed')) return 'green';
   if (v.includes('progress') || v === 'running' || v === 'queued') return 'yellow';
   return 'gray';
@@ -102,11 +107,11 @@ function progressIndicator(status?: string | null) {
     return <Box w="10px" h="10px" borderRadius="full" bg="green.400" />;
   }
 
-  if (v.endsWith('_failed') || v === 'ineligible') {
+  if (v.endsWith('_failed') || v === 'technical_failure' || v === 'ineligible') {
     return <Box w="10px" h="10px" borderRadius="full" bg="red.400" />;
   }
 
-  if (v === 'contractor_revision_inbox') {
+  if (v === 'package_needs_correction' || v === 'contractor_revision_inbox') {
     return <Box w="10px" h="10px" borderRadius="full" bg="orange.400" />;
   }
 
@@ -123,6 +128,8 @@ function pipelineStage(status?: string | null) {
   if (v.startsWith('ocr_')) return 'OCR';
   if (v.startsWith('genai_')) return 'GenAI';
   if (v === 'admin_review_inbox') return 'Admin Review';
+  if (v === 'package_needs_correction') return 'Package Correction';
+  if (v === 'technical_failure') return 'Technical Failure';
   if (v === 'contractor_revision_inbox') return 'Contractor Revision';
   if (v === 'in_review') return 'Review';
   if (v === 'approved_pending' || v === 'approved_paid') return 'Approved';
@@ -459,12 +466,13 @@ export function IngestRunMonitorTabs({
               </Text>
             )}
             <Box borderWidth="1px" borderRadius="md" overflow="auto">
-              <Table size="sm" minW="920px">
+              <Table size="sm" minW="1040px">
                 <Thead bg="gray.50">
                   <Tr>
                     <Th>invoice_id</Th>
                     <Th>filename</Th>
                     <Th>invoice status</Th>
+                    <Th>invoice substatus</Th>
                     <Th>stage</Th>
                     <Th>progress</Th>
                     <Th>status updated</Th>
@@ -474,6 +482,7 @@ export function IngestRunMonitorTabs({
                 <Tbody>
                   {invoiceRows.map((r) => {
                     const isSelected = String(r.invoice_id) === String(selectedInvoiceId);
+                    const substatusHint = String(r.invoice_status_subtype_hint || '').trim();
                     return (
                       <Tr
                         key={`${r.invoice_version_id}-${r.invoice_id}`}
@@ -489,6 +498,15 @@ export function IngestRunMonitorTabs({
                         <Td fontSize="xs">
                           <Badge colorScheme={statusColor(r.invoice_status)}>{r.invoice_status || '-'}</Badge>
                         </Td>
+                        <Td fontSize="xs">
+                          {r.invoice_status_subtype ? (
+                            <Tooltip label={substatusHint || r.invoice_status_subtype} hasArrow placement="top">
+                              <Badge colorScheme="orange">{r.invoice_status_subtype}</Badge>
+                            </Tooltip>
+                          ) : (
+                            '-'
+                          )}
+                        </Td>
                         <Td fontSize="xs">{pipelineStage(r.invoice_status)}</Td>
                         <Td>{progressIndicator(r.invoice_status)}</Td>
                         <Td fontSize="xs">{fmtTs(r.invoice_status_updated_at)}</Td>
@@ -499,7 +517,7 @@ export function IngestRunMonitorTabs({
 
                   {!rowsLoading && invoiceRows.length === 0 && (
                     <Tr>
-                      <Td colSpan={7}>
+                      <Td colSpan={8}>
                         <Text fontSize="sm" opacity={0.7}>
                           {runIdValue ? 'No invoice rows for this run yet.' : emptyMessage}
                         </Text>

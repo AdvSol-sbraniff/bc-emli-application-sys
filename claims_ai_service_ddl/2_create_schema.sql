@@ -2476,3 +2476,44 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_supporting_document_type_step
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
   ON claims.ingest_step_runs (invoice_version_id, invoice_upgrade_type_id, step_type, created_at DESC);
+
+-- Prevent concurrent pipeline advancement from creating duplicate active/success
+-- rows for the same logical step target. Failed rows remain repeatable so worker
+-- retry history is preserved.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_ingest_step_runs_document_nonfailed
+  ON claims.ingest_step_runs (ingest_run_id, ingest_document_id, step_type)
+  WHERE ingest_document_id IS NOT NULL
+    AND step_type IN ('ocr_read','fix_ocr_read','classifier_files','fix_classifier_files')
+    AND status IN ('queued','in_progress','succeeded');
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_ingest_step_runs_invoice_nonfailed
+  ON claims.ingest_step_runs (ingest_run_id, invoice_version_id, step_type)
+  WHERE invoice_version_id IS NOT NULL
+    AND ingest_document_id IS NULL
+    AND supporting_document_type_id IS NULL
+    AND invoice_upgrade_type_id IS NULL
+    AND status IN ('queued','in_progress','succeeded');
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_ingest_step_runs_support_type_nonfailed
+  ON claims.ingest_step_runs (
+    ingest_run_id,
+    invoice_version_id,
+    supporting_document_type_id,
+    step_type
+  )
+  WHERE invoice_version_id IS NOT NULL
+    AND supporting_document_type_id IS NOT NULL
+    AND ingest_document_id IS NULL
+    AND status IN ('queued','in_progress','succeeded');
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_ingest_step_runs_upgrade_nonfailed
+  ON claims.ingest_step_runs (
+    ingest_run_id,
+    invoice_version_id,
+    invoice_upgrade_type_id,
+    step_type
+  )
+  WHERE invoice_version_id IS NOT NULL
+    AND invoice_upgrade_type_id IS NOT NULL
+    AND ingest_document_id IS NULL
+    AND status IN ('queued','in_progress','succeeded');

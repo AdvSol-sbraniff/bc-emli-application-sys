@@ -147,23 +147,28 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53204'::uuid,
     'eligibility_code_valid_for_invoice_date',
-    'Checks whether the invoice date is inside the eligibility-code completion window. The invoice date is currently used as the system proxy for upgrade completed date.
+    'Checks whether the invoice date is within six months of the matched eligibility-code approval date. The invoice date is currently used as the system proxy for upgrade completed date.
 
 Pseudo-code:
-if invoice_date is missing or approved_at is missing:
+invoice_date = invoice_versions.di_ocr_invoice_date
+approval_date = matched users_eligibilitycodes.approved_at
+
+if invoice_date is missing:
+  warn
+else if approval_date is missing:
   warn
 else:
-  deadline = expires_at if present, otherwise approved_at + 6 months
-  if approved_at <= invoice_date <= deadline:
+  deadline = approval_date + 6 months
+  if approval_date <= invoice_date <= deadline:
     pass
   else:
     fail',
     true,
-    'No follow-up is required when the invoice date clearly falls within the eligibility-code validity window.',
-    'Verify the eligibility-code dates and invoice date before deciding whether the claim falls inside the valid approval window.',
-    'The invoice date appears to fall outside the eligibility-code validity window and needs correction or program review.',
+    'No follow-up is required when the invoice date clearly falls within six months of the eligibility-code approval date.',
+    'Verify the eligibility-code approval date and invoice date before deciding whether the claim falls inside the six-month completion window.',
+    'The invoice date appears to fall outside the six-month eligibility-code completion window and needs correction or program review.',
     'This eligibility timing check passed with context worth surfacing to the reviewer.',
-    'This rule compares stored eligibility-code dates against the invoice date and is intended to remain admin-configurable like other code rules.',
+    'This rule compares claims.users_eligibilitycodes.approved_at against claims.invoice_versions.di_ocr_invoice_date and intentionally does not use users_eligibilitycodes.expires_at.',
     TIMESTAMP '2026-05-25 00:00:00',
     NOW()
   ),
@@ -183,14 +188,66 @@ else:
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53207'::uuid,
     'prior_same_upgrade_type_rebate_payment_found',
-    'Checks whether the matched participant already has a paid or active claim for the same exact detected upgrade type. This is a V1 exact-upgrade-type check and does not yet group all primary-heating-system upgrade types together.',
+    'Checks whether the matched participant already has a non-ineligible current invoice for the same one-rebate-limited upgrade area.
+
+Pseudo-code:
+primary_space_heating_upgrade_types = [
+  air_source_heat_pump_electric,
+  air_source_heat_pump_wood,
+  air_source_heat_pump_gas_propane,
+  air_source_heat_pump_oil,
+  dual_fuel_ducted_heat_pump,
+  air_to_water_heat_pump,
+  combined_space_water_heat_pump
+]
+
+current_upgrade_types = upgrade_type_keys on this invoice version
+prior_current_upgrade_types = upgrade_type_keys on current invoice versions for the same participant, excluding this invoice, where invoice status is not ineligible
+
+current_has_space_heating = current_upgrade_types has any key in primary_space_heating_upgrade_types
+prior_has_space_heating = prior_current_upgrade_types has any key in primary_space_heating_upgrade_types
+
+fail if current_has_space_heating and prior_has_space_heating
+fail if current has heat_pump_water_heater and prior has heat_pump_water_heater
+fail if current has insulation and prior has insulation
+fail if current has windows_doors and prior has windows_doors
+otherwise pass',
     true,
-    'No prior paid or active claim was found for the same participant and same exact detected upgrade type.',
-    'Review the duplicate-payment detail before moving forward. This may mean another active or payment-pending claim exists, or that participant identity could not be resolved.',
-    'This participant appears to already have a paid rebate for the same exact detected upgrade type. Review the prior invoice before approving another payment.',
+    'No prior non-ineligible current invoice was found for the same participant and same one-rebate-limited upgrade area.',
     NULL,
-    'Uses invoice_versions.participant_user_id and the latest invoice_version per other invoice parent. V1 compares exact invoice_upgrade_type_id only and intentionally does not group primary-heating-system families.',
+    'This participant appears to already have a non-ineligible current invoice for the same one-rebate-limited upgrade area. Review the prior invoice before approving another payment.',
+    NULL,
+    'Uses invoice_versions.participant_user_id, current invoice versions for other invoice parents, claims.invoice_version_upgrade_types, and claims.invoices.status. Primary space heating is checked as one grouped area; heat pump water heater, insulation, and windows/doors are exact upgrade-type checks. The rule returns pass or fail only.',
     TIMESTAMP '2026-06-18 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53208'::uuid,
+    'current_invoice_cannot_contain_multiple_space_systems',
+    'Checks whether the current invoice version contains more than one primary space heating system upgrade type. This is intentionally separate from prior-rebate history so the failed aspect is clear and the code remains simple.
+
+Pseudo-code:
+primary_space_heating_upgrade_types = [
+  air_source_heat_pump_electric,
+  air_source_heat_pump_wood,
+  air_source_heat_pump_gas_propane,
+  air_source_heat_pump_oil,
+  dual_fuel_ducted_heat_pump,
+  air_to_water_heat_pump,
+  combined_space_water_heat_pump
+]
+
+current_space_heating_upgrade_types = current invoice version upgrade_type_keys that are in primary_space_heating_upgrade_types
+
+fail if count(current_space_heating_upgrade_types) > 1
+otherwise pass',
+    true,
+    'The current invoice contains zero or one primary space heating system upgrade type.',
+    NULL,
+    'The current invoice appears to contain multiple primary space heating system upgrade types. Review the detected upgrade types before approving.',
+    NULL,
+    'Uses claims.invoice_version_upgrade_types for the current invoice version only. The rule returns pass or fail only.',
+    TIMESTAMP '2026-06-24 00:00:00',
     NOW()
   ),
   (
@@ -295,6 +352,7 @@ WITH code_rule_upgrade_type_seed (
   ('submission_within_six_months', 'common'),
   ('eligibility_code_valid_for_invoice_date', 'common'),
   ('eligibility_code_found_in_database', 'common'),
+  ('current_invoice_cannot_contain_multiple_space_systems', 'common'),
   ('prior_same_upgrade_type_rebate_payment_found', 'common'),
   ('income_level_1_or_2_required', 'insulation'),
   ('income_level_1_or_2_required', 'windows_doors'),

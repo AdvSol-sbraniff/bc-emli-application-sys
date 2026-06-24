@@ -6,21 +6,28 @@ module Claims
       SOURCE_VINTAGE_DATE = Date.new(2026, 4, 1)
       COMMON_RULE_FALLBACK_ENABLED = false
       PRIOR_REBATE_RULE_KEY = "prior_same_upgrade_type_rebate_payment_found"
-      PAID_PRIOR_REBATE_STATUSES = %w[approved_paid].freeze
-      ACTIVE_PRIOR_REBATE_STATUSES = %w[
-        genai_complete
-        admin_review_inbox
-        contractor_revision_inbox
-        in_review
-        approved_pending
+      MULTIPLE_SPACE_SYSTEMS_RULE_KEY =
+        "current_invoice_cannot_contain_multiple_space_systems"
+      PRIMARY_SPACE_HEATING_UPGRADE_TYPE_KEYS = %w[
+        air_source_heat_pump_electric
+        air_source_heat_pump_wood
+        air_source_heat_pump_gas_propane
+        air_source_heat_pump_oil
+        dual_fuel_ducted_heat_pump
+        air_to_water_heat_pump
+        combined_space_water_heat_pump
       ].freeze
-      EXCLUDED_DUPLICATE_REBATE_UPGRADE_TYPE_KEYS = %w[common].freeze
+      HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY = "heat_pump_water_heater"
+      INSULATION_UPGRADE_TYPE_KEY = "insulation"
+      WINDOWS_DOORS_UPGRADE_TYPE_KEY = "windows_doors"
+      PRIOR_REBATE_EXCLUDED_INVOICE_STATUS = "ineligible"
       COMMON_RULE_KEYS = %w[
         source_vintage_applies
         first_class_invoice_fields_present
         submission_within_six_months
         eligibility_code_valid_for_invoice_date
         eligibility_code_found_in_database
+        current_invoice_cannot_contain_multiple_space_systems
         prior_same_upgrade_type_rebate_payment_found
       ].freeze
       COMMON_RULE_BUILDERS = {
@@ -32,6 +39,8 @@ module Claims
           :eligibility_code_valid_for_invoice_date,
         "eligibility_code_found_in_database" =>
           :eligibility_code_found_in_database,
+        MULTIPLE_SPACE_SYSTEMS_RULE_KEY =>
+          :current_invoice_cannot_contain_multiple_space_systems,
         PRIOR_REBATE_RULE_KEY => :prior_same_upgrade_type_rebate_payment_found
       }.freeze
 
@@ -211,21 +220,14 @@ module Claims
 
         invoice_date = invoice_version.di_ocr_invoice_date
         eligibility_code_record = matched_eligibility_code_record
-        approved_at =
-          eligibility_code_record&.approved_at ||
-            first_field_value(code_fields, "users_eligibilitycodes.approved_at")
-        expires_at =
-          eligibility_code_record&.expires_at ||
-            first_field_value(code_fields, "users_eligibilitycodes.expires_at")
-        eligibility_code =
-          eligibility_code_record&.eligibility_code ||
-            first_field_value(
-              code_fields,
-              "users_eligibilitycodes.eligibility_code"
-            )
+        approved_at = eligibility_code_record&.approved_at
+        eligibility_code = eligibility_code_record&.eligibility_code
 
         missing = []
         missing << "invoice date" if invoice_date.blank?
+        if eligibility_code_record.blank?
+          missing << "matched eligibility code record"
+        end
         missing << "eligibility code approval date" if approved_at.blank?
 
         if missing.any?
@@ -234,15 +236,14 @@ module Claims
               rule_number: 4,
               rule_key: "eligibility_code_valid_for_invoice_date",
               expected_text:
-                "Invoice date is within the eligibility-code validity window.",
+                "Invoice date is within six months of the eligibility-code approval date.",
               detail_text: "Missing #{missing.join(" and ")}."
             )
           )
         end
 
         approved_date = parse_date(approved_at)
-        expiry_date = parse_date(expires_at)
-        deadline = expiry_date || approved_date.advance(months: 6)
+        deadline = approved_date.advance(months: 6)
         pass = invoice_date >= approved_date && invoice_date <= deadline
 
         row(
@@ -251,9 +252,9 @@ module Claims
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
           expected_text:
-            "Invoice date is on or after eligibility-code approval and on or before eligibility-code expiry.",
+            "Invoice date is on or after eligibility-code approval and on or before six months after approval.",
           detail_text:
-            "eligibility_code=#{eligibility_code.presence || "missing"}; users_eligibilitycode_id=#{invoice_version.users_eligibilitycode_id.presence || "missing"}; approved_at=#{approved_date.iso8601}; expiry=#{deadline.iso8601}; invoice_date=#{invoice_date.iso8601}.",
+            "eligibility_code=#{eligibility_code.presence || "missing"}; users_eligibilitycode_id=#{invoice_version.users_eligibilitycode_id.presence || "missing"}; approved_at=#{approved_date.iso8601}; six_month_deadline=#{deadline.iso8601}; invoice_date=#{invoice_date.iso8601}.",
           calculation:
             "#{approved_date.iso8601} <= #{invoice_date.iso8601} <= #{deadline.iso8601} => #{pass}",
           evidence_text:
@@ -263,9 +264,8 @@ module Claims
         warn_row(
           rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
-          expected_text:
-            "Eligibility approval/expiry dates are parseable dates.",
-          detail_text: "Could not parse eligibility-code dates."
+          expected_text: "Eligibility approval date is a parseable date.",
+          detail_text: "Could not parse eligibility-code approval date."
         )
       end
 
@@ -321,6 +321,35 @@ module Claims
         )
       end
 
+      def current_invoice_cannot_contain_multiple_space_systems
+        return nil unless enabled_common_rule?(MULTIPLE_SPACE_SYSTEMS_RULE_KEY)
+
+        space_heating_keys =
+          current_upgrade_type_keys & PRIMARY_SPACE_HEATING_UPGRADE_TYPE_KEYS
+        pass = space_heating_keys.size <= 1
+
+        row(
+          rule_number: 7,
+          rule_key: MULTIPLE_SPACE_SYSTEMS_RULE_KEY,
+          rule_result: pass ? "pass" : "fail",
+          confidence: 100,
+          expected_text:
+            "Current invoice contains no more than one primary space heating system upgrade type.",
+          detail_text:
+            "current_space_heating_upgrade_types=#{space_heating_keys.join(",").presence || "none"}; count=#{space_heating_keys.size}.",
+          calculation:
+            "current_space_heating_upgrade_type_count=#{space_heating_keys.size}; #{space_heating_keys.size} <= 1 => #{pass}",
+          evidence_text:
+            "claims.invoice_version_upgrade_types + claims.invoice_upgrade_types",
+          reason_and_likely_causes:
+            (
+              unless pass
+                "The classifier detected multiple primary space heating upgrade types on the same invoice version. The invoice should only contain one primary space heating system."
+              end
+            )
+        )
+      end
+
       def prior_same_upgrade_type_rebate_payment_found
         return nil unless enabled_common_rule?(PRIOR_REBATE_RULE_KEY)
 
@@ -329,10 +358,10 @@ module Claims
             row(
               rule_number: 6,
               rule_key: PRIOR_REBATE_RULE_KEY,
-              rule_result: "warn",
+              rule_result: "fail",
               confidence: 0,
               expected_text:
-                "Matched participant is available before checking prior same-upgrade rebate payments.",
+                "Matched participant is available before checking prior rebate payments.",
               detail_text:
                 "invoice_versions.participant_user_id is missing; duplicate-payment history cannot be checked.",
               calculation: "participant_user_id is populated => false",
@@ -343,70 +372,29 @@ module Claims
           )
         end
 
-        current_upgrade_types = distinct_current_duplicate_rebate_upgrade_types
-
-        if current_upgrade_types.empty?
-          return(
-            row(
-              rule_number: 6,
-              rule_key: PRIOR_REBATE_RULE_KEY,
-              rule_result: "warn",
-              confidence: 0,
-              expected_text:
-                "At least one detected upgrade type is available for duplicate-payment comparison.",
-              detail_text:
-                "No non-common detected upgrade types were found for this invoice version.",
-              calculation:
-                "distinct non-common invoice_version_upgrade_types count = 0",
-              evidence_text: "claims.invoice_version_upgrade_types",
-              reason_and_likely_causes:
-                "The classifier did not leave a non-common detected upgrade type for this invoice version, so code cannot compare prior rebate payments."
-            )
-          )
+        current_keys = current_upgrade_type_keys
+        prior_keys = prior_current_invoice_upgrade_type_keys
+        current_has_space_heating =
+          (current_keys & PRIMARY_SPACE_HEATING_UPGRADE_TYPE_KEYS).any?
+        prior_has_space_heating =
+          (prior_keys & PRIMARY_SPACE_HEATING_UPGRADE_TYPE_KEYS).any?
+        failed_checks = []
+        if current_has_space_heating && prior_has_space_heating
+          failed_checks << "primary_space_heating"
         end
-
-        evaluations =
-          current_upgrade_types.map do |upgrade_type|
-            prior_matches =
-              latest_prior_same_upgrade_type_matches(
-                invoice_upgrade_type_id: upgrade_type.id
-              )
-            failed_matches =
-              prior_matches.select do |match|
-                PAID_PRIOR_REBATE_STATUSES.include?(match.status)
-              end
-            warning_matches =
-              prior_matches.select do |match|
-                ACTIVE_PRIOR_REBATE_STATUSES.include?(match.status)
-              end
-            ignored_matches = prior_matches - failed_matches - warning_matches
-            result =
-              if failed_matches.any?
-                "fail"
-              elsif warning_matches.any?
-                "warn"
-              else
-                "pass"
-              end
-
-            {
-              upgrade_type: upgrade_type,
-              prior_matches: prior_matches,
-              failed_matches: failed_matches,
-              warning_matches: warning_matches,
-              ignored_matches: ignored_matches,
-              result: result
-            }
-          end
-
-        rule_result =
-          if evaluations.any? { |evaluation| evaluation[:result] == "fail" }
-            "fail"
-          elsif evaluations.any? { |evaluation| evaluation[:result] == "warn" }
-            "warn"
-          else
-            "pass"
-          end
+        if current_keys.include?(HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY) &&
+             prior_keys.include?(HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY)
+          failed_checks << HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY
+        end
+        if current_keys.include?(INSULATION_UPGRADE_TYPE_KEY) &&
+             prior_keys.include?(INSULATION_UPGRADE_TYPE_KEY)
+          failed_checks << INSULATION_UPGRADE_TYPE_KEY
+        end
+        if current_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY) &&
+             prior_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY)
+          failed_checks << WINDOWS_DOORS_UPGRADE_TYPE_KEY
+        end
+        rule_result = failed_checks.any? ? "fail" : "pass"
 
         row(
           rule_number: 6,
@@ -414,12 +402,25 @@ module Claims
           rule_result: rule_result,
           confidence: 100,
           expected_text:
-            "Participant has no prior paid or active claim for the same exact detected upgrade type.",
-          detail_text: prior_rebate_detail_text(evaluations),
-          calculation: prior_rebate_calculation(evaluations),
+            "Participant has no prior non-ineligible current invoice for the same one-rebate-limited upgrade area.",
+          detail_text:
+            "participant_user_id=#{invoice_version.participant_user_id}; current_upgrade_types=#{current_keys.join(",").presence || "none"}; prior_current_upgrade_types=#{prior_keys.join(",").presence || "none"}; failed_checks=#{failed_checks.join(",").presence || "none"}.",
+          calculation:
+            prior_rebate_calculation(
+              current_keys: current_keys,
+              prior_keys: prior_keys,
+              current_has_space_heating: current_has_space_heating,
+              prior_has_space_heating: prior_has_space_heating,
+              failed_checks: failed_checks,
+              rule_result: rule_result
+            ),
           evidence_text:
-            "invoice_versions.participant_user_id + latest invoice_versions per invoice_id + claims.invoice_version_upgrade_types + claims.invoices.status",
-          reason_and_likely_causes: prior_rebate_reason(rule_result)
+            "invoice_versions.participant_user_id + current invoice_versions per invoice_id + claims.invoice_version_upgrade_types + claims.invoices.status",
+          reason_and_likely_causes:
+            prior_rebate_reason(
+              rule_result: rule_result,
+              failed_checks: failed_checks
+            )
         )
       end
 
@@ -439,138 +440,78 @@ module Claims
           invoice_version.users_eligibilitycode
       end
 
-      def distinct_current_duplicate_rebate_upgrade_types
-        @distinct_current_duplicate_rebate_upgrade_types ||=
+      def current_upgrade_type_keys
+        @current_upgrade_type_keys ||=
           ::Claims::InvoiceUpgradeType
             .joins(
               "INNER JOIN claims.invoice_version_upgrade_types ivut " \
                 "ON ivut.invoice_upgrade_type_id = " \
                 "#{::Claims::InvoiceUpgradeType.table_name}.id"
             )
-            .where(ivut: { invoice_version_id: invoice_version.id })
+            .where("ivut.invoice_version_id = ?", invoice_version.id)
+            .distinct
+            .order(:upgrade_type_key)
+            .pluck(:upgrade_type_key)
+      end
+
+      def prior_current_invoice_upgrade_type_keys
+        @prior_current_invoice_upgrade_type_keys ||=
+          ::Claims::InvoiceUpgradeType
+            .joins(
+              "INNER JOIN claims.invoice_version_upgrade_types prior_ivut " \
+                "ON prior_ivut.invoice_upgrade_type_id = " \
+                "#{::Claims::InvoiceUpgradeType.table_name}.id"
+            )
+            .joins(
+              "INNER JOIN claims.v_current_invoice_versions prior_current_versions " \
+                "ON prior_current_versions.id = prior_ivut.invoice_version_id"
+            )
+            .where(
+              "prior_current_versions.participant_user_id = ?",
+              invoice_version.participant_user_id
+            )
+            .where.not("prior_current_versions.invoice_id = ?", invoice.id)
             .where.not(
-              upgrade_type_key: EXCLUDED_DUPLICATE_REBATE_UPGRADE_TYPE_KEYS
+              "prior_current_versions.invoice_status = ?",
+              PRIOR_REBATE_EXCLUDED_INVOICE_STATUS
             )
             .distinct
             .order(:upgrade_type_key)
-            .to_a
+            .pluck(:upgrade_type_key)
       end
 
-      def latest_prior_same_upgrade_type_matches(invoice_upgrade_type_id:)
-        latest_versions_sql =
-          ::Claims::InvoiceVersion
-            .select(
-              "DISTINCT ON (invoice_id) " \
-                "id, invoice_id, invoice_versionno, participant_user_id, " \
-                "users_eligibilitycode_id"
-            )
-            .where(participant_user_id: invoice_version.participant_user_id)
-            .where.not(invoice_id: invoice.id)
-            .order(:invoice_id, invoice_versionno: :desc)
-            .to_sql
-
-        ::Claims::Invoice
-          .from("claims.invoices AS prior_invoices")
-          .joins(
-            "INNER JOIN (#{latest_versions_sql}) latest_versions " \
-              "ON latest_versions.invoice_id = prior_invoices.id"
-          )
-          .joins(
-            "INNER JOIN claims.invoice_version_upgrade_types prior_ivut " \
-              "ON prior_ivut.invoice_version_id = latest_versions.id"
-          )
-          .where(
-            prior_ivut: {
-              invoice_upgrade_type_id: invoice_upgrade_type_id
-            }
-          )
-          .select(
-            "prior_invoices.id AS invoice_id",
-            "prior_invoices.status AS status",
-            "prior_invoices.submitted_at AS submitted_at",
-            "latest_versions.id AS invoice_version_id",
-            "latest_versions.invoice_versionno AS invoice_versionno"
-          )
-          .order(
-            Arel.sql(
-              "CASE prior_invoices.status " \
-                "WHEN 'approved_paid' THEN 0 " \
-                "WHEN 'approved_pending' THEN 1 " \
-                "WHEN 'in_review' THEN 2 " \
-                "WHEN 'admin_review_inbox' THEN 3 " \
-                "WHEN 'contractor_revision_inbox' THEN 4 " \
-                "WHEN 'genai_complete' THEN 5 " \
-                "ELSE 6 END"
-            ),
-            Arel.sql("prior_invoices.created_at DESC")
-          )
-          .to_a
-          .uniq { |match| match.invoice_version_id }
-      end
-
-      def prior_rebate_detail_text(evaluations)
+      def prior_rebate_calculation(
+        current_keys:,
+        prior_keys:,
+        current_has_space_heating:,
+        prior_has_space_heating:,
+        failed_checks:,
+        rule_result:
+      )
         [
-          "participant_user_id=#{invoice_version.participant_user_id}",
-          "users_eligibilitycode_id=#{invoice_version.users_eligibilitycode_id.presence || "missing"}",
-          "current_invoice_id=#{invoice.id}",
-          "current_invoice_version_id=#{invoice_version.id}",
-          "upgrade checks: #{prior_rebate_upgrade_summaries(evaluations).join(" | ")}"
+          "current_has_space_heating=#{current_has_space_heating}",
+          "prior_has_space_heating=#{prior_has_space_heating}",
+          "current_has_heat_pump_water_heater=#{current_keys.include?(HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY)}",
+          "prior_has_heat_pump_water_heater=#{prior_keys.include?(HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY)}",
+          "current_has_insulation=#{current_keys.include?(INSULATION_UPGRADE_TYPE_KEY)}",
+          "prior_has_insulation=#{prior_keys.include?(INSULATION_UPGRADE_TYPE_KEY)}",
+          "current_has_windows_doors=#{current_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY)}",
+          "prior_has_windows_doors=#{prior_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY)}",
+          "failed_checks=#{failed_checks.join(",").presence || "none"}",
+          "result=#{rule_result}"
         ].join("; ")
       end
 
-      def prior_rebate_upgrade_summaries(evaluations)
-        evaluations.map do |evaluation|
-          upgrade_type = evaluation[:upgrade_type]
-          parts = ["#{upgrade_type.upgrade_type_key}=#{evaluation[:result]}"]
-          if evaluation[:failed_matches].any?
-            parts << "paid prior #{prior_rebate_match_list(evaluation[:failed_matches])}"
-          end
-          if evaluation[:warning_matches].any?
-            parts << "active prior #{prior_rebate_match_list(evaluation[:warning_matches])}"
-          end
-          if evaluation[:ignored_matches].any?
-            parts << "ignored prior #{prior_rebate_match_list(evaluation[:ignored_matches])}"
-          end
+      def prior_rebate_reason(rule_result:, failed_checks:)
+        return nil unless rule_result == "fail"
 
-          if parts.size == 1
-            parts.first
-          else
-            "#{parts.first} (#{parts.drop(1).join("; ")})"
-          end
+        if failed_checks.empty?
+          return(
+            "The deterministic duplicate-rebate check could not run because participant_user_id was missing."
+          )
         end
-      end
 
-      def prior_rebate_match_list(matches)
-        matches
-          .map do |match|
-            "#{match.status}:invoice_id=#{match.invoice_id}," \
-              "invoice_version_id=#{match.invoice_version_id}," \
-              "version=#{match.invoice_versionno}"
-          end
-          .join(", ")
-      end
-
-      def prior_rebate_calculation(evaluations)
-        evaluations
-          .map do |evaluation|
-            "#{evaluation[:upgrade_type].upgrade_type_key}: " \
-              "paid_matches=#{evaluation[:failed_matches].size}, " \
-              "active_matches=#{evaluation[:warning_matches].size}, " \
-              "ignored_matches=#{evaluation[:ignored_matches].size} " \
-              "=> #{evaluation[:result]}"
-          end
-          .join("; ")
-      end
-
-      def prior_rebate_reason(rule_result)
-        case rule_result
-        when "fail"
-          "A latest invoice version on another invoice parent for this participant has the same exact detected upgrade type and an approved-paid status."
-        when "warn"
-          "A latest invoice version on another invoice parent for this participant has the same exact detected upgrade type in an active or payment-pending status."
-        else
-          nil
-        end
+        "A current non-ineligible invoice for this participant already contains one of the same one-rebate-limited upgrade areas: #{failed_checks.join(", ")}."
       end
 
       def first_field_value(fields, key)

@@ -458,7 +458,7 @@ module Api
                   invoice_version&.original_filename,
               created_at: invoice.created_at,
               updated_at: invoice.updated_at
-            }
+            }.merge(invoice_status_subtype_copy(invoice))
           end
 
         invoice_version_ids =
@@ -485,12 +485,19 @@ module Api
               original_filename: invoice_version.original_filename,
               created_at: invoice.created_at,
               updated_at: invoice.updated_at
-            }
+            }.merge(invoice_status_subtype_copy(invoice))
           end
 
         rows_by_invoice_id.values.sort_by do |row|
           row[:created_at] || Time.at(0)
         end
+      end
+
+      def invoice_status_subtype_copy(invoice)
+        ::Claims::Invoices::StatusSubtypes.invoice_row_copy(
+          invoice.status,
+          invoice.status_subtype
+        )
       end
 
       def contractor_ingest_invoice_step_rows(

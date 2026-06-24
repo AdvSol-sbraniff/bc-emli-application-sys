@@ -17,6 +17,7 @@ module Claims
         package_duplicate_file_conflict
         package_no_processable_files
         package_invoice_classification_conflict
+        package_no_supported_upgrade_type
         package_missing_required_fix_file
         package_file_too_large
       ].freeze
@@ -71,6 +72,8 @@ module Claims
           "No processable files were found in the upload.",
         "package_invoice_classification_conflict" =>
           "The uploaded files could not be safely classified into one invoice and supporting documents.",
+        "package_no_supported_upgrade_type" =>
+          "The invoice was found, but no supported ESP rebate upgrade type was detected.",
         "package_missing_required_fix_file" =>
           "No corrected invoice file was provided.",
         "package_file_too_large" =>
@@ -166,6 +169,25 @@ module Claims
             message.presence || "We could not prepare your AI advice right now."
           "#{base} #{guidance}".squish
         end
+      end
+
+      def self.invoice_row_copy(status, subtype)
+        subtype = subtype.to_s.strip
+        return {} if subtype.blank?
+
+        record = subtype_record(status, subtype)
+        return {} if record.nil?
+
+        hint_parts = [
+          record.contractor_message.presence,
+          record.retry_guidance.presence
+        ].compact
+
+        {
+          invoice_status_subtype_admin_label: record.admin_label.presence,
+          invoice_status_subtype_hint: hint_parts.join(" ").presence,
+          invoice_status_subtype_retry_guidance: record.retry_guidance.presence
+        }.compact
       end
 
       def self.subtype_record(status, subtype)

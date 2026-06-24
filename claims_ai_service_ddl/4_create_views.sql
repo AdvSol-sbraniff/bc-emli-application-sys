@@ -76,7 +76,9 @@ SELECT DISTINCT ON (iv.invoice_id)
   iv.updated_at,
   iv.neea_product_id,
   iv.awhp_product_id,
-  iv.ohpa_product_id
+  iv.ohpa_product_id,
+  iv.users_eligibilitycode_id,
+  iv.participant_user_id
 FROM claims.invoices i
 JOIN claims.invoice_versions iv
   ON iv.invoice_id = i.id

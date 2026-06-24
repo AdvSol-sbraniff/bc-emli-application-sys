@@ -5,8 +5,16 @@ module Claims
     class AdvanceBundleRun
       BUNDLE_INVALID_ERROR_CODE = "invoice_bundle_count_invalid"
       BUNDLE_UNKNOWN_ERROR_CODE = "invoice_bundle_unknown_documents"
+      BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE =
+        "invoice_bundle_no_supported_upgrade_type"
       SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE = "supporting_documents_attached"
       DEFAULT_WORKER_ATTEMPT_LIMIT = 4
+      STEP_STATUS_RANK = {
+        "queued" => 1,
+        "failed" => 2,
+        "in_progress" => 3,
+        "succeeded" => 4
+      }.freeze
 
       def self.call(ingest_run_id:)
         new(ingest_run_id: ingest_run_id).call
@@ -285,6 +293,31 @@ module Claims
           resolved_invoice_version_id: resolved_invoice_version_id
         )
         resolved_invoice_id = resolved_document.reload.resolved_invoice_id
+
+        unless supported_upgrade_type_detected?(resolved_invoice_version_id)
+          return(
+            update_failed!(
+              run: run,
+              total_files: total_files,
+              failed_files: 1,
+              messages: messages,
+              shell_invoice_id: resolved_invoice_id || shell_invoice_id,
+              shell_invoice_status: "package_needs_correction",
+              shell_invoice_status_subtype: "package_no_supported_upgrade_type",
+              extra_messages: [
+                {
+                  code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE,
+                  level: "error",
+                  message:
+                    "The invoice was classified as an invoice, but no supported ESP rebate upgrade type was detected.",
+                  invoice_version_id: resolved_invoice_version_id,
+                  invoice_filename: resolved_document.original_filename
+                }
+              ]
+            )
+          )
+        end
+
         supporting_document_rows =
           documents.select { |doc| doc.document_kind == "supporting_document" }
 
@@ -732,21 +765,19 @@ module Claims
             ingest_document_id: document_ids,
             step_type: step_type
           )
-          .order(created_at: :desc)
           .to_a
           .group_by(&:ingest_document_id)
-          .transform_values(&:first)
+          .transform_values { |steps| best_step_for_target(steps) }
       end
 
       def latest_invoice_step(ingest_run_id, invoice_version_id, step_type)
-        ::Claims::IngestStepRun
-          .where(
+        best_step_for_target(
+          ::Claims::IngestStepRun.where(
             ingest_run_id: ingest_run_id,
             invoice_version_id: invoice_version_id,
             step_type: step_type
-          )
-          .order(created_at: :desc)
-          .first
+          ).to_a
+        )
       end
 
       def latest_type_steps_map(
@@ -764,10 +795,9 @@ module Claims
             supporting_document_type_id: supporting_document_type_ids,
             step_type: step_type
           )
-          .order(created_at: :desc)
           .to_a
           .group_by(&:supporting_document_type_id)
-          .transform_values(&:first)
+          .transform_values { |steps| best_step_for_target(steps) }
       end
 
       def latest_validation_steps(ingest_run_id, invoice_version_id)
@@ -823,17 +853,33 @@ module Claims
 
       def enqueue_classifier_jobs!(documents:, step_type:)
         documents.each do |document|
-          ::Claims::IngestStepRun.find_or_create_by!(
-            ingest_run_id: @ingest_run_id,
-            ingest_document_id: document.id,
-            step_type: step_type
-          ) do |step|
-            step.session_id = document.session_id
-            step.status = "queued"
-            step.error_text = nil
-            step.created_at = Time.current
-            step.updated_at = Time.current
+          created_step = nil
+
+          document.with_lock do
+            existing_step =
+              best_step_for_target(
+                ::Claims::IngestStepRun.where(
+                  ingest_run_id: @ingest_run_id,
+                  ingest_document_id: document.id,
+                  step_type: classifier_step_types_for_lookup,
+                  status: %w[queued in_progress succeeded]
+                ).to_a
+              )
+            next if existing_step
+
+            created_step =
+              ::Claims::IngestStepRun.create!(
+                ingest_run_id: @ingest_run_id,
+                session_id: document.session_id,
+                ingest_document_id: document.id,
+                step_type: step_type,
+                status: "queued",
+                error_text: nil,
+                created_at: Time.current,
+                updated_at: Time.current
+              )
           end
+          next unless created_step
 
           ::Claims::RunIngestTriageJob.perform_async(
             document.id,
@@ -940,18 +986,28 @@ module Claims
         documents
           .map do |document|
             step =
-              ::Claims::IngestStepRun
-                .where(
+              best_step_for_target(
+                ::Claims::IngestStepRun.where(
                   ingest_run_id: ingest_run_id,
                   ingest_document_id: document.id,
                   step_type: classifier_step_types_for_lookup
-                )
-                .order(created_at: :desc)
-                .first
+                ).to_a
+              )
             [document.id, step]
           end
           .select { |_document_id, step| step.present? }
           .to_h
+      end
+
+      def best_step_for_target(steps)
+        steps.compact.max_by do |step|
+          [
+            STEP_STATUS_RANK.fetch(step.status.to_s, 0),
+            step.updated_at || step.created_at,
+            step.created_at,
+            step.id
+          ]
+        end
       end
 
       def classifier_step_types_for_lookup
@@ -1130,6 +1186,20 @@ module Claims
           "use_existing_classifier",
           step_type
         )
+      end
+
+      def supported_upgrade_type_detected?(invoice_version_id)
+        ::Claims::InvoiceVersionUpgradeType
+          .joins(
+            "INNER JOIN claims.invoice_upgrade_types iut " \
+              "ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
+          )
+          .where(
+            invoice_version_id: invoice_version_id,
+            source_engine: "classifier"
+          )
+          .where.not("iut.upgrade_type_key" => "common")
+          .exists?
       end
 
       def invoice_status_for(invoice_version_id)

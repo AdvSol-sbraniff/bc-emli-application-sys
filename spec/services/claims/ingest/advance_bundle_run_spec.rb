@@ -10,6 +10,160 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       ENV["CLAIMS_INGEST_STEP_ATTEMPT_LIMIT"] = previous
     end
 
+    def windows_doors_upgrade_type(now)
+      Claims::InvoiceUpgradeType.find_or_create_by!(
+        upgrade_type_key: "windows_doors"
+      ) do |row|
+        row.description = "Windows and doors"
+        row.created_at = now
+        row.updated_at = now
+      end
+    end
+
+    def add_detected_windows_doors_upgrade!(invoice_version, now)
+      upgrade_type = windows_doors_upgrade_type(now)
+
+      Claims::InvoiceVersionUpgradeType.create!(
+        invoice_version_id: invoice_version.id,
+        invoice_upgrade_type_id: upgrade_type.id,
+        source_engine: "classifier",
+        call_status: "classified",
+        confidence: 98,
+        evidence_text: "Window rebate line",
+        raw_json: {
+          "upgrade_type_key" => "windows_doors"
+        },
+        created_at: now,
+        updated_at: now
+      )
+    end
+
+    it "does not let a stale queued classifier row hide a succeeded classifier row" do
+      now = Time.zone.parse("2026-06-23 15:41:05")
+      service = described_class.new(ingest_run_id: SecureRandom.uuid)
+      succeeded_step =
+        Claims::IngestStepRun.new(
+          id: SecureRandom.uuid,
+          status: "succeeded",
+          created_at: now,
+          updated_at: now + 10.seconds
+        )
+      stale_queued_step =
+        Claims::IngestStepRun.new(
+          id: SecureRandom.uuid,
+          status: "queued",
+          created_at: now + 20.seconds,
+          updated_at: now + 20.seconds
+        )
+
+      expect(
+        service.send(:best_step_for_target, [succeeded_step, stale_queued_step])
+      ).to eq(succeeded_step)
+    end
+
+    it "marks an invoice with no supported detected upgrade type as package needs correction" do
+      now = Time.zone.parse("2026-06-24 09:15:00")
+      contractor =
+        Contractor.create!(business_name: "Unknown Upgrade Contractor")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "ocr_in_progress",
+          created_at: now,
+          updated_at: now
+        )
+      run =
+        Claims::IngestRun.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "running",
+          total_files: 1,
+          completed_files: 0,
+          failed_files: 0,
+          created_at: now,
+          updated_at: now
+        )
+      document =
+        Claims::IngestDocument.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          storage_provider: "azure_blob",
+          storage_key: "uploaded/car-repair-invoice.pdf",
+          original_filename: "Car repair invoice.pdf",
+          content_type: "application/pdf",
+          di_read_raw_json: {
+            "read" => "car repair"
+          },
+          classifier_raw_json: {
+            "document_kind" => "invoice",
+            "document_kind_confidence" => 99,
+            "detected_upgrade_types" => [],
+            "eligibility_code" => {
+              "value" => nil
+            },
+            "product_references" => {
+            }
+          },
+          document_kind: "invoice",
+          document_kind_confidence: 99,
+          document_kind_reason: "Primary contractor invoice.",
+          classification_status: "classified",
+          classification_confidence: 99,
+          classification_reason: "Invoice with no ESP rebate upgrade.",
+          classified_at: now,
+          created_at: now,
+          updated_at: now
+        )
+
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        ingest_document_id: document.id,
+        step_type: "ocr_read",
+        status: "succeeded",
+        created_at: now - 30.seconds,
+        updated_at: now - 20.seconds
+      )
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        ingest_document_id: document.id,
+        step_type: "classifier_files",
+        status: "succeeded",
+        created_at: now - 10.seconds,
+        updated_at: now
+      )
+
+      allow(Claims::RunOcrJob).to receive(:perform_async)
+      allow(Claims::RunGenaiJob).to receive(:perform_async)
+
+      described_class.call(ingest_run_id: run.id)
+
+      expect(run.reload.status).to eq("failed")
+      expect(run.failed_files).to eq(1)
+      expect(run.resolved_invoice_version_id).to be_present
+      expect(invoice.reload.status).to eq("package_needs_correction")
+      expect(invoice.status_subtype).to eq("package_no_supported_upgrade_type")
+      expect(
+        Claims::InvoiceVersionUpgradeType.where(
+          invoice_version_id: run.resolved_invoice_version_id
+        )
+      ).to be_empty
+      expect(Claims::RunOcrJob).not_to have_received(:perform_async)
+      expect(Claims::RunGenaiJob).not_to have_received(:perform_async)
+      expect(run.messages).to include(
+        a_hash_including(
+          "code" => "invoice_bundle_no_supported_upgrade_type",
+          "level" => "error"
+        )
+      )
+    end
+
     it "treats cloned invoice evidence as reused and gates fix OCR/classifier on new files" do
       now = Time.zone.parse("2026-06-22 10:07:24")
       contractor = Contractor.create!(business_name: "Test Contractor")
@@ -48,6 +202,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           created_at: now,
           updated_at: now
         )
+      add_detected_windows_doors_upgrade!(new_version, now)
       run =
         Claims::IngestRun.create!(
           session_id: session.id,
@@ -219,6 +374,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           created_at: now,
           updated_at: now
         )
+      add_detected_windows_doors_upgrade!(new_version, now)
       run =
         Claims::IngestRun.create!(
           session_id: session.id,
@@ -379,6 +535,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           created_at: now,
           updated_at: now
         )
+      add_detected_windows_doors_upgrade!(new_version, now)
       run =
         Claims::IngestRun.create!(
           session_id: session.id,
