@@ -58,20 +58,6 @@ Use invoice evidence first, and treat supporting-document facts only as corrobor
 Set rule_result="pass" when electric primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
 Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_electric_rebate_math_within_cap', 'Check whether the claimed rebate for this electric-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
-Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
-Use these electric-source maximum rebate amounts for ESP1/ESP2: central ducted or 3-head multi-split $5,000/$4,000; 2-head multi-split or 2 single-head mini-splits $5,000/$4,000; single-head mini-split $5,000/$4,000. ESP3 has no rebate for this electric-to-heat-pump path.
-Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
-Evaluate this rule in this order:
-1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable cap from the explicit cap values in this rule using the visible eligibility code.
-4. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
-Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
-Set rule_result="warn" when the eligibility code, rebate category, rebate amount, or visible upgrade cost is missing/ambiguous but no visible value clearly exceeds the cap.
-Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost or applicable cap.
-In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
-In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_gas_propane_existing_heat_context_present', 'Check whether the invoice or configured supporting-document located fields support that the home was primarily heated by natural gas or propane and that the new air-source heat pump replaces that system.
 Use invoice evidence first, including furnace, boiler, natural gas, propane, FortisBC gas, PNG, tank propane, or fossil-fuel conversion wording; use supporting-document facts only as corroborating context.
 Set rule_result="pass" when natural-gas/propane primary heat replacement is clear.
@@ -82,7 +68,7 @@ Use preapproval_notice located fields such as preapproval_date, approval_referen
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_gas_propane_rebate_math_within_cap', 'Check whether the claimed rebate for this natural-gas-or-propane-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
-Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
+Use the visible hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
 Use these gas/propane-source base maximum rebate amounts: central ducted or 3-head multi-split ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; 2-head multi-split or 2 single-head mini-splits ESP1 $14,000, ESP2 $10,500, ESP3 $8,000; single-head mini-split ESP1 $7,500, ESP2 $5,500, ESP3 $4,000.
 Northern top-up caps, when separately visible and eligible, are ESP1/ESP2 only: up to $3,000 for central ducted, multi-split, 2 single-head, air-to-water, or combined space/water systems; up to $1,500 for single-head mini-split systems. ESP3 has no northern top-up.
 Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
@@ -116,7 +102,7 @@ Use preapproval_notice located fields such as preapproval_date, approval_referen
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_rebate_math_within_cap', 'Check whether the claimed rebate for this oil-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
-Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
+Use the visible hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
 Use these oil-source base maximum rebate amounts: central ducted or 3-head multi-split ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; 2-head multi-split or 2 single-head mini-splits ESP1 $14,000, ESP2 $10,500, ESP3 $10,000; single-head mini-split ESP1 $10,000, ESP2 $10,000, ESP3 $10,000.
 Northern top-up caps, when separately visible and eligible, are ESP1/ESP2 only: up to $3,000 for central ducted, multi-split, 2 single-head, air-to-water, or combined space/water systems; up to $1,500 for single-head mini-split systems. ESP3 has no northern top-up.
 Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
@@ -141,7 +127,7 @@ Set rule_result="warn" when backup fuel context is missing or ambiguous.
 Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_existing_heat_context_present', 'Check whether invoice text supports wood/solid-fuel primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_rebate_math_within_cap', 'Check whether the claimed rebate for this wood-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
-Use the visible hp_new_equipment_type, hp_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
+Use the visible hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
 Use these wood/solid-fuel-source maximum rebate amounts for ESP1/ESP2: central ducted or 3-head multi-split $5,000/$4,000; 2-head multi-split or 2 single-head mini-splits $5,000/$4,000; single-head mini-split $5,000/$4,000. ESP3 has no rebate for this wood-to-heat-pump path.
 Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
 Evaluate this rule in this order:
@@ -420,15 +406,28 @@ Set rule_result="warn" only when required values are missing, unreadable, duplic
 Set rule_result="fail" when the visible values clearly do not reconcile under either acceptable model.
 In reason_and_likely_causes, name which model appears to fit the invoice.
 In calculation, show both the formula and visible values used, for example: invoice_total - customer_payment_or_deposit = amount_due, and amount_due equals visible rebate total.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('overall_rebate_not_over_invoice_total', 'Check whether the overall CleanBC / Better Homes / ESP rebate shown on the invoice does not exceed the invoice cost or paid/customer-responsible cost.
-Use these field keys when available:
-- overall_rebate_line_amount: the visible total program rebate amount.
-- amount_due_after_rebate: the visible customer amount owing after rebates, deposits, credits, or prior payments, when the invoice clearly shows it.
-Also use the best-supported visible gross invoice total from OCR/DI JSON or the invoice totals section. Do not treat amount_due_after_rebate as the gross invoice total.
-Set rule_result="pass" only when the overall_rebate_line_amount is clear and does not exceed the visible gross invoice total. If the invoice clearly shows an after-rebate/customer-owing amount, also confirm the rebate does not create an impossible or negative customer-paid-cost relationship based on the visible arithmetic.
-Set rule_result="warn" when the rebate amount, gross invoice total, or after-rebate/customer-owing amount is missing, ambiguous, or labelled in a way that prevents a confident comparison, and admin should verify the totals section.
-Set rule_result="fail" when the visible overall rebate clearly exceeds the visible gross invoice total, or when visible invoice arithmetic clearly shows the rebate exceeds the paid/customer-responsible cost of the upgrade.
-In calculation, show the field keys and values used, including overall_rebate_line_amount, gross invoice total, and amount_due_after_rebate when available.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('overall_rebate_not_over_invoice_total', 'Check whether the visible overall CleanBC / Better Homes / ESP rebate does not exceed the invoice total.
+
+Use only these named fields:
+- overall_rebate_line_amount: the visible total program rebate amount for the invoice.
+- InvoiceTotal: the Azure Document Intelligence invoice total.
+
+Do not use AmountDue or any other field for this rule.
+
+Set rule_result="pass" only when both overall_rebate_line_amount and InvoiceTotal are present, clear, and overall_rebate_line_amount is less than or equal to InvoiceTotal.
+Set rule_result="warn" when overall_rebate_line_amount or InvoiceTotal is missing, null, ambiguous, unreadable, or not confidently tied to the invoice totals.
+Set rule_result="fail" when overall_rebate_line_amount is greater than InvoiceTotal.
+In calculation, show the named fields and values used, including overall_rebate_line_amount and InvoiceTotal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('overall_rebate_not_over_paid_cost_of_upgrade', 'Check whether the visible overall CleanBC / Better Homes / ESP rebate does not exceed the paid cost of the upgrade.
+
+Use only these named fields:
+- overall_rebate_line_amount: the visible total program rebate amount for the invoice.
+- paid_cost_of_upgrade_amount: the visible paid cost of the upgrade.
+
+Set rule_result="pass" only when both overall_rebate_line_amount and paid_cost_of_upgrade_amount are present, clear, and overall_rebate_line_amount is less than or equal to paid_cost_of_upgrade_amount.
+Set rule_result="warn" when overall_rebate_line_amount or paid_cost_of_upgrade_amount is missing, null, ambiguous, unreadable, or not confidently tied to the claimed upgrade.
+Set rule_result="fail" when overall_rebate_line_amount is greater than paid_cost_of_upgrade_amount.
+In calculation, show the named fields and values used, including overall_rebate_line_amount and paid_cost_of_upgrade_amount.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('rebate_line_evidence_present', 'Check whether the invoice visibly identifies CleanBC / Better Homes / ESP rebate amounts and makes the rebate amount understandable.
 Set rule_result="pass" when one overall program rebate amount is clearly labelled and no useful extra context is needed.
 Set rule_result="info" when multiple upgrade-specific CleanBC / Better Homes / ESP rebate amounts are clearly labelled, summable, and useful to call out as context. A split rebate presentation is acceptable when the amounts are clear; do not warn merely because rebates are split by upgrade type.
@@ -570,7 +569,6 @@ WITH genai_rule_upgrade_types_seed (
   ('air_source_heat_pump_electric', 'ashp_electric_existing_heat_context_present', 1),
   ('air_source_heat_pump_electric', 'hp_main_living_area_or_primary_capacity_present', 7),
   ('air_source_heat_pump_electric', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
-  ('air_source_heat_pump_electric', 'ashp_electric_rebate_math_within_cap', 5),
   ('air_source_heat_pump_electric', 'hp_description_sufficient_for_review', 4),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_existing_heat_context_present', 1),
   ('air_source_heat_pump_gas_propane', 'hp_conditioned_space_distribution_present', 2),
@@ -616,14 +614,15 @@ WITH genai_rule_upgrade_types_seed (
   ('combined_space_water_heat_pump', 'cshp_no_existing_or_secondary_heat_pump_review', 7),
   ('combined_space_water_heat_pump', 'hydronic_non_integrated_area_review', 8),
   ('combined_space_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
-  ('common', 'contractor_identity_matches_record', 6),
-  ('common', 'homeowner_identity_matches_eligibility_record', 7),
-  ('common', 'income_verification_supporting_documents_attached', 9),
-  ('common', 'overall_invoice_arithmetic_consistent', 5),
+  ('common', 'contractor_identity_matches_record', 7),
+  ('common', 'homeowner_identity_matches_eligibility_record', 8),
+  ('common', 'income_verification_supporting_documents_attached', 10),
+  ('common', 'overall_invoice_arithmetic_consistent', 6),
   ('common', 'overall_rebate_not_over_invoice_total', 4),
+  ('common', 'overall_rebate_not_over_paid_cost_of_upgrade', 5),
   ('common', 'rebate_line_evidence_present', 2),
   ('common', 'upgrade_type_evidence_present', 1),
-  ('common', 'utility_account_supporting_document_attached', 8),
+  ('common', 'utility_account_supporting_document_attached', 9),
   ('common', 'warranty_costs_flag', 3),
   ('dual_fuel_ducted_heat_pump', 'dfhp_controls_reference_present', 2),
   ('dual_fuel_ducted_heat_pump', 'dfhp_description_sufficient_for_review', 4),
@@ -717,9 +716,6 @@ WITH genai_located_fields_seed (
   updated_at
 ) AS (
   VALUES
-  ('amount_due_after_rebate', 'Locate the visible customer amount owing after CleanBC / Better Homes / ESP rebates, deposits, credits, or prior payments have been applied.
-This field is distinct from the generic Document Intelligence amount_due field. The DI amount_due field may represent a gross balance, net customer balance, program receivable, or another invoice total depending on the invoice layout. For this field, return the invoice-visible after-rebate/customer-owing amount only when the label, totals section, or surrounding arithmetic supports that meaning.
-Use value=null when the invoice does not clearly show a customer amount due after rebates/deposits/credits/payments. In evidence_text, cite the exact label or totals-line wording that supports the value.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_equipment_type', 'Locate air-to-water heat pump evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_line_amount', 'Locate air-to-water heat pump line-item totals.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_product_list_reference', 'Locate air-to-water qualifying product list references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -771,7 +767,6 @@ Electrical service upgrade', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_billing_reference', 'Locate utility billing evidence for the line/service upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_reference', 'Locate BC Hydro, FortisBC, utility connection, line upgrade, or utility bill/invoice references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hardware_per_unit', 'Locate hardware/material price per unit.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hp_ahri_reference', 'Locate AHRI reference/certificate numbers for outdoor unit, indoor unit(s), and furnace where visible. Store only the numeric AHRI reference number in value, such as "213617706"; put the full visible invoice phrase, such as "AHRI Certificate: 213617706", in evidence_text.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_backup_heat_evidence', 'Locate backup heat evidence and note if it appears electric, wood, fossil fuel, or unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_conditioned_space_distribution_evidence', 'Locate evidence that the heat pump distributes heat through the conditioned space formerly served by the primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_efficiency_and_capacity', 'Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -784,7 +779,15 @@ Electrical service upgrade', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_fossil_fuel_removal_evidence', 'Locate removal, decommissioning, capping, disconnection, appliance/piping/vent/fuel-container removal, permit, or inspection evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_heat_load_calc_reference', 'Locate heat load calculation, sizing report, CSA-F280, Manual J, or similar.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_installation_labour_amount', 'Locate installation labour amount if shown separately.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hp_line_amount', 'Locate air-source heat pump line-item totals.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_upgrade_line_amount', 'Locate the visible line-item amount or subtotal for the claimed air-source heat pump upgrade.
+
+Return the amount for the air-source heat pump equipment and installation scope tied to this upgrade type. Include outdoor unit, indoor head units, air handler, central ducted heat-pump components, and installation labour when they are presented as part of the same air-source heat pump upgrade line or subtotal.
+
+Do not include CleanBC / Better Homes / ESP rebate amounts, customer payments, deposits, taxes-only totals, invoice-wide totals, unrelated upgrades, electrical service upgrades, heat pump water heaters, air-to-water heat pumps, dual-fuel heat pumps, ventilation, insulation, windows/doors, health and safety remediation, warranty/maintenance plans, financing charges, or fossil-fuel removal work unless the invoice clearly includes them in a single labelled air-source heat pump upgrade subtotal.
+
+Use value=null when the air-source heat pump upgrade amount is missing, ambiguous, bundled with unrelated upgrades without a clear subtotal, or cannot be separated from other work.
+
+In evidence_text, cite the exact visible line label, subtotal label, or arithmetic used.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_main_living_area_evidence', 'Locate evidence that the heat pump serves a main living area or whole-home/primary heating load.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_make_model', 'Locate make/model numbers.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_new_equipment_type', 'Locate single-head mini-split, 2-head/multi-split, ductless mini-split, ductless multi-split, central ducted, low-static ducted mini, indoor heads/zones, or similar.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -852,8 +855,22 @@ Insulation', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('manufacturer_label_photo_reference', 'Locate text suggesting manufacturer label photos are included, attached, or required.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('metric_u_factor', 'Locate metric U-factor numeric values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('nrcan_number', 'Locate NRCan ENERGY STAR fenestration registration number, if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('overall_rebate_line_amount', 'Locate the overall CleanBC / Better Homes / Energy Savings Program rebate amount for the whole invoice. If the invoice has several upgrade-specific rebate lines but no single total rebate line, add the visible upgrade-specific rebate amounts together and explain the calculation in evidence_text; use value=null only when neither an overall rebate nor summable upgrade-specific rebate lines are visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('overall_rebate_line_amount', 'Locate the visible overall CleanBC / Better Homes / Energy Savings Program rebate amount for the whole invoice.
+
+Return the single invoice-level total rebate amount when the invoice clearly shows one.
+If the invoice does not show a single invoice-level total rebate amount, but does show multiple visible CleanBC / Better Homes / ESP rebate amounts for specific upgrade lines, return the sum of those visible rebate amounts.
+Use value=null when neither a single invoice-level total rebate amount nor summable upgrade-specific rebate amounts are visible.
+Do not include discounts, taxes, deposits, customer payments, credits, financing amounts, warranty coverage, insurance coverage, or non-program rebates unless the visible label clearly identifies the amount as a CleanBC / Better Homes / ESP rebate.
+In evidence_text, cite the exact visible rebate label or totals-line wording. If summing multiple upgrade-specific rebate amounts, show the arithmetic using the visible labels and values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_rebate_line_description', 'Locate the text description for the overall rebate line, explicit total rebate summary, or visible split upgrade-specific rebate lines that together form the invoice-level rebate.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('paid_cost_of_upgrade_amount', 'Locate the visible paid cost of the upgrade.
+
+This field is the participant/customer paid cost for the claimed upgrade after CleanBC / Better Homes / ESP rebates have been applied, including amounts already paid by the participant and amounts still owed by the participant for that upgrade.
+Use value only when the invoice clearly shows the paid cost of the claimed upgrade, or when the invoice clearly shows enough named totals to calculate it from visible invoice arithmetic.
+Do not use InvoiceTotal for this field unless the invoice clearly shows no rebate, credit, deposit, payment, insurance, warranty, or other deduction affects the participant-paid cost.
+Do not use AmountDue by itself unless the invoice label, totals section, or visible arithmetic clearly shows AmountDue represents the participant/customer paid cost for the claimed upgrade.
+Use value=null when the paid cost of the upgrade is missing, ambiguous, not separated from other upgrades, or cannot be confidently calculated from visible named invoice fields.
+In evidence_text, cite the exact visible labels and arithmetic used, such as participant total owed, customer payment, deposit, balance paid, amount due, rebate, credit, or upgrade subtotal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('pane_count', 'Locate pane count if invoice appears to count panes instead of rough openings.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('quote_preapproval_reference', 'Locate quote pre-approval, pre-approval, or approval-before-installation references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('rough_opening_count', 'Locate rough opening count if explicitly stated.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -906,20 +923,18 @@ WITH genai_located_field_upgrade_types_seed (
   field_number
 ) AS (
   VALUES
-  ('air_source_heat_pump_electric', 'hp_ahri_reference', 4),
   ('air_source_heat_pump_electric', 'hp_efficiency_and_capacity', 6),
   ('air_source_heat_pump_electric', 'hp_existing_electric_heat_evidence', 2),
   ('air_source_heat_pump_electric', 'hp_existing_heat_pump_flag', 12),
   ('air_source_heat_pump_electric', 'hp_heat_load_calc_reference', 7),
   ('air_source_heat_pump_electric', 'hp_installation_labour_amount', 9),
-  ('air_source_heat_pump_electric', 'hp_line_amount', 8),
+  ('air_source_heat_pump_electric', 'ashp_upgrade_line_amount', 8),
   ('air_source_heat_pump_electric', 'hp_main_living_area_evidence', 11),
   ('air_source_heat_pump_electric', 'hp_make_model', 3),
   ('air_source_heat_pump_electric', 'hp_new_equipment_type', 1),
   ('air_source_heat_pump_electric', 'hp_product_list_reference', 5),
   ('air_source_heat_pump_electric', 'hp_registered_contractor_or_permit_evidence', 13),
   ('air_source_heat_pump_electric', 'upgrade_specific_rebate_line_amount', 10),
-  ('air_source_heat_pump_gas_propane', 'hp_ahri_reference', 4),
   ('air_source_heat_pump_gas_propane', 'hp_backup_heat_evidence', 12),
   ('air_source_heat_pump_gas_propane', 'hp_conditioned_space_distribution_evidence', 16),
   ('air_source_heat_pump_gas_propane', 'hp_efficiency_and_capacity', 6),
@@ -928,14 +943,13 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_source_heat_pump_gas_propane', 'hp_fossil_combination_boiler_evidence', 15),
   ('air_source_heat_pump_gas_propane', 'hp_fossil_fuel_removal_evidence', 7),
   ('air_source_heat_pump_gas_propane', 'hp_heat_load_calc_reference', 8),
-  ('air_source_heat_pump_gas_propane', 'hp_line_amount', 10),
+  ('air_source_heat_pump_gas_propane', 'ashp_upgrade_line_amount', 10),
   ('air_source_heat_pump_gas_propane', 'hp_make_model', 3),
   ('air_source_heat_pump_gas_propane', 'hp_new_equipment_type', 1),
   ('air_source_heat_pump_gas_propane', 'hp_non_integrated_area_preapproval_reference', 13),
   ('air_source_heat_pump_gas_propane', 'hp_northern_top_up_evidence', 9),
   ('air_source_heat_pump_gas_propane', 'hp_product_list_reference', 5),
   ('air_source_heat_pump_gas_propane', 'upgrade_specific_rebate_line_amount', 11),
-  ('air_source_heat_pump_oil', 'hp_ahri_reference', 4),
   ('air_source_heat_pump_oil', 'hp_backup_heat_evidence', 13),
   ('air_source_heat_pump_oil', 'hp_conditioned_space_distribution_evidence', 17),
   ('air_source_heat_pump_oil', 'hp_efficiency_and_capacity', 6),
@@ -943,7 +957,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_source_heat_pump_oil', 'hp_existing_oil_heat_evidence', 2),
   ('air_source_heat_pump_oil', 'hp_fossil_combination_boiler_evidence', 16),
   ('air_source_heat_pump_oil', 'hp_heat_load_calc_reference', 8),
-  ('air_source_heat_pump_oil', 'hp_line_amount', 10),
+  ('air_source_heat_pump_oil', 'ashp_upgrade_line_amount', 10),
   ('air_source_heat_pump_oil', 'hp_make_model', 3),
   ('air_source_heat_pump_oil', 'hp_new_equipment_type', 1),
   ('air_source_heat_pump_oil', 'hp_non_integrated_area_preapproval_reference', 14),
@@ -952,13 +966,12 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_source_heat_pump_oil', 'hp_oil_system_removal_evidence', 7),
   ('air_source_heat_pump_oil', 'hp_product_list_reference', 5),
   ('air_source_heat_pump_oil', 'upgrade_specific_rebate_line_amount', 11),
-  ('air_source_heat_pump_wood', 'hp_ahri_reference', 4),
   ('air_source_heat_pump_wood', 'hp_backup_heat_evidence', 13),
   ('air_source_heat_pump_wood', 'hp_efficiency_and_capacity', 6),
   ('air_source_heat_pump_wood', 'hp_existing_heat_pump_flag', 12),
   ('air_source_heat_pump_wood', 'hp_existing_wood_heat_evidence', 2),
   ('air_source_heat_pump_wood', 'hp_heat_load_calc_reference', 8),
-  ('air_source_heat_pump_wood', 'hp_line_amount', 9),
+  ('air_source_heat_pump_wood', 'ashp_upgrade_line_amount', 9),
   ('air_source_heat_pump_wood', 'hp_main_living_area_evidence', 11),
   ('air_source_heat_pump_wood', 'hp_make_model', 3),
   ('air_source_heat_pump_wood', 'hp_new_equipment_type', 1),
@@ -993,7 +1006,6 @@ WITH genai_located_field_upgrade_types_seed (
   ('combined_space_water_heat_pump', 'hydronic_fossil_removal_evidence', 5),
   ('combined_space_water_heat_pump', 'hydronic_wood_removal_or_wett_evidence', 6),
   ('combined_space_water_heat_pump', 'upgrade_specific_rebate_line_amount', 9),
-  ('common', 'amount_due_after_rebate', 7),
   ('common', 'contractor_gst_number', 1),
   ('common', 'customer_deposit', 4),
   ('common', 'eligibility_code', 2),
@@ -1004,6 +1016,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('common', 'labour_cost_invoice_total', 3),
   ('common', 'overall_rebate_line_amount', 5),
   ('common', 'overall_rebate_line_description', 6),
+  ('common', 'paid_cost_of_upgrade_amount', 7),
   ('dual_fuel_ducted_heat_pump', 'dfhp_equipment_type', 1),
   ('dual_fuel_ducted_heat_pump', 'dfhp_existing_png_or_tank_propane_evidence', 2),
   ('dual_fuel_ducted_heat_pump', 'dfhp_fossil_modification_evidence', 7),
@@ -1012,7 +1025,6 @@ WITH genai_located_field_upgrade_types_seed (
   ('dual_fuel_ducted_heat_pump', 'dfhp_make_model', 3),
   ('dual_fuel_ducted_heat_pump', 'dfhp_source_fuel_path', 10),
   ('dual_fuel_ducted_heat_pump', 'dfhp_switchover_setpoint_evidence', 5),
-  ('dual_fuel_ducted_heat_pump', 'hp_ahri_reference', 4),
   ('dual_fuel_ducted_heat_pump', 'hp_conditioned_space_distribution_evidence', 13),
   ('dual_fuel_ducted_heat_pump', 'hp_existing_heat_pump_flag', 14),
   ('dual_fuel_ducted_heat_pump', 'hp_northern_top_up_evidence', 11),

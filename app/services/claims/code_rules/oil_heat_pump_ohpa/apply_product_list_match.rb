@@ -5,7 +5,7 @@ module Claims
     module OilHeatPumpOhpa
       class ApplyProductListMatch
         OIL_UPGRADE_TYPE_KEY = "air_source_heat_pump_oil"
-        INVOICE_AHRI_FIELD_KEY = "hp_ahri_reference"
+        INVOICE_AHRI_FIELD_KEY = "classifier.ahri_reference"
         SUPPORTING_AHRI_FIELD_KEY = "ahri_reference"
 
         RULES = {
@@ -101,7 +101,7 @@ module Claims
             .where(
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: "genai",
+              source_engine: "classifier",
               field_key: INVOICE_AHRI_FIELD_KEY
             )
             .where.not(value_text: [nil, ""])

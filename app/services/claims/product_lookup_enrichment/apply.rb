@@ -13,7 +13,6 @@ module Claims
       OIL_UPGRADE_TYPE_KEY = "air_source_heat_pump_oil"
       HPWH_UPGRADE_TYPE_KEY = "heat_pump_water_heater"
 
-      HP_AHRI_FIELD_KEY = "hp_ahri_reference"
       CLASSIFIER_AHRI_FIELD_KEY = "classifier.ahri_reference"
       CLASSIFIER_MODEL_NUMBER_FIELD_KEY = "classifier.product_model_number"
       CLASSIFIER_MANUFACTURER_FIELD_KEY = "classifier.product_manufacturer"
@@ -117,8 +116,9 @@ module Claims
       def lookup_ahri_product(upgrade_types)
         field =
           best_invoice_field(
-            field_keys: [CLASSIFIER_AHRI_FIELD_KEY, HP_AHRI_FIELD_KEY],
-            upgrade_type_ids: upgrade_types.map(&:id)
+            field_keys: [CLASSIFIER_AHRI_FIELD_KEY],
+            upgrade_type_ids: upgrade_types.map(&:id),
+            source_engines: ["classifier"]
           )
         ahri = normalized_ahri(field&.value_text)
         product =
@@ -142,8 +142,9 @@ module Claims
       def lookup_ohpa_product(upgrade_type)
         field =
           best_invoice_field(
-            field_keys: [CLASSIFIER_AHRI_FIELD_KEY, HP_AHRI_FIELD_KEY],
-            upgrade_type_ids: [upgrade_type.id]
+            field_keys: [CLASSIFIER_AHRI_FIELD_KEY],
+            upgrade_type_ids: [upgrade_type.id],
+            source_engines: ["classifier"]
           )
         ahri = normalized_ahri(field&.value_text)
         product =
@@ -258,19 +259,28 @@ module Claims
         )
       end
 
-      def best_invoice_field(field_keys:, upgrade_type_ids:)
+      def best_invoice_field(
+        field_keys:,
+        upgrade_type_ids:,
+        source_engines: %w[classifier genai]
+      )
         invoice_fields(
           field_keys: field_keys,
-          upgrade_type_ids: upgrade_type_ids
+          upgrade_type_ids: upgrade_type_ids,
+          source_engines: source_engines
         ).first
       end
 
-      def invoice_fields(field_keys:, upgrade_type_ids:)
+      def invoice_fields(
+        field_keys:,
+        upgrade_type_ids:,
+        source_engines: %w[classifier genai]
+      )
         ::Claims::InvoiceVersionLocatedField
           .where(
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type_ids,
-            source_engine: %w[classifier genai],
+            source_engine: source_engines,
             field_key: field_keys
           )
           .where.not(value_text: [nil, ""])

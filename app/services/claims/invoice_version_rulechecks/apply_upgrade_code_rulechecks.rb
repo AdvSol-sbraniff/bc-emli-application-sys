@@ -5,6 +5,7 @@ module Claims
     class ApplyUpgradeCodeRulechecks
       SERVICE_CLASSES = [
         ::Claims::CodeRules::AirWaterHeatPumpProductList::ApplyProductListMatch,
+        ::Claims::CodeRules::AshpElectric::ApplyProductRequirements,
         ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch,
         ::Claims::CodeRules::IncomeLevel::ApplyLevelOneOrTwoRequired,

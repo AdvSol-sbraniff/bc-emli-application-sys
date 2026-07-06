@@ -4,7 +4,7 @@ module Claims
   module CodeRules
     module HeatPumpAhri
       class ApplyProductListMatch
-        INVOICE_AHRI_FIELD_KEY = "hp_ahri_reference"
+        INVOICE_AHRI_FIELD_KEY = "classifier.ahri_reference"
         SUPPORTING_AHRI_FIELD_KEY = "ahri_reference"
 
         AHRI_RELEVANT_UPGRADE_TYPES = %w[
@@ -21,16 +21,24 @@ module Claims
         MIN_HSPF2 = BigDecimal("8.5")
 
         RULES = {
-          product_list_match: {
+          invoice_ahri_present: {
             number: 1,
-            key: "hp_ahri_found_in_product_list"
+            key: "hp_invoice_ahri_reference_present"
+          },
+          supporting_ahri_match: {
+            number: 2,
+            key: "hp_supporting_document_ahri_matches_invoice"
+          },
+          product_list_match: {
+            number: 3,
+            key: "hp_ahri_reference_found_in_product_list"
           },
           minimum_capacity: {
-            number: 2,
+            number: 4,
             key: "hp_product_minimum_capacity_at_minus_5c"
           },
           efficiency_threshold: {
-            number: 3,
+            number: 5,
             key: "hp_product_efficiency_threshold"
           }
         }.freeze
@@ -121,7 +129,7 @@ module Claims
             .where(
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: "genai",
+              source_engine: "classifier",
               field_key: INVOICE_AHRI_FIELD_KEY
             )
             .where.not(value_text: [nil, ""])
@@ -205,6 +213,16 @@ module Claims
         def rulecheck_rows(ahri_evidence:, product:, enabled_rules:)
           [
             (
+              if enabled_rules.key?(:invoice_ahri_present)
+                invoice_ahri_present_row(ahri_evidence: ahri_evidence)
+              end
+            ),
+            (
+              if enabled_rules.key?(:supporting_ahri_match)
+                supporting_ahri_match_row(ahri_evidence: ahri_evidence)
+              end
+            ),
+            (
               if enabled_rules.key?(:product_list_match)
                 product_list_match_row(
                   ahri_evidence: ahri_evidence,
@@ -231,16 +249,55 @@ module Claims
           ].compact
         end
 
+        def invoice_ahri_present_row(ahri_evidence:)
+          invoice_ahri = ahri_evidence.fetch(:invoice_ahri)
+          present = invoice_ahri.present?
+
+          base_rulecheck_row(
+            rule: RULES.fetch(:invoice_ahri_present),
+            rule_result: present ? "pass" : "warn",
+            confidence: present ? 100 : 0,
+            expected_text:
+              "The classifier should store an invoice AHRI reference in claims.invoice_version_located_fields with source_engine=classifier and field_key=classifier.ahri_reference.",
+            calculation:
+              "classifier.ahri_reference=#{invoice_ahri.presence || "(missing)"}",
+            evidence_text: invoice_ahri_evidence_text(ahri_evidence),
+            reason_and_likely_causes:
+              if present
+                "The classifier stored invoice AHRI #{invoice_ahri} for this heat-pump upgrade type."
+              else
+                "No classifier.ahri_reference row was stored for this heat-pump upgrade type. Code cannot use the invoice as the AHRI product-list lookup source until the classifier captures the invoice AHRI reference."
+              end
+          )
+        end
+
+        def supporting_ahri_match_row(ahri_evidence:)
+          status = supporting_ahri_status(ahri_evidence)
+
+          base_rulecheck_row(
+            rule: RULES.fetch(:supporting_ahri_match),
+            rule_result: supporting_ahri_rule_result(status),
+            confidence: supporting_ahri_confidence(status),
+            expected_text:
+              "The invoice classifier AHRI reference should match AHRI evidence extracted from supporting product documents when supporting-document AHRI evidence is present.",
+            calculation:
+              supporting_ahri_calculation_text(ahri_evidence, status),
+            evidence_text: ahri_evidence_text(ahri_evidence),
+            reason_and_likely_causes:
+              supporting_ahri_reason_text(ahri_evidence, status)
+          )
+        end
+
         def product_list_match_row(ahri_evidence:, product:)
           status =
-            ahri_evidence_status(ahri_evidence: ahri_evidence, product: product)
+            product_list_status(ahri_evidence: ahri_evidence, product: product)
 
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
             rule_result: product_list_rule_result(status),
             confidence: product_list_confidence(status),
             expected_text:
-              "The invoice AHRI reference should match a row in the imported BC Hydro heat-pump product list; supporting-document AHRI evidence, when present, should not conflict.",
+              "The invoice classifier AHRI reference should match a row in the imported BC Hydro heat-pump product list.",
             calculation:
               product_list_calculation_text(
                 ahri_evidence: ahri_evidence,
@@ -424,7 +481,7 @@ module Claims
             evidence_text: ahri_text.presence,
             reason_and_likely_causes:
               "This code rule depends on a successful AHRI product-list match before it can inspect product-list metrics. " \
-                "Code Rule 1 records whether the AHRI reference was missing, not found, or matched. " \
+                "The AHRI product-list rule records whether the invoice AHRI reference was missing, not found, or matched. " \
                 "Until a product row is matched, this dependent metric check cannot make a meaningful pass or fail decision. " \
                 "This is shown as information rather than a second warning so the admin is not asked to resolve the same root issue twice. " \
                 "After the AHRI match is corrected, rerun GenAI/code checks to evaluate this product-list metric."
@@ -443,57 +500,98 @@ module Claims
         end
 
         def product_list_rule_result(status)
-          if %i[
-               source_unavailable
-               missing_invoice
-               matched_without_supporting
-             ].include?(status)
+          if %i[source_unavailable missing_invoice].include?(status)
             "warn"
           else
-            (status == :matched_with_supporting ? "pass" : "fail")
+            (status == :matched ? "pass" : "fail")
           end
         end
 
         def product_list_confidence(status)
           case status
-          when :matched_with_supporting, :matched_without_supporting, :conflict,
-               :not_found
+          when :matched, :not_found
             100
           else
             0
           end
         end
 
-        def ahri_evidence_status(ahri_evidence:, product:)
+        def supporting_ahri_status(ahri_evidence)
           return :missing_invoice if ahri_evidence.fetch(:invoice_ahri).blank?
           return :conflict if supporting_ahri_conflict?(ahri_evidence)
+          return :matched if supporting_ahri_matches_invoice?(ahri_evidence)
+
+          :missing_supporting
+        end
+
+        def supporting_ahri_rule_result(status)
+          case status
+          when :matched
+            "pass"
+          when :conflict
+            "fail"
+          else
+            "warn"
+          end
+        end
+
+        def supporting_ahri_confidence(status)
+          %i[matched conflict].include?(status) ? 100 : 0
+        end
+
+        def product_list_status(ahri_evidence:, product:)
+          return :missing_invoice if ahri_evidence.fetch(:invoice_ahri).blank?
           unless current_heat_pump_products_available?
             return :source_unavailable
           end
 
           return :not_found if product.blank?
-          if supporting_ahri_matches_invoice?(ahri_evidence)
-            return :matched_with_supporting
-          end
 
-          :matched_without_supporting
+          :matched
         end
 
-        def product_list_calculation_text(ahri_evidence:, status:, product:)
+        def supporting_ahri_calculation_text(ahri_evidence, status)
           invoice_ahri = ahri_evidence.fetch(:invoice_ahri)
           supporting_ahris = ahri_evidence.fetch(:supporting_ahris)
 
           case status
           when :missing_invoice
-            "No #{INVOICE_AHRI_FIELD_KEY} invoice located field was stored for this heat-pump upgrade call. Supporting-document AHRI values: #{supporting_ahris.presence&.join(", ") || "(none)"}."
-          when :conflict
-            "Invoice AHRI #{invoice_ahri} did not match supporting-document AHRI values #{supporting_ahris.join(", ")}."
+            "classifier.ahri_reference=(missing); supporting_document ahri_reference values=#{supporting_ahris.presence&.join(", ") || "(none)"}."
+          when :missing_supporting
+            "classifier.ahri_reference=#{invoice_ahri}; supporting_document ahri_reference values=(none)."
+          when :matched
+            "classifier.ahri_reference=#{invoice_ahri}; supporting_document ahri_reference values=#{supporting_ahris.join(", ")}; at least one supporting-document value matches."
+          else
+            "classifier.ahri_reference=#{invoice_ahri}; supporting_document ahri_reference values=#{supporting_ahris.join(", ")}; no supporting-document value matches."
+          end
+        end
+
+        def supporting_ahri_reason_text(ahri_evidence, status)
+          invoice_ahri = ahri_evidence.fetch(:invoice_ahri)
+          supporting_ahris = ahri_evidence.fetch(:supporting_ahris)
+
+          case status
+          when :missing_invoice
+            "No classifier.ahri_reference row was stored for this heat-pump upgrade type, so code cannot compare invoice AHRI evidence with supporting-document AHRI evidence."
+          when :missing_supporting
+            "The invoice classifier stored AHRI #{invoice_ahri}, but no processed product supporting document supplied an ahri_reference located field. Admin should verify whether the supporting product evidence is missing or whether extraction should be rerun."
+          when :matched
+            "The supporting-document AHRI evidence corroborates the invoice classifier AHRI #{invoice_ahri}."
+          else
+            "The invoice classifier AHRI reference does not match the AHRI reference extracted from supporting documents. Invoice AHRI is #{invoice_ahri}; supporting-document AHRI values are #{supporting_ahris.join(", ")}. Admin should verify whether the wrong supporting document was uploaded, the invoice references a different system, or extraction needs correction."
+          end
+        end
+
+        def product_list_calculation_text(ahri_evidence:, status:, product:)
+          invoice_ahri = ahri_evidence.fetch(:invoice_ahri)
+
+          case status
+          when :missing_invoice
+            "No #{INVOICE_AHRI_FIELD_KEY} invoice located field was stored for this heat-pump upgrade call."
           when :source_unavailable
             "Invoice AHRI #{invoice_ahri} was stored, but no current imported BC Hydro heat-pump product-list rows were available to search."
-          when :matched_with_supporting
-            "Invoice AHRI #{invoice_ahri} matched ahri_products.id=#{product.id} from source=#{product.import_run&.ahri_source&.description}; supporting-document AHRI evidence corroborates the same value."
-          when :matched_without_supporting
-            "Invoice AHRI #{invoice_ahri} matched ahri_products.id=#{product.id} from source=#{product.import_run&.ahri_source&.description}; no supporting-document #{SUPPORTING_AHRI_FIELD_KEY} located field corroborated the AHRI."
+          when :matched
+            "Invoice AHRI #{invoice_ahri} matched ahri_products.id=#{product.id} from source=#{product.import_run&.ahri_source&.description}."
           else
             "Invoice AHRI #{invoice_ahri} was searched across the current imported BC Hydro heat-pump product lists, but no matching row was found."
           end
@@ -501,35 +599,25 @@ module Claims
 
         def product_list_reason_text(ahri_evidence:, status:, product:)
           invoice_ahri = ahri_evidence.fetch(:invoice_ahri)
-          supporting_ahris = ahri_evidence.fetch(:supporting_ahris)
 
           case status
           when :missing_invoice
             "The invoice located fields did not include #{INVOICE_AHRI_FIELD_KEY}. " \
-              "Supporting-document AHRI evidence is useful context, but this code rule uses the invoice AHRI as the product-list lookup key. " \
-              "Without an invoice AHRI, code cannot confirm the billed equipment against the imported BC Hydro heat-pump product list. " \
+              "This code rule uses the classifier invoice AHRI as the product-list lookup key. " \
+              "Without classifier invoice AHRI, code cannot confirm the billed equipment against the imported BC Hydro heat-pump product list. " \
               "Admin should verify whether the invoice visibly includes an AHRI reference and rerun extraction if needed."
-          when :conflict
-            "The invoice AHRI reference does not match the AHRI reference extracted from supporting documents. " \
-              "Invoice AHRI is #{invoice_ahri}; supporting-document AHRI values are #{supporting_ahris.join(", ")}. " \
-              "Because the two sources conflict, code cannot safely treat the supporting document as corroboration for the invoice product-list match. " \
-              "Admin should verify whether the wrong supporting document was uploaded, the invoice references a different system, or extraction needs correction."
           when :source_unavailable
             "The invoice located fields show AHRI #{invoice_ahri}, but there are no current imported BC Hydro heat-pump product-list rows available for code to search. " \
               "This is an information-on-record problem, not a product failure. " \
               "Admin should refresh the heat-pump product-list imports and rerun GenAI/code checks."
-          when :matched_with_supporting
-            "The invoice AHRI #{invoice_ahri} was found in the current imported BC Hydro heat-pump product lists, and supporting-document AHRI evidence corroborates the same value. " \
+          when :matched
+            "The invoice AHRI #{invoice_ahri} was found in the current imported BC Hydro heat-pump product lists. " \
               "The stored invoice version now points to the exact imported product-list row used for this check. " \
               "This is a code-owned pass because the match was made against local information on record, not by model judgment. " \
               "Admins can use the AHRI product-list section to inspect make, model, capacity, and efficiency details."
-          when :matched_without_supporting
-            "The invoice AHRI #{invoice_ahri} was found in the current imported BC Hydro heat-pump product lists, so the product-list lookup itself succeeded. " \
-              "No processed supporting document supplied a matching #{SUPPORTING_AHRI_FIELD_KEY} located field, so this is shown as a warning for admin awareness rather than as a product-list failure. " \
-              "Admin can use the AHRI product-list section to inspect the matched row and decide whether the evidence package needs follow-up."
           else
             "The invoice AHRI #{invoice_ahri} was not found across the current imported BC Hydro heat-pump product lists. " \
-              "This is a product-list lookup failure, regardless of whether supporting-document AHRI evidence is present. " \
+              "This is a product-list lookup failure. " \
               "Admin should verify the AHRI was read correctly, confirm the product-list imports are current, and ask the contractor for corrected qualifying-product evidence if the AHRI still does not match."
           end
         end
@@ -556,6 +644,13 @@ module Claims
           end
 
           parts.uniq.join("; ").presence
+        end
+
+        def invoice_ahri_evidence_text(ahri_evidence)
+          invoice_field = ahri_evidence.fetch(:invoice_field)
+          return nil unless invoice_field
+
+          invoice_field.evidence_text.presence || invoice_field.value_text
         end
 
         def minimum_capacity_reason_text(product:, capacity:, passed:)

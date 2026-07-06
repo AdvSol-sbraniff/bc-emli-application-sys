@@ -15,16 +15,81 @@ WITH code_rules_seed (
 ) AS (
   VALUES
   (
-    '590f2f3a-3e23-449a-a7d4-2f35c3d53001'::uuid,
-    'hp_ahri_found_in_product_list',
-    'Checks whether the invoice AHRI reference exists in the current imported BC Hydro heat-pump product lists; supporting-document AHRI evidence corroborates the match when present and must not conflict.',
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53021'::uuid,
+    'hp_invoice_ahri_reference_present',
+    'Checks whether the classifier stored an invoice AHRI reference in claims.invoice_version_located_fields for AHRI-backed heat-pump upgrade types.',
     true,
-    'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched AHRI product-list row.',
-    'Review the AHRI match when supporting-document AHRI evidence is missing, when invoice AHRI is missing, or when no current imported list rows are available.',
-    'Ask the contractor for corrected product evidence when the invoice AHRI conflicts with supporting-document AHRI evidence or is not found in the imported product list.',
+    'No follow-up is required when the classifier stored an invoice AHRI reference for this heat-pump upgrade type.',
+    'Review the invoice and rerun classifier extraction if the AHRI reference is visible but no classifier AHRI field was stored.',
     NULL,
-    'The code supplies the detailed invoice AHRI product-list lookup and any supporting-document AHRI corroboration/conflict explanation; these messages are short admin guidance additions only.',
-    TIMESTAMP '2026-05-14 00:00:00',
+    NULL,
+    'Reads claims.invoice_version_located_fields where source_engine=classifier and field_key=classifier.ahri_reference. This rule only checks presence of the invoice classifier AHRI field.',
+    TIMESTAMP '2026-07-06 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53022'::uuid,
+    'hp_supporting_document_ahri_matches_invoice',
+    'Checks whether AHRI evidence extracted from supporting product documents matches the classifier AHRI reference found on the invoice.',
+    true,
+    'No follow-up is required when supporting-document AHRI evidence matches the invoice classifier AHRI reference.',
+    'Review the supporting product evidence when no supporting-document AHRI reference was extracted or the invoice AHRI is missing.',
+    'Ask the contractor for corrected product evidence when supporting-document AHRI evidence conflicts with the invoice AHRI reference.',
+    NULL,
+    'Compares claims.invoice_version_located_fields source_engine=classifier field_key=classifier.ahri_reference with claims.supporting_document_located_fields field_key=ahri_reference for supporting documents on the same invoice version.',
+    TIMESTAMP '2026-07-06 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53023'::uuid,
+    'hp_ahri_reference_found_in_product_list',
+    'Checks whether the classifier AHRI reference found on the invoice exists in the current imported BC Hydro heat-pump product list.',
+    true,
+    'No follow-up is required when the invoice AHRI reference is found in the imported product list.',
+    'Review the invoice AHRI reference when it is missing or when no current imported AHRI product-list rows are available.',
+    'Ask the contractor for corrected product evidence when the invoice AHRI reference is not found in the imported product list.',
+    NULL,
+    'Reads claims.invoice_version_located_fields source_engine=classifier field_key=classifier.ahri_reference and searches claims.v_current_ahri_products. Supporting-document AHRI corroboration is handled by hp_supporting_document_ahri_matches_invoice.',
+    TIMESTAMP '2026-07-06 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53031'::uuid,
+    'ashp_electric_rebate_math_within_cap',
+    'Checks ASHP convert-from-electric rebate amount against the ASHP upgrade line amount and the Income Level 1/2 cap from the requirements table.',
+    true,
+    'No follow-up is required when the ASHP electric rebate is within the named upgrade amount and income-level cap.',
+    'Review the invoice ASHP line amount, rebate line, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice ASHP line amount, rebate line, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9. Uses ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    TIMESTAMP '2026-07-06 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53032'::uuid,
+    'ashp_electric_product_specs_meet_requirements',
+    'Checks the ASHP convert-from-electric requirements table product specs: efficiency threshold, variable speed compressor, and minimum 12,000 BTU capacity.',
+    true,
+    'No follow-up is required when the matched AHRI product row and named field evidence satisfy the product specification checks.',
+    'Review the matched AHRI row and invoice/product evidence when a metric is missing or ambiguous.',
+    'Confirm the AHRI match before asking the contractor for corrected product evidence.',
+    'Resolve the AHRI product-list match first, then rerun checks.',
+    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9. Uses the matched AHRI product row plus hp_efficiency_and_capacity evidence for variable-speed wording.',
+    TIMESTAMP '2026-07-06 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53033'::uuid,
+    'ashp_electric_multisplit_minimum_two_indoor_heads',
+    'Checks that an ASHP convert-from-electric ductless multi-split installation has at least two indoor head units.',
+    true,
+    'No follow-up is required when the claim is not multi-split or the multi-split evidence supports at least two indoor heads.',
+    'Review the invoice equipment section when a multi-split system is visible but the indoor-head count is not explicit.',
+    'Ask the contractor for corrected invoice or product evidence if a ductless multi-split shows fewer than two indoor heads.',
+    NULL,
+    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9. Uses hp_new_equipment_type and the matched AHRI source/product evidence.',
+    TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
   (
@@ -134,7 +199,29 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53203'::uuid,
     'submission_within_six_months',
-    'Checks whether the contractor submitted the invoice within six months of the invoice date.',
+    'Pseudocode:
+if rule submission_within_six_months is not enabled for common:
+  do not run
+
+invoice_date = invoice_versions.di_ocr_invoice_date
+submitted_at = claims.invoices.submitted_at
+
+if invoice_date is missing or submitted_at is missing:
+  rule_result = warn
+  expected = "invoices.submitted_at <= invoice_date + 6 months"
+  reason = say exactly which date is missing
+
+deadline = invoice_date + 6 months
+submitted_date = submitted_at.to_date
+
+if submitted_date <= deadline:
+  rule_result = pass
+else:
+  rule_result = fail
+
+calculation =
+  invoice_date + 6 months = deadline;
+  submitted_date <= deadline => true/false',
     true,
     'No follow-up is required when the submission date clearly falls within six months of the invoice date.',
     'Confirm the invoice date or submitted date before deciding whether the six-month deadline was met.',
@@ -330,23 +417,49 @@ DELETE FROM claims.code_rule_upgrade_types cru
 USING obsolete_oil_ahri_mappings old
 WHERE cru.id = old.id;
 
+WITH obsolete_electric_ahri_metric_mappings AS (
+  SELECT cru.id
+  FROM claims.code_rule_upgrade_types cru
+  JOIN claims.code_rules cr
+    ON cr.id = cru.code_rule_id
+  JOIN claims.invoice_upgrade_types iut
+    ON iut.id = cru.invoice_upgrade_type_id
+  WHERE iut.upgrade_type_key = 'air_source_heat_pump_electric'
+    AND cr.code_rule_key IN (
+      'hp_product_minimum_capacity_at_minus_5c',
+      'hp_product_efficiency_threshold'
+    )
+)
+DELETE FROM claims.code_rule_upgrade_types cru
+USING obsolete_electric_ahri_metric_mappings old
+WHERE cru.id = old.id;
+
 WITH code_rule_upgrade_type_seed (
   code_rule_key,
   upgrade_type_key
 ) AS (
   VALUES
-  ('hp_ahri_found_in_product_list', 'air_source_heat_pump_electric'),
-  ('hp_ahri_found_in_product_list', 'air_source_heat_pump_wood'),
-  ('hp_ahri_found_in_product_list', 'air_source_heat_pump_gas_propane'),
-  ('hp_ahri_found_in_product_list', 'dual_fuel_ducted_heat_pump'),
-  ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_electric'),
+  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_electric'),
+  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_wood'),
+  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_gas_propane'),
+  ('hp_invoice_ahri_reference_present', 'dual_fuel_ducted_heat_pump'),
+  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_electric'),
+  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_wood'),
+  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_gas_propane'),
+  ('hp_supporting_document_ahri_matches_invoice', 'dual_fuel_ducted_heat_pump'),
+  ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_electric'),
+  ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_wood'),
+  ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_gas_propane'),
+  ('hp_ahri_reference_found_in_product_list', 'dual_fuel_ducted_heat_pump'),
   ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_wood'),
   ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_gas_propane'),
   ('hp_product_minimum_capacity_at_minus_5c', 'dual_fuel_ducted_heat_pump'),
-  ('hp_product_efficiency_threshold', 'air_source_heat_pump_electric'),
   ('hp_product_efficiency_threshold', 'air_source_heat_pump_wood'),
   ('hp_product_efficiency_threshold', 'air_source_heat_pump_gas_propane'),
   ('hp_product_efficiency_threshold', 'dual_fuel_ducted_heat_pump'),
+  ('ashp_electric_rebate_math_within_cap', 'air_source_heat_pump_electric'),
+  ('ashp_electric_product_specs_meet_requirements', 'air_source_heat_pump_electric'),
+  ('ashp_electric_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_electric'),
   ('source_vintage_applies', 'common'),
   ('first_class_invoice_fields_present', 'common'),
   ('submission_within_six_months', 'common'),
