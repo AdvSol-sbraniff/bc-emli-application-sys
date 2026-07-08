@@ -2,9 +2,9 @@
 
 module Claims
   module CodeRules
-    module AshpGasPropane
+    module AshpOil
       class ApplyRebateCap
-        GAS_PROPANE_UPGRADE_TYPE_KEY = "air_source_heat_pump_gas_propane"
+        OIL_UPGRADE_TYPE_KEY = "air_source_heat_pump_oil"
         ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY = "ashp_upgrade_line_amount"
         REBATE_FIELD_KEY = "upgrade_specific_rebate_line_amount"
         EQUIPMENT_TYPE_FIELD_KEY = "hp_new_equipment_type"
@@ -12,14 +12,14 @@ module Claims
 
         BASE_CAPS_BY_CATEGORY = {
           single_head_minisplit: {
-            1 => BigDecimal("7500"),
-            2 => BigDecimal("5500"),
-            3 => BigDecimal("4000")
+            1 => BigDecimal("10000"),
+            2 => BigDecimal("10000"),
+            3 => BigDecimal("10000")
           },
           two_head_or_two_single_head: {
             1 => BigDecimal("14000"),
             2 => BigDecimal("10500"),
-            3 => BigDecimal("8000")
+            3 => BigDecimal("10000")
           },
           central_ducted_or_three_head: {
             1 => BigDecimal("16000"),
@@ -28,10 +28,7 @@ module Claims
           }
         }.freeze
 
-        RULE = {
-          number: 5,
-          key: "ashp_gas_propane_rebate_math_within_cap"
-        }.freeze
+        RULE = { number: 5, key: "ashp_oil_rebate_math_within_cap" }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
@@ -69,7 +66,7 @@ module Claims
         attr_reader :invoice_version, :upgrade_type
 
         def enabled_for_upgrade_type?
-          unless upgrade_type.upgrade_type_key == GAS_PROPANE_UPGRADE_TYPE_KEY
+          unless upgrade_type.upgrade_type_key == OIL_UPGRADE_TYPE_KEY
             return false
           end
 
@@ -94,7 +91,7 @@ module Claims
             rule_result: rule_result,
             confidence: confidence,
             expected_text:
-              "For ASHP convert-from-natural-gas/propane, the claimed base rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the equipment-category maximum for the matched income level.",
+              "For ASHP convert-from-oil, the claimed base rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the equipment-category maximum for the matched income level.",
             calculation: calculation,
             evidence_text: evidence_text,
             reason_and_likely_causes:
@@ -308,9 +305,9 @@ module Claims
           when "pass"
             "The named rebate, ASHP upgrade amount, equipment category, and income-level cap are all present, and the rebate is no greater than the eligible ASHP upgrade amount or the base rebate cap. Northern top-up is intentionally excluded and checked by ashp_fossil_northern_top_up_within_cap."
           when "fail"
-            "The deterministic gas/propane ASHP base rebate comparison failed: #{failures.join("; ")}."
+            "The deterministic oil ASHP base rebate comparison failed: #{failures.join("; ")}."
           else
-            "Code could not confidently complete the gas/propane ASHP base rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice rebate line, ASHP line amount, equipment category, and matched eligibility code."
+            "Code could not confidently complete the oil ASHP base rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice rebate line, ASHP line amount, equipment category, and matched eligibility code."
           end
         end
 

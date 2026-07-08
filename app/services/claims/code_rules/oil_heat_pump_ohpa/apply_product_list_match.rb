@@ -10,7 +10,7 @@ module Claims
 
         RULES = {
           product_list_match: {
-            number: 1,
+            number: 3,
             key: "ashp_oil_ohpa_bc_product_found_in_list"
           }
         }.freeze
@@ -190,7 +190,7 @@ module Claims
             rule_result: product_list_rule_result(status),
             confidence: matched ? 100 : 0,
             expected_text:
-              "The invoice and supporting document should both show the same AHRI reference, and that AHRI should match a row in the imported NRCan Oil to Heat Pump Affordability BC qualified product list.",
+              "After invoice AHRI evidence is present and corroborated by supporting-document AHRI evidence, the agreed AHRI should match a row in the imported NRCan Oil to Heat Pump Affordability BC qualified product list.",
             calculation:
               product_list_calculation_text(
                 ahri_evidence: ahri_evidence,
@@ -252,7 +252,12 @@ module Claims
         end
 
         def product_list_rule_result(status)
-          if status == :source_unavailable
+          if %i[
+               missing_invoice
+               missing_supporting
+               conflict
+               source_unavailable
+             ].include?(status)
             "warn"
           else
             (status == :matched ? "pass" : "fail")
@@ -277,11 +282,11 @@ module Claims
         def product_list_calculation_text(ahri_evidence:, status:, product:)
           case status
           when :missing_invoice
-            "No AHRI reference was stored in invoice located fields. Supporting-document AHRI evidence: #{supporting_ahri_text(ahri_evidence)}."
+            "OHPA lookup was not evaluated because no AHRI reference was stored in invoice located fields. Supporting-document AHRI evidence: #{supporting_ahri_text(ahri_evidence)}."
           when :missing_supporting
-            "Invoice AHRI was stored as #{ahri_evidence.fetch(:invoice_ahri)}, but no AHRI reference was stored in processed supporting-document located fields."
+            "OHPA lookup was not evaluated because invoice AHRI was stored as #{ahri_evidence.fetch(:invoice_ahri)}, but no AHRI reference was stored in processed supporting-document located fields."
           when :conflict
-            "Invoice AHRI #{ahri_evidence.fetch(:invoice_ahri)} does not match the supporting-document AHRI evidence #{supporting_ahri_text(ahri_evidence)}."
+            "OHPA lookup was not evaluated because invoice AHRI #{ahri_evidence.fetch(:invoice_ahri)} does not match the supporting-document AHRI evidence #{supporting_ahri_text(ahri_evidence)}."
           when :source_unavailable
             "Invoice and supporting-document AHRI evidence both show #{ahri_evidence.fetch(:invoice_ahri)}, but no current imported NRCan OHPA BC product-list rows were available to search."
           when :matched
@@ -294,16 +299,17 @@ module Claims
         def product_list_reason_text(ahri_evidence:, status:, product:)
           case status
           when :missing_invoice
-            "The oil-to-heat-pump product-list rule requires AHRI evidence in both the invoice and a supporting product document. " \
-              "The processed supporting documents may include AHRI evidence, but the invoice located fields did not include a usable AHRI reference. " \
-              "Because the invoice does not independently identify the installed AHRI combination, code cannot confirm the billed equipment is on the NRCan OHPA BC list."
+            "The oil-to-heat-pump OHPA product-list lookup depends on the invoice AHRI check. " \
+              "Because the invoice located fields did not include a usable AHRI reference, code cannot search the NRCan OHPA BC list for the billed equipment. " \
+              "Resolve hp_invoice_ahri_reference_present first, then rerun code checks."
           when :missing_supporting
-            "The invoice includes AHRI evidence, but the processed supporting documents did not include usable AHRI evidence. " \
-              "This rule requires the invoice AHRI to be corroborated by supporting product evidence such as a product specification sheet or manufacturer label/photo."
+            "The oil-to-heat-pump OHPA product-list lookup depends on supporting product evidence corroborating the invoice AHRI. " \
+              "The invoice includes AHRI evidence, but the processed supporting documents did not include usable AHRI evidence. " \
+              "Resolve hp_supporting_document_ahri_matches_invoice first, then rerun code checks."
           when :conflict
-            "The invoice AHRI does not match the AHRI evidence extracted from supporting documents. " \
+            "The oil-to-heat-pump OHPA product-list lookup was not evaluated because the invoice AHRI does not match the AHRI evidence extracted from supporting documents. " \
               "Invoice evidence is #{ahri_evidence.fetch(:invoice_ahri)}; supporting-document evidence is #{supporting_ahri_text(ahri_evidence)}. " \
-              "Admin should verify whether the wrong supporting document was uploaded, the invoice references a different system, or extraction needs correction."
+              "Resolve hp_supporting_document_ahri_matches_invoice first, then rerun code checks."
           when :source_unavailable
             "The invoice and supporting documents agree on AHRI #{ahri_evidence.fetch(:invoice_ahri)}, but there are no current imported NRCan OHPA BC product-list rows available for code to search. " \
               "This is an information-on-record problem, not a product failure. Admin should refresh the OHPA download and rerun GenAI/code checks."

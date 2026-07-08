@@ -2,35 +2,23 @@
 
 module Claims
   module CodeRules
-    module AshpGasPropane
-      class ApplyRebateCap
-        GAS_PROPANE_UPGRADE_TYPE_KEY = "air_source_heat_pump_gas_propane"
-        ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY = "ashp_upgrade_line_amount"
-        REBATE_FIELD_KEY = "upgrade_specific_rebate_line_amount"
+    module AshpFossil
+      class ApplyNorthernTopUp
+        FOSSIL_ASHP_UPGRADE_TYPE_KEYS = %w[
+          air_source_heat_pump_gas_propane
+          air_source_heat_pump_oil
+        ].freeze
+        OLD_RULE_KEY = "ashp_gas_propane_northern_top_up_within_cap"
+        TOP_UP_FIELD_KEY = "hp_northern_top_up_evidence"
         EQUIPMENT_TYPE_FIELD_KEY = "hp_new_equipment_type"
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
 
-        BASE_CAPS_BY_CATEGORY = {
-          single_head_minisplit: {
-            1 => BigDecimal("7500"),
-            2 => BigDecimal("5500"),
-            3 => BigDecimal("4000")
-          },
-          two_head_or_two_single_head: {
-            1 => BigDecimal("14000"),
-            2 => BigDecimal("10500"),
-            3 => BigDecimal("8000")
-          },
-          central_ducted_or_three_head: {
-            1 => BigDecimal("16000"),
-            2 => BigDecimal("12000"),
-            3 => BigDecimal("10500")
-          }
-        }.freeze
+        SINGLE_HEAD_CAP = BigDecimal("1500")
+        MULTI_OR_DUCTED_CAP = BigDecimal("3000")
 
         RULE = {
-          number: 5,
-          key: "ashp_gas_propane_rebate_math_within_cap"
+          number: 7,
+          key: "ashp_fossil_northern_top_up_within_cap"
         }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
@@ -69,7 +57,9 @@ module Claims
         attr_reader :invoice_version, :upgrade_type
 
         def enabled_for_upgrade_type?
-          unless upgrade_type.upgrade_type_key == GAS_PROPANE_UPGRADE_TYPE_KEY
+          unless FOSSIL_ASHP_UPGRADE_TYPE_KEYS.include?(
+                   upgrade_type.upgrade_type_key
+                 )
             return false
           end
 
@@ -83,7 +73,7 @@ module Claims
         def rulecheck_row
           now = Time.current
           rule_result, confidence, calculation, evidence_text, reason_text =
-            rebate_cap_evaluation
+            top_up_evaluation
 
           {
             invoice_version_id: invoice_version.id,
@@ -94,7 +84,7 @@ module Claims
             rule_result: rule_result,
             confidence: confidence,
             expected_text:
-              "For ASHP convert-from-natural-gas/propane, the claimed base rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the equipment-category maximum for the matched income level.",
+              "A separately claimed fossil-fuel-conversion ASHP northern top-up should be for an eligible Income Level 1 or 2 home, within the equipment-category cap, north of and including the District of 100 Mile House, and connected to BC Hydro electric service.",
             calculation: calculation,
             evidence_text: evidence_text,
             reason_and_likely_causes:
@@ -107,34 +97,49 @@ module Claims
           }
         end
 
-        def rebate_cap_evaluation
-          rebate_amount = decimal_from_field(rebate_field)
-          upgrade_amount = decimal_from_field(ashp_upgrade_line_amount_field)
+        def top_up_evaluation
+          top_up_text = field_text(top_up_field)
+
+          unless top_up_claimed?(top_up_text)
+            return [
+              "pass",
+              100,
+              "hp_northern_top_up_evidence=(missing or no separate northern top-up visible); top_up_claimed=false.",
+              field_evidence(top_up_field),
+              "No separate northern top-up is visible in the named northern-top-up field, so there is no top-up amount to compare against the northern top-up caps."
+            ]
+          end
+
+          amount = top_up_amount(top_up_text)
           income_level = parsed_income_level
           category = equipment_category
-          cap = category_cap(category, income_level)
+          cap = category_cap(category)
+          location_supported = northern_location_supported?(top_up_text)
+          bc_hydro_supported = bc_hydro_service_supported?(top_up_text)
           failures = []
           warnings = []
 
-          if rebate_amount.nil?
-            warnings << "#{REBATE_FIELD_KEY} is missing or not numeric"
-          end
-          if upgrade_amount.nil?
-            warnings << "#{ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY} is missing or not numeric"
+          if amount.nil?
+            warnings << "#{TOP_UP_FIELD_KEY} does not contain a parseable separate dollar amount"
           end
           if income_level.nil?
             warnings << "income level is missing or not ESP1/ESP2/ESP3"
           end
           if category == :unknown
-            warnings << "#{EQUIPMENT_TYPE_FIELD_KEY} does not clearly classify the base rebate category"
+            warnings << "#{EQUIPMENT_TYPE_FIELD_KEY} does not clearly classify the equipment for the northern top-up cap"
+          end
+          unless location_supported
+            warnings << "#{TOP_UP_FIELD_KEY} does not clearly support location north of and including the District of 100 Mile House"
+          end
+          unless bc_hydro_supported
+            warnings << "#{TOP_UP_FIELD_KEY} does not clearly support BC Hydro electric service"
           end
 
-          if rebate_amount && cap && rebate_amount > cap
-            failures << "rebate #{money(rebate_amount)} exceeds #{category_label(category)} cap #{money(cap)}"
+          if income_level == 3 && amount&.positive?
+            failures << "income level 3 has no northern top-up"
           end
-
-          if rebate_amount && upgrade_amount && rebate_amount > upgrade_amount
-            failures << "rebate #{money(rebate_amount)} exceeds ASHP upgrade amount #{money(upgrade_amount)}"
+          if amount && cap && amount > cap
+            failures << "northern top-up #{money(amount)} exceeds #{category_label(category)} cap #{money(cap)}"
           end
 
           result =
@@ -150,20 +155,19 @@ module Claims
             result,
             result == "warn" ? 0 : 100,
             [
-              "#{REBATE_FIELD_KEY}=#{money(rebate_amount) || "(missing)"}",
-              "#{ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY}=#{money(upgrade_amount) || "(missing)"}",
+              "#{TOP_UP_FIELD_KEY}=#{money(amount) || "(missing)"}",
               "income_level=#{income_level || "(missing)"}",
               "equipment_category=#{category_label(category)}",
               "cap=#{money(cap) || "(missing)"}",
-              "northern_top_up_excluded=true"
+              "northern_location_supported=#{location_supported}",
+              "bc_hydro_service_supported=#{bc_hydro_supported}"
             ].join("; "),
             field_evidence(
-              rebate_field,
-              ashp_upgrade_line_amount_field,
+              top_up_field,
               equipment_type_field,
               income_level_field
             ),
-            rebate_cap_reason_text(
+            top_up_reason_text(
               result: result,
               failures: failures,
               warnings: warnings
@@ -171,46 +175,74 @@ module Claims
           ]
         end
 
+        def top_up_claimed?(text)
+          return false if text.blank?
+          if text.match?(/\b(no|none|not visible|not shown|missing|null)\b/i)
+            return false
+          end
+
+          text.match?(
+            /\b(northern|north(?:ern)?\s+top[- ]?up|top[- ]?up)\b/i
+          ) || top_up_amount(text).present?
+        end
+
+        def top_up_amount(text)
+          dollar_values = text.to_s.scan(/\$\s*(\d[\d,]*(?:\.\d+)?)/).flatten
+          values =
+            dollar_values.filter_map do |value|
+              BigDecimal(value.delete(","))
+            rescue ArgumentError
+              nil
+            end
+
+          values.max
+        end
+
         def equipment_category
           text = field_text(equipment_type_field)
           return :unknown if text.blank?
 
           if text.match?(
-               /\b(central\s+ducted|central\s+system|3[- ]?head|three[- ]?head|3\s+or\s+more\s+zones?|three\s+or\s+more\s+zones?|3\s+or\s+more\s+supply\s+outlets?|three\s+or\s+more\s+supply\s+outlets?|mixed\s+ducted\s+and\s+ductless)\b/i
+               /\b(central\s+ducted|3[- ]?head|three[- ]?head|multi[- ]?split|multiple[- ]split|multi[- ]?head|2[- ]?head|two[- ]?head|2\s+single[- ]head|two\s+single[- ]head|low\s+static|two\s+supply\s+outlets?|3\s+or\s+more\s+zones?|three\s+or\s+more\s+zones?)\b/i
              )
-            return :central_ducted_or_three_head
-          end
-
-          if text.match?(
-               /\b(2[- ]?head|two[- ]?head|2\s+single[- ]head|two\s+single[- ]head|low\s+static(?:\s+pressure)?\s+ducted\s+mini(?:[- ]split)?(?:[^.;]*\btwo\s+supply\s+outlets?)?)\b/i
-             )
-            return :two_head_or_two_single_head
+            return :multi_or_ducted
           end
 
           if text.match?(/\b(single[- ]head|one[- ]head|1[- ]head)\b/i)
-            return :single_head_minisplit
+            return :single_head
           end
 
           :unknown
         end
 
-        def category_cap(category, income_level)
-          return nil unless income_level
-
-          BASE_CAPS_BY_CATEGORY.fetch(category, {})[income_level]
+        def category_cap(category)
+          case category
+          when :single_head
+            SINGLE_HEAD_CAP
+          when :multi_or_ducted
+            MULTI_OR_DUCTED_CAP
+          end
         end
 
         def category_label(category)
           case category
-          when :single_head_minisplit
+          when :single_head
             "single-head mini-split"
-          when :two_head_or_two_single_head
-            "2-head multi-split or 2 single-head mini-split"
-          when :central_ducted_or_three_head
-            "central ducted or 3-head multi-split"
+          when :multi_or_ducted
+            "central ducted, multi-split, or 2 single-head mini-split"
           else
             "unknown"
           end
+        end
+
+        def northern_location_supported?(text)
+          text.match?(
+            /\b(north\s+of|including\s+the\s+District\s+of\s+100\s+Mile\s+House|100\s+Mile\s+House|51\.628|location[^.;]*(north|eligible))\b/i
+          )
+        end
+
+        def bc_hydro_service_supported?(text)
+          text.match?(/\b(BC\s*Hydro|hydro\s+electric\s+service)\b/i)
         end
 
         def parsed_income_level
@@ -226,13 +258,8 @@ module Claims
           nil
         end
 
-        def ashp_upgrade_line_amount_field
-          @ashp_upgrade_line_amount_field ||=
-            best_genai_field(ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY)
-        end
-
-        def rebate_field
-          @rebate_field ||= best_genai_field(REBATE_FIELD_KEY)
+        def top_up_field
+          @top_up_field ||= best_genai_field(TOP_UP_FIELD_KEY)
         end
 
         def equipment_type_field
@@ -251,7 +278,6 @@ module Claims
               source_engine: "genai",
               field_key: field_key
             )
-            .where.not(value_text: [nil, ""])
             .order(confidence: :desc, created_at: :desc)
             .first
         end
@@ -263,25 +289,8 @@ module Claims
               source_engine: "code",
               field_key: field_key
             )
-            .where.not(value_text: [nil, ""])
             .order(confidence: :desc, created_at: :desc)
             .first
-        end
-
-        def decimal_from_field(field)
-          decimal_from_text(field&.value_text)
-        end
-
-        def decimal_from_text(value)
-          text = value.to_s.strip
-          return nil if text.blank?
-
-          match = text.match(/-?\$?\s*\d[\d,]*(?:\.\d+)?/)
-          return nil unless match
-
-          BigDecimal(match[0].delete("$, "))
-        rescue ArgumentError
-          nil
         end
 
         def field_text(field)
@@ -303,14 +312,14 @@ module Claims
             .presence
         end
 
-        def rebate_cap_reason_text(result:, failures:, warnings:)
+        def top_up_reason_text(result:, failures:, warnings:)
           case result
           when "pass"
-            "The named rebate, ASHP upgrade amount, equipment category, and income-level cap are all present, and the rebate is no greater than the eligible ASHP upgrade amount or the base rebate cap. Northern top-up is intentionally excluded and checked by ashp_fossil_northern_top_up_within_cap."
+            "The named northern-top-up, equipment, income-level, northern-location, and BC Hydro evidence satisfy the deterministic fossil-fuel ASHP northern top-up check."
           when "fail"
-            "The deterministic gas/propane ASHP base rebate comparison failed: #{failures.join("; ")}."
+            "The deterministic fossil-fuel ASHP northern top-up comparison failed: #{failures.join("; ")}."
           else
-            "Code could not confidently complete the gas/propane ASHP base rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice rebate line, ASHP line amount, equipment category, and matched eligibility code."
+            "Code could not confidently complete the fossil-fuel ASHP northern top-up comparison because #{warnings.join("; ")}. Admin should verify the top-up line, equipment category, location, BC Hydro service, and eligibility code."
           end
         end
 
@@ -320,7 +329,7 @@ module Claims
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
               source_engine: "code",
-              rule_key: RULE.fetch(:key)
+              rule_key: [RULE.fetch(:key), OLD_RULE_KEY]
             ).delete_all
 
             ::Claims::InvoiceVersionRulecheck.insert_all!(rows)

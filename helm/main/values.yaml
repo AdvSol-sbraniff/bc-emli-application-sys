@@ -45,6 +45,7 @@ app:
 
   logVolume:
     enabled: true
+    storage: 2Gi
 
   resources:
     requests:

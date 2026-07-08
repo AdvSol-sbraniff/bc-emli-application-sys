@@ -2,35 +2,53 @@
 
 module Claims
   module CodeRules
-    module AshpGasPropane
+    module Hydronic
       class ApplyRebateCap
-        GAS_PROPANE_UPGRADE_TYPE_KEY = "air_source_heat_pump_gas_propane"
-        ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY = "ashp_upgrade_line_amount"
         REBATE_FIELD_KEY = "upgrade_specific_rebate_line_amount"
-        EQUIPMENT_TYPE_FIELD_KEY = "hp_new_equipment_type"
+        SOURCE_FUEL_FIELD_KEY = "hydronic_conversion_source_fuel_evidence"
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
 
-        BASE_CAPS_BY_CATEGORY = {
-          single_head_minisplit: {
-            1 => BigDecimal("7500"),
-            2 => BigDecimal("5500"),
-            3 => BigDecimal("4000")
+        CONFIG = {
+          "air_to_water_heat_pump" => {
+            rule: {
+              number: 5,
+              key: "atw_rebate_math_within_cap"
+            },
+            line_amount_field_key: "atw_line_amount",
+            display_name: "air-to-water heat pump",
+            caps: {
+              fossil: {
+                1 => BigDecimal("16000"),
+                2 => BigDecimal("12000"),
+                3 => BigDecimal("10500")
+              },
+              electric_or_wood: {
+                1 => BigDecimal("5000"),
+                2 => BigDecimal("5000"),
+                3 => nil
+              }
+            }
           },
-          two_head_or_two_single_head: {
-            1 => BigDecimal("14000"),
-            2 => BigDecimal("10500"),
-            3 => BigDecimal("8000")
-          },
-          central_ducted_or_three_head: {
-            1 => BigDecimal("16000"),
-            2 => BigDecimal("12000"),
-            3 => BigDecimal("10500")
+          "combined_space_water_heat_pump" => {
+            rule: {
+              number: 5,
+              key: "cshp_rebate_math_within_cap"
+            },
+            line_amount_field_key: "cshp_line_amount",
+            display_name: "combined space and water heat pump",
+            caps: {
+              fossil: {
+                1 => BigDecimal("19500"),
+                2 => BigDecimal("16500"),
+                3 => BigDecimal("14000")
+              },
+              electric_or_wood: {
+                1 => BigDecimal("8500"),
+                2 => BigDecimal("8500"),
+                3 => nil
+              }
+            }
           }
-        }.freeze
-
-        RULE = {
-          number: 5,
-          key: "ashp_gas_propane_rebate_math_within_cap"
         }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
@@ -41,7 +59,7 @@ module Claims
         end
 
         def self.implemented_rule_keys
-          [RULE.fetch(:key)]
+          CONFIG.values.map { |config| config.fetch(:rule).fetch(:key) }
         end
 
         def initialize(invoice_version_id:, invoice_upgrade_type_id:)
@@ -68,13 +86,19 @@ module Claims
 
         attr_reader :invoice_version, :upgrade_type
 
+        def config
+          @config ||= CONFIG[upgrade_type.upgrade_type_key]
+        end
+
+        def rule
+          config.fetch(:rule)
+        end
+
         def enabled_for_upgrade_type?
-          unless upgrade_type.upgrade_type_key == GAS_PROPANE_UPGRADE_TYPE_KEY
-            return false
-          end
+          return false unless config
 
           ::Claims::CodeRules::Registry.enabled_for?(
-            code_rule_key: RULE.fetch(:key),
+            code_rule_key: rule.fetch(:key),
             invoice_upgrade_type_id: upgrade_type.id,
             fallback: false
           )
@@ -89,12 +113,12 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
-            rule_key: RULE.fetch(:key),
+            rule_number: rule.fetch(:number),
+            rule_key: rule.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,
             expected_text:
-              "For ASHP convert-from-natural-gas/propane, the claimed base rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the equipment-category maximum for the matched income level.",
+              "For a #{config.fetch(:display_name)}, the claimed base rebate must be no more than 100% of the eligible upgrade cost and no more than the source-fuel maximum for the matched income level.",
             calculation: calculation,
             evidence_text: evidence_text,
             reason_and_likely_causes:
@@ -109,10 +133,10 @@ module Claims
 
         def rebate_cap_evaluation
           rebate_amount = decimal_from_field(rebate_field)
-          upgrade_amount = decimal_from_field(ashp_upgrade_line_amount_field)
+          upgrade_amount = decimal_from_field(line_amount_field)
           income_level = parsed_income_level
-          category = equipment_category
-          cap = category_cap(category, income_level)
+          source_path = source_fuel_path
+          cap = source_path_cap(source_path, income_level)
           failures = []
           warnings = []
 
@@ -120,21 +144,24 @@ module Claims
             warnings << "#{REBATE_FIELD_KEY} is missing or not numeric"
           end
           if upgrade_amount.nil?
-            warnings << "#{ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY} is missing or not numeric"
+            warnings << "#{line_amount_field_key} is missing or not numeric"
           end
           if income_level.nil?
             warnings << "income level is missing or not ESP1/ESP2/ESP3"
           end
-          if category == :unknown
-            warnings << "#{EQUIPMENT_TYPE_FIELD_KEY} does not clearly classify the base rebate category"
+          if source_path == :unknown
+            warnings << "#{SOURCE_FUEL_FIELD_KEY} does not clearly classify the hydronic source-fuel path"
+          end
+          if source_path != :unknown && income_level && cap.nil?
+            failures << "#{source_path_label(source_path)} has no rebate for income level #{income_level}"
           end
 
           if rebate_amount && cap && rebate_amount > cap
-            failures << "rebate #{money(rebate_amount)} exceeds #{category_label(category)} cap #{money(cap)}"
+            failures << "rebate #{money(rebate_amount)} exceeds #{source_path_label(source_path)} cap #{money(cap)}"
           end
 
           if rebate_amount && upgrade_amount && rebate_amount > upgrade_amount
-            failures << "rebate #{money(rebate_amount)} exceeds ASHP upgrade amount #{money(upgrade_amount)}"
+            failures << "rebate #{money(rebate_amount)} exceeds #{config.fetch(:display_name)} upgrade amount #{money(upgrade_amount)}"
           end
 
           result =
@@ -151,16 +178,16 @@ module Claims
             result == "warn" ? 0 : 100,
             [
               "#{REBATE_FIELD_KEY}=#{money(rebate_amount) || "(missing)"}",
-              "#{ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY}=#{money(upgrade_amount) || "(missing)"}",
+              "#{line_amount_field_key}=#{money(upgrade_amount) || "(missing)"}",
               "income_level=#{income_level || "(missing)"}",
-              "equipment_category=#{category_label(category)}",
-              "cap=#{money(cap) || "(missing)"}",
+              "source_fuel_path=#{source_path_label(source_path)}",
+              "cap=#{money(cap) || "(none)"}",
               "northern_top_up_excluded=true"
             ].join("; "),
             field_evidence(
               rebate_field,
-              ashp_upgrade_line_amount_field,
-              equipment_type_field,
+              line_amount_field,
+              source_fuel_field,
               income_level_field
             ),
             rebate_cap_reason_text(
@@ -171,43 +198,36 @@ module Claims
           ]
         end
 
-        def equipment_category
-          text = field_text(equipment_type_field)
+        def source_fuel_path
+          text = field_text(source_fuel_field)
           return :unknown if text.blank?
 
           if text.match?(
-               /\b(central\s+ducted|central\s+system|3[- ]?head|three[- ]?head|3\s+or\s+more\s+zones?|three\s+or\s+more\s+zones?|3\s+or\s+more\s+supply\s+outlets?|three\s+or\s+more\s+supply\s+outlets?|mixed\s+ducted\s+and\s+ductless)\b/i
+               /\b(fossil|oil|propane|natural\s+gas|gas\s+furnace|gas\s+boiler|oil\s+furnace|oil\s+boiler|propane\s+furnace|propane\s+boiler)\b/i
              )
-            return :central_ducted_or_three_head
+            return :fossil
           end
-
           if text.match?(
-               /\b(2[- ]?head|two[- ]?head|2\s+single[- ]head|two\s+single[- ]head|low\s+static(?:\s+pressure)?\s+ducted\s+mini(?:[- ]split)?(?:[^.;]*\btwo\s+supply\s+outlets?)?)\b/i
+               /\b(electric|baseboard|radiant|wood|solid\s+fuel|pellet|stove|insert|wood\s+furnace)\b/i
              )
-            return :two_head_or_two_single_head
-          end
-
-          if text.match?(/\b(single[- ]head|one[- ]head|1[- ]head)\b/i)
-            return :single_head_minisplit
+            return :electric_or_wood
           end
 
           :unknown
         end
 
-        def category_cap(category, income_level)
+        def source_path_cap(source_path, income_level)
           return nil unless income_level
 
-          BASE_CAPS_BY_CATEGORY.fetch(category, {})[income_level]
+          config.fetch(:caps).fetch(source_path, {})[income_level]
         end
 
-        def category_label(category)
-          case category
-          when :single_head_minisplit
-            "single-head mini-split"
-          when :two_head_or_two_single_head
-            "2-head multi-split or 2 single-head mini-split"
-          when :central_ducted_or_three_head
-            "central ducted or 3-head multi-split"
+        def source_path_label(source_path)
+          case source_path
+          when :fossil
+            "fossil fuel"
+          when :electric_or_wood
+            "electricity or wood"
           else
             "unknown"
           end
@@ -226,17 +246,20 @@ module Claims
           nil
         end
 
-        def ashp_upgrade_line_amount_field
-          @ashp_upgrade_line_amount_field ||=
-            best_genai_field(ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY)
+        def line_amount_field_key
+          config.fetch(:line_amount_field_key)
+        end
+
+        def line_amount_field
+          @line_amount_field ||= best_genai_field(line_amount_field_key)
         end
 
         def rebate_field
           @rebate_field ||= best_genai_field(REBATE_FIELD_KEY)
         end
 
-        def equipment_type_field
-          @equipment_type_field ||= best_genai_field(EQUIPMENT_TYPE_FIELD_KEY)
+        def source_fuel_field
+          @source_fuel_field ||= best_genai_field(SOURCE_FUEL_FIELD_KEY)
         end
 
         def income_level_field
@@ -306,11 +329,11 @@ module Claims
         def rebate_cap_reason_text(result:, failures:, warnings:)
           case result
           when "pass"
-            "The named rebate, ASHP upgrade amount, equipment category, and income-level cap are all present, and the rebate is no greater than the eligible ASHP upgrade amount or the base rebate cap. Northern top-up is intentionally excluded and checked by ashp_fossil_northern_top_up_within_cap."
+            "The named rebate, #{config.fetch(:display_name)} upgrade amount, source-fuel path, and income-level cap are all present, and the rebate is no greater than the eligible upgrade amount or the base rebate cap. Northern top-up is intentionally excluded and checked by heat_pump_northern_top_up_3000_within_cap."
           when "fail"
-            "The deterministic gas/propane ASHP base rebate comparison failed: #{failures.join("; ")}."
+            "The deterministic #{config.fetch(:display_name)} base rebate comparison failed: #{failures.join("; ")}."
           else
-            "Code could not confidently complete the gas/propane ASHP base rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice rebate line, ASHP line amount, equipment category, and matched eligibility code."
+            "Code could not confidently complete the #{config.fetch(:display_name)} base rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice rebate line, hydronic line amount, source-fuel path, and matched eligibility code."
           end
         end
 
@@ -320,7 +343,7 @@ module Claims
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
               source_engine: "code",
-              rule_key: RULE.fetch(:key)
+              rule_key: rule.fetch(:key)
             ).delete_all
 
             ::Claims::InvoiceVersionRulecheck.insert_all!(rows)
@@ -330,7 +353,7 @@ module Claims
         def append_admin_message(rule_result:, reason_text:)
           message =
             ::Claims::CodeRules::Registry.admin_message(
-              code_rule_key: RULE.fetch(:key),
+              code_rule_key: rule.fetch(:key),
               rule_result: rule_result
             )
           return reason_text if message.blank?

@@ -3,7 +3,6 @@
 module Claims
   module InvoiceVersionRulechecks
     class ApplyCodeRulechecks
-      SOURCE_VINTAGE_DATE = Date.new(2026, 4, 1)
       COMMON_RULE_FALLBACK_ENABLED = false
       PRIOR_REBATE_RULE_KEY = "prior_same_upgrade_type_rebate_payment_found"
       MULTIPLE_SPACE_SYSTEMS_RULE_KEY =
@@ -22,7 +21,6 @@ module Claims
       WINDOWS_DOORS_UPGRADE_TYPE_KEY = "windows_doors"
       PRIOR_REBATE_EXCLUDED_INVOICE_STATUS = "ineligible"
       COMMON_RULE_KEYS = %w[
-        source_vintage_applies
         first_class_invoice_fields_present
         submission_within_six_months
         eligibility_code_valid_for_invoice_date
@@ -31,7 +29,6 @@ module Claims
         prior_same_upgrade_type_rebate_payment_found
       ].freeze
       COMMON_RULE_BUILDERS = {
-        "source_vintage_applies" => :source_vintage_applies,
         "first_class_invoice_fields_present" =>
           :first_class_invoice_fields_present,
         "submission_within_six_months" => :submission_within_six_months,
@@ -85,41 +82,6 @@ module Claims
       private
 
       attr_reader :invoice_version, :invoice, :session, :code_fields
-
-      def source_vintage_applies
-        return nil unless enabled_common_rule?("source_vintage_applies")
-
-        invoice_date = invoice_version.di_ocr_invoice_date
-
-        if invoice_date.blank?
-          return(
-            warn_row(
-              rule_number: 1,
-              rule_key: "source_vintage_applies",
-              expected_text:
-                "Invoice date determines which RER vintage applies.",
-              detail_text:
-                "Invoice date was not found, so the correct requirements vintage needs admin confirmation."
-            )
-          )
-        end
-
-        pass = invoice_date >= SOURCE_VINTAGE_DATE
-        result = pass ? "pass" : "warn"
-
-        row(
-          rule_number: 1,
-          rule_key: "source_vintage_applies",
-          rule_result: result,
-          confidence: 100,
-          expected_text:
-            "Invoice date determines whether the current #{SOURCE_VINTAGE_DATE.iso8601} RER vintage applies or prior requirements may apply.",
-          detail_text: "Invoice date=#{invoice_date.iso8601}.",
-          calculation:
-            "#{invoice_date.iso8601} >= #{SOURCE_VINTAGE_DATE.iso8601} => #{pass}; result=#{result}",
-          evidence_text: "invoice_versions.di_ocr_invoice_date"
-        )
-      end
 
       def first_class_invoice_fields_present
         unless enabled_common_rule?("first_class_invoice_fields_present")

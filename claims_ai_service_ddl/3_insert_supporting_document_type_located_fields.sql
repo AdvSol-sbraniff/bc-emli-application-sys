@@ -3,6 +3,14 @@ BEGIN;
 -- Supporting-document field extraction registry.
 -- These rows define what the separate supporting-document extraction call
 -- should locate after triage classifies an uploaded file as a supporting document.
+DELETE FROM claims.supporting_document_type_located_fields
+WHERE field_key = 'non_integrated_area_evidence'
+  AND supporting_document_type_id IN (
+    SELECT id
+    FROM claims.supporting_document_types
+    WHERE type_key = 'preapproval_notice'
+  );
+
 WITH field_seed (
   supporting_document_type_key,
   field_key,
@@ -66,11 +74,11 @@ WITH field_seed (
   ('oil_removal_proof', 'contractor_or_authority_name', 4, 'Locate the contractor, fuel supplier, inspection authority, or permit authority name if visible.', true),
   ('oil_removal_proof', 'removal_scope_or_description', 5, 'Locate the description of oil system or oil tank removal/decommissioning work completed, including capping, disconnection, tank removal, appliance removal, or by-law/compliance wording.', true),
 
-  ('fossil_backup_system_document', 'backup_equipment_type', 1, 'Locate the retained fossil-fuel backup equipment type, such as gas furnace, propane furnace, boiler, or other backup heat source.', true),
-  ('fossil_backup_system_document', 'backup_system_document_date_or_permit_reference', 2, 'Locate the document date, commissioning date, inspection date, permit number, or permit date for the retained fossil backup system.', true),
-  ('fossil_backup_system_document', 'site_address', 3, 'Locate the site address for the retained fossil backup system.', true),
+  ('fossil_backup_system_document', 'backup_equipment_type', 1, 'Locate the fossil-fuel backup, retained, removed, or modified equipment type, such as gas furnace, propane furnace, boiler, piping, vent, fuel container, or other backup heat source.', true),
+  ('fossil_backup_system_document', 'backup_system_document_date_or_permit_reference', 2, 'Locate the document date, commissioning date, modification date, removal date, inspection date, permit number, or permit date for the fossil backup/removal/modification work.', true),
+  ('fossil_backup_system_document', 'site_address', 3, 'Locate the site address for the retained, removed, or modified fossil backup system.', true),
   ('fossil_backup_system_document', 'contractor_or_authority_name', 4, 'Locate the contractor, fuel supplier, inspection authority, permit authority, or heat-pump installation company name if visible.', true),
-  ('fossil_backup_system_document', 'backup_system_scope_or_description', 5, 'Locate the description of the retained/limited fossil backup system, including controls, switchover, capping, disconnection, piping, appliance, vent, tank, or by-law/compliance wording.', true),
+  ('fossil_backup_system_document', 'backup_system_scope_or_description', 5, 'Locate the description of fossil-fuel system removal, modification, retained/limited backup setup, controls, switchover, capping, disconnection, piping, appliance, vent, fuel container, tank, or by-law/compliance wording.', true),
 
   ('electrical_utility_upgrade_document', 'utility_provider', 1, 'Locate the utility provider name.', true),
   ('electrical_utility_upgrade_document', 'previous_service_size', 2, 'Locate previous electrical service size if visible.', true),
@@ -144,6 +152,8 @@ WITH field_seed (
   ('f280_heat_load_calculation', 'calculation_standard_reference', 5, 'Locate CSA-F280-12, F280, heat-load standard, software, or methodology reference if visible.', true),
   ('f280_heat_load_calculation', 'approval_or_professional_reference', 6, 'Locate approval, designer, professional, contractor, program acceptance, or company reference if visible.', true),
   ('f280_heat_load_calculation', 'approval_status_or_condition', 7, 'Locate approval status, approval condition, limitation, revision requirement, or program acceptance wording if visible.', true),
+  ('f280_heat_load_calculation', 'sizing_method_or_rule_of_thumb_evidence', 8, 'Locate sizing-method evidence, calculated-sizing evidence, equipment-sizing method, or wording that indicates rule-of-thumb sizing was used or rejected.', true),
+  ('f280_heat_load_calculation', 'supplemental_heat_source_assumptions', 9, 'Locate supplemental heat sources considered, included, excluded, or disallowed in the heat-load calculation, including electric heat, non-fossil heat, fossil fuel heat, gas fireplace, propane, natural gas, oil, or wood.', true),
 
   ('dual_fuel_control_document', 'control_setup_date', 1, 'Locate control setup date, commissioning date, or control document date if visible.', true),
   ('dual_fuel_control_document', 'equipment_reference', 2, 'Locate equipment make/model, heat pump reference, thermostat, outdoor-temperature switch-over control, or equipment control board reference.', true),
@@ -160,7 +170,7 @@ WITH field_seed (
 
   ('preapproval_quote', 'quote_date', 1, 'Locate the quote date, estimate date, submission date, or revision date if visible.', true),
   ('preapproval_quote', 'quote_reference', 2, 'Locate quote number, estimate number, email subject/reference, contractor reference, or application/reference number if visible.', true),
-  ('preapproval_quote', 'quoted_upgrade_scope', 3, 'Locate the quoted upgrade scope, such as windows/doors, ductless-to-ducted conversion, hydronic removal, Non-Integrated Area approval context, or other preapproval scope.', true),
+  ('preapproval_quote', 'quoted_upgrade_scope', 3, 'Locate the quoted upgrade scope, such as windows/doors, ductless-to-ducted conversion, hydronic removal, or other preapproval scope.', true),
   ('preapproval_quote', 'property_or_participant_reference', 4, 'Locate property address, participant/customer name, or other case reference visible on the quote.', true),
   ('preapproval_quote', 'approval_submission_evidence', 5, 'Locate evidence that the quote was submitted for program preapproval or approval before installation, such as submitted, approved, pre-approved, ESP contractor support, or email approval wording.', true),
   ('preapproval_quote', 'quoted_cost_or_amount', 6, 'Locate quoted cost, estimate amount, rebate amount, or amount subject to preapproval if visible.', true),
@@ -171,7 +181,6 @@ WITH field_seed (
   ('preapproval_notice', 'property_or_participant_reference', 4, 'Locate property address, participant/customer name, eligibility code, or other case reference visible on the notice.', true),
   ('preapproval_notice', 'preapproval_condition_or_expiry', 5, 'Locate any approval condition, expiry, required next step, or limitation visible on the preapproval notice.', true),
   ('preapproval_notice', 'approval_status_or_decision', 6, 'Locate the approval decision/status, such as approved, pre-approved, conditional approval, rejected, expired, or pending if visible.', true),
-  ('preapproval_notice', 'non_integrated_area_evidence', 7, 'Locate Non-Integrated Area, electrical-grid area, remote-grid, BC Hydro/FortisBC limitation, or other non-integrated-area wording if visible.', true),
 
   ('floor_plan_document', 'floor_plan_area_reference', 1, 'Locate text or markings showing the area of new insulation added or the insulation upgrade area.', true),
   ('floor_plan_document', 'floor_plan_location_or_scope', 2, 'Locate the floor, room, attic, wall, crawlspace, basement, exposed floor, or other location/scope shown on the floor plan.', true),

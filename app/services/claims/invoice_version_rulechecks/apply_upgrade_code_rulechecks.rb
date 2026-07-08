@@ -6,12 +6,18 @@ module Claims
       SERVICE_CLASSES = [
         ::Claims::CodeRules::AirWaterHeatPumpProductList::ApplyProductListMatch,
         ::Claims::CodeRules::AshpGasPropane::ApplyRebateCap,
-        ::Claims::CodeRules::AshpGasPropane::ApplyNorthernTopUp,
+        ::Claims::CodeRules::AshpFossil::ApplyNorthernTopUp,
+        ::Claims::CodeRules::AshpOil::ApplyRebateCap,
         ::Claims::CodeRules::AshpProductRequirements::ApplyProductRequirements,
+        ::Claims::CodeRules::Dfhp::ApplyProductSpecs,
+        ::Claims::CodeRules::Dfhp::ApplyRebateCap,
+        ::Claims::CodeRules::HeatPump::ApplyNorthernTopUp3000,
+        ::Claims::CodeRules::Hpwh::ApplyRebateCap,
+        ::Claims::CodeRules::Hydronic::ApplyRebateCap,
+        ::Claims::CodeRules::OilHeatPumpOhpa::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch,
         ::Claims::CodeRules::IncomeLevel::ApplyLevelOneOrTwoRequired,
-        ::Claims::CodeRules::OilHeatPumpOhpa::ApplyProductListMatch,
         ::Claims::CodeRules::WindowsDoorsUFactor::ApplyThresholdCheck
       ].freeze
 

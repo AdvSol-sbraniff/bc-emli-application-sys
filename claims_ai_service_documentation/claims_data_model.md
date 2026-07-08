@@ -1185,9 +1185,8 @@ Examples of seeded GenAI rules include:
 
 - `contractor_identity_matches_record`
 - `ashp_gas_propane_existing_heat_context_present`
-- `ashp_gas_propane_rebate_math_within_cap`
-- `ashp_gas_propane_removal_supporting_document_attached`
-- `ashp_oil_consumption_proof_supporting_document_attached`
+- `ashp_fossil_fuel_removal_supporting_document_attached`
+- `ashp_oil_consumption_baseline_proof_present`
 - `hpwh_product_reference_present`
 - `wd_certification_reference_present`
 
@@ -1297,14 +1296,14 @@ Examples include:
 - `hpwh_neea_found_in_product_list`: checks heat pump water heater manufacturer/model evidence against the imported NEEA list.
 - `hpwh_neea_tier_2_or_higher`: checks the matched NEEA tier.
 - `hydronic_product_found_in_qualifying_list`: checks air-to-water or combined heat-pump evidence against the imported AWHP list.
-- `ashp_oil_ohpa_bc_product_found_in_list`: checks oil-to-heat-pump AHRI evidence against imported OHPA BC qualified products.
+- `ashp_oil_ohpa_bc_product_found_in_list`: checks corroborated oil-to-heat-pump AHRI evidence against imported OHPA BC qualified products.
 - `wd_u_factor_threshold`: checks extracted windows/doors U-factor values against the configured threshold.
 
 Product-list matches are also stored as foreign keys on `claims.invoice_versions` where applicable, such as `ahri_product_id`, `neea_product_id`, `awhp_product_id`, and `ohpa_product_id`. The rulecheck row explains the result; the invoice-version foreign key preserves the matched product row for the processed version.
 
 ### 7.11 Example: missing mandatory supporting document
 
-An invoice is classified as `air_source_heat_pump_gas_propane`. The upgrade-specific GenAI validation includes the rule `ashp_gas_propane_removal_supporting_document_attached`.
+An invoice is classified as `air_source_heat_pump_gas_propane` or `air_source_heat_pump_oil`. The upgrade-specific GenAI validation includes the rule `ashp_fossil_fuel_removal_supporting_document_attached`.
 
 If no `fossil_fuel_removal_proof` or `permit_document` was promoted for that upgrade type, the runtime rulecheck could look conceptually like:
 
@@ -1312,14 +1311,14 @@ If no `fossil_fuel_removal_proof` or `permit_document` was promoted for that upg
 invoice_version_id: version 1
 invoice_upgrade_type_id: air_source_heat_pump_gas_propane
 source_engine: genai
-rule_number: 6
-rule_key: ashp_gas_propane_removal_supporting_document_attached
+rule_number: 3
+rule_key: ashp_fossil_fuel_removal_supporting_document_attached
 rule_result: fail
 confidence: 94
 expected_text: fossil_fuel_removal_proof or permit_document attached
 calculation: null
 evidence_text: supporting_document_summary_for_upgrade_type has no acceptable removal or permit document
-reason_and_likely_causes: The package does not include a usable fossil-fuel removal proof or permit document for this gas/propane conversion path. The contractor may need to upload removal proof, permit evidence, or another acceptable document before the claim can move forward.
+reason_and_likely_causes: The package does not include a usable fossil-fuel removal proof or permit document for this fossil-fuel conversion path. The contractor may need to upload removal proof, permit evidence, or another acceptable document before the claim can move forward.
 ```
 
 If a document was present but blurry or visually limited, the same rule would more likely be `warn` so the admin knows to inspect that attachment rather than immediately request a corrected package.
@@ -1758,7 +1757,7 @@ OHPA product rows include:
 - `eligibility_notes`
 - `raw_row_json`
 
-OHPA matching is stricter than generic AHRI heat-pump matching because the oil-to-heat-pump code check compares invoice AHRI evidence with supporting-document AHRI evidence before treating the product-list match as strong.
+OHPA matching is stricter than generic AHRI heat-pump matching because oil-to-heat-pump validation uses the invoice AHRI check, the supporting-document AHRI match check, and then the OHPA BC product-list lookup before treating the product-list match as strong.
 
 ### 9.6 `claims.ahri_sources`
 
@@ -1925,7 +1924,7 @@ The `hydronic_product_found_in_qualifying_list` code rule then records whether p
 
 An oil-to-heat-pump invoice version has invoice AHRI evidence, and a supporting product document also has AHRI evidence.
 
-The OHPA product-list check compares:
+The oil AHRI checks compare:
 
 ```text
 invoice hp_ahri_reference
@@ -1939,9 +1938,9 @@ The strongest pass path is:
 3. The invoice and supporting-document AHRI values agree.
 4. The AHRI value exists in `claims.v_current_ohpa_products`.
 
-When that happens, the invoice version can store `ohpa_product_id`, and the `ashp_oil_ohpa_bc_product_found_in_list` rulecheck explains the match.
+When that happens, the invoice version can store `ohpa_product_id`, `hp_invoice_ahri_reference_present` and `hp_supporting_document_ahri_matches_invoice` explain the AHRI evidence, and `ashp_oil_ohpa_bc_product_found_in_list` explains the OHPA BC product-list lookup.
 
-If invoice and supporting-document AHRI values conflict, the rulecheck should fail or warn according to the code rule's result logic, even if one of the values appears in the imported list.
+If invoice and supporting-document AHRI values conflict, `hp_supporting_document_ahri_matches_invoice` owns the conflict result and the OHPA BC product-list lookup warns that it cannot be evaluated until the AHRI evidence is corrected.
 
 ## 10. Eligibility And Applicant Facts
 
@@ -3246,7 +3245,7 @@ Examples:
 - `hpwh_neea_found_in_product_list`
 - `hpwh_neea_tier_2_or_higher`
 - `ashp_oil_ohpa_bc_product_found_in_list`
-- `ashp_gas_propane_removal_supporting_document_attached`
+- `ashp_fossil_fuel_removal_supporting_document_attached`
 - `esu_utility_upgrade_supporting_document_attached`
 
 Common prefixes:

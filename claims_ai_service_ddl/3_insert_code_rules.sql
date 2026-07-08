@@ -7,7 +7,8 @@ WITH obsolete_ashp_requirement_rule_keys (code_rule_key) AS (
   ('ashp_electric_multisplit_minimum_two_indoor_heads'),
   ('ashp_wood_rebate_math_within_cap'),
   ('ashp_wood_product_specs_meet_requirements'),
-  ('ashp_wood_multisplit_minimum_two_indoor_heads')
+  ('ashp_wood_multisplit_minimum_two_indoor_heads'),
+  ('ashp_gas_propane_northern_top_up_within_cap')
 ),
 obsolete_ashp_requirement_rule_mappings AS (
   SELECT cru.id
@@ -28,10 +29,37 @@ WITH obsolete_ashp_requirement_rule_keys (code_rule_key) AS (
   ('ashp_electric_multisplit_minimum_two_indoor_heads'),
   ('ashp_wood_rebate_math_within_cap'),
   ('ashp_wood_product_specs_meet_requirements'),
-  ('ashp_wood_multisplit_minimum_two_indoor_heads')
+  ('ashp_wood_multisplit_minimum_two_indoor_heads'),
+  ('ashp_gas_propane_northern_top_up_within_cap')
 )
 DELETE FROM claims.code_rules cr
 USING obsolete_ashp_requirement_rule_keys old
+WHERE cr.code_rule_key = old.code_rule_key;
+
+WITH retired_common_rule_keys (code_rule_key) AS (
+  VALUES
+  ('source_vintage_applies'),
+  ('dfhp_northern_top_up_within_cap')
+),
+retired_common_rule_mappings AS (
+  SELECT cru.id
+  FROM claims.code_rule_upgrade_types cru
+  JOIN claims.code_rules cr
+    ON cr.id = cru.code_rule_id
+  JOIN retired_common_rule_keys old
+    ON old.code_rule_key = cr.code_rule_key
+)
+DELETE FROM claims.code_rule_upgrade_types cru
+USING retired_common_rule_mappings old
+WHERE cru.id = old.id;
+
+WITH retired_common_rule_keys (code_rule_key) AS (
+  VALUES
+  ('source_vintage_applies'),
+  ('dfhp_northern_top_up_within_cap')
+)
+DELETE FROM claims.code_rules cr
+USING retired_common_rule_keys old
 WHERE cr.code_rule_key = old.code_rule_key;
 
 WITH code_rules_seed (
@@ -129,20 +157,20 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53038'::uuid,
     'ashp_gas_propane_rebate_math_within_cap',
-    'Checks ASHP natural-gas/propane base rebate amount against the ASHP upgrade line amount and the equipment-category cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read ashp_upgrade_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type. 5. Classify equipment as single-head mini-split, 2-head multi-split/2 single-head mini-split, central ducted/3-head multi-split, or unknown. 6. Apply base cap table: single-head ESP1 $7,500, ESP2 $5,500, ESP3 $4,000; 2-head/2-single-head ESP1 $14,000, ESP2 $10,500, ESP3 $8,000; central/3-head ESP1 $16,000, ESP2 $12,000, ESP3 $10,500. 7. If rebate amount, ASHP upgrade amount, income level, or equipment category is missing or ambiguous, warn. 8. If rebate amount exceeds the category/income cap, fail. 9. If rebate amount exceeds the ASHP upgrade amount, fail. 10. Pass only when all named values are clear and the rebate is less than or equal to both the ASHP upgrade amount and the applicable base cap. 11. Exclude separately claimed northern top-up from this base rebate comparison; ashp_gas_propane_northern_top_up_within_cap owns the separate northern top-up check. 12. In calculation, show upgrade_specific_rebate_line_amount, ashp_upgrade_line_amount, income level, equipment category, cap, and northern_top_up_excluded=true.',
+    'Checks ASHP natural-gas/propane base rebate amount against the ASHP upgrade line amount and the equipment-category cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read ashp_upgrade_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type. 5. Classify equipment as single-head mini-split, 2-head multi-split/2 single-head mini-split, central ducted/3-head multi-split, or unknown. 6. Apply base cap table: single-head ESP1 $7,500, ESP2 $5,500, ESP3 $4,000; 2-head/2-single-head ESP1 $14,000, ESP2 $10,500, ESP3 $8,000; central/3-head ESP1 $16,000, ESP2 $12,000, ESP3 $10,500. 7. If rebate amount, ASHP upgrade amount, income level, or equipment category is missing or ambiguous, warn. 8. If rebate amount exceeds the category/income cap, fail. 9. If rebate amount exceeds the ASHP upgrade amount, fail. 10. Pass only when all named values are clear and the rebate is less than or equal to both the ASHP upgrade amount and the applicable base cap. 11. Exclude separately claimed northern top-up from this base rebate comparison; ashp_fossil_northern_top_up_within_cap owns the separate northern top-up check. 12. In calculation, show upgrade_specific_rebate_line_amount, ashp_upgrade_line_amount, income level, equipment category, cap, and northern_top_up_excluded=true.',
     true,
     'No follow-up is required when the gas/propane ASHP base rebate is within the named ASHP upgrade amount and equipment-category cap.',
     'Review the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before moving the claim forward.',
     'Confirm the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before asking the contractor for correction.',
     NULL,
-    'Uses hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by ashp_gas_propane_northern_top_up_within_cap.',
+    'Uses hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by ashp_fossil_northern_top_up_within_cap.',
     TIMESTAMP '2026-07-07 00:00:00',
     NOW()
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53037'::uuid,
-    'ashp_gas_propane_northern_top_up_within_cap',
-    'Checks a separately claimed northern top-up for an ASHP natural-gas/propane conversion. Pseudocode: 1. Read hp_northern_top_up_evidence. 2. If no separate northern top-up is visible, pass with calculation top_up_claimed=false. 3. Read income level from users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type and classify the equipment as single-head mini-split, central ducted/multi-split/2 single-head mini-split, or unknown. 5. Apply cap $1,500 for single-head mini-split, $3,000 for central ducted/multi-split/2 single-head mini-split, and no cap when category is unknown. 6. If income level is 3 and a positive top-up amount is visible, fail because ESP3 has no northern top-up. 7. If top-up amount, income level, or equipment category is missing or ambiguous, warn. 8. If top-up amount exceeds the category cap, fail. 9. Check hp_northern_top_up_evidence for location evidence north of and including the District of 100 Mile House. 10. Check hp_northern_top_up_evidence for BC Hydro electric service evidence. 11. If location or BC Hydro evidence is missing or ambiguous, warn even when the amount is within cap. 12. Pass only when the top-up amount is within cap, income level is 1 or 2, category is clear, northern-location evidence is clear, and BC Hydro-service evidence is clear. 13. In calculation, show top-up amount, income level, equipment category, cap, northern-location evidence, and BC Hydro-service evidence.',
+    'ashp_fossil_northern_top_up_within_cap',
+    'Checks a separately claimed northern top-up for an ASHP fossil-fuel conversion from natural gas, propane, or oil. Pseudocode: 1. Read hp_northern_top_up_evidence. 2. If no separate northern top-up is visible, pass with calculation top_up_claimed=false. 3. Read income level from users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type and classify the equipment as single-head mini-split, central ducted/multi-split/2 single-head mini-split, or unknown. 5. Apply cap $1,500 for single-head mini-split, $3,000 for central ducted/multi-split/2 single-head mini-split, and no cap when category is unknown. 6. If income level is 3 and a positive top-up amount is visible, fail because ESP3 has no northern top-up. 7. If top-up amount, income level, or equipment category is missing or ambiguous, warn. 8. If top-up amount exceeds the category cap, fail. 9. Check hp_northern_top_up_evidence for location evidence north of and including the District of 100 Mile House. 10. Check hp_northern_top_up_evidence for BC Hydro electric service evidence. 11. If location or BC Hydro evidence is missing or ambiguous, warn even when the amount is within cap. 12. Pass only when the top-up amount is within cap, income level is 1 or 2, category is clear, northern-location evidence is clear, and BC Hydro-service evidence is clear. 13. In calculation, show top-up amount, income level, equipment category, cap, northern-location evidence, and BC Hydro-service evidence.',
     true,
     'No follow-up is required when the separate northern top-up is within cap and the named evidence supports location and BC Hydro service.',
     'Review the northern top-up amount, equipment category, income level, location evidence, and BC Hydro service evidence before moving the claim forward.',
@@ -150,6 +178,84 @@ WITH code_rules_seed (
     NULL,
     'Uses hp_northern_top_up_evidence, hp_new_equipment_type, and users_eligibilitycodes.income_level. This code rule intentionally treats missing top-up evidence as pass because no top-up was claimed.',
     TIMESTAMP '2026-07-07 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53039'::uuid,
+    'ashp_oil_rebate_math_within_cap',
+    'Checks ASHP oil-conversion base rebate amount against the ASHP upgrade line amount and the equipment-category cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read ashp_upgrade_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type. 5. Classify equipment as single-head mini-split, 2-head multi-split/2 single-head mini-split, central ducted/3-head multi-split, or unknown. 6. Apply base cap table: single-head ESP1 $10,000, ESP2 $10,000, ESP3 $10,000; 2-head/2-single-head ESP1 $14,000, ESP2 $10,500, ESP3 $10,000; central/3-head ESP1 $16,000, ESP2 $12,000, ESP3 $10,500. 7. If rebate amount, ASHP upgrade amount, income level, or equipment category is missing or ambiguous, warn. 8. If rebate amount exceeds the category/income cap, fail. 9. If rebate amount exceeds the ASHP upgrade amount, fail. 10. Pass only when all named values are clear and the rebate is less than or equal to both the ASHP upgrade amount and the applicable base cap. 11. Exclude separately claimed northern top-up from this base rebate comparison; ashp_fossil_northern_top_up_within_cap owns the separate northern top-up check. 12. In calculation, show upgrade_specific_rebate_line_amount, ashp_upgrade_line_amount, income level, equipment category, cap, and northern_top_up_excluded=true.',
+    true,
+    'No follow-up is required when the oil ASHP base rebate is within the named ASHP upgrade amount and equipment-category cap.',
+    'Review the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Uses hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by ashp_fossil_northern_top_up_within_cap.',
+    TIMESTAMP '2026-07-08 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53040'::uuid,
+    'dfhp_rebate_math_within_cap',
+    'Checks dual-fuel ducted heat pump base rebate amount against the DFHP upgrade line amount and the source-fuel-path cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read dfhp_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read dfhp_source_fuel_path. 5. Classify source fuel as PNG natural gas/PNG propane, tank propane, or unknown. 6. Apply base cap table: PNG natural gas/PNG propane ESP1 $11,500, ESP2 $6,500, ESP3 $6,500; tank propane ESP1 $15,000, ESP2 $10,000, ESP3 $10,000. 7. If rebate amount, DFHP upgrade amount, income level, or source-fuel path is missing or ambiguous, warn. 8. If rebate amount exceeds the source-fuel/income cap, fail. 9. If rebate amount exceeds the DFHP upgrade amount, fail. 10. Pass only when all named values are clear and the rebate is less than or equal to both the DFHP upgrade amount and the applicable base cap. 11. Exclude separately claimed northern top-up from this base rebate comparison; heat_pump_northern_top_up_3000_within_cap owns the separate northern top-up check. 12. In calculation, show upgrade_specific_rebate_line_amount, dfhp_line_amount, income level, source-fuel path, cap, and northern_top_up_excluded=true.',
+    true,
+    'No follow-up is required when the DFHP base rebate is within the named DFHP upgrade amount and source-fuel-path cap.',
+    'Review the invoice DFHP line amount, rebate line, source-fuel path, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice DFHP line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Uses dfhp_source_fuel_path, dfhp_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by heat_pump_northern_top_up_3000_within_cap.',
+    TIMESTAMP '2026-07-08 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53042'::uuid,
+    'dfhp_product_specs_meet_requirements',
+    'Checks dual-fuel ducted heat pump product specifications from the matched AHRI product-list row. Pseudocode: 1. Resolve the matched AHRI product row from invoice_versions.ahri_product_id, falling back to classifier.ahri_reference searched against claims.v_current_ahri_products. 2. If no matched AHRI product row is available, return info because hp_ahri_reference_found_in_product_list owns the product-list match. 3. Read SEER, HSPF, SEER2, HSPF2, and rated_capacity_btu_at_minus_5c from the matched AHRI product row. 4. Pass the efficiency check when either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5. 5. Warn when neither complete efficiency pair is available. 6. Fail when complete values are available and neither efficiency path passes. 7. Pass the capacity check when the matched product row capacity is at least 12,000 BTU. 8. Warn when capacity is missing or not numeric. 9. Fail when capacity is present and below 12,000 BTU. 10. Do not check variable speed compressor because the dual-fuel ducted heat pump requirements table says variable speed compressor is not required. 11. Do not check multi-split indoor-head count because the dual-fuel ducted heat pump table has no multi-split indoor-head rule. 12. Combine the checks: fail if any check fails, warn if no check fails but any check is incomplete, otherwise pass. 13. In calculation, show the matched AHRI row values used.',
+    true,
+    'No follow-up is required when the matched AHRI row satisfies the DFHP efficiency and 12,000 BTU capacity checks.',
+    'Review the matched AHRI product-list row when DFHP efficiency or capacity values are missing or incomplete.',
+    'Confirm the AHRI match before asking the contractor for corrected DFHP product evidence.',
+    'Resolve the AHRI product-list match first, then rerun checks.',
+    'DFHP-specific replacement for the generic hp_product_minimum_capacity_at_minus_5c and hp_product_efficiency_threshold mappings. It intentionally does not check variable-speed compressor or multi-split indoor-head count.',
+    TIMESTAMP '2026-07-08 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53041'::uuid,
+    'heat_pump_northern_top_up_3000_within_cap',
+    'Checks a separately claimed northern top-up for heat-pump upgrade types whose requirement table has a $3,000 northern top-up cap. Pseudocode: 1. Read hp_northern_top_up_evidence. 2. If no separate northern top-up is visible, pass with calculation top_up_claimed=false. 3. Read income level from users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Apply top-up cap $3,000 for ESP1 or ESP2. 5. If income level is 3 and a positive top-up amount is visible, fail because ESP3 has no northern top-up. 6. If top-up amount or income level is missing or ambiguous, warn. 7. If top-up amount exceeds $3,000, fail. 8. Check hp_northern_top_up_evidence for location evidence north of and including the District of 100 Mile House. 9. Check hp_northern_top_up_evidence for BC Hydro electric service evidence. 10. If location or BC Hydro evidence is missing or ambiguous, warn even when the amount is within cap. 11. Pass only when the top-up amount is within $3,000, income level is 1 or 2, northern-location evidence is clear, and BC Hydro-service evidence is clear. 12. In calculation, show top-up amount, income level, cap, northern-location evidence, and BC Hydro-service evidence.',
+    true,
+    'No follow-up is required when the separate northern top-up is within the $3,000 cap and the named evidence supports location and BC Hydro service.',
+    'Review the northern top-up amount, income level, location evidence, and BC Hydro service evidence before moving the claim forward.',
+    'Confirm the top-up amount and income level before asking the contractor for correction.',
+    NULL,
+    'Uses hp_northern_top_up_evidence and users_eligibilitycodes.income_level. This code rule intentionally treats missing top-up evidence as pass because no top-up was claimed.',
+    TIMESTAMP '2026-07-08 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53152'::uuid,
+    'atw_rebate_math_within_cap',
+    'Checks air-to-water space-heating-only base rebate amount against the ATW upgrade line amount and the source-fuel-path cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read atw_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hydronic_conversion_source_fuel_evidence. 5. Classify source fuel as fossil fuel, electricity/wood, or unknown. 6. Apply base cap table: fossil fuel ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; electricity/wood ESP1 $5,000, ESP2 $5,000, ESP3 no rebate. 7. If rebate amount, ATW upgrade amount, income level, or source-fuel path is missing or ambiguous, warn. 8. If the source path has no rebate for the income level, fail. 9. If rebate amount exceeds the source-fuel/income cap, fail. 10. If rebate amount exceeds the ATW upgrade amount, fail. 11. Pass only when all named values are clear and the rebate is less than or equal to both the ATW upgrade amount and the applicable base cap. 12. Exclude separately claimed northern top-up from this base rebate comparison; heat_pump_northern_top_up_3000_within_cap owns the separate northern top-up check. 13. In calculation, show upgrade_specific_rebate_line_amount, atw_line_amount, income level, source-fuel path, cap, and northern_top_up_excluded=true.',
+    true,
+    'No follow-up is required when the ATW base rebate is within the named ATW upgrade amount and source-fuel-path cap.',
+    'Review the invoice ATW line amount, rebate line, source-fuel path, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice ATW line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Uses hydronic_conversion_source_fuel_evidence, atw_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by heat_pump_northern_top_up_3000_within_cap.',
+    TIMESTAMP '2026-07-08 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53153'::uuid,
+    'cshp_rebate_math_within_cap',
+    'Checks combined space-and-water heat pump base rebate amount against the CSHP upgrade line amount and the source-fuel-path cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read cshp_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hydronic_conversion_source_fuel_evidence. 5. Classify source fuel as fossil fuel, electricity/wood, or unknown. 6. Apply base cap table: fossil fuel ESP1 $19,500, ESP2 $16,500, ESP3 $14,000; electricity/wood ESP1 $8,500, ESP2 $8,500, ESP3 no rebate. 7. If rebate amount, CSHP upgrade amount, income level, or source-fuel path is missing or ambiguous, warn. 8. If the source path has no rebate for the income level, fail. 9. If rebate amount exceeds the source-fuel/income cap, fail. 10. If rebate amount exceeds the CSHP upgrade amount, fail. 11. Pass only when all named values are clear and the rebate is less than or equal to both the CSHP upgrade amount and the applicable base cap. 12. Exclude separately claimed northern top-up from this base rebate comparison; heat_pump_northern_top_up_3000_within_cap owns the separate northern top-up check. 13. In calculation, show upgrade_specific_rebate_line_amount, cshp_line_amount, income level, source-fuel path, cap, and northern_top_up_excluded=true.',
+    true,
+    'No follow-up is required when the CSHP base rebate is within the named CSHP upgrade amount and source-fuel-path cap.',
+    'Review the invoice CSHP line amount, rebate line, source-fuel path, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice CSHP line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Uses hydronic_conversion_source_fuel_evidence, cshp_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by heat_pump_northern_top_up_3000_within_cap.',
+    TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
   (
@@ -205,6 +311,19 @@ WITH code_rules_seed (
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53104'::uuid,
+    'hpwh_rebate_math_within_cap',
+    'Checks heat pump water heater rebate amount against the HPWH upgrade line amount and the source-fuel-path cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read hpwh_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hpwh_existing_fuel_type. 5. Classify source fuel as fossil fuel, electricity/wood, or unknown. 6. Apply cap table: fossil fuel ESP1 $3,500, ESP2 $3,500, ESP3 $3,500; electricity/wood ESP1 $3,500, ESP2 $2,800, ESP3 no rebate. 7. If rebate amount, HPWH upgrade amount, income level, or source-fuel path is missing or ambiguous, warn. 8. If the source path has no rebate for the income level, fail. 9. If rebate amount exceeds the source-fuel/income cap, fail. 10. If rebate amount exceeds the HPWH upgrade amount, fail. 11. Pass only when all named values are clear and the rebate is less than or equal to both the HPWH upgrade amount and the applicable cap. 12. In calculation, show upgrade_specific_rebate_line_amount, hpwh_line_amount, income level, source-fuel path, and cap.',
+    true,
+    'No follow-up is required when the HPWH rebate is within the named HPWH upgrade amount and source-fuel-path cap.',
+    'Review the invoice HPWH line amount, rebate line, source-fuel path, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice HPWH line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Requirement PDF: HEAT PUMP WATER HEATER requirements table. Uses hpwh_existing_fuel_type, hpwh_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    TIMESTAMP '2026-07-08 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53151'::uuid,
     'hydronic_product_found_in_qualifying_list',
     'Checks whether invoice and supporting-document air-to-water or combined heat pump product evidence match each other and exist in the current imported Better Homes BC Air-to-Water and Combination Heat Pump Qualifying Product List.',
@@ -220,27 +339,14 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53181'::uuid,
     'ashp_oil_ohpa_bc_product_found_in_list',
-    'Checks whether the invoice AHRI reference matches AHRI evidence from a product_spec_sheet or manufacturer_label_photo, and exists in the current imported NRCan Oil to Heat Pump Affordability BC qualified product list.',
+    'Checks whether the corroborated invoice/supporting-document AHRI reference exists in the current imported NRCan Oil to Heat Pump Affordability BC qualified product list.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched NRCan OHPA BC product-list row.',
     'Refresh the OHPA product-list import if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',
-    'Ask the contractor for corrected invoice/supporting product evidence when AHRI evidence is missing, conflicting, or not found in the imported OHPA BC product list.',
+    'Ask the contractor for corrected product evidence when the agreed AHRI reference is not found in the imported OHPA BC product list.',
     NULL,
-    'The code supplies the detailed invoice/supporting-document AHRI comparison and NRCan OHPA BC product-list match explanation; these messages are short admin guidance additions only.',
+    'This rule owns only the NRCan OHPA BC product-list lookup. Invoice AHRI presence is handled by hp_invoice_ahri_reference_present, and invoice/supporting-document AHRI agreement is handled by hp_supporting_document_ahri_matches_invoice.',
     TIMESTAMP '2026-06-02 00:00:00',
-    NOW()
-  ),
-  (
-    '590f2f3a-3e23-449a-a7d4-2f35c3d53201'::uuid,
-    'source_vintage_applies',
-    'Checks whether the invoice date falls under the current 2026-04-01 Energy Savings Program requirements vintage or whether an earlier requirements version may apply.',
-    true,
-    'No follow-up is required if the invoice date clearly falls on or after April 1, 2026.',
-    'Confirm the invoice date and whether an earlier requirements version should be used before treating this as a material issue.',
-    'Use the earlier applicable requirements version or correct the invoice-date evidence before continuing this review.',
-    'The invoice date does not clearly decide which requirements version applies, so keep this in view during review.',
-    'This is a core date-version gate for the current requirements set. Admins may disable it only if this control is intentionally handled elsewhere.',
-    TIMESTAMP '2026-05-25 00:00:00',
     NOW()
   ),
   (
@@ -487,7 +593,8 @@ WITH obsolete_section_specific_ahri_metric_mappings AS (
   WHERE iut.upgrade_type_key IN (
       'air_source_heat_pump_electric',
       'air_source_heat_pump_wood',
-      'air_source_heat_pump_gas_propane'
+      'air_source_heat_pump_gas_propane',
+      'dual_fuel_ducted_heat_pump'
     )
     AND cr.code_rule_key IN (
       'hp_product_minimum_capacity_at_minus_5c',
@@ -506,17 +613,18 @@ WITH code_rule_upgrade_type_seed (
   ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_electric'),
   ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_wood'),
   ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_gas_propane'),
+  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_oil'),
   ('hp_invoice_ahri_reference_present', 'dual_fuel_ducted_heat_pump'),
   ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_electric'),
   ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_wood'),
   ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_gas_propane'),
+  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_oil'),
   ('hp_supporting_document_ahri_matches_invoice', 'dual_fuel_ducted_heat_pump'),
   ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_electric'),
   ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_wood'),
   ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_gas_propane'),
   ('hp_ahri_reference_found_in_product_list', 'dual_fuel_ducted_heat_pump'),
-  ('hp_product_minimum_capacity_at_minus_5c', 'dual_fuel_ducted_heat_pump'),
-  ('hp_product_efficiency_threshold', 'dual_fuel_ducted_heat_pump'),
+  ('dfhp_product_specs_meet_requirements', 'dual_fuel_ducted_heat_pump'),
   ('ashp_electric_wood_rebate_math_within_cap', 'air_source_heat_pump_electric'),
   ('ashp_electric_wood_rebate_math_within_cap', 'air_source_heat_pump_wood'),
   ('ashp_product_specs_meet_requirements', 'air_source_heat_pump_electric'),
@@ -528,8 +636,15 @@ WITH code_rule_upgrade_type_seed (
   ('ashp_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_gas_propane'),
   ('ashp_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_oil'),
   ('ashp_gas_propane_rebate_math_within_cap', 'air_source_heat_pump_gas_propane'),
-  ('ashp_gas_propane_northern_top_up_within_cap', 'air_source_heat_pump_gas_propane'),
-  ('source_vintage_applies', 'common'),
+  ('ashp_oil_rebate_math_within_cap', 'air_source_heat_pump_oil'),
+  ('ashp_fossil_northern_top_up_within_cap', 'air_source_heat_pump_gas_propane'),
+  ('ashp_fossil_northern_top_up_within_cap', 'air_source_heat_pump_oil'),
+  ('dfhp_rebate_math_within_cap', 'dual_fuel_ducted_heat_pump'),
+  ('heat_pump_northern_top_up_3000_within_cap', 'dual_fuel_ducted_heat_pump'),
+  ('atw_rebate_math_within_cap', 'air_to_water_heat_pump'),
+  ('cshp_rebate_math_within_cap', 'combined_space_water_heat_pump'),
+  ('heat_pump_northern_top_up_3000_within_cap', 'air_to_water_heat_pump'),
+  ('heat_pump_northern_top_up_3000_within_cap', 'combined_space_water_heat_pump'),
   ('first_class_invoice_fields_present', 'common'),
   ('submission_within_six_months', 'common'),
   ('eligibility_code_valid_for_invoice_date', 'common'),
@@ -545,6 +660,7 @@ WITH code_rule_upgrade_type_seed (
   ('wd_u_factor_threshold', 'windows_doors'),
   ('hpwh_neea_found_in_product_list', 'heat_pump_water_heater'),
   ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater'),
+  ('hpwh_rebate_math_within_cap', 'heat_pump_water_heater'),
   ('hydronic_product_found_in_qualifying_list', 'air_to_water_heat_pump'),
   ('hydronic_product_found_in_qualifying_list', 'combined_space_water_heat_pump'),
   ('ashp_oil_ohpa_bc_product_found_in_list', 'air_source_heat_pump_oil')

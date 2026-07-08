@@ -52,6 +52,7 @@ WITH supporting_document_type_upgrade_types_seed (
   ('manufacturer_label_photo', 'air_source_heat_pump_oil'),
 
   ('dual_fuel_control_document', 'dual_fuel_ducted_heat_pump'),
+  ('fossil_fuel_removal_proof', 'dual_fuel_ducted_heat_pump'),
   ('fossil_backup_system_document', 'dual_fuel_ducted_heat_pump'),
   ('permit_document', 'dual_fuel_ducted_heat_pump'),
   ('f280_heat_load_calculation', 'dual_fuel_ducted_heat_pump'),
