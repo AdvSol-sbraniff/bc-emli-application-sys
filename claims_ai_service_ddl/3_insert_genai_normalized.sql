@@ -35,7 +35,8 @@ WHERE genai_rule_key IN (
   'hydronic_no_existing_heat_pump_flag',
   'ashp_electric_primary_system_scope_present',
   'dfhp_fossil_modification_or_removal_supporting_document_attached',
-  'hydronic_fossil_removal_supporting_document_attached'
+  'hydronic_fossil_removal_supporting_document_attached',
+  'ashp_gas_propane_rebate_math_within_cap'
 );
 
 -- Retired GenAI located fields replaced by clearer field keys.
@@ -58,8 +59,27 @@ Use invoice evidence first, and treat supporting-document facts only as corrobor
 Set rule_result="pass" when electric primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
 Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_gas_propane_existing_heat_context_present', 'Check whether the invoice or configured supporting-document located fields support that the home was primarily heated by natural gas or propane and that the new air-source heat pump replaces that system.
-Use invoice evidence first, including furnace, boiler, natural gas, propane, FortisBC gas, PNG, tank propane, or fossil-fuel conversion wording; use supporting-document facts only as corroborating context.
+  ('ashp_electric_backup_heat_electric_present', 'Check whether the electric-to-heat-pump backup space heating system is electric.
+
+Use only these named fields and facts:
+- hp_backup_heat_evidence: visible backup heat evidence and whether it appears electric, wood, fossil fuel, or unclear.
+- hp_existing_electric_heat_evidence: visible hard-wired electric heating evidence, only as corroborating context when it also speaks to retained or backup heat.
+
+For AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), the back-up space heating system must be electric.
+
+Set rule_result="pass" when hp_backup_heat_evidence clearly shows electric backup heat, such as electric baseboard, electric resistance, electric furnace, electric boiler, radiant electric ceiling/floor, or other electric backup space heating.
+Set rule_result="warn" when backup heat context is missing, ambiguous, or only implied by the prior electric heating system without clear backup wording.
+Set rule_result="fail" when hp_backup_heat_evidence clearly shows wood, natural gas, propane, oil, dual-fuel fossil backup, or another non-electric backup space heating system.
+In calculation, state hp_backup_heat_evidence and whether the backup heat is electric, non-electric, or unclear.
+In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_gas_propane_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by fossil fuel natural gas or propane and that the new air-source heat pump is replacing that system.
+
+Natural-gas or propane primary-heating evidence includes natural gas furnace, propane furnace, fossil-fuel furnace, gas boiler, propane boiler, FortisBC gas, PNG gas, propane tank, or similar wording.
+
+A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C. A fireplace is not considered a primary heating system.
+
+Use invoice evidence first, and treat supporting-document facts only as corroborating context.
+
 Set rule_result="pass" when natural-gas/propane primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
 Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -67,26 +87,24 @@ Set rule_result="fail" when the prior heating context is missing, points to a di
 Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no Non-Integrated Area evidence is visible.
 Set rule_result="warn" when Non-Integrated Area evidence is visible without pre-approval evidence; admin should verify pre-approval before treating this as a material failure.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_gas_propane_rebate_math_within_cap', 'Check whether the claimed rebate for this natural-gas-or-propane-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
-Use the visible hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, eligibility code, and any clearly separate northern top-up evidence.
-Use these gas/propane-source base maximum rebate amounts: central ducted or 3-head multi-split ESP1 $16,000, ESP2 $12,000, ESP3 $10,500; 2-head multi-split or 2 single-head mini-splits ESP1 $14,000, ESP2 $10,500, ESP3 $8,000; single-head mini-split ESP1 $7,500, ESP2 $5,500, ESP3 $4,000.
-Northern top-up caps, when separately visible and eligible, are ESP1/ESP2 only: up to $3,000 for central ducted, multi-split, 2 single-head, air-to-water, or combined space/water systems; up to $1,500 for single-head mini-split systems. ESP3 has no northern top-up.
-Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
-Evaluate this rule in this order:
-1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable base cap from the explicit cap values in this rule using the visible eligibility code.
-4. Compare the claimed rebate to both the visible upgrade cost and the applicable base cap.
-5. If the invoice also shows a clearly separate northern top-up amount, state whether the visible top-up appears within the published top-up cap for that visible equipment category and eligibility code. Do not add a top-up amount into the main rebate comparison unless the invoice clearly bundles it into the same claimed rebate line.
-Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable base cap.
-Set rule_result="warn" when the eligibility code, rebate category, rebate amount, or visible upgrade cost is missing/ambiguous but no visible value clearly exceeds the cap.
-Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost or applicable cap.
-In reason_and_likely_causes, state which rebate category the invoice appears to fit, whether a northern top-up is separately visible, and why.
-In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, base cap comparison, and any separate northern-top-up check.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_gas_propane_removal_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes fossil_fuel_removal_proof or permit_document.
-Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_gas_propane_removal_supporting_document_attached', 'Check whether an acceptable fossil-fuel natural-gas/propane system removal supporting document is present.
+
+Use only these named document types and located fields:
+- permit_document: permit_date, permit_address, authority_name, permit_scope_or_equipment_reference, and permit_status_or_completion_evidence.
+- fossil_fuel_removal_proof: removed_equipment_type, removal_date_or_permit_reference, site_address, contractor_or_authority_name, and removal_scope_or_description.
+- supporting_document_summary_for_upgrade_type: routed document types, supporting_document_routing_quality, present documents, and not_present_applicable_type_keys.
+
+Accepted path 1: local government permit or inspection report.
+For this path, require a permit_document with supporting_document_routing_quality="usable", readable permit_date showing an inspection/permit/completion/approval date, readable permit_address showing the address where inspection/removal-related work took place, and permit_scope_or_equipment_reference or permit_status_or_completion_evidence that supports natural-gas/propane/fossil-fuel heating-system removal, inspection, decommissioning, capping, venting, or related completion.
+
+Accepted path 2: invoice from the removal company or heat-pump installation company.
+For this path, require fossil_fuel_removal_proof with supporting_document_routing_quality="usable", readable removal_scope_or_description describing the work completed for natural-gas/propane/fossil-fuel heating-system removal/decommissioning/capping/disconnection, and readable removal_date_or_permit_reference showing the date of removal or decommissioning.
+
+Set rule_result="pass" when either accepted path is present, usable, and has the required located-field evidence for that path.
+Set rule_result="warn" when an acceptable document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears relevant but one or more required located fields for its path are missing, null, low-confidence, visually limited, or too unclear for confident review.
+Set rule_result="fail" when both acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
+In calculation, state which path was used: permit_or_inspection, removal_invoice, both, missing, or unclear; then list the required fields for that path and whether each is present/usable.
+In evidence_text, cite the exact supporting-document summary and located-field wording that supports the path decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_consumption_baseline_reference_present', 'Check whether visible evidence supports the 500 L annual oil-consumption baseline for this oil-to-heat-pump claim.
 Use supporting-document located fields when supplied, especially utility_bill or utility_account_document fields such as utility_service_type_or_fuel_evidence, utility_provider, account_or_bill_date, account_number_or_reference, and fuel_consumption_quantity_or_period.
 Set rule_result="pass" when the invoice or supporting-document fields show at least 500 L of oil consumption within the relevant 12-month application period, or enough fuel-bill/receipt evidence for admin to confirm that threshold.
@@ -125,25 +143,34 @@ Set rule_result="fail" if all acceptable document types are missing, listed in n
 Set rule_result="pass" when backup heat is clearly wood/electric or no fossil-backup concern is visible.
 Set rule_result="warn" when backup fuel context is missing or ambiguous.
 Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_wood_existing_heat_context_present', 'Check whether invoice text supports wood/solid-fuel primary heating conversion context.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_wood_rebate_math_within_cap', 'Check whether the claimed rebate for this wood-to-heat-pump upgrade appears to stay within the visible upgrade cost and the program maximum for the visible system type.
-Use the visible hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and eligibility code.
-Use these wood/solid-fuel-source maximum rebate amounts for ESP1/ESP2: central ducted or 3-head multi-split $5,000/$4,000; 2-head multi-split or 2 single-head mini-splits $5,000/$4,000; single-head mini-split $5,000/$4,000. ESP3 has no rebate for this wood-to-heat-pump path.
-Category mapping: a low-static-pressure ducted mini-split with two supply outlets may be treated like the 2-head or 2 single-head category; a ducted mini, multiple-split system with three or more supply outlets, or mixed ducted/ductless system with three or more zones may be treated like the central ducted or 3-head category.
-Evaluate this rule in this order:
-1. Determine the visible equipment rebate category from invoice wording: central ducted / 3-head multi-split, 2-head multi-split / 2 single-head mini-split, or single-head mini-split.
-2. Apply the category mapping when the invoice mentions low-static-pressure ducted mini-splits or systems with 3 or more supply outlets / zones.
-3. Determine the applicable cap from the explicit cap values in this rule using the visible eligibility code.
-4. Compare the claimed rebate to both the visible upgrade cost and the applicable cap.
-Set rule_result="pass" only when the invoice clearly shows the rebate category, rebate amount, visible upgrade cost, and eligibility code, and the claimed rebate is less than or equal to both the visible upgrade cost and the applicable cap.
-Set rule_result="warn" when the eligibility code, rebate category, rebate amount, or visible upgrade cost is missing/ambiguous but no visible value clearly exceeds the cap.
-Set rule_result="fail" when the rebate clearly exceeds the visible upgrade cost or applicable cap.
-In reason_and_likely_causes, state which rebate category the invoice appears to fit and why.
-In calculation, show the visible category, eligibility code, visible upgrade cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_wood_removal_or_wett_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set or wett_report.
-Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_wood_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by a wood or solid fuel heating system and that the new air-source heat pump is replacing that system.
+
+Wood or solid fuel heating evidence includes wood stove, pellet stove, insert, wood furnace, solid fuel furnace, or similar wording.
+
+A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C.
+
+Use invoice evidence first, and treat supporting-document facts only as corroborating context.
+
+Set rule_result="pass" when wood/solid-fuel primary heat replacement is clear.
+Set rule_result="warn" when the conversion context is plausible but incomplete.
+Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('ashp_wood_removal_or_wett_supporting_document_attached', 'Check whether the required wood/solid-fuel removal or safe-retention supporting document is present for this wood-to-heat-pump upgrade.
+
+Use only these named fields and facts:
+- hp_wood_system_removal_or_wett_evidence: invoice evidence about whether the existing wood or solid-fuel heating system was removed, retained, WETT-inspected, decommissioned, or otherwise addressed.
+- supporting_document_summary_for_upgrade_type: the routed supporting-document summary for this upgrade type, including before_after_photo_set and wett_report document types, routing quality, not-present document types, and located fields.
+- before_after_photo_set located fields, including photo_role, visible_subject_or_area, visible_condition_summary, image_quality_or_legibility, and visible_text_or_label_values.
+- wett_report located fields, including wett_inspection_date, wett_inspector_certification_number, site_address, compliance_or_removal_conclusion, wett_inspector_or_company_name, and wett_appliance_or_system_reference.
+
+If the visible evidence shows the wood or solid-fuel heating system was removed, require before_after_photo_set evidence for the removed wood/solid-fuel heating system.
+If the visible evidence shows the wood or solid-fuel heating system was retained in safe and working order, require wett_report evidence.
+If the removal/retention path is unclear, do not guess which document is required.
+
+Set rule_result="pass" when the removal/retention path is clear and the required document type for that path is present with supporting_document_routing_quality="usable" and enough readable located-field evidence for review.
+Set rule_result="warn" when the removal/retention path is unclear, or when the required document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
+Set rule_result="fail" when the removal/retention path is clear and the required document type for that path is missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
+In calculation, state the visible path used: removed, retained, or unclear; then list the required document type and whether it is present/usable.
+In evidence_text, cite the exact invoice or supporting-document wording/located fields that support the path and document decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_not_combined_or_hpwh_scope', 'Check whether the invoice supports air-to-water space-heating-only scope and does not appear to be a combined space/water system or standalone heat pump water heater.
 Set rule_result="warn" if the air-to-water versus combined/HPWH distinction is ambiguous and admin should verify equipment scope.
 Set rule_result="fail" if domestic-hot-water/combined scope is clearly visible in a space-heating-only air-to-water ruleset.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -286,9 +313,18 @@ Set rule_result="fail" when visible evidence clearly limits the system to a seco
 Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
 Set rule_result="warn" when existing/add-on/secondary heat-pump wording is visible, because the extracted 2026 combined space/water table does not state the same explicit no-existing-heat-pump sentence found in the air-to-water section.
 Set rule_result="fail" only when supplied program facts or visible invoice evidence clearly contradict combined space/water heat-pump eligibility.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hp_fossil_backup_not_fossil_primary', 'Check whether visible backup heat evidence appears electric or wood, and whether any natural-gas/propane fireplace is clearly secondary.
-Set rule_result="warn" if backup context is missing/ambiguous and admin should verify backup fuel.
-Set rule_result="fail" if the invoice suggests fossil-fuel backup remains as a primary system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_fossil_backup_not_fossil_primary', 'Check whether the backup heating system for this fossil-fuel-to-heat-pump upgrade is electric or wood, with only the allowed exception for a retained natural-gas/propane fireplace that is clearly secondary.
+
+Use only this named field:
+- hp_backup_heat_evidence: visible backup heat evidence and whether it appears electric, wood, fossil fuel, fireplace-only, secondary, primary, or unclear.
+
+Set rule_result="pass" when hp_backup_heat_evidence clearly shows the backup heating system is electric or wood.
+Set rule_result="pass" when the only visible natural-gas/propane retained heat is a fireplace and the evidence clearly shows it is secondary, not the backup heating system and not the primary heating system.
+Set rule_result="warn" when backup heat context is missing, ambiguous, or when a natural-gas/propane fireplace is visible but the evidence does not clearly show whether it is secondary.
+Set rule_result="fail" when hp_backup_heat_evidence clearly shows natural gas, propane, oil, dual-fuel fossil backup, or another fossil-fuel system remains as the backup heating system.
+Set rule_result="fail" when a natural-gas/propane fireplace is visible and the evidence shows it is primary, backup, or not clearly limited to a secondary fireplace role.
+In calculation, state hp_backup_heat_evidence and classify the visible backup context as electric, wood, secondary gas/propane fireplace, fossil backup, or unclear.
+In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_main_living_area_or_primary_capacity_present', 'Check whether invoice evidence or located fields show the heat pump is sized/described as the home''s primary heating system or serves a main living area.
 Set rule_result="pass" when primary-heating capacity or main-living-area service is clear.
 Set rule_result="warn" when this evidence is missing or ambiguous.
@@ -361,11 +397,25 @@ Set rule_result="pass" if fossil-fuel source path is not visible or not claimed.
 Set rule_result="pass" if fossil-fuel source path is visible and at least one required document type is present with supporting_document_routing_quality="usable" and located_fields contain readable fossil-removal/decommissioning or permit evidence for the site/system.
 Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, or too unclear for confident review.
 Set rule_result="fail" if fossil-fuel source path is visible and both fossil_fuel_removal_proof and permit_document are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hydronic_wood_removal_or_wett_supporting_document_attached', 'If the visible source-fuel path is wood or solid fuel, check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set or wett_report.
+  ('hydronic_wood_removal_or_wett_supporting_document_attached', 'If the visible source-fuel path is wood or solid fuel, check whether the required wood/solid-fuel removal or safe-retention supporting document is present.
+
+Use only these named fields and facts:
+- hydronic_conversion_source_fuel_evidence: invoice evidence about whether the hydronic heat pump replaced a wood or solid-fuel heating system.
+- hydronic_wood_removal_or_wett_evidence: invoice evidence about whether the existing wood or solid-fuel heating system was removed, retained, WETT-inspected, decommissioned, or otherwise addressed.
+- supporting_document_summary_for_upgrade_type: the routed supporting-document summary for this upgrade type, including before_after_photo_set and wett_report document types, routing quality, not-present document types, and located fields.
+- before_after_photo_set located fields, including photo_role, visible_subject_or_area, visible_condition_summary, image_quality_or_legibility, and visible_text_or_label_values.
+- wett_report located fields, including wett_inspection_date, wett_inspector_certification_number, site_address, compliance_or_removal_conclusion, wett_inspector_or_company_name, and wett_appliance_or_system_reference.
+
 Set rule_result="pass" if wood/solid-fuel source path is not visible or not claimed.
-Set rule_result="pass" if wood/solid-fuel source path is visible and either required document type is present with supporting_document_routing_quality="usable" and located_fields contain readable removal-photo or WETT/safe-retention evidence for the site/system.
-Set rule_result="warn" if the source-fuel path is unclear, or if the required document is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located_fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
-Set rule_result="fail" if wood/solid-fuel source path is visible and both before_after_photo_set and wett_report are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+If the visible evidence shows the heat pump replaced a wood or solid-fuel heating system and that system was removed, require before_after_photo_set evidence for the removed wood/solid-fuel heating system.
+If the visible evidence shows the heat pump replaced a wood or solid-fuel heating system and that system was retained in safe and working order, require wett_report evidence.
+If the wood/solid-fuel source path is visible but the removal/retention path is unclear, do not guess which document is required.
+
+Set rule_result="pass" when the wood/solid-fuel path does not apply, or when the removal/retention path is clear and the required document type for that path is present with supporting_document_routing_quality="usable" and enough readable located-field evidence for review.
+Set rule_result="warn" when the wood/solid-fuel source path or removal/retention path is unclear, or when the required document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
+Set rule_result="fail" when the wood/solid-fuel source path and removal/retention path are clear and the required document type for that path is missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
+In calculation, state the visible source-fuel path, removal/retention path, required document type, and whether that document is present/usable.
+In evidence_text, cite the exact invoice or supporting-document wording/located fields that support the path and document decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_non_integrated_area_review', 'If fossil-fuel conversion and Non-Integrated Area evidence are visible, check whether pre-approval is also visible in invoice evidence or configured supporting-document located fields.
 Use preapproval_notice located fields such as preapproval_date, approval_reference, non_integrated_area_evidence, approved_upgrade_scope, and property_or_participant_reference.
 Set rule_result="pass" if no fossil-fuel Non-Integrated Area evidence is visible.
@@ -567,13 +617,13 @@ WITH genai_rule_upgrade_types_seed (
 ) AS (
   VALUES
   ('air_source_heat_pump_electric', 'ashp_electric_existing_heat_context_present', 1),
+  ('air_source_heat_pump_electric', 'ashp_electric_backup_heat_electric_present', 8),
   ('air_source_heat_pump_electric', 'hp_main_living_area_or_primary_capacity_present', 7),
   ('air_source_heat_pump_electric', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
   ('air_source_heat_pump_electric', 'hp_description_sufficient_for_review', 4),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_existing_heat_context_present', 1),
   ('air_source_heat_pump_gas_propane', 'hp_conditioned_space_distribution_present', 2),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_non_integrated_area_review', 8),
-  ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_rebate_math_within_cap', 5),
   ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_removal_supporting_document_attached', 3),
   ('air_source_heat_pump_gas_propane', 'hp_description_sufficient_for_review', 4),
   ('air_source_heat_pump_gas_propane', 'hp_fossil_backup_not_fossil_primary', 6),
@@ -592,7 +642,6 @@ WITH genai_rule_upgrade_types_seed (
   ('air_source_heat_pump_wood', 'ashp_wood_backup_heat_not_fossil_present', 8),
   ('air_source_heat_pump_wood', 'ashp_wood_existing_heat_context_present', 1),
   ('air_source_heat_pump_wood', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
-  ('air_source_heat_pump_wood', 'ashp_wood_rebate_math_within_cap', 5),
   ('air_source_heat_pump_wood', 'ashp_wood_removal_or_wett_supporting_document_attached', 3),
   ('air_source_heat_pump_wood', 'hp_description_sufficient_for_review', 4),
   ('air_to_water_heat_pump', 'atw_not_combined_or_hpwh_scope', 6),
@@ -767,7 +816,7 @@ Electrical service upgrade', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_billing_reference', 'Locate utility billing evidence for the line/service upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_reference', 'Locate BC Hydro, FortisBC, utility connection, line upgrade, or utility bill/invoice references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hardware_per_unit', 'Locate hardware/material price per unit.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hp_backup_heat_evidence', 'Locate backup heat evidence and note if it appears electric, wood, fossil fuel, or unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_backup_heat_evidence', 'Locate backup heat evidence and note if it appears electric, wood, fossil fuel, fireplace-only, secondary, primary, or unclear. If a natural-gas or propane fireplace is visible, state whether the wording supports that it is secondary rather than the backup or primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_conditioned_space_distribution_evidence', 'Locate evidence that the heat pump distributes heat through the conditioned space formerly served by the primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_efficiency_and_capacity', 'Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_existing_electric_heat_evidence', 'Locate hard-wired electric baseboard, radiant ceiling/floor, electric furnace, electric boiler, or other electric primary heat evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -792,7 +841,13 @@ In evidence_text, cite the exact visible line label, subtotal label, or arithmet
   ('hp_make_model', 'Locate make/model numbers.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_new_equipment_type', 'Locate single-head mini-split, 2-head/multi-split, ductless mini-split, ductless multi-split, central ducted, low-static ducted mini, indoor heads/zones, or similar.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_non_integrated_area_preapproval_reference', 'Locate Non-Integrated Area or pre-approval references if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hp_northern_top_up_evidence', 'Locate northern top-up evidence if shown.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('hp_northern_top_up_evidence', 'Locate northern top-up evidence if shown.
+
+Return the visible separate northern top-up amount, exact top-up label or wording, location evidence for north of and including the District of 100 Mile House, and evidence that the home is connected to BC Hydro electric service.
+
+Use value=null when no separate northern top-up is visible.
+
+In evidence_text, cite the exact visible top-up label, amount, location wording, and BC Hydro service wording when present. If the top-up is visible but location or BC Hydro evidence is missing, say which part is missing.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_oil_consumption_baseline_evidence', 'Locate 500 L annual oil-consumption evidence, fuel bills, receipts, or similar references if visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_oil_system_removal_evidence', 'Locate oil system and oil tank removal, decommissioning, capping, disconnection, permit, or inspection evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_product_list_reference', 'Locate qualified heat pump product list, NRCan, ENERGY STAR, NEEP, NRCan Oil to Heat Pump Affordability qualified product list, or similar references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -934,6 +989,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('air_source_heat_pump_electric', 'hp_new_equipment_type', 1),
   ('air_source_heat_pump_electric', 'hp_product_list_reference', 5),
   ('air_source_heat_pump_electric', 'hp_registered_contractor_or_permit_evidence', 13),
+  ('air_source_heat_pump_electric', 'hp_backup_heat_evidence', 14),
   ('air_source_heat_pump_electric', 'upgrade_specific_rebate_line_amount', 10),
   ('air_source_heat_pump_gas_propane', 'hp_backup_heat_evidence', 12),
   ('air_source_heat_pump_gas_propane', 'hp_conditioned_space_distribution_evidence', 16),

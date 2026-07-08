@@ -1,5 +1,39 @@
 BEGIN;
 
+WITH obsolete_ashp_requirement_rule_keys (code_rule_key) AS (
+  VALUES
+  ('ashp_electric_rebate_math_within_cap'),
+  ('ashp_electric_product_specs_meet_requirements'),
+  ('ashp_electric_multisplit_minimum_two_indoor_heads'),
+  ('ashp_wood_rebate_math_within_cap'),
+  ('ashp_wood_product_specs_meet_requirements'),
+  ('ashp_wood_multisplit_minimum_two_indoor_heads')
+),
+obsolete_ashp_requirement_rule_mappings AS (
+  SELECT cru.id
+  FROM claims.code_rule_upgrade_types cru
+  JOIN claims.code_rules cr
+    ON cr.id = cru.code_rule_id
+  JOIN obsolete_ashp_requirement_rule_keys old
+    ON old.code_rule_key = cr.code_rule_key
+)
+DELETE FROM claims.code_rule_upgrade_types cru
+USING obsolete_ashp_requirement_rule_mappings old
+WHERE cru.id = old.id;
+
+WITH obsolete_ashp_requirement_rule_keys (code_rule_key) AS (
+  VALUES
+  ('ashp_electric_rebate_math_within_cap'),
+  ('ashp_electric_product_specs_meet_requirements'),
+  ('ashp_electric_multisplit_minimum_two_indoor_heads'),
+  ('ashp_wood_rebate_math_within_cap'),
+  ('ashp_wood_product_specs_meet_requirements'),
+  ('ashp_wood_multisplit_minimum_two_indoor_heads')
+)
+DELETE FROM claims.code_rules cr
+USING obsolete_ashp_requirement_rule_keys old
+WHERE cr.code_rule_key = old.code_rule_key;
+
 WITH code_rules_seed (
   id,
   code_rule_key,
@@ -55,41 +89,67 @@ WITH code_rules_seed (
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53031'::uuid,
-    'ashp_electric_rebate_math_within_cap',
-    'Checks ASHP convert-from-electric rebate amount against the ASHP upgrade line amount and the Income Level 1/2 cap from the requirements table.',
+    'ashp_electric_wood_rebate_math_within_cap',
+    'Checks ASHP convert-from-electric/wood rebate amount against the ASHP upgrade line amount and the Income Level 1/2 cap from the requirements table.',
     true,
-    'No follow-up is required when the ASHP electric rebate is within the named upgrade amount and income-level cap.',
+    'No follow-up is required when the ASHP electric/wood rebate is within the named upgrade amount and income-level cap.',
     'Review the invoice ASHP line amount, rebate line, and eligibility-code match before moving the claim forward.',
     'Confirm the invoice ASHP line amount, rebate line, and eligibility-code match before asking the contractor for correction.',
     NULL,
-    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9. Uses ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9; AIR SOURCE HEAT PUMP (CONVERT FROM WOOD), requirements table after item 11. Uses ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53032'::uuid,
-    'ashp_electric_product_specs_meet_requirements',
-    'Checks the ASHP convert-from-electric requirements table product specs: efficiency threshold, variable speed compressor, and minimum 12,000 BTU capacity.',
+    'ashp_product_specs_meet_requirements',
+    'Checks ASHP requirements table product specs: efficiency threshold, variable speed compressor, and minimum 12,000 BTU capacity.',
     true,
-    'No follow-up is required when the matched AHRI product row and named field evidence satisfy the product specification checks.',
-    'Review the matched AHRI row and invoice/product evidence when a metric is missing or ambiguous.',
-    'Confirm the AHRI match before asking the contractor for corrected product evidence.',
-    'Resolve the AHRI product-list match first, then rerun checks.',
-    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9. Uses the matched AHRI product row plus hp_efficiency_and_capacity evidence for variable-speed wording.',
+    'No follow-up is required when the matched product-list row and named field evidence satisfy the product specification checks.',
+    'Review the matched product-list row and invoice/product evidence when a metric is missing or ambiguous.',
+    'Confirm the product-list match before asking the contractor for corrected product evidence.',
+    'Resolve the product-list match first, then rerun checks.',
+    'Requirement PDF: ASHP requirements tables for electric, wood, gas/propane, and oil conversion sections. Uses the matched AHRI/OHPA product row plus hp_efficiency_and_capacity evidence for variable-speed wording.',
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53033'::uuid,
-    'ashp_electric_multisplit_minimum_two_indoor_heads',
-    'Checks that an ASHP convert-from-electric ductless multi-split installation has at least two indoor head units.',
+    'ashp_multisplit_minimum_two_indoor_heads',
+    'Checks that an ASHP ductless multi-split installation has at least two indoor head units.',
     true,
     'No follow-up is required when the claim is not multi-split or the multi-split evidence supports at least two indoor heads.',
     'Review the invoice equipment section when a multi-split system is visible but the indoor-head count is not explicit.',
     'Ask the contractor for corrected invoice or product evidence if a ductless multi-split shows fewer than two indoor heads.',
     NULL,
-    'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9. Uses hp_new_equipment_type and the matched AHRI source/product evidence.',
+    'Requirement PDF: ASHP requirements tables for electric, wood, gas/propane, and oil conversion sections. Uses hp_new_equipment_type and the matched AHRI/OHPA source/product evidence.',
     TIMESTAMP '2026-07-06 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53038'::uuid,
+    'ashp_gas_propane_rebate_math_within_cap',
+    'Checks ASHP natural-gas/propane base rebate amount against the ASHP upgrade line amount and the equipment-category cap for the matched income level. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read ashp_upgrade_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type. 5. Classify equipment as single-head mini-split, 2-head multi-split/2 single-head mini-split, central ducted/3-head multi-split, or unknown. 6. Apply base cap table: single-head ESP1 $7,500, ESP2 $5,500, ESP3 $4,000; 2-head/2-single-head ESP1 $14,000, ESP2 $10,500, ESP3 $8,000; central/3-head ESP1 $16,000, ESP2 $12,000, ESP3 $10,500. 7. If rebate amount, ASHP upgrade amount, income level, or equipment category is missing or ambiguous, warn. 8. If rebate amount exceeds the category/income cap, fail. 9. If rebate amount exceeds the ASHP upgrade amount, fail. 10. Pass only when all named values are clear and the rebate is less than or equal to both the ASHP upgrade amount and the applicable base cap. 11. Exclude separately claimed northern top-up from this base rebate comparison; ashp_gas_propane_northern_top_up_within_cap owns the separate northern top-up check. 12. In calculation, show upgrade_specific_rebate_line_amount, ashp_upgrade_line_amount, income level, equipment category, cap, and northern_top_up_excluded=true.',
+    true,
+    'No follow-up is required when the gas/propane ASHP base rebate is within the named ASHP upgrade amount and equipment-category cap.',
+    'Review the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Uses hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by ashp_gas_propane_northern_top_up_within_cap.',
+    TIMESTAMP '2026-07-07 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53037'::uuid,
+    'ashp_gas_propane_northern_top_up_within_cap',
+    'Checks a separately claimed northern top-up for an ASHP natural-gas/propane conversion. Pseudocode: 1. Read hp_northern_top_up_evidence. 2. If no separate northern top-up is visible, pass with calculation top_up_claimed=false. 3. Read income level from users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Read hp_new_equipment_type and classify the equipment as single-head mini-split, central ducted/multi-split/2 single-head mini-split, or unknown. 5. Apply cap $1,500 for single-head mini-split, $3,000 for central ducted/multi-split/2 single-head mini-split, and no cap when category is unknown. 6. If income level is 3 and a positive top-up amount is visible, fail because ESP3 has no northern top-up. 7. If top-up amount, income level, or equipment category is missing or ambiguous, warn. 8. If top-up amount exceeds the category cap, fail. 9. Check hp_northern_top_up_evidence for location evidence north of and including the District of 100 Mile House. 10. Check hp_northern_top_up_evidence for BC Hydro electric service evidence. 11. If location or BC Hydro evidence is missing or ambiguous, warn even when the amount is within cap. 12. Pass only when the top-up amount is within cap, income level is 1 or 2, category is clear, northern-location evidence is clear, and BC Hydro-service evidence is clear. 13. In calculation, show top-up amount, income level, equipment category, cap, northern-location evidence, and BC Hydro-service evidence.',
+    true,
+    'No follow-up is required when the separate northern top-up is within cap and the named evidence supports location and BC Hydro service.',
+    'Review the northern top-up amount, equipment category, income level, location evidence, and BC Hydro service evidence before moving the claim forward.',
+    'Confirm the top-up amount, equipment category, and income level before asking the contractor for correction.',
+    NULL,
+    'Uses hp_northern_top_up_evidence, hp_new_equipment_type, and users_eligibilitycodes.income_level. This code rule intentionally treats missing top-up evidence as pass because no top-up was claimed.',
+    TIMESTAMP '2026-07-07 00:00:00',
     NOW()
   ),
   (
@@ -417,21 +477,25 @@ DELETE FROM claims.code_rule_upgrade_types cru
 USING obsolete_oil_ahri_mappings old
 WHERE cru.id = old.id;
 
-WITH obsolete_electric_ahri_metric_mappings AS (
+WITH obsolete_section_specific_ahri_metric_mappings AS (
   SELECT cru.id
   FROM claims.code_rule_upgrade_types cru
   JOIN claims.code_rules cr
     ON cr.id = cru.code_rule_id
   JOIN claims.invoice_upgrade_types iut
     ON iut.id = cru.invoice_upgrade_type_id
-  WHERE iut.upgrade_type_key = 'air_source_heat_pump_electric'
+  WHERE iut.upgrade_type_key IN (
+      'air_source_heat_pump_electric',
+      'air_source_heat_pump_wood',
+      'air_source_heat_pump_gas_propane'
+    )
     AND cr.code_rule_key IN (
       'hp_product_minimum_capacity_at_minus_5c',
       'hp_product_efficiency_threshold'
     )
 )
 DELETE FROM claims.code_rule_upgrade_types cru
-USING obsolete_electric_ahri_metric_mappings old
+USING obsolete_section_specific_ahri_metric_mappings old
 WHERE cru.id = old.id;
 
 WITH code_rule_upgrade_type_seed (
@@ -451,15 +515,20 @@ WITH code_rule_upgrade_type_seed (
   ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_wood'),
   ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_gas_propane'),
   ('hp_ahri_reference_found_in_product_list', 'dual_fuel_ducted_heat_pump'),
-  ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_wood'),
-  ('hp_product_minimum_capacity_at_minus_5c', 'air_source_heat_pump_gas_propane'),
   ('hp_product_minimum_capacity_at_minus_5c', 'dual_fuel_ducted_heat_pump'),
-  ('hp_product_efficiency_threshold', 'air_source_heat_pump_wood'),
-  ('hp_product_efficiency_threshold', 'air_source_heat_pump_gas_propane'),
   ('hp_product_efficiency_threshold', 'dual_fuel_ducted_heat_pump'),
-  ('ashp_electric_rebate_math_within_cap', 'air_source_heat_pump_electric'),
-  ('ashp_electric_product_specs_meet_requirements', 'air_source_heat_pump_electric'),
-  ('ashp_electric_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_electric'),
+  ('ashp_electric_wood_rebate_math_within_cap', 'air_source_heat_pump_electric'),
+  ('ashp_electric_wood_rebate_math_within_cap', 'air_source_heat_pump_wood'),
+  ('ashp_product_specs_meet_requirements', 'air_source_heat_pump_electric'),
+  ('ashp_product_specs_meet_requirements', 'air_source_heat_pump_wood'),
+  ('ashp_product_specs_meet_requirements', 'air_source_heat_pump_gas_propane'),
+  ('ashp_product_specs_meet_requirements', 'air_source_heat_pump_oil'),
+  ('ashp_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_electric'),
+  ('ashp_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_wood'),
+  ('ashp_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_gas_propane'),
+  ('ashp_multisplit_minimum_two_indoor_heads', 'air_source_heat_pump_oil'),
+  ('ashp_gas_propane_rebate_math_within_cap', 'air_source_heat_pump_gas_propane'),
+  ('ashp_gas_propane_northern_top_up_within_cap', 'air_source_heat_pump_gas_propane'),
   ('source_vintage_applies', 'common'),
   ('first_class_invoice_fields_present', 'common'),
   ('submission_within_six_months', 'common'),

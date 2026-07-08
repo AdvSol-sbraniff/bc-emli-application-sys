@@ -2,9 +2,12 @@
 
 module Claims
   module CodeRules
-    module AshpElectric
+    module AshpProductRequirements
       class ApplyProductRequirements
         ELECTRIC_UPGRADE_TYPE_KEY = "air_source_heat_pump_electric"
+        WOOD_UPGRADE_TYPE_KEY = "air_source_heat_pump_wood"
+        GAS_PROPANE_UPGRADE_TYPE_KEY = "air_source_heat_pump_gas_propane"
+        OIL_UPGRADE_TYPE_KEY = "air_source_heat_pump_oil"
         ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY = "ashp_upgrade_line_amount"
         REBATE_FIELD_KEY = "upgrade_specific_rebate_line_amount"
         EQUIPMENT_TYPE_FIELD_KEY = "hp_new_equipment_type"
@@ -24,18 +27,34 @@ module Claims
         MIN_HSPF2 = BigDecimal("8.5")
         MIN_MULTISPLIT_HEADS = 2
 
+        REBATE_CAP_UPGRADE_TYPE_KEYS = [
+          ELECTRIC_UPGRADE_TYPE_KEY,
+          WOOD_UPGRADE_TYPE_KEY
+        ].freeze
+        AHRI_PRODUCT_UPGRADE_TYPE_KEYS = [
+          ELECTRIC_UPGRADE_TYPE_KEY,
+          WOOD_UPGRADE_TYPE_KEY,
+          GAS_PROPANE_UPGRADE_TYPE_KEY
+        ].freeze
+        OHPA_PRODUCT_UPGRADE_TYPE_KEYS = [OIL_UPGRADE_TYPE_KEY].freeze
+        PRODUCT_SPEC_UPGRADE_TYPE_KEYS =
+          (
+            AHRI_PRODUCT_UPGRADE_TYPE_KEYS + OHPA_PRODUCT_UPGRADE_TYPE_KEYS
+          ).freeze
+        MULTISPLIT_UPGRADE_TYPE_KEYS = PRODUCT_SPEC_UPGRADE_TYPE_KEYS
+
         RULES = {
           rebate_cap: {
             number: 4,
-            key: "ashp_electric_rebate_math_within_cap"
+            key: "ashp_electric_wood_rebate_math_within_cap"
           },
           product_specs: {
             number: 5,
-            key: "ashp_electric_product_specs_meet_requirements"
+            key: "ashp_product_specs_meet_requirements"
           },
           multisplit_heads: {
             number: 6,
-            key: "ashp_electric_multisplit_minimum_two_indoor_heads"
+            key: "ashp_multisplit_minimum_two_indoor_heads"
           }
         }.freeze
 
@@ -63,7 +82,7 @@ module Claims
           enabled_rules = enabled_rules_for_upgrade_type
           return { ok: true, skipped: true } if enabled_rules.empty?
 
-          product = matched_ahri_product
+          product = matched_product
           rows = rulecheck_rows(enabled_rules: enabled_rules, product: product)
           replace_rulechecks!(rows)
 
@@ -82,16 +101,162 @@ module Claims
         attr_reader :invoice_version, :upgrade_type
 
         def enabled_rules_for_upgrade_type
-          unless upgrade_type.upgrade_type_key == ELECTRIC_UPGRADE_TYPE_KEY
-            return {}
+          RULES.select do |_rule_type, rule|
+            applicable_rule_for_upgrade_type?(_rule_type) &&
+              ::Claims::CodeRules::Registry.enabled_for?(
+                code_rule_key: rule.fetch(:key),
+                invoice_upgrade_type_id: upgrade_type.id,
+                fallback: false
+              )
+          end
+        end
+
+        def applicable_rule_for_upgrade_type?(rule_type)
+          case rule_type
+          when :rebate_cap
+            REBATE_CAP_UPGRADE_TYPE_KEYS.include?(upgrade_type.upgrade_type_key)
+          when :product_specs
+            PRODUCT_SPEC_UPGRADE_TYPE_KEYS.include?(
+              upgrade_type.upgrade_type_key
+            )
+          when :multisplit_heads
+            MULTISPLIT_UPGRADE_TYPE_KEYS.include?(upgrade_type.upgrade_type_key)
+          else
+            false
+          end
+        end
+
+        def ahri_backed_upgrade_type?
+          AHRI_PRODUCT_UPGRADE_TYPE_KEYS.include?(upgrade_type.upgrade_type_key)
+        end
+
+        def ohpa_backed_upgrade_type?
+          OHPA_PRODUCT_UPGRADE_TYPE_KEYS.include?(upgrade_type.upgrade_type_key)
+        end
+
+        def matched_product
+          return matched_ahri_product if ahri_backed_upgrade_type?
+          return matched_ohpa_product if ohpa_backed_upgrade_type?
+
+          nil
+        end
+
+        def matched_ahri_product
+          if invoice_version.ahri_product.present?
+            return invoice_version.ahri_product
           end
 
-          RULES.select do |_rule_type, rule|
-            ::Claims::CodeRules::Registry.enabled_for?(
-              code_rule_key: rule.fetch(:key),
-              invoice_upgrade_type_id: upgrade_type.id,
-              fallback: false
-            )
+          invoice_ahri = normalized_ahri(invoice_ahri_field&.value_text)
+          return nil if invoice_ahri.blank?
+
+          current_match =
+            ::Claims::CurrentAhriProduct
+              .where(ahri_reference_number: invoice_ahri)
+              .order(:source_description, :id)
+              .first
+
+          ::Claims::AhriProduct.find_by(id: current_match.id) if current_match
+        end
+
+        def matched_ohpa_product
+          if invoice_version.ohpa_product.present?
+            return invoice_version.ohpa_product
+          end
+
+          invoice_ahri = normalized_ahri(invoice_ahri_field&.value_text)
+          return nil if invoice_ahri.blank?
+
+          current_match =
+            ::Claims::CurrentOhpaProduct
+              .where(ahri_reference_number: invoice_ahri)
+              .order(:source_description, :id)
+              .first
+
+          ::Claims::OhpaProduct.find_by(id: current_match.id) if current_match
+        end
+
+        def source_product_label(product)
+          case product
+          when ::Claims::OhpaProduct
+            "OHPA product row"
+          else
+            "AHRI product row"
+          end
+        end
+
+        def source_product_pointer
+          if ohpa_backed_upgrade_type?
+            "invoice_versions.ohpa_product_id or classifier.ahri_reference"
+          else
+            "invoice_versions.ahri_product_id or classifier.ahri_reference"
+          end
+        end
+
+        def capacity_value(product)
+          if product.respond_to?(:rated_capacity_btu_at_minus_5c)
+            return product.rated_capacity_btu_at_minus_5c
+          end
+          if product.respond_to?(:rated_capacity_47f)
+            return product.rated_capacity_47f
+          end
+
+          nil
+        end
+
+        def legacy_seer_value(product)
+          product.seer if product.respond_to?(:seer)
+        end
+
+        def legacy_hspf_value(product)
+          product.hspf if product.respond_to?(:hspf)
+        end
+
+        def current_seer2_value(product)
+          product.seer2 if product.respond_to?(:seer2)
+        end
+
+        def current_hspf2_value(product)
+          if product.respond_to?(:hspf2)
+            product.hspf2
+          elsif product.respond_to?(:hspf2_region_iv)
+            product.hspf2_region_iv
+          end
+        end
+
+        def product_value(product, method_name)
+          product.public_send(method_name) if product.respond_to?(method_name)
+        end
+
+        def source_product_description(product)
+          if product.respond_to?(:import_run) &&
+               product.import_run.respond_to?(:ahri_source)
+            return product.import_run.ahri_source&.description.to_s
+          end
+          if product.respond_to?(:import_run) &&
+               product.import_run.respond_to?(:ohpa_source)
+            return product.import_run.ohpa_source&.description.to_s
+          end
+
+          ""
+        end
+
+        def source_product_reference(product)
+          table_name =
+            case product
+            when ::Claims::OhpaProduct
+              "ohpa_products"
+            else
+              "ahri_products"
+            end
+          "#{table_name}.id=#{product.id}"
+        end
+
+        def product_list_name(product)
+          case product
+          when ::Claims::OhpaProduct
+            "NRCan Oil to Heat Pump Affordability BC qualified product list"
+          else
+            "BC Hydro heat-pump product list"
           end
         end
 
@@ -129,7 +294,7 @@ module Claims
             warnings << "income level is missing or not ESP1/ESP2/ESP3"
           end
           if income_level == 3
-            warnings << "income level #{income_level} has no electric ASHP rebate cap"
+            warnings << "income level #{income_level} has no electric/wood ASHP rebate cap"
           end
 
           if rebate_amount && cap && rebate_amount > cap
@@ -141,7 +306,7 @@ module Claims
           end
 
           if rebate_amount&.positive? && income_level == 3
-            failures << "income level 3 has no electric-to-ASHP rebate cap"
+            failures << "income level 3 has no electric/wood ASHP rebate cap"
           end
 
           result =
@@ -158,7 +323,7 @@ module Claims
             rule_result: result,
             confidence: result == "pass" || result == "fail" ? 100 : 0,
             expected_text:
-              "For ASHP convert-from-electric, the claimed rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the Income Level 1/2 maximum shown in the requirements table.",
+              "For ASHP convert-from-electric/wood, the claimed rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the Income Level 1/2 maximum shown in the requirements table.",
             calculation: [
               "#{REBATE_FIELD_KEY}=#{money(rebate_amount) || "(missing)"}",
               "#{ASHP_UPGRADE_LINE_AMOUNT_FIELD_KEY}=#{money(upgrade_amount) || "(missing)"}",
@@ -186,7 +351,7 @@ module Claims
               dependent_info_row(
                 rule: RULES.fetch(:product_specs),
                 expected_text:
-                  "The matched AHRI product row should show capacity of at least 12,000 BTU, qualifying SEER/HSPF or SEER2/HSPF2 values, and variable-speed compressor evidence."
+                  "The matched AHRI/OHPA product row should show capacity of at least 12,000 BTU, qualifying SEER/HSPF or SEER2/HSPF2 values, and variable-speed compressor evidence."
               )
             )
           end
@@ -206,7 +371,7 @@ module Claims
             rule_result: result,
             confidence: result == "pass" || result == "fail" ? 100 : 0,
             expected_text:
-              "Ductless mini-split, ductless multi-split, and central ducted heat pumps in the ASHP convert-from-electric table must meet the SEER/HSPF or SEER2/HSPF2 threshold, use a variable speed compressor, and have minimum capacity of 12,000 BTU.",
+              "Ductless mini-split, ductless multi-split, and central ducted ASHPs must meet the SEER/HSPF or SEER2/HSPF2 threshold, use a variable speed compressor, and have minimum capacity of 12,000 BTU.",
             calculation:
               evaluations
                 .map { |evaluation| evaluation.fetch(:calculation) }
@@ -235,7 +400,7 @@ module Claims
                 rule_result: "pass",
                 confidence: 100,
                 expected_text:
-                  "Ductless multi-split heat pumps in the ASHP convert-from-electric table must install a minimum of two indoor head units.",
+                  "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
                 calculation:
                   "hp_new_equipment_type/product source does not identify this ASHP as a ductless multi-split.",
                 evidence_text:
@@ -254,7 +419,7 @@ module Claims
                 rule_result: "fail",
                 confidence: 100,
                 expected_text:
-                  "Ductless multi-split heat pumps in the ASHP convert-from-electric table must install a minimum of two indoor head units.",
+                  "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
                 calculation:
                   "identified_as_multisplit=true; indoor_head_count=#{head_count}; required_minimum=#{MIN_MULTISPLIT_HEADS}.",
                 evidence_text:
@@ -273,7 +438,7 @@ module Claims
                 rule_result: "pass",
                 confidence: 100,
                 expected_text:
-                  "Ductless multi-split heat pumps in the ASHP convert-from-electric table must install a minimum of two indoor head units.",
+                  "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
                 calculation:
                   "identified_as_multisplit=true; indoor_head_count=#{head_count}; required_minimum=#{MIN_MULTISPLIT_HEADS}.",
                 evidence_text:
@@ -290,14 +455,14 @@ module Claims
             rule_result: product_multisplit_source?(product) ? "pass" : "warn",
             confidence: product_multisplit_source?(product) ? 100 : 0,
             expected_text:
-              "Ductless multi-split heat pumps in the ASHP convert-from-electric table must install a minimum of two indoor head units.",
+              "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
             calculation:
-              "identified_as_multisplit=true; indoor_head_count=(not explicitly visible); product_source=#{product_source_description(product).presence || "(missing)"}",
+              "identified_as_multisplit=true; indoor_head_count=(not explicitly visible); product_source=#{source_product_description(product).presence || "(missing)"}",
             evidence_text:
               field_evidence(equipment_type_field) || product_evidence(product),
             reason_and_likely_causes:
               if product_multisplit_source?(product)
-                "The matched AHRI product-list source is the ductless multi-split list, so code treats the product-list bucket as satisfying the multi-split indoor-head requirement."
+                "The matched product-list source is the ductless multi-split list, so code treats the product-list bucket as satisfying the multi-split indoor-head requirement."
               else
                 "The invoice evidence identifies a multi-split heat pump, but code could not find a named field value with the number of indoor head units. Admin should verify the invoice equipment section."
               end
@@ -305,7 +470,7 @@ module Claims
         end
 
         def capacity_evaluation(product)
-          capacity = product.rated_capacity_btu_at_minus_5c
+          capacity = capacity_value(product)
 
           if !metric_present?(capacity)
             return(
@@ -314,7 +479,7 @@ module Claims
                 calculation:
                   "capacity=#{format_decimal(capacity) || "(missing)"}; required_minimum=12000 BTU",
                 reason:
-                  "The AHRI product row does not provide a usable capacity value."
+                  "The #{source_product_label(product)} does not provide a usable capacity value."
               }
             )
           end
@@ -326,24 +491,26 @@ module Claims
               "capacity=#{format_decimal(capacity)} BTU; required_minimum=12000 BTU",
             reason:
               if passed
-                "The AHRI product row meets the 12,000 BTU minimum capacity requirement."
+                "The #{source_product_label(product)} meets the 12,000 BTU minimum capacity requirement."
               else
-                "The AHRI product row is below the 12,000 BTU minimum capacity requirement."
+                "The #{source_product_label(product)} is below the 12,000 BTU minimum capacity requirement."
               end
           }
         end
 
         def efficiency_evaluation(product)
           legacy_complete =
-            metric_present?(product.seer) && metric_present?(product.hspf)
+            metric_present?(legacy_seer_value(product)) &&
+              metric_present?(legacy_hspf_value(product))
           current_complete =
-            metric_present?(product.seer2) && metric_present?(product.hspf2)
+            metric_present?(current_seer2_value(product)) &&
+              metric_present?(current_hspf2_value(product))
           legacy_pass =
-            legacy_complete && product.seer >= MIN_SEER &&
-              product.hspf >= MIN_HSPF
+            legacy_complete && legacy_seer_value(product) >= MIN_SEER &&
+              legacy_hspf_value(product) >= MIN_HSPF
           current_pass =
-            current_complete && product.seer2 >= MIN_SEER2 &&
-              product.hspf2 >= MIN_HSPF2
+            current_complete && current_seer2_value(product) >= MIN_SEER2 &&
+              current_hspf2_value(product) >= MIN_HSPF2
 
           if !legacy_complete && !current_complete
             return(
@@ -352,7 +519,7 @@ module Claims
                 calculation:
                   "SEER/HSPF pair=(incomplete); SEER2/HSPF2 pair=(incomplete)",
                 reason:
-                  "The AHRI product row does not provide one complete efficiency pair for threshold comparison."
+                  "The #{source_product_label(product)} does not provide one complete efficiency pair for threshold comparison."
               }
             )
           end
@@ -362,9 +529,9 @@ module Claims
             calculation: efficiency_calculation_text(product),
             reason:
               if legacy_pass || current_pass
-                "The AHRI product row meets one allowed efficiency threshold path."
+                "The #{source_product_label(product)} meets one allowed efficiency threshold path."
               else
-                "The AHRI product row does not meet either allowed efficiency threshold path."
+                "The #{source_product_label(product)} does not meet either allowed efficiency threshold path."
               end
           }
         end
@@ -417,23 +584,6 @@ module Claims
           end
 
           "pass"
-        end
-
-        def matched_ahri_product
-          if invoice_version.ahri_product.present?
-            return invoice_version.ahri_product
-          end
-
-          invoice_ahri = normalized_ahri(invoice_ahri_field&.value_text)
-          return nil if invoice_ahri.blank?
-
-          current_match =
-            ::Claims::CurrentAhriProduct
-              .where(ahri_reference_number: invoice_ahri)
-              .order(:source_description, :id)
-              .first
-
-          ::Claims::AhriProduct.find_by(id: current_match.id) if current_match
         end
 
         def ashp_upgrade_line_amount_field
@@ -560,7 +710,7 @@ module Claims
         end
 
         def product_multisplit_source?(product)
-          product_source_description(product).match?(
+          source_product_description(product).match?(
             /\bductless\s+multi[- ]split\b/i
           )
         end
@@ -569,9 +719,13 @@ module Claims
           [
             equipment_type_field&.value_text,
             equipment_type_field&.evidence_text,
-            product_source_description(product),
-            product&.heat_pump_type,
-            product&.indoor_model_or_air_handler
+            source_product_description(product),
+            product_value(product, :heat_pump_type),
+            product_value(product, :indoor_model_or_air_handler),
+            product_value(product, :indoor_model_numbers),
+            product_value(product, :ducting_configuration),
+            product_value(product, :product_group),
+            product_value(product, :ahri_type)
           ].compact.join(" ")
         end
 
@@ -580,14 +734,13 @@ module Claims
             efficiency_and_capacity_field&.value_text,
             efficiency_and_capacity_field&.evidence_text,
             equipment_type_field&.value_text,
-            product&.heat_pump_type,
-            product&.eligibility_notes,
-            product&.raw_row_json
+            product_value(product, :heat_pump_type),
+            product_value(product, :ducting_configuration),
+            product_value(product, :product_group),
+            product_value(product, :ahri_type),
+            product_value(product, :eligibility_notes),
+            product_value(product, :raw_row_json)
           ].compact.join(" ")
-        end
-
-        def product_source_description(product)
-          product&.import_run&.ahri_source&.description.to_s
         end
 
         def rebate_cap_reason_text(result:, failures:, warnings:)
@@ -595,9 +748,9 @@ module Claims
           when "pass"
             "The named rebate, ASHP upgrade amount, and income-level cap are all present, and the rebate is no greater than the eligible ASHP upgrade amount or the Income Level cap."
           when "fail"
-            "The deterministic ASHP electric rebate comparison failed: #{failures.join("; ")}."
+            "The deterministic ASHP electric/wood rebate comparison failed: #{failures.join("; ")}."
           else
-            "Code could not confidently complete the ASHP electric rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice line amount, rebate line, and matched eligibility code."
+            "Code could not confidently complete the ASHP electric/wood rebate comparison because #{warnings.join("; ")}. Admin should verify the invoice line amount, rebate line, and matched eligibility code."
           end
         end
 
@@ -606,11 +759,11 @@ module Claims
             evaluations.map { |evaluation| evaluation.fetch(:reason) }.join(" ")
           case result
           when "pass"
-            "The matched AHRI product row and named field evidence satisfy the ASHP electric product specification checks. #{details}"
+            "The matched product row and named field evidence satisfy the ASHP product specification checks. #{details}"
           when "fail"
-            "One or more ASHP electric product specification checks failed. #{details}"
+            "One or more ASHP product specification checks failed. #{details}"
           else
-            "One or more ASHP electric product specification checks could not be completed from the named fields/product row. #{details}"
+            "One or more ASHP product specification checks could not be completed from the named fields/product row. #{details}"
           end
         end
 
@@ -621,10 +774,10 @@ module Claims
             confidence: 0,
             expected_text: expected_text,
             calculation:
-              "No matched AHRI product row was available from invoice_versions.ahri_product_id or classifier.ahri_reference.",
+              "No matched product row was available from #{source_product_pointer}.",
             evidence_text: field_evidence(invoice_ahri_field),
             reason_and_likely_causes:
-              "This ASHP electric product-spec rule depends on the AHRI product-list match. The AHRI product-list rule records whether the invoice AHRI reference was missing, not found, or matched; this dependent metric check is informational until that match exists."
+              "This ASHP product-spec rule depends on the product-list match. The product-list rule records whether the invoice AHRI reference was missing, not found, or matched; this dependent metric check is informational until that match exists."
           )
         end
 
@@ -705,12 +858,18 @@ module Claims
 
           [
             "AHRI #{product.ahri_reference_number}",
-            product_source_description(product),
-            product.make,
-            product.outdoor_model,
-            product.indoor_model_or_air_handler,
-            product.furnace_model,
-            "capacity #{format_decimal(product.rated_capacity_btu_at_minus_5c)} BTU",
+            source_product_reference(product),
+            product_list_name(product),
+            source_product_description(product),
+            product_value(product, :make),
+            product_value(product, :brand),
+            product_value(product, :outdoor_model),
+            product_value(product, :model_number),
+            product_value(product, :indoor_model_or_air_handler),
+            product_value(product, :indoor_model_numbers),
+            product_value(product, :furnace_model),
+            product_value(product, :furnace_model_number),
+            "capacity #{format_decimal(capacity_value(product))} BTU",
             efficiency_metric_summary(product)
           ].compact_blank.join("; ")
         end
@@ -718,23 +877,23 @@ module Claims
         def efficiency_metric_summary(product)
           [
             (
-              if metric_present?(product.seer)
-                "SEER #{format_decimal(product.seer)}"
+              if metric_present?(legacy_seer_value(product))
+                "SEER #{format_decimal(legacy_seer_value(product))}"
               end
             ),
             (
-              if metric_present?(product.hspf)
-                "HSPF #{format_decimal(product.hspf)}"
+              if metric_present?(legacy_hspf_value(product))
+                "HSPF #{format_decimal(legacy_hspf_value(product))}"
               end
             ),
             (
-              if metric_present?(product.seer2)
-                "SEER2 #{format_decimal(product.seer2)}"
+              if metric_present?(current_seer2_value(product))
+                "SEER2 #{format_decimal(current_seer2_value(product))}"
               end
             ),
             (
-              if metric_present?(product.hspf2)
-                "HSPF2 #{format_decimal(product.hspf2)}"
+              if metric_present?(current_hspf2_value(product))
+                "HSPF2 #{format_decimal(current_hspf2_value(product))}"
               end
             )
           ].compact.join(", ")
@@ -742,15 +901,17 @@ module Claims
 
         def efficiency_calculation_text(product)
           legacy =
-            if metric_present?(product.seer) || metric_present?(product.hspf)
-              "SEER #{format_decimal(product.seer)} / HSPF #{format_decimal(product.hspf)} versus SEER >= 16.0 and HSPF >= 10.0"
+            if metric_present?(legacy_seer_value(product)) ||
+                 metric_present?(legacy_hspf_value(product))
+              "SEER #{format_decimal(legacy_seer_value(product))} / HSPF #{format_decimal(legacy_hspf_value(product))} versus SEER >= 16.0 and HSPF >= 10.0"
             else
               "SEER/HSPF pair not provided"
             end
 
           current =
-            if metric_present?(product.seer2) || metric_present?(product.hspf2)
-              "SEER2 #{format_decimal(product.seer2)} / HSPF2 #{format_decimal(product.hspf2)} versus SEER2 >= 15.2 and HSPF2 >= 8.5"
+            if metric_present?(current_seer2_value(product)) ||
+                 metric_present?(current_hspf2_value(product))
+              "SEER2 #{format_decimal(current_seer2_value(product))} / HSPF2 #{format_decimal(current_hspf2_value(product))} versus SEER2 >= 15.2 and HSPF2 >= 8.5"
             else
               "SEER2/HSPF2 pair not provided"
             end
