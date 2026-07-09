@@ -166,6 +166,9 @@ module Api
                      "neea_product_match" => serialize_neea_product_match(iv),
                      "awhp_product_match" => serialize_awhp_product_match(iv),
                      "ohpa_product_match" => serialize_ohpa_product_match(iv),
+                     "herv_product_match" => serialize_herv_product_match(iv),
+                     "vent_fan_product_match" =>
+                       serialize_vent_fan_product_match(iv),
                      "supporting_document_types_by_upgrade_type" =>
                        serialize_supporting_document_types_by_upgrade_type(
                          iv.id
@@ -340,6 +343,9 @@ module Api
                      "neea_product_match" => serialize_neea_product_match(iv),
                      "awhp_product_match" => serialize_awhp_product_match(iv),
                      "ohpa_product_match" => serialize_ohpa_product_match(iv),
+                     "herv_product_match" => serialize_herv_product_match(iv),
+                     "vent_fan_product_match" =>
+                       serialize_vent_fan_product_match(iv),
                      "supporting_document_types_by_upgrade_type" =>
                        serialize_supporting_document_types_by_upgrade_type(
                          iv.id
@@ -957,6 +963,92 @@ module Api
           source: {
             ohpa_import_run_id: import_run&.id,
             ohpa_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
+      end
+
+      def serialize_herv_product_match(invoice_version)
+        product = invoice_version.herv_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.herv_source
+
+        {
+          product: {
+            id: product.id,
+            brand: product.brand,
+            model_number: product.model_number,
+            model_type: product.model_type,
+            sensible_heat_recovery_efficiency_sre_at_0c:
+              product.sensible_heat_recovery_efficiency_sre_at_0c,
+            sensible_heat_recovery_efficiency_sre_at_minus_25c:
+              product.sensible_heat_recovery_efficiency_sre_at_minus_25c,
+            associated_net_supply_airflow_at_0c_cfm:
+              product.associated_net_supply_airflow_at_0c_cfm,
+            associated_net_supply_airflow_at_minus_25c_cfm:
+              product.associated_net_supply_airflow_at_minus_25c_cfm,
+            associated_power_consumption_at_0c_w:
+              product.associated_power_consumption_at_0c_w,
+            associated_power_consumption_at_minus_25c_w:
+              product.associated_power_consumption_at_minus_25c_w,
+            max_rated_airflow_at_0c_cfm: product.max_rated_airflow_at_0c_cfm,
+            power_consumption_at_0c_w: product.power_consumption_at_0c_w,
+            eligibility_notes: product.eligibility_notes
+          },
+          source: {
+            herv_import_run_id: import_run&.id,
+            herv_source_id: source&.id,
+            source_url: source&.source_url,
+            source_description: source&.description,
+            publishing_notes: import_run&.publishing_notes,
+            publishing_date: import_run&.publishing_date,
+            completed_at: import_run&.completed_at,
+            records_imported: import_run&.records_imported
+          }
+        }
+      end
+
+      def serialize_vent_fan_product_match(invoice_version)
+        product = invoice_version.vent_fan_product
+        return nil unless product
+
+        import_run = product.import_run
+        source = import_run&.vent_fan_source
+
+        {
+          product: {
+            id: product.id,
+            energy_star_unique_id: product.energy_star_unique_id,
+            energy_star_partner: product.energy_star_partner,
+            brand: product.brand,
+            product_model_name: product.product_model_name,
+            model_number: product.model_number,
+            fan_type: product.fan_type,
+            number_of_speeds: product.number_of_speeds,
+            duct_size: product.duct_size,
+            sound_level_sones: product.sound_level_sones,
+            bathroom_utility_airflow_at_0_25_in_wg:
+              product.bathroom_utility_airflow_at_0_25_in_wg,
+            airflow_1_cfm: product.airflow_1_cfm,
+            airflow_2_cfm: product.airflow_2_cfm,
+            airflow_3_cfm: product.airflow_3_cfm,
+            efficacy_1_cfm_watt: product.efficacy_1_cfm_watt,
+            efficacy_2_cfm_watt: product.efficacy_2_cfm_watt,
+            efficacy_3_cfm_watt: product.efficacy_3_cfm_watt,
+            markets: product.markets,
+            cb_model_identifier: product.cb_model_identifier,
+            meets_most_efficient_criteria: product.meets_most_efficient_criteria
+          },
+          source: {
+            vent_fan_import_run_id: import_run&.id,
+            vent_fan_source_id: source&.id,
             source_url: source&.source_url,
             source_description: source&.description,
             publishing_notes: import_run&.publishing_notes,

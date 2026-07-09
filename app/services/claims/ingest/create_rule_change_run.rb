@@ -162,6 +162,8 @@ module Claims
         clone.neea_product_id = nil
         clone.awhp_product_id = nil
         clone.ohpa_product_id = nil
+        clone.herv_product_id = nil
+        clone.vent_fan_product_id = nil
         clone.users_eligibilitycode_id = nil
         clone.participant_user_id = nil
         clone.created_at = now

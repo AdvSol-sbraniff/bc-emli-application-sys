@@ -9,16 +9,18 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 3. `3_insert_neea_sources.sql`
 4. `3_insert_awhp_sources.sql`
 5. `3_insert_ohpa_sources.sql`
-6. `3_insert_invoice_status_subtypes.sql`
-7. `3_insert_invoice_upgrade_types.sql`
-8. `3_insert_supporting_document_types.sql`
-9. `3_insert_supporting_document_type_upgrade_types.sql`
-10. `3_insert_supporting_document_type_located_fields.sql`
-11. `3_insert_code_rules.sql`
-12. `3_insert_code_located_fields.sql`
-13. `3_insert_validationgenai_config.sql`
-14. `3_insert_genai_normalized.sql`
-15. `4_create_views.sql`
+6. `3_insert_herv_sources.sql`
+7. `3_insert_vent_fan_sources.sql`
+8. `3_insert_invoice_status_subtypes.sql`
+9. `3_insert_invoice_upgrade_types.sql`
+10. `3_insert_supporting_document_types.sql`
+11. `3_insert_supporting_document_type_upgrade_types.sql`
+12. `3_insert_supporting_document_type_located_fields.sql`
+13. `3_insert_code_rules.sql`
+14. `3_insert_code_located_fields.sql`
+15. `3_insert_validationgenai_config.sql`
+16. `3_insert_genai_normalized.sql`
+17. `4_create_views.sql`
 
 ## Optional local test data
 

@@ -34,6 +34,18 @@ const downloadTools: DownloadTool[] = [
       'Download, import, and inspect the NRCan Oil to Heat Pump Affordability BC qualified product list used by oil heat pump code rules.',
     path: '/ohpa-product-list-admin',
   },
+  {
+    title: 'HERV ENERGY STAR product list config',
+    description:
+      'Download, import, and inspect the NRCan ENERGY STAR heat/energy recovery ventilator product list used by ventilation code rules.',
+    path: '/herv-product-list-admin',
+  },
+  {
+    title: 'ENERGY STAR fan product list config',
+    description:
+      'Download, import, and inspect the ENERGY STAR certified ventilating fan product list used by ventilation fan code rules.',
+    path: '/vent-fan-product-list-admin',
+  },
 ];
 
 export default function DownloadsAdminScreen() {

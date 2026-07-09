@@ -9,9 +9,7 @@ WITH supporting_document_type_upgrade_types_seed (
   upgrade_type_key
 ) AS (
   VALUES
-  ('income_verification_document', 'common'),
   ('utility_bill', 'common'),
-  ('utility_account_document', 'common'),
   ('landlord_consent_form', 'common'),
 
   ('before_after_photo_set', 'insulation'),
@@ -24,7 +22,6 @@ WITH supporting_document_type_upgrade_types_seed (
   ('manufacturer_label_photo', 'windows_doors'),
 
   ('utility_bill', 'air_source_heat_pump_electric'),
-  ('utility_account_document', 'air_source_heat_pump_electric'),
   ('f280_heat_load_calculation', 'air_source_heat_pump_electric'),
   ('product_spec_sheet', 'air_source_heat_pump_electric'),
   ('manufacturer_label_photo', 'air_source_heat_pump_electric'),
@@ -45,7 +42,6 @@ WITH supporting_document_type_upgrade_types_seed (
   ('oil_removal_proof', 'air_source_heat_pump_oil'),
   ('permit_document', 'air_source_heat_pump_oil'),
   ('utility_bill', 'air_source_heat_pump_oil'),
-  ('utility_account_document', 'air_source_heat_pump_oil'),
   ('preapproval_notice', 'air_source_heat_pump_oil'),
   ('f280_heat_load_calculation', 'air_source_heat_pump_oil'),
   ('product_spec_sheet', 'air_source_heat_pump_oil'),

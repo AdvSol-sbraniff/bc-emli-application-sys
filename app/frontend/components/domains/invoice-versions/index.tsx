@@ -1263,6 +1263,12 @@ export const InvoiceVersionShowScreen = () => {
   const ohpaProductMatch = readData?.ohpa_product_match;
   const ohpaProduct = ohpaProductMatch?.product;
   const ohpaSource = ohpaProductMatch?.source;
+  const hervProductMatch = readData?.herv_product_match;
+  const hervProduct = hervProductMatch?.product;
+  const hervSource = hervProductMatch?.source;
+  const ventFanProductMatch = readData?.vent_fan_product_match;
+  const ventFanProduct = ventFanProductMatch?.product;
+  const ventFanSource = ventFanProductMatch?.source;
   const supportingDocumentTypeGroups = useMemo(
     () =>
       Array.isArray(readData?.supporting_document_types_by_upgrade_type)
@@ -2096,6 +2102,215 @@ export const InvoiceVersionShowScreen = () => {
                         </AccordionItem>
                       );
                     })
+                  )}
+
+                  {hervProduct && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              HERV ENERGY STAR product-list match
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Box borderWidth="1px" borderColor="teal.100" borderRadius="md" p="10px" bg="teal.50">
+                          <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                            <StatusDot result="pass" />
+                            <Badge colorScheme="teal">Product reference</Badge>
+                            {hervSource?.source_description && (
+                              <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                {String(hervSource.source_description)}
+                              </Badge>
+                            )}
+                            <Text fontSize="xs" opacity={0.75}>
+                              {fmtText(hervProduct.brand)} {fmtText(hervProduct.model_number)}
+                            </Text>
+                          </Flex>
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {[
+                              ['Brand', hervProduct.brand],
+                              ['Model number', hervProduct.model_number],
+                              ['Model type', hervProduct.model_type],
+                              ['SRE at 0 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_0c],
+                              ['SRE at -25 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_minus_25c],
+                              [
+                                'Associated net supply airflow at 0 C CFM',
+                                hervProduct.associated_net_supply_airflow_at_0c_cfm,
+                              ],
+                              [
+                                'Associated net supply airflow at -25 C CFM',
+                                hervProduct.associated_net_supply_airflow_at_minus_25c_cfm,
+                              ],
+                              [
+                                'Associated power consumption at 0 C W',
+                                hervProduct.associated_power_consumption_at_0c_w,
+                              ],
+                              [
+                                'Associated power consumption at -25 C W',
+                                hervProduct.associated_power_consumption_at_minus_25c_w,
+                              ],
+                              ['Max rated airflow at 0 C CFM', hervProduct.max_rated_airflow_at_0c_cfm],
+                              ['Power consumption at 0 C W', hervProduct.power_consumption_at_0c_w],
+                              ['Eligibility notes', hervProduct.eligibility_notes],
+                            ].map(([label, value]) => (
+                              <Box
+                                key={String(label)}
+                                px="10px"
+                                py="8px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="teal.100"
+                                bg="white"
+                              >
+                                <Text fontSize="xs" opacity={0.7}>
+                                  {String(label)}
+                                </Text>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {fmtText(value)}
+                                </Text>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          <Box mt="10px" pt="8px" borderTopWidth="1px" borderColor="teal.100">
+                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="4px">
+                              Source
+                            </Text>
+                            <Text fontSize="sm">
+                              {fmtText(hervSource?.source_description)}{' '}
+                              {hervSource?.publishing_date ? `(published ${fmtDate(hervSource.publishing_date)})` : ''}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75} wordBreak="break-all">
+                              HERV source id: {fmtText(hervSource?.herv_source_id)}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75}>
+                              Imported {fmtDate(hervSource?.completed_at)} with {fmtText(hervSource?.records_imported)}{' '}
+                              rows.
+                            </Text>
+                            {hervSource?.source_url && (
+                              <Text
+                                as="a"
+                                href={String(hervSource.source_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                fontSize="xs"
+                                color="teal.700"
+                                textDecoration="underline"
+                              >
+                                Open source list
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  )}
+
+                  {ventFanProduct && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              ENERGY STAR fan product-list match
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="8px">
+                        <Box borderWidth="1px" borderColor="teal.100" borderRadius="md" p="10px" bg="teal.50">
+                          <Flex align="center" gap="8px" mb="8px" wrap="wrap">
+                            <StatusDot result="pass" />
+                            <Badge colorScheme="teal">Product reference</Badge>
+                            {ventFanSource?.source_description && (
+                              <Badge colorScheme="gray" variant="subtle" textTransform="none">
+                                {String(ventFanSource.source_description)}
+                              </Badge>
+                            )}
+                            <Text fontSize="xs" opacity={0.75}>
+                              {fmtText(ventFanProduct.brand)} {fmtText(ventFanProduct.model_number)}
+                            </Text>
+                          </Flex>
+
+                          <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
+                            {[
+                              ['Brand', ventFanProduct.brand],
+                              ['Model number', ventFanProduct.model_number],
+                              ['Product model name', ventFanProduct.product_model_name],
+                              ['Fan type', ventFanProduct.fan_type],
+                              ['Airflow 1 CFM', ventFanProduct.airflow_1_cfm],
+                              ['Efficacy 1 CFM/Watt', ventFanProduct.efficacy_1_cfm_watt],
+                              ['Sound level sones', ventFanProduct.sound_level_sones],
+                              [
+                                'Bathroom/utility airflow at 0.25 in. w.g.',
+                                ventFanProduct.bathroom_utility_airflow_at_0_25_in_wg,
+                              ],
+                              ['Markets', ventFanProduct.markets],
+                              ['ENERGY STAR Unique ID', ventFanProduct.energy_star_unique_id],
+                              ['CB model identifier', ventFanProduct.cb_model_identifier],
+                              ['Most Efficient criteria', ventFanProduct.meets_most_efficient_criteria],
+                            ].map(([label, value]) => (
+                              <Box
+                                key={String(label)}
+                                px="10px"
+                                py="8px"
+                                borderRadius="md"
+                                borderWidth="1px"
+                                borderColor="teal.100"
+                                bg="white"
+                              >
+                                <Text fontSize="xs" opacity={0.7}>
+                                  {String(label)}
+                                </Text>
+                                <Text fontSize="sm" noOfLines={3}>
+                                  {fmtText(value)}
+                                </Text>
+                              </Box>
+                            ))}
+                          </Box>
+
+                          <Box mt="10px" pt="8px" borderTopWidth="1px" borderColor="teal.100">
+                            <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" opacity={0.7} mb="4px">
+                              Source
+                            </Text>
+                            <Text fontSize="sm">
+                              {fmtText(ventFanSource?.source_description)}{' '}
+                              {ventFanSource?.publishing_date
+                                ? `(published ${fmtDate(ventFanSource.publishing_date)})`
+                                : ''}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75} wordBreak="break-all">
+                              Fan source id: {fmtText(ventFanSource?.vent_fan_source_id)}
+                            </Text>
+                            <Text fontSize="xs" opacity={0.75}>
+                              Imported {fmtDate(ventFanSource?.completed_at)} with{' '}
+                              {fmtText(ventFanSource?.records_imported)} rows.
+                            </Text>
+                            {ventFanSource?.source_url && (
+                              <Text
+                                as="a"
+                                href={String(ventFanSource.source_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                fontSize="xs"
+                                color="teal.700"
+                                textDecoration="underline"
+                              >
+                                Open source list
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
+                      </AccordionPanel>
+                    </AccordionItem>
                   )}
 
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">

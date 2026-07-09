@@ -62,6 +62,12 @@ const AwhpProductListAdminScreen = lazy(() =>
 const OhpaProductListAdminScreen = lazy(() =>
   import('../ohpa-product-list-admin').then((module) => ({ default: module.default })),
 );
+const HervProductListAdminScreen = lazy(() =>
+  import('../herv-product-list-admin').then((module) => ({ default: module.default })),
+);
+const VentFanProductListAdminScreen = lazy(() =>
+  import('../vent-fan-product-list-admin').then((module) => ({ default: module.default })),
+);
 const DownloadsAdminScreen = lazy(() => import('../downloads-admin').then((module) => ({ default: module.default })));
 const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
 
@@ -476,6 +482,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/get-support': 'Support',
   '/heat-pump-product-list-admin': 'Heat Pump Product List Admin',
   '/hello-ai-admin': 'Hello AI Admin',
+  '/herv-product-list-admin': 'HERV ENERGY STAR Product List Admin',
   '/hpwh-product-list-admin': 'HPWH Product List Admin',
   '/invoice-supporting-documents-admin': 'Invoice Supporting Documents Admin',
   '/invoice-versions-admin': 'Invoice Versions Admin',
@@ -485,6 +492,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/new-invoice': 'New Invoice',
   '/not-found': 'Not Found',
   '/ohpa-product-list-admin': 'OHPA Product List Admin',
+  '/vent-fan-product-list-admin': 'ENERGY STAR Fan Product List Admin',
   '/profile': 'Profile',
   '/profile/eula': 'Terms',
   '/programs': 'Programs',
@@ -999,6 +1007,8 @@ const AppRoutes = observer(() => {
           <Route path="/hpwh-product-list-admin" element={<HpwhProductListAdminScreen />} />
           <Route path="/awhp-product-list-admin" element={<AwhpProductListAdminScreen />} />
           <Route path="/ohpa-product-list-admin" element={<OhpaProductListAdminScreen />} />
+          <Route path="/herv-product-list-admin" element={<HervProductListAdminScreen />} />
+          <Route path="/vent-fan-product-list-admin" element={<VentFanProductListAdminScreen />} />
           <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/contractorfixsimulation" element={<ContractorFixSimulationAdminScreen />} />
           <Route path="/advice-refresh-simulation-admin" element={<AdviceRefreshSimulationAdminScreen />} />

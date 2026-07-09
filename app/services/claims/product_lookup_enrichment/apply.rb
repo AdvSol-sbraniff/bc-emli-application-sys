@@ -12,6 +12,7 @@ module Claims
 
       OIL_UPGRADE_TYPE_KEY = "air_source_heat_pump_oil"
       HPWH_UPGRADE_TYPE_KEY = "heat_pump_water_heater"
+      VENTILATION_UPGRADE_TYPE_KEY = "ventilation"
 
       CLASSIFIER_AHRI_FIELD_KEY = "classifier.ahri_reference"
       CLASSIFIER_MODEL_NUMBER_FIELD_KEY = "classifier.product_model_number"
@@ -20,6 +21,25 @@ module Claims
       HPWH_MODEL_NUMBER_FIELD_KEY = "hpwh_model_number"
       HPWH_MODEL_COMPONENTS_FIELD_KEY = "hpwh_model_components"
       HPWH_MAKE_MODEL_FIELD_KEY = "hpwh_make_model"
+      VENT_MANUFACTURER_FIELD_KEY = "vent_manufacturer"
+      VENT_MODEL_NUMBER_FIELD_KEY = "vent_model_number"
+      VENT_MAKE_MODEL_FIELD_KEY = "vent_make_model"
+      VENT_SYSTEM_TYPE_FIELD_KEY = "vent_system_type"
+      HERV_SUPPORTING_DOCUMENT_FIELD_KEYS = %w[
+        brand_and_model
+        model_number
+        product_category_or_system_type
+        energy_star_reference
+        nrcan_reference
+        product_list_reference
+      ].freeze
+      VENT_FAN_SUPPORTING_DOCUMENT_FIELD_KEYS = %w[
+        brand_and_model
+        model_number
+        product_category_or_system_type
+        energy_star_reference
+        product_list_reference
+      ].freeze
 
       HYDRONIC_INVOICE_FIELD_KEYS = {
         "air_to_water_heat_pump" => %w[
@@ -63,6 +83,13 @@ module Claims
           updates[:neea_product_id] = results[:neea][:product_id]
         end
 
+        if ventilation_upgrade_type
+          results[:herv] = lookup_herv_product(ventilation_upgrade_type)
+          updates[:herv_product_id] = results[:herv][:product_id]
+          results[:vent_fan] = lookup_vent_fan_product(ventilation_upgrade_type)
+          updates[:vent_fan_product_id] = results[:vent_fan][:product_id]
+        end
+
         hydronic_upgrade_types.each do |upgrade_type|
           results[:awhp] = lookup_awhp_product(upgrade_type)
           updates[:awhp_product_id] = results[:awhp][:product_id]
@@ -103,6 +130,13 @@ module Claims
         @hpwh_upgrade_type ||=
           invoice_upgrade_types.find do |upgrade_type|
             upgrade_type.upgrade_type_key == HPWH_UPGRADE_TYPE_KEY
+          end
+      end
+
+      def ventilation_upgrade_type
+        @ventilation_upgrade_type ||=
+          invoice_upgrade_types.find do |upgrade_type|
+            upgrade_type.upgrade_type_key == VENTILATION_UPGRADE_TYPE_KEY
           end
       end
 
@@ -259,6 +293,124 @@ module Claims
         )
       end
 
+      def lookup_herv_product(upgrade_type)
+        invoice_fields =
+          invoice_fields(
+            field_keys: [
+              CLASSIFIER_MODEL_NUMBER_FIELD_KEY,
+              CLASSIFIER_MANUFACTURER_FIELD_KEY,
+              VENT_MANUFACTURER_FIELD_KEY,
+              VENT_MODEL_NUMBER_FIELD_KEY,
+              VENT_MAKE_MODEL_FIELD_KEY,
+              VENT_SYSTEM_TYPE_FIELD_KEY
+            ],
+            upgrade_type_ids: [upgrade_type.id]
+          )
+        supporting_fields =
+          supporting_document_fields(
+            field_keys: HERV_SUPPORTING_DOCUMENT_FIELD_KEYS
+          )
+
+        invoice_model_values = model_values_for(invoice_fields)
+        supporting_model_values = model_values_for(supporting_fields)
+        invoice_manufacturer_values = manufacturer_values_for(invoice_fields)
+        supporting_manufacturer_values =
+          manufacturer_values_for(supporting_fields)
+
+        invoice_product =
+          herv_product_for(
+            model_values: invoice_model_values,
+            manufacturer_values: invoice_manufacturer_values
+          )
+        supporting_product =
+          herv_product_for(
+            model_values: supporting_model_values,
+            manufacturer_values: supporting_manufacturer_values
+          )
+        product =
+          if invoice_product.present? && supporting_product.present? &&
+               invoice_product.id == supporting_product.id
+            invoice_product
+          end
+
+        lookup_result(
+          product_family: "herv",
+          evidence_kind: "invoice_and_supporting_model",
+          evidence_value:
+            (invoice_model_values + supporting_model_values).first,
+          field: invoice_fields.first || supporting_fields.first,
+          product: product,
+          product_rows_available: ::Claims::CurrentHervProduct.exists?,
+          extra: {
+            invoice_model_values: invoice_model_values,
+            supporting_model_values: supporting_model_values,
+            invoice_manufacturer_values: invoice_manufacturer_values,
+            supporting_manufacturer_values: supporting_manufacturer_values,
+            invoice_product_id: invoice_product&.id,
+            supporting_product_id: supporting_product&.id
+          }
+        )
+      end
+
+      def lookup_vent_fan_product(upgrade_type)
+        invoice_fields =
+          invoice_fields(
+            field_keys: [
+              CLASSIFIER_MODEL_NUMBER_FIELD_KEY,
+              CLASSIFIER_MANUFACTURER_FIELD_KEY,
+              VENT_MANUFACTURER_FIELD_KEY,
+              VENT_MODEL_NUMBER_FIELD_KEY,
+              VENT_MAKE_MODEL_FIELD_KEY,
+              VENT_SYSTEM_TYPE_FIELD_KEY
+            ],
+            upgrade_type_ids: [upgrade_type.id]
+          )
+        supporting_fields =
+          supporting_document_fields(
+            field_keys: VENT_FAN_SUPPORTING_DOCUMENT_FIELD_KEYS
+          )
+
+        invoice_model_values = model_values_for(invoice_fields)
+        supporting_model_values = model_values_for(supporting_fields)
+        invoice_manufacturer_values = manufacturer_values_for(invoice_fields)
+        supporting_manufacturer_values =
+          manufacturer_values_for(supporting_fields)
+
+        invoice_product =
+          vent_fan_product_for(
+            model_values: invoice_model_values,
+            manufacturer_values: invoice_manufacturer_values
+          )
+        supporting_product =
+          vent_fan_product_for(
+            model_values: supporting_model_values,
+            manufacturer_values: supporting_manufacturer_values
+          )
+        product =
+          if invoice_product.present? && supporting_product.present? &&
+               invoice_product.id == supporting_product.id
+            invoice_product
+          end
+
+        lookup_result(
+          product_family: "vent_fan",
+          evidence_kind: "invoice_and_supporting_model",
+          evidence_value:
+            (invoice_model_values + supporting_model_values).first,
+          field: invoice_fields.first || supporting_fields.first,
+          product: product,
+          product_rows_available: ::Claims::CurrentVentFanProduct.exists?,
+          extra: {
+            invoice_model_values: invoice_model_values,
+            supporting_model_values: supporting_model_values,
+            invoice_manufacturer_values: invoice_manufacturer_values,
+            supporting_manufacturer_values: supporting_manufacturer_values,
+            invoice_product_id: invoice_product&.id,
+            supporting_product_id: supporting_product&.id
+          }
+        )
+      end
+
       def best_invoice_field(
         field_keys:,
         upgrade_type_ids:,
@@ -289,6 +441,20 @@ module Claims
             confidence: :desc,
             created_at: :desc
           )
+          .to_a
+      end
+
+      def supporting_document_fields(field_keys:)
+        ::Claims::SupportingDocumentLocatedField
+          .joins(:supporting_document)
+          .where(
+            ::Claims::SupportingDocument.table_name => {
+              invoice_version_id: invoice_version.id
+            }
+          )
+          .where(field_key: field_keys)
+          .where.not(value_text: [nil, ""])
+          .order(confidence: :desc, created_at: :desc)
           .to_a
       end
 
@@ -369,6 +535,34 @@ module Claims
             manufacturer_values: manufacturers
           )
         product && ::Claims::AwhpProduct.find_by(id: product.id)
+      end
+
+      def herv_product_for(model_values:, manufacturer_values:)
+        return nil if model_values.empty?
+
+        manufacturers =
+          manufacturer_values.map { |value| normalize_text(value) }.compact
+        product =
+          best_model_product(
+            candidates: ::Claims::CurrentHervProduct.all.to_a,
+            model_values: model_values,
+            manufacturer_values: manufacturers
+          )
+        product && ::Claims::HervProduct.find_by(id: product.id)
+      end
+
+      def vent_fan_product_for(model_values:, manufacturer_values:)
+        return nil if model_values.empty?
+
+        manufacturers =
+          manufacturer_values.map { |value| normalize_text(value) }.compact
+        product =
+          best_model_product(
+            candidates: ::Claims::CurrentVentFanProduct.all.to_a,
+            model_values: model_values,
+            manufacturer_values: manufacturers
+          )
+        product && ::Claims::VentFanProduct.find_by(id: product.id)
       end
 
       def best_model_product(candidates:, model_values:, manufacturer_values:)

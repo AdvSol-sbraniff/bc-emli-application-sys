@@ -1,0 +1,39 @@
+INVOICE
+
+FreshAir HVAC Ltd.
+BC Contractor Registration: HP-VENT-2048
+Invoice No: VENT-2026-001
+Invoice Date: 2026-06-12
+Customer: Test Customer
+Installation Address: 123 Example Street, Victoria, BC
+
+Scope of Work
+
+Installed one Airflow AIR205-R heat recovery ventilator (HRV) as part of the same CleanBC Energy Savings Program project as the air-source heat pump installation listed below.
+
+The ventilation upgrade improves air circulation in the home by providing balanced fresh-air supply and stale-air exhaust through a heat recovery ventilator.
+
+Line Items
+
+1. Air-source heat pump installation - outdoor unit, indoor head, refrigerant lines, commissioning
+   Amount: $8,750.00
+
+2. Ventilation upgrade - Airflow AIR205-R heat recovery ventilator (HRV), duct connection, balancing, commissioning
+   Amount: $2,000.00
+
+3. Labour included for HRV installation by licensed HVAC contractor
+   Amount: Included
+
+CleanBC / Better Homes / ESP Rebates
+
+Air-source heat pump rebate: -$5,000.00
+Ventilation rebate: -$1,600.00
+
+Subtotal before rebates: $10,750.00
+Total CleanBC / Better Homes / ESP rebate: -$6,600.00
+Customer amount owing after rebate: $4,150.00
+
+Notes
+
+The Airflow AIR205-R HRV is ENERGY STAR certified and listed on the Natural Resources Canada searchable product list for heat/energy recovery ventilators.
+The HRV was installed in accordance with the BC Housing Heat Recovery Ventilation Guide for Houses.

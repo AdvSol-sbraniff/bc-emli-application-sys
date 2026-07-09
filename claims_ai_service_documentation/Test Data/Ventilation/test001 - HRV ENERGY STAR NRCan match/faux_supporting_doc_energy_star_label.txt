@@ -1,0 +1,19 @@
+ENERGY STAR LABEL / PRODUCT LISTING EVIDENCE
+
+ENERGY STAR Canada
+Heat/Energy Recovery Ventilator
+
+Brand Name: Airflow
+Model Number: AIR205-R
+Product Category: Heat Recovery Ventilator / HRV
+
+This model appears on Natural Resources Canada's searchable product list:
+Ventilators, heat/energy recovery (ENERGY STAR)
+Product segment: ES.Ventilators.HeatEnergyRecovery
+
+Visible rating values:
+SRE at 0 C: 76.0%
+SRE at -25 C: 70.0%
+Model type: H
+
+Label legibility: clear

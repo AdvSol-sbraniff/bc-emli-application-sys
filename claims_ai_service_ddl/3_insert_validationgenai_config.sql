@@ -80,12 +80,12 @@ Rules:
 - If a rule task, configured document type, not_present_applicable_type_keys value, or prompt instruction appears illogical when compared with the package evidence as a whole, call out that inconsistency explicitly in reason_and_likely_causes. Do not blindly fail only because a literal type_key is not present when another supplied document appears to satisfy the business intent of the rule. In that situation, explain the likely configuration/rule wording issue and use the least severe result that still gives the admin a clear review path.
 - For every located_fields[] item based on visible invoice evidence, set page and polygon when Document Intelligence provides a reliable location. Use polygon=null only for inferred/database-derived values or when no reliable DI location exists.
 - For every non-common upgrade-specific ruleset call, include a located_fields[] item with field_key="upgrade_specific_rebate_line_amount" for the CleanBC / Better Homes / Energy Savings Program rebate amount attributable to that specific upgrade type. Use value=null when the invoice does not clearly allocate a rebate to this upgrade type.
-- Supporting-document evidence is supplied in case_facts.supporting_document_summary and case_facts.supporting_document_summary_for_upgrade_type. When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, income/utility-account documents, landlord consent, or other attachments, inspect the configured supporting documents and their located_fields before warning or failing for missing evidence.
+- Supporting-document evidence is supplied in case_facts.supporting_document_summary and case_facts.supporting_document_summary_for_upgrade_type. When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, landlord consent, or other attachments, inspect the configured supporting documents and their located_fields before warning or failing for missing evidence.
 - If supporting-document located fields satisfy a document-present or fact-present requirement, cite the supporting_document type_key plus the exact field_key/value/evidence_text used in evidence_text.
 - If a supporting document is present but the located fields show visual-review, cutoff, blur, missing-page, or legibility limitations, use rule_result="warn" for targeted admin review unless the visible evidence clearly contradicts the requirement.
 
 Rule result examples:
-- PASS: Standard warranty terms are visible but no warranty-paid/credited costs appear. Admin can skim.
+- PASS: Standard warranty or insurance terms are visible but no warranty-paid, insurance-paid, credited, or no-charge costs appear. Admin can skim.
 - INFO: A rule passes, but the invoice includes useful context worth surfacing, such as clearly split rebate amounts by upgrade type, arithmetic that reconciles under a specific acceptable model, or strong documentation that helps explain why review should be easy. This may appear in advice as a helpful note, not a requested fix.
 - WARN: Invoice date is before 2026-04-01, so the prior RER version may apply. Admin should confirm the correct requirements vintage; this is not an invoice eligibility failure by itself.
 - WARN: A supporting document is present but the extracted fields are incomplete, ambiguous, visually limited, or illegible. Admin should verify that specific supporting-document file only.
@@ -94,7 +94,7 @@ Rule result examples:
 - WARN: Rebate math values are incomplete or ambiguous, but no visible value clearly exceeds a cap. Admin should verify the missing amount or source value.
 - FAIL: The visible claimed rebate clearly exceeds the cap or invoice cost.
 - FAIL: The invoice clearly shows standalone/ineligible scope for a rule that requires association with another upgrade.
-- FAIL: The invoice clearly shows warranty-paid/credited/no-charge costs being claimed.
+- FAIL: The invoice clearly shows warranty-paid, insurance-paid, credited, or no-charge costs being claimed.
 $system$,
     $classifier$
 purpose-statement:
@@ -132,7 +132,6 @@ Allowed supporting_document_type_key values:
 - floor_plan_document
 - fossil_backup_system_document
 - fossil_fuel_removal_proof
-- income_verification_document
 - landlord_consent_form
 - manufacturer_label_photo
 - oil_removal_proof
@@ -140,7 +139,6 @@ Allowed supporting_document_type_key values:
 - preapproval_notice
 - preapproval_quote
 - product_spec_sheet
-- utility_account_document
 - utility_bill
 - electrical_utility_upgrade_document
 - wett_report
@@ -299,7 +297,6 @@ Allowed supporting_document_type_key values:
 - floor_plan_document
 - fossil_backup_system_document
 - fossil_fuel_removal_proof
-- income_verification_document
 - landlord_consent_form
 - manufacturer_label_photo
 - oil_removal_proof
@@ -307,7 +304,6 @@ Allowed supporting_document_type_key values:
 - preapproval_notice
 - preapproval_quote
 - product_spec_sheet
-- utility_account_document
 - utility_bill
 - electrical_utility_upgrade_document
 - wett_report

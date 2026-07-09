@@ -77,6 +77,8 @@ SELECT DISTINCT ON (iv.invoice_id)
   iv.neea_product_id,
   iv.awhp_product_id,
   iv.ohpa_product_id,
+  iv.herv_product_id,
+  iv.vent_fan_product_id,
   iv.users_eligibilitycode_id,
   iv.participant_user_id
 FROM claims.invoices i
@@ -209,6 +211,68 @@ JOIN (
   FROM claims.ohpa_import_runs
   WHERE status = 'succeeded'
   ORDER BY ohpa_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
+) latest
+  ON latest.id = run.id;
+
+
+CREATE OR REPLACE VIEW claims.v_current_herv_products AS
+SELECT
+  p.*,
+  src.id AS herv_source_id,
+  src.source_url,
+  src.description AS source_description,
+  run.publishing_notes,
+  run.publishing_date,
+  run.storage_provider AS source_storage_provider,
+  run.storage_key AS source_storage_key,
+  run.content_type AS source_content_type,
+  run.byte_size AS source_byte_size,
+  run.file_sha256 AS source_file_sha256,
+  run.completed_at AS source_import_completed_at,
+  run.records_imported AS source_records_imported
+FROM claims.herv_products p
+JOIN claims.herv_import_runs run
+  ON run.id = p.import_run_id
+JOIN claims.herv_sources src
+  ON src.id = run.herv_source_id
+JOIN (
+  SELECT DISTINCT ON (herv_source_id)
+    id,
+    herv_source_id
+  FROM claims.herv_import_runs
+  WHERE status = 'succeeded'
+  ORDER BY herv_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
+) latest
+  ON latest.id = run.id;
+
+
+CREATE OR REPLACE VIEW claims.v_current_vent_fan_products AS
+SELECT
+  p.*,
+  src.id AS vent_fan_source_id,
+  src.source_url,
+  src.description AS source_description,
+  run.publishing_notes,
+  run.publishing_date,
+  run.storage_provider AS source_storage_provider,
+  run.storage_key AS source_storage_key,
+  run.content_type AS source_content_type,
+  run.byte_size AS source_byte_size,
+  run.file_sha256 AS source_file_sha256,
+  run.completed_at AS source_import_completed_at,
+  run.records_imported AS source_records_imported
+FROM claims.vent_fan_products p
+JOIN claims.vent_fan_import_runs run
+  ON run.id = p.import_run_id
+JOIN claims.vent_fan_sources src
+  ON src.id = run.vent_fan_source_id
+JOIN (
+  SELECT DISTINCT ON (vent_fan_source_id)
+    id,
+    vent_fan_source_id
+  FROM claims.vent_fan_import_runs
+  WHERE status = 'succeeded'
+  ORDER BY vent_fan_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
 ) latest
   ON latest.id = run.id;
 

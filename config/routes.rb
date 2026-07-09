@@ -206,6 +206,16 @@ Rails.application.routes.draw do
           to: "ohpa_products_admin#import_status"
       post "admin/ohpa_products/import_downloaded_csv",
            to: "ohpa_products_admin#import_downloaded_csv"
+      get "admin/herv_products", to: "herv_products_admin#index"
+      get "admin/herv_products/import_status",
+          to: "herv_products_admin#import_status"
+      post "admin/herv_products/import_downloaded_csv",
+           to: "herv_products_admin#import_downloaded_csv"
+      get "admin/vent_fan_products", to: "vent_fan_products_admin#index"
+      get "admin/vent_fan_products/import_status",
+          to: "vent_fan_products_admin#import_status"
+      post "admin/vent_fan_products/import_downloaded_csv",
+           to: "vent_fan_products_admin#import_downloaded_csv"
       get "admin/validation_rules", to: "validation_rules_admin#index"
       get "admin/validation_rules/upgrade_types",
           to: "validation_rules_admin#upgrade_types"

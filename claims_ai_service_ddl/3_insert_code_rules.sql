@@ -1,67 +1,5 @@
 BEGIN;
 
-WITH obsolete_ashp_requirement_rule_keys (code_rule_key) AS (
-  VALUES
-  ('ashp_electric_rebate_math_within_cap'),
-  ('ashp_electric_product_specs_meet_requirements'),
-  ('ashp_electric_multisplit_minimum_two_indoor_heads'),
-  ('ashp_wood_rebate_math_within_cap'),
-  ('ashp_wood_product_specs_meet_requirements'),
-  ('ashp_wood_multisplit_minimum_two_indoor_heads'),
-  ('ashp_gas_propane_northern_top_up_within_cap')
-),
-obsolete_ashp_requirement_rule_mappings AS (
-  SELECT cru.id
-  FROM claims.code_rule_upgrade_types cru
-  JOIN claims.code_rules cr
-    ON cr.id = cru.code_rule_id
-  JOIN obsolete_ashp_requirement_rule_keys old
-    ON old.code_rule_key = cr.code_rule_key
-)
-DELETE FROM claims.code_rule_upgrade_types cru
-USING obsolete_ashp_requirement_rule_mappings old
-WHERE cru.id = old.id;
-
-WITH obsolete_ashp_requirement_rule_keys (code_rule_key) AS (
-  VALUES
-  ('ashp_electric_rebate_math_within_cap'),
-  ('ashp_electric_product_specs_meet_requirements'),
-  ('ashp_electric_multisplit_minimum_two_indoor_heads'),
-  ('ashp_wood_rebate_math_within_cap'),
-  ('ashp_wood_product_specs_meet_requirements'),
-  ('ashp_wood_multisplit_minimum_two_indoor_heads'),
-  ('ashp_gas_propane_northern_top_up_within_cap')
-)
-DELETE FROM claims.code_rules cr
-USING obsolete_ashp_requirement_rule_keys old
-WHERE cr.code_rule_key = old.code_rule_key;
-
-WITH retired_common_rule_keys (code_rule_key) AS (
-  VALUES
-  ('source_vintage_applies'),
-  ('dfhp_northern_top_up_within_cap')
-),
-retired_common_rule_mappings AS (
-  SELECT cru.id
-  FROM claims.code_rule_upgrade_types cru
-  JOIN claims.code_rules cr
-    ON cr.id = cru.code_rule_id
-  JOIN retired_common_rule_keys old
-    ON old.code_rule_key = cr.code_rule_key
-)
-DELETE FROM claims.code_rule_upgrade_types cru
-USING retired_common_rule_mappings old
-WHERE cru.id = old.id;
-
-WITH retired_common_rule_keys (code_rule_key) AS (
-  VALUES
-  ('source_vintage_applies'),
-  ('dfhp_northern_top_up_within_cap')
-)
-DELETE FROM claims.code_rules cr
-USING retired_common_rule_keys old
-WHERE cr.code_rule_key = old.code_rule_key;
-
 WITH code_rules_seed (
   id,
   code_rule_key,
@@ -324,6 +262,19 @@ WITH code_rules_seed (
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53105'::uuid,
+    'esu_rebate_math_within_cap',
+    'Checks electrical service upgrade rebate amount against the ESU upgrade line amount and the income-level cap. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read esu_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Apply cap table: ESP1 $5,000, ESP2 $3,500, ESP3 $1,500. 5. If rebate amount, ESU upgrade amount, or income level is missing or ambiguous, warn. 6. If rebate amount exceeds the income-level cap, fail. 7. If rebate amount exceeds the ESU upgrade amount, fail. 8. Pass only when all named values are clear and the rebate is less than or equal to both the ESU upgrade amount and the applicable cap. 9. In calculation, show upgrade_specific_rebate_line_amount, esu_line_amount, income level, and cap.',
+    true,
+    'No follow-up is required when the ESU rebate is within the named ESU upgrade amount and income-level cap.',
+    'Review the invoice ESU line amount, rebate line, and eligibility-code match before moving the claim forward.',
+    'Confirm the invoice ESU line amount, rebate line, and eligibility-code match before asking the contractor for correction.',
+    NULL,
+    'Requirement PDF: ELECTRICAL SERVICE UPGRADE requirements table. Uses esu_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    TIMESTAMP '2026-07-09 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53151'::uuid,
     'hydronic_product_found_in_qualifying_list',
     'Checks whether invoice and supporting-document air-to-water or combined heat pump product evidence match each other and exist in the current imported Better Homes BC Air-to-Water and Combination Heat Pump Qualifying Product List.',
@@ -517,6 +468,169 @@ otherwise pass',
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53106'::uuid,
+    'hs_rebate_math_within_cap',
+    'Checks whether the claimed health and safety remediation rebate is within the eligible remediation cost and the income-level maximum.
+
+Pseudo-code:
+read upgrade_specific_rebate_line_amount from GenAI located fields for this health and safety remediation upgrade
+read hs_line_amount from GenAI located fields for this health and safety remediation upgrade
+read users_eligibilitycodes.income_level from the matched eligibility-code record, falling back to the code located field if needed
+
+if rebate amount, hs_line_amount, or income level is missing/not numeric, return warn
+
+if income level is 1:
+  calculated cap = lesser of 95% of hs_line_amount and $800
+
+if income level is 2:
+  calculated cap = lesser of 60% of hs_line_amount and $800
+
+if income level is 3:
+  fail when a positive health and safety remediation rebate is claimed because no ESP3 rebate applies
+
+fail if upgrade_specific_rebate_line_amount is greater than hs_line_amount
+fail if upgrade_specific_rebate_line_amount is greater than the calculated cap
+otherwise pass',
+    true,
+    'No follow-up is required when the health and safety remediation rebate is within the eligible remediation cost and calculated income-level cap.',
+    'Verify the invoice rebate line, health and safety remediation amount, and matched eligibility code before deciding whether the cap is met.',
+    'The claimed health and safety remediation rebate appears to exceed the eligible remediation amount or calculated income-level cap.',
+    NULL,
+    'Uses genai located fields hs_line_amount and upgrade_specific_rebate_line_amount plus claims.users_eligibilitycodes.income_level. ESP1 cap is min(95% of cost, $800); ESP2 cap is min(60% of cost, $800); ESP3 has no health and safety remediation rebate.',
+    TIMESTAMP '2026-07-09 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53107'::uuid,
+    'vent_rebate_math_within_cap',
+    'Checks whether the claimed ventilation rebate is within the visible ventilation cost and the calculated subtype/income-level maximum.
+
+Pseudo-code:
+read upgrade_specific_rebate_line_amount from GenAI located fields for this ventilation upgrade
+read vent_line_amount from GenAI located fields for this ventilation upgrade
+read users_eligibilitycodes.income_level from the matched eligibility-code record, falling back to the code located field if needed
+classify ventilation subtype as bathroom fan, HRV/ERV, or unknown using:
+- invoice_versions.vent_fan_product_id when the fan product-list code rule matched
+- invoice_versions.herv_product_id when the HRV/ERV product-list code rule matched
+- vent_system_type and supporting-document product_category_or_system_type as fallback named evidence
+
+if rebate amount, vent_line_amount, income level, or ventilation subtype is missing/ambiguous, return warn unless a clear failure is present
+
+if subtype is bathroom fan and income level is 1:
+  calculated cap = lesser of 95% of vent_line_amount and $300
+
+if subtype is bathroom fan and income level is 2:
+  calculated cap = lesser of 60% of vent_line_amount and $300
+
+if subtype is HRV/ERV and income level is 1:
+  calculated cap = lesser of 95% of vent_line_amount and $1,600
+
+if subtype is HRV/ERV and income level is 2:
+  calculated cap = lesser of 60% of vent_line_amount and $1,600
+
+if income level is 3:
+  fail when a positive ventilation rebate is claimed because no ESP3 rebate applies
+
+fail if upgrade_specific_rebate_line_amount is greater than vent_line_amount
+fail if upgrade_specific_rebate_line_amount is greater than the calculated cap
+otherwise pass',
+    true,
+    'No follow-up is required when the ventilation rebate is within the eligible ventilation cost and calculated subtype/income-level cap.',
+    'Verify the invoice rebate line, ventilation amount, ventilation subtype, and matched eligibility code before deciding whether the cap is met.',
+    'The claimed ventilation rebate appears to exceed the eligible ventilation amount or calculated subtype/income-level cap.',
+    NULL,
+    'Uses genai located fields vent_line_amount, upgrade_specific_rebate_line_amount, vent_system_type; supporting-document product_category_or_system_type; invoice_versions.herv_product_id; invoice_versions.vent_fan_product_id; and claims.users_eligibilitycodes.income_level. Bathroom fan caps: ESP1 min(95% of cost, $300), ESP2 min(60% of cost, $300), ESP3 no rebate. HRV/ERV caps: ESP1 min(95% of cost, $1,600), ESP2 min(60% of cost, $1,600), ESP3 no rebate.',
+    TIMESTAMP '2026-07-09 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53120'::uuid,
+    'vent_herv_nrcan_energy_star_product_list_match',
+    'Checks whether an HRV/ERV ventilation product is listed in the imported NRCan ENERGY STAR heat/energy recovery ventilator product list.
+
+Pseudo-code:
+1. Run only for ventilation upgrade types when this code rule is enabled.
+2. Read invoice-side named fields: classifier.product_model_number, classifier.product_manufacturer, vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
+3. Read supporting-document named fields from documents on the same invoice version: brand_and_model, model_number, product_category_or_system_type, energy_star_reference, nrcan_reference, and product_list_reference.
+4. If the named evidence clearly indicates bathroom/exhaust fan and does not indicate HRV/ERV, return info because the HRV/ERV product-list lookup is not applicable.
+5. If the named evidence does not clearly indicate HRV/ERV, return warn so admin can review vent_system_type and product evidence.
+6. Extract usable model values from invoice fields and supporting-document fields.
+7. If invoice model evidence is missing, fail because the invoice does not independently identify the installed HRV/ERV product.
+8. If supporting-document model evidence is missing, fail because the invoice product is not corroborated by supporting product evidence.
+9. If no current imported HERV product-list rows are available, warn and ask admin to refresh the HERV product-list download.
+10. Search claims.v_current_herv_products by normalized model number, allowing exact, normalized, regex, and contained-model matches with manufacturer/brand as a scoring boost.
+11. Resolve invoice evidence and supporting-document evidence separately.
+12. If either side does not resolve to a product-list row, fail.
+13. If invoice and supporting-document evidence resolve to different product rows, fail.
+14. If both resolve to the same product row, pass and store that row in invoice_versions.herv_product_id.
+15. In calculation, show invoice model evidence, supporting-document model evidence, source availability, matched herv_products.id when present, and whether the rule was not applicable because the visible ventilation system was a bathroom fan.',
+    true,
+    'No follow-up is required unless the visible ventilation equipment appears inconsistent with the matched NRCan ENERGY STAR HERV product-list row.',
+    'Refresh the HERV product-list import if invoice and supporting-document product evidence agree but no current imported list rows are available, or review the equipment type if HRV/ERV evidence is unclear.',
+    'Ask the contractor for corrected invoice/supporting product evidence when HRV/ERV product evidence is missing, conflicting, or not found in the imported NRCan ENERGY STAR HERV product list.',
+    'This rule records information only when the visible ventilation evidence is for a bathroom/exhaust fan rather than an HRV/ERV.',
+    'Code-owned deterministic lookup for the ventilation requirement that heat/energy recovery ventilators be ENERGY STAR certified and listed on NRCan searchable product list.',
+    TIMESTAMP '2026-07-09 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53121'::uuid,
+    'vent_fan_energy_star_product_list_match',
+    'Checks whether a bathroom, utility, exhaust, or ventilating fan product is listed in the imported ENERGY STAR certified ventilating fan product list.
+
+Pseudo-code:
+1. Run only for ventilation upgrade types when this code rule is enabled.
+2. Read invoice-side named fields: classifier.product_model_number, classifier.product_manufacturer, vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
+3. Read supporting-document named fields from documents on the same invoice version: brand_and_model, model_number, product_category_or_system_type, energy_star_reference, and product_list_reference.
+4. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return info because the fan product-list lookup is not applicable.
+5. If the named evidence does not clearly identify fan equipment, return warn so admin can review vent_system_type and product evidence.
+6. Extract usable model values from invoice fields and supporting-document fields.
+7. If invoice model evidence is missing, warn because the invoice does not independently identify the installed fan product.
+8. If supporting-document model evidence is missing, warn because the invoice product is not corroborated by supporting product evidence.
+9. If no current imported fan product-list rows are available, warn and ask admin to refresh the ENERGY STAR fan product-list download.
+10. Search claims.v_current_vent_fan_products by normalized model number, allowing exact, normalized, regex, and contained-model matches with manufacturer/brand as a scoring boost.
+11. Resolve invoice evidence and supporting-document evidence separately.
+12. If either side does not resolve to a product-list row, fail when the visible evidence clearly identifies a fan model but it is absent from the current imported list.
+13. If invoice and supporting-document evidence resolve to different product rows, fail.
+14. If both resolve to the same product row, pass and store that row in invoice_versions.vent_fan_product_id.
+15. In calculation, show invoice model evidence, supporting-document model evidence, source availability, matched vent_fan_products.id when present, fan type, markets, ENERGY STAR Unique ID, and CB Model Identifier.',
+    true,
+    'No follow-up is required unless the visible ventilation equipment appears inconsistent with the matched ENERGY STAR ventilating-fan product-list row.',
+    'Refresh the ENERGY STAR fan product-list import if invoice and supporting-document product evidence agree but no current imported list rows are available, or review the equipment type if fan evidence is unclear.',
+    'Ask the contractor for corrected invoice/supporting product evidence when fan product evidence is conflicting or not found in the imported ENERGY STAR certified ventilating fan product list.',
+    'This rule records information only when the visible ventilation evidence is for HRV/ERV rather than a bathroom/utility/exhaust fan.',
+    'Code-owned deterministic lookup for the ventilation requirement that fans be ENERGY STAR certified and listed on the EPA/DOE searchable product list.',
+    TIMESTAMP '2026-07-09 00:00:00',
+    NOW()
+  ),
+  (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53122'::uuid,
+    'vent_fan_capacity_meets_minimum',
+    'Checks whether a bathroom, utility, exhaust, or ventilating fan has capacity evidence of at least 85 cfm (40 L/s) at 50 Pa (0.2 in. w.c.).
+
+Pseudo-code:
+1. Run only for ventilation upgrade types when this code rule is enabled.
+2. Use the same named product identity fields as vent_fan_energy_star_product_list_match to determine whether the visible ventilation equipment is a bathroom/utility/exhaust fan or HRV/ERV.
+3. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return info because this fan-capacity requirement is not applicable.
+4. Use supporting-document named capacity fields bathroom_fan_cfm and static_pressure from documents on the same invoice version.
+5. If visible named supporting-document capacity evidence clearly shows at least 85 cfm or 40 L/s at 50 Pa or 0.2 in. w.c., pass.
+6. If visible named supporting-document capacity evidence clearly shows less than 85 cfm or 40 L/s at 50 Pa or 0.2 in. w.c., fail.
+7. If invoice and supporting-document product evidence resolved to the same imported ENERGY STAR fan product row, read claims.v_current_vent_fan_products.bathroom_utility_airflow_at_0_25_in_wg for that row.
+8. If bathroom_utility_airflow_at_0_25_in_wg is at least 85 cfm, pass because this is conservative pass evidence at a stricter listed pressure than 0.2 in. w.c.
+9. If the matched product row has a bathroom_utility_airflow_at_0_25_in_wg value below 85 cfm, warn because the imported list field uses 0.25 in. w.g. and does not by itself prove failure at 0.2 in. w.c.; admin should verify a product specification sheet or row detail.
+10. If generic cfm evidence is present but does not clearly state 50 Pa or 0.2 in. w.c., warn for admin review rather than pass.
+11. If neither a matched product-list row nor named supporting-document capacity fields provide usable capacity evidence, warn.
+12. In calculation, show the named capacity fields, matched vent_fan_products.id when present, bathroom_utility_airflow_at_0_25_in_wg, airflow_1_cfm, airflow_2_cfm, airflow_3_cfm, and the exact comparison used.',
+    true,
+    'No follow-up is required when named visible evidence or the matched imported fan product-list row confirms at least 85 cfm at the required or stricter pressure.',
+    'Verify a product specification sheet or ENERGY STAR row detail when capacity evidence is present but the static pressure is missing or the imported 0.25 in. w.g. airflow does not independently confirm the threshold.',
+    'Ask the contractor for corrected product specification evidence when named evidence clearly shows the fan below 85 cfm at 50 Pa / 0.2 in. w.c.',
+    'Resolve the fan product-list match or request capacity/static-pressure evidence before relying on this requirement.',
+    'Code-owned deterministic check for the ventilation requirement that fans have capacity of at least 85 cfm (40 L/s) at static pressure of 50 Pa (0.2 in. w.c.).',
+    TIMESTAMP '2026-07-09 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53301'::uuid,
     'wd_u_factor_threshold',
     'Checks whether the structured metric U-factor values extracted for windows and doors are 1.22 W/m2-K or less.',
@@ -564,46 +678,6 @@ ON CONFLICT (code_rule_key) DO UPDATE SET
   info_admin_message = EXCLUDED.info_admin_message,
   admin_notes = COALESCE(claims.code_rules.admin_notes, EXCLUDED.admin_notes),
   updated_at = NOW();
-
-WITH obsolete_oil_ahri_mappings AS (
-  SELECT cru.id
-  FROM claims.code_rule_upgrade_types cru
-  JOIN claims.code_rules cr
-    ON cr.id = cru.code_rule_id
-  JOIN claims.invoice_upgrade_types iut
-    ON iut.id = cru.invoice_upgrade_type_id
-  WHERE iut.upgrade_type_key = 'air_source_heat_pump_oil'
-    AND cr.code_rule_key IN (
-      'hp_ahri_found_in_product_list',
-      'hp_product_minimum_capacity_at_minus_5c',
-      'hp_product_efficiency_threshold'
-    )
-)
-DELETE FROM claims.code_rule_upgrade_types cru
-USING obsolete_oil_ahri_mappings old
-WHERE cru.id = old.id;
-
-WITH obsolete_section_specific_ahri_metric_mappings AS (
-  SELECT cru.id
-  FROM claims.code_rule_upgrade_types cru
-  JOIN claims.code_rules cr
-    ON cr.id = cru.code_rule_id
-  JOIN claims.invoice_upgrade_types iut
-    ON iut.id = cru.invoice_upgrade_type_id
-  WHERE iut.upgrade_type_key IN (
-      'air_source_heat_pump_electric',
-      'air_source_heat_pump_wood',
-      'air_source_heat_pump_gas_propane',
-      'dual_fuel_ducted_heat_pump'
-    )
-    AND cr.code_rule_key IN (
-      'hp_product_minimum_capacity_at_minus_5c',
-      'hp_product_efficiency_threshold'
-    )
-)
-DELETE FROM claims.code_rule_upgrade_types cru
-USING obsolete_section_specific_ahri_metric_mappings old
-WHERE cru.id = old.id;
 
 WITH code_rule_upgrade_type_seed (
   code_rule_key,
@@ -657,10 +731,16 @@ WITH code_rule_upgrade_type_seed (
   ('income_level_1_or_2_required', 'air_source_heat_pump_wood'),
   ('income_level_1_or_2_required', 'health_and_safety_remediation'),
   ('income_level_1_or_2_required', 'ventilation'),
+  ('vent_rebate_math_within_cap', 'ventilation'),
+  ('vent_herv_nrcan_energy_star_product_list_match', 'ventilation'),
+  ('vent_fan_energy_star_product_list_match', 'ventilation'),
+  ('vent_fan_capacity_meets_minimum', 'ventilation'),
   ('wd_u_factor_threshold', 'windows_doors'),
+  ('esu_rebate_math_within_cap', 'electrical_service_upgrade'),
   ('hpwh_neea_found_in_product_list', 'heat_pump_water_heater'),
   ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater'),
   ('hpwh_rebate_math_within_cap', 'heat_pump_water_heater'),
+  ('hs_rebate_math_within_cap', 'health_and_safety_remediation'),
   ('hydronic_product_found_in_qualifying_list', 'air_to_water_heat_pump'),
   ('hydronic_product_found_in_qualifying_list', 'combined_space_water_heat_pump'),
   ('ashp_oil_ohpa_bc_product_found_in_list', 'air_source_heat_pump_oil')

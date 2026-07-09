@@ -641,6 +641,8 @@ export default function ContractorInvoiceReviewScreen() {
   const neeaProduct = readData?.neea_product_match?.product;
   const awhpProduct = readData?.awhp_product_match?.product;
   const ohpaProduct = readData?.ohpa_product_match?.product;
+  const hervProduct = readData?.herv_product_match?.product;
+  const ventFanProduct = readData?.vent_fan_product_match?.product;
   const supportingDocumentTypeGroups = useMemo(
     () =>
       Array.isArray(readData?.supporting_document_types_by_upgrade_type)
@@ -1665,6 +1667,55 @@ export default function ContractorInvoiceReviewScreen() {
                       ['HSPF2 Region IV', ohpaProduct.hspf2_region_iv],
                       ['HSPF2 Region V', ohpaProduct.hspf2_region_v],
                       ['SEER2', ohpaProduct.seer2],
+                    ]}
+                  />
+                )}
+
+                {hervProduct && (
+                  <ProductMatchAccordion
+                    title="HERV ENERGY STAR product-list match"
+                    rows={[
+                      ['Brand', hervProduct.brand],
+                      ['Model number', hervProduct.model_number],
+                      ['Model type', hervProduct.model_type],
+                      ['SRE at 0 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_0c],
+                      ['SRE at -25 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_minus_25c],
+                      ['Associated net supply airflow at 0 C CFM', hervProduct.associated_net_supply_airflow_at_0c_cfm],
+                      [
+                        'Associated net supply airflow at -25 C CFM',
+                        hervProduct.associated_net_supply_airflow_at_minus_25c_cfm,
+                      ],
+                      ['Associated power consumption at 0 C W', hervProduct.associated_power_consumption_at_0c_w],
+                      [
+                        'Associated power consumption at -25 C W',
+                        hervProduct.associated_power_consumption_at_minus_25c_w,
+                      ],
+                      ['Max rated airflow at 0 C CFM', hervProduct.max_rated_airflow_at_0c_cfm],
+                      ['Power consumption at 0 C W', hervProduct.power_consumption_at_0c_w],
+                      ['Eligibility notes', hervProduct.eligibility_notes],
+                    ]}
+                  />
+                )}
+
+                {ventFanProduct && (
+                  <ProductMatchAccordion
+                    title="ENERGY STAR fan product-list match"
+                    rows={[
+                      ['Brand', ventFanProduct.brand],
+                      ['Model number', ventFanProduct.model_number],
+                      ['Product model name', ventFanProduct.product_model_name],
+                      ['Fan type', ventFanProduct.fan_type],
+                      ['Airflow 1 CFM', ventFanProduct.airflow_1_cfm],
+                      ['Efficacy 1 CFM/Watt', ventFanProduct.efficacy_1_cfm_watt],
+                      ['Sound level sones', ventFanProduct.sound_level_sones],
+                      [
+                        'Bathroom/utility airflow at 0.25 in. w.g.',
+                        ventFanProduct.bathroom_utility_airflow_at_0_25_in_wg,
+                      ],
+                      ['Markets', ventFanProduct.markets],
+                      ['ENERGY STAR Unique ID', ventFanProduct.energy_star_unique_id],
+                      ['CB model identifier', ventFanProduct.cb_model_identifier],
+                      ['Most Efficient criteria', ventFanProduct.meets_most_efficient_criteria],
                     ]}
                   />
                 )}

@@ -25,6 +25,16 @@ module Claims
                foreign_key: :ohpa_product_id,
                optional: true
 
+    belongs_to :herv_product,
+               class_name: "Claims::HervProduct",
+               foreign_key: :herv_product_id,
+               optional: true
+
+    belongs_to :vent_fan_product,
+               class_name: "Claims::VentFanProduct",
+               foreign_key: :vent_fan_product_id,
+               optional: true
+
     belongs_to :users_eligibilitycode,
                class_name: "Claims::UsersEligibilitycode",
                foreign_key: :users_eligibilitycode_id,

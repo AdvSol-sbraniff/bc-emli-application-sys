@@ -11,6 +11,8 @@ module Claims
         ::Claims::CodeRules::AshpProductRequirements::ApplyProductRequirements,
         ::Claims::CodeRules::Dfhp::ApplyProductSpecs,
         ::Claims::CodeRules::Dfhp::ApplyRebateCap,
+        ::Claims::CodeRules::Esu::ApplyRebateCap,
+        ::Claims::CodeRules::HealthSafety::ApplyRebateCap,
         ::Claims::CodeRules::HeatPump::ApplyNorthernTopUp3000,
         ::Claims::CodeRules::Hpwh::ApplyRebateCap,
         ::Claims::CodeRules::Hydronic::ApplyRebateCap,
@@ -18,6 +20,9 @@ module Claims
         ::Claims::CodeRules::HeatPumpAhri::ApplyProductListMatch,
         ::Claims::CodeRules::HeatPumpWaterHeaterNeea::ApplyProductListMatch,
         ::Claims::CodeRules::IncomeLevel::ApplyLevelOneOrTwoRequired,
+        ::Claims::CodeRules::VentilationHerv::ApplyProductListMatch,
+        ::Claims::CodeRules::VentilationFan::ApplyProductListMatch,
+        ::Claims::CodeRules::Ventilation::ApplyRebateCap,
         ::Claims::CodeRules::WindowsDoorsUFactor::ApplyThresholdCheck
       ].freeze
 

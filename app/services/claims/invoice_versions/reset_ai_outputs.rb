@@ -48,7 +48,9 @@ module Claims
             ahri_product_id: nil,
             neea_product_id: nil,
             awhp_product_id: nil,
-            ohpa_product_id: nil
+            ohpa_product_id: nil,
+            herv_product_id: nil,
+            vent_fan_product_id: nil
           )
         end
       end

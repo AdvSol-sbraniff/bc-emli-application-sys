@@ -125,6 +125,14 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/downloads-admin', title: 'Downloads' },
         { href: '/ohpa-product-list-admin', title: 'OHPA BC product list config' },
       ],
+      '/herv-product-list-admin': [
+        { href: '/downloads-admin', title: 'Downloads' },
+        { href: '/herv-product-list-admin', title: 'HERV ENERGY STAR product list config' },
+      ],
+      '/vent-fan-product-list-admin': [
+        { href: '/downloads-admin', title: 'Downloads' },
+        { href: '/vent-fan-product-list-admin', title: 'ENERGY STAR fan product list config' },
+      ],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: 'Create Test Eligibility Codes' }],
       '/users-admin': [{ href: '/users-admin', title: 'Create Test Users' }],
       '/revision-requests-admin': [

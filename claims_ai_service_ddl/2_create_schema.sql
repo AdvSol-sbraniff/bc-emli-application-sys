@@ -689,7 +689,326 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ohpa_products_source_row_unique
   );
 
 
---
+-- ============================================================
+-- herv_sources
+-- PURPOSE: Stable catalogue of NRCan ENERGY STAR heat/energy
+-- recovery ventilator product-list source definitions. Import
+-- runs are child/history records under these source rows.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.herv_sources (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  description text NOT NULL,
+  source_url text NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT herv_sources_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_herv_sources_description
+  ON claims.herv_sources (description);
+
+
+
+-- ============================================================
+-- herv_import_runs
+-- PURPOSE: Track refresh attempts for NRCan ENERGY STAR heat/
+-- energy recovery ventilator CSV data used by code-owned
+-- ventilation checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.herv_import_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  herv_source_id uuid NOT NULL,
+  storage_provider character varying NULL,
+  storage_key text NULL,
+  content_type character varying NULL,
+  byte_size bigint NULL,
+  status text NOT NULL DEFAULT 'queued',
+
+  started_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  completed_at timestamp(6) without time zone NULL,
+
+  records_imported integer NOT NULL DEFAULT 0,
+  publishing_notes text NULL,
+  publishing_date date NULL,
+  file_sha256 text NULL,
+  error_text text NULL,
+  metadata_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT herv_import_runs_pkey PRIMARY KEY (id),
+
+  CONSTRAINT herv_import_runs_status_chk
+    CHECK (status IN ('queued','running','succeeded','failed')),
+
+  CONSTRAINT herv_import_runs_records_imported_chk
+    CHECK (records_imported >= 0),
+
+  CONSTRAINT fk_herv_import_runs_source
+    FOREIGN KEY (herv_source_id)
+    REFERENCES claims.herv_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_herv_import_runs_source_started
+  ON claims.herv_import_runs (herv_source_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_herv_import_runs_status
+  ON claims.herv_import_runs (status);
+
+CREATE INDEX IF NOT EXISTS idx_herv_import_runs_storage_key
+  ON claims.herv_import_runs (storage_key);
+
+
+
+-- ============================================================
+-- herv_products
+-- PURPOSE: Cached NRCan ENERGY STAR heat/energy recovery
+-- ventilator product-list rows used by code-owned ventilation
+-- HRV/ERV product-list checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.herv_products (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  import_run_id uuid NOT NULL,
+
+  brand text NULL,
+  brand_normalized text NULL,
+  model_number text NOT NULL,
+  model_number_normalized text NULL,
+  model_number_regex text NULL,
+  model_type text NULL,
+
+  sensible_heat_recovery_efficiency_sre_at_0c numeric NULL,
+  sensible_heat_recovery_efficiency_sre_at_minus_25c numeric NULL,
+  associated_net_supply_airflow_at_0c_cfm numeric NULL,
+  associated_net_supply_airflow_at_minus_25c_cfm numeric NULL,
+  associated_power_consumption_at_0c_w numeric NULL,
+  associated_power_consumption_at_minus_25c_w numeric NULL,
+  associated_net_supply_airflow_at_0c_ls numeric NULL,
+  associated_net_supply_airflow_at_minus_25c_ls numeric NULL,
+  marked_for_outdoor_use_at_minus_10c_or_higher boolean NULL,
+  max_rated_airflow_at_0c_cfm numeric NULL,
+  max_rated_airflow_at_0c_ls numeric NULL,
+  power_consumption_at_0c_w numeric NULL,
+
+  eligibility_notes text NULL,
+  raw_row_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT herv_products_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_herv_products_import_run
+    FOREIGN KEY (import_run_id)
+    REFERENCES claims.herv_import_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_herv_products_import_run
+  ON claims.herv_products (import_run_id);
+
+CREATE INDEX IF NOT EXISTS idx_herv_products_brand_normalized
+  ON claims.herv_products (brand_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_herv_products_model_number_normalized
+  ON claims.herv_products (model_number_normalized);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_herv_products_source_row_unique
+  ON claims.herv_products (
+    import_run_id,
+    COALESCE(brand_normalized, ''),
+    model_number_normalized,
+    COALESCE(model_type, ''),
+    COALESCE(sensible_heat_recovery_efficiency_sre_at_0c, -1),
+    COALESCE(associated_net_supply_airflow_at_0c_cfm, -1),
+    COALESCE(power_consumption_at_0c_w, -1)
+  );
+
+
+
+-- ============================================================
+-- vent_fan_sources
+-- PURPOSE: Stable catalogue of ENERGY STAR certified
+-- ventilating-fan product-list source definitions. Import runs
+-- are child/history records under these source rows.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.vent_fan_sources (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  description text NOT NULL,
+  source_url text NOT NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT vent_fan_sources_pkey PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_sources_description
+  ON claims.vent_fan_sources (description);
+
+
+
+-- ============================================================
+-- vent_fan_import_runs
+-- PURPOSE: Track refresh attempts for ENERGY STAR certified
+-- ventilating-fan CSV data used by code-owned ventilation checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.vent_fan_import_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  vent_fan_source_id uuid NOT NULL,
+  storage_provider character varying NULL,
+  storage_key text NULL,
+  content_type character varying NULL,
+  byte_size bigint NULL,
+  status text NOT NULL DEFAULT 'queued',
+
+  started_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  completed_at timestamp(6) without time zone NULL,
+
+  records_imported integer NOT NULL DEFAULT 0,
+  publishing_notes text NULL,
+  publishing_date date NULL,
+  file_sha256 text NULL,
+  error_text text NULL,
+  metadata_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT vent_fan_import_runs_pkey PRIMARY KEY (id),
+
+  CONSTRAINT vent_fan_import_runs_status_chk
+    CHECK (status IN ('queued','running','succeeded','failed')),
+
+  CONSTRAINT vent_fan_import_runs_records_imported_chk
+    CHECK (records_imported >= 0),
+
+  CONSTRAINT fk_vent_fan_import_runs_source
+    FOREIGN KEY (vent_fan_source_id)
+    REFERENCES claims.vent_fan_sources(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_import_runs_source_started
+  ON claims.vent_fan_import_runs (vent_fan_source_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_import_runs_status
+  ON claims.vent_fan_import_runs (status);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_import_runs_storage_key
+  ON claims.vent_fan_import_runs (storage_key);
+
+
+
+-- ============================================================
+-- vent_fan_products
+-- PURPOSE: Cached ENERGY STAR certified ventilating-fan
+-- product-list rows used by code-owned ventilation fan checks.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.vent_fan_products (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  import_run_id uuid NOT NULL,
+
+  energy_star_unique_id text NULL,
+  energy_star_partner text NULL,
+  brand text NOT NULL,
+  brand_normalized text NOT NULL,
+  product_model_name text NULL,
+  model_number text NOT NULL,
+  model_number_normalized text NOT NULL,
+  model_number_regex text NULL,
+  additional_model_information text NULL,
+  upc text NULL,
+
+  fan_type text NULL,
+  merv_of_in_line_fan_filter text NULL,
+  number_of_speeds text NULL,
+  duct_size text NULL,
+  sound_level_sones numeric NULL,
+  bathroom_utility_sound_level_sones_at_0_25_in_wg numeric NULL,
+  bathroom_utility_airflow_at_0_25_in_wg numeric NULL,
+
+  lighting text NULL,
+  shipped_with_energy_star_lamps text NULL,
+  energy_star_lamp_esuid text NULL,
+  alternate_energy_star_lamps_esuids text NULL,
+  energy_star_lamp_partner text NULL,
+  lamp_model_number text NULL,
+  lighting_technology text NULL,
+  total_light_output_lumens numeric NULL,
+  total_input_power_watts numeric NULL,
+  luminaire_efficacy numeric NULL,
+  power_factor numeric NULL,
+  cct_kelvin integer NULL,
+  cri integer NULL,
+  light_source_life_hours integer NULL,
+  special_features text NULL,
+
+  airflow_1_cfm numeric NULL,
+  airflow_2_cfm numeric NULL,
+  airflow_3_cfm numeric NULL,
+  efficacy_1_cfm_watt numeric NULL,
+  efficacy_2_cfm_watt numeric NULL,
+  efficacy_3_cfm_watt numeric NULL,
+  ventilating_fan_features text NULL,
+
+  date_available_on_market date NULL,
+  date_qualified date NULL,
+  markets text NULL,
+  cb_model_identifier text NULL,
+  meets_most_efficient_criteria text NULL,
+  notes text NULL,
+  raw_row_json jsonb NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT vent_fan_products_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_vent_fan_products_import_run
+    FOREIGN KEY (import_run_id)
+    REFERENCES claims.vent_fan_import_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_products_import_run
+  ON claims.vent_fan_products (import_run_id);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_products_brand_model_norm
+  ON claims.vent_fan_products (brand_normalized, model_number_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_products_model_norm
+  ON claims.vent_fan_products (model_number_normalized);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_products_energy_star_unique_id
+  ON claims.vent_fan_products (energy_star_unique_id);
+
+CREATE INDEX IF NOT EXISTS idx_vent_fan_products_cb_model_identifier
+  ON claims.vent_fan_products (cb_model_identifier);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_vent_fan_products_source_row_unique
+  ON claims.vent_fan_products (
+    import_run_id,
+    COALESCE(energy_star_unique_id, ''),
+    brand_normalized,
+    model_number_normalized,
+    COALESCE(cb_model_identifier, '')
+  );
+
+
+-- 
 -- users_eligibilitycodes
 -- how we get the participant_id
 --
@@ -843,10 +1162,14 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   -- code-owned point-in-time Better Homes BC AWHP qualifying-list match
   awhp_product_id uuid NULL,
   -- code-owned point-in-time NRCan OHPA BC product-list match
-  ohpa_product_id uuid NULL,
-  -- code-owned point-in-time eligibility-code / participant match
-  users_eligibilitycode_id uuid NULL,
-  participant_user_id uuid NULL,
+    ohpa_product_id uuid NULL,
+    -- code-owned point-in-time NRCan ENERGY STAR HERV product-list match
+    herv_product_id uuid NULL,
+    -- code-owned point-in-time ENERGY STAR ventilating-fan product-list match
+    vent_fan_product_id uuid NULL,
+    -- code-owned point-in-time eligibility-code / participant match
+    users_eligibilitycode_id uuid NULL,
+    participant_user_id uuid NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
@@ -872,9 +1195,17 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
     FOREIGN KEY (ohpa_product_id)
     REFERENCES claims.ohpa_products(id),
 
-  CONSTRAINT fk_invoice_versions_users_eligibilitycode
-    FOREIGN KEY (users_eligibilitycode_id)
-    REFERENCES claims.users_eligibilitycodes(id),
+    CONSTRAINT fk_invoice_versions_herv_product
+      FOREIGN KEY (herv_product_id)
+      REFERENCES claims.herv_products(id),
+
+    CONSTRAINT fk_invoice_versions_vent_fan_product
+      FOREIGN KEY (vent_fan_product_id)
+      REFERENCES claims.vent_fan_products(id),
+
+    CONSTRAINT fk_invoice_versions_users_eligibilitycode
+      FOREIGN KEY (users_eligibilitycode_id)
+      REFERENCES claims.users_eligibilitycodes(id),
 
   CONSTRAINT fk_invoice_versions_participant_user
     FOREIGN KEY (participant_user_id)
@@ -917,6 +1248,12 @@ CREATE INDEX IF NOT EXISTS idx_invoice_versions_awhp_product
 
 CREATE INDEX IF NOT EXISTS idx_invoice_versions_ohpa_product
   ON claims.invoice_versions (ohpa_product_id);
+
+  CREATE INDEX IF NOT EXISTS idx_invoice_versions_herv_product
+    ON claims.invoice_versions (herv_product_id);
+
+  CREATE INDEX IF NOT EXISTS idx_invoice_versions_vent_fan_product
+    ON claims.invoice_versions (vent_fan_product_id);
 
 CREATE INDEX IF NOT EXISTS index_invoice_versions_on_users_eligibilitycode_id
   ON claims.invoice_versions (users_eligibilitycode_id);
