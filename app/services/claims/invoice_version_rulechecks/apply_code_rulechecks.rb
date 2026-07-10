@@ -19,6 +19,7 @@ module Claims
       HEAT_PUMP_WATER_HEATER_UPGRADE_TYPE_KEY = "heat_pump_water_heater"
       INSULATION_UPGRADE_TYPE_KEY = "insulation"
       WINDOWS_DOORS_UPGRADE_TYPE_KEY = "windows_doors"
+      ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY = "electrical_service_upgrade"
       PRIOR_REBATE_EXCLUDED_INVOICE_STATUS = "ineligible"
       COMMON_RULE_KEYS = %w[
         first_class_invoice_fields_present
@@ -356,6 +357,10 @@ module Claims
              prior_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY)
           failed_checks << WINDOWS_DOORS_UPGRADE_TYPE_KEY
         end
+        if current_keys.include?(ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY) &&
+             prior_keys.include?(ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY)
+          failed_checks << ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY
+        end
         rule_result = failed_checks.any? ? "fail" : "pass"
 
         row(
@@ -459,6 +464,8 @@ module Claims
           "prior_has_insulation=#{prior_keys.include?(INSULATION_UPGRADE_TYPE_KEY)}",
           "current_has_windows_doors=#{current_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY)}",
           "prior_has_windows_doors=#{prior_keys.include?(WINDOWS_DOORS_UPGRADE_TYPE_KEY)}",
+          "current_has_electrical_service_upgrade=#{current_keys.include?(ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY)}",
+          "prior_has_electrical_service_upgrade=#{prior_keys.include?(ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY)}",
           "failed_checks=#{failed_checks.join(",").presence || "none"}",
           "result=#{rule_result}"
         ].join("; ")

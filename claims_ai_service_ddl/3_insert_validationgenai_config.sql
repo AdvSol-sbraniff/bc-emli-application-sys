@@ -160,50 +160,6 @@ Output-json-schema:
     "polygon": null,
     "evidence_text": null
   },
-  "product_references": {
-    "ahri_reference": {
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    },
-    "neea_reference": {
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    },
-    "awhp_reference": {
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    },
-    "ohpa_reference": {
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    },
-    "product_model_number": {
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    },
-    "product_manufacturer": {
-      "value": null,
-      "confidence": 0,
-      "page": null,
-      "polygon": null,
-      "evidence_text": null
-    }
-  },
   "detected_upgrade_types": [
     {
       "upgrade_type_key": "windows_doors",
@@ -246,16 +202,10 @@ Rules:
 - supporting_document_routing_quality_reason is mandatory when supporting_document_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
 - Do not return supporting_document_located_fields. Supporting-document extraction is handled by a separate extraction call.
 - If document_kind is supporting_document or unknown, return eligibility_code.value=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
-- If document_kind is supporting_document or unknown, return product_references with all nested values null.
 - Return only allowed upgrade_type_key values.
 - Return only allowed supporting_document_type_key values.
 - Set eligibility_code.value to the exact visible invoice token when present. Expected prefixes are ESP1, ESP2, ESP3, or ESPI. Use null when no eligibility code is visible.
 - For eligibility_code, set confidence, evidence_text, page, and polygon from the exact Document Intelligence evidence when available. Use page=null and polygon=null only when DI JSON does not provide a reliable location.
-- Set product_references.*.value from exact invoice-visible product-list or product identity evidence when present. Use null for unknown values.
-- For every non-null product_references.*.value, set confidence, evidence_text, page, and polygon from the exact Document Intelligence evidence when available. Use page=null and polygon=null only when DI JSON does not provide a reliable location.
-- For AHRI evidence, put the exact AHRI reference in product_references.ahri_reference.
-- For NEEA, AWHP, or OHPA evidence, use the corresponding product_references key only when the invoice explicitly shows that list/source. Otherwise use product_model_number and product_manufacturer when visible.
-- Do not invent product references from supporting documents in this classifier call. This call only classifies the current staged document OCR text.
 - Include an upgrade type only when direct invoice evidence supports that a Better Homes BC / CleanBC / ESP rebate claim is being made for that exact upgrade type.
 - Do not include every work component on the invoice. Classify rebate-claimed upgrade domains, not incidental construction scope, supporting materials, or labour categories.
 - Strong classification evidence includes an explicit upgrade-specific rebate line, an explicit CleanBC/Better Homes/ESP amount tied to that upgrade, or invoice wording that clearly presents the item as a claimed program upgrade.
@@ -320,14 +270,6 @@ Output-json-schema:
   "supporting_document_routing_quality_reason": null,
   "visual_routing_summary": null,
   "eligibility_code": null,
-  "product_references": {
-    "ahri_reference": null,
-    "neea_reference": null,
-    "awhp_reference": null,
-    "ohpa_reference": null,
-    "product_model_number": null,
-    "product_manufacturer": null
-  },
   "detected_upgrade_types": [],
   "not_detected_upgrade_types": []
 }
@@ -353,7 +295,7 @@ Rules:
 - Use supporting_document_routing_quality="needs_review" when the likely type is clear but the image has blur, cutoff, glare, rotation, or ambiguity concerns.
 - Use supporting_document_routing_quality="unusable" when the image is blank, irrelevant, or too poor to route safely.
 - visual_routing_summary may briefly describe the image for routing only. It is not official evidence.
-- Return eligibility_code=null, product_references with all values null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
+- Return eligibility_code=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
 - Use confidence from 0 to 100.
 $classifier_image$,
     $supporting_document_extraction$

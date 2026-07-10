@@ -26,7 +26,7 @@ module Claims
         RULES = {
           product_list_match: {
             number: 1,
-            key: "hydronic_product_found_in_qualifying_list"
+            key: "hydronic_awhp_product_validation"
           }
         }.freeze
 
@@ -56,6 +56,7 @@ module Claims
 
           field_bundle = located_field_bundle
           product = product_for_field_bundle(field_bundle)
+          invoice_version.update!(awhp_product_id: product&.id)
           rule_rows =
             rulecheck_rows(
               field_bundle: field_bundle,
@@ -407,7 +408,9 @@ module Claims
         end
 
         def product_list_rule_result(status)
-          if status == :source_unavailable
+          if %i[missing_invoice missing_supporting source_unavailable].include?(
+               status
+             )
             "warn"
           else
             (status == :matched ? "pass" : "fail")
@@ -445,20 +448,112 @@ module Claims
         end
 
         def product_list_calculation_text(field_bundle:, status:, product:)
-          case status
-          when :missing_invoice
-            "No usable hydronic heat-pump model/product evidence was stored in invoice located fields. Supporting-document product evidence: #{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
-          when :missing_supporting
-            "Invoice product evidence was stored as #{field_bundle.fetch(:invoice_model_values).join(" / ")}, but no usable supporting-document product evidence was stored."
-          when :source_unavailable
-            "Invoice and supporting-document product evidence are present, but no current imported Better Homes BC air-to-water / combined heat pump product-list rows were available to search."
-          when :conflict
-            "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} did not resolve to the same imported AWHP product as supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")}."
-          when :matched
-            "Invoice and supporting-document product evidence both matched awhp_products.id=#{product.id} from source=#{product.import_run&.awhp_source&.description}. #{field_summary(field_bundle)}."
-          else
-            "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} and supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")} were searched against the current imported Better Homes BC qualifying list, but code could not confirm a shared matching row."
-          end
+          base =
+            case status
+            when :missing_invoice
+              "No usable hydronic heat-pump model/product evidence was stored in invoice located fields. Supporting-document product evidence: #{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
+            when :missing_supporting
+              "Invoice product evidence was stored as #{field_bundle.fetch(:invoice_model_values).join(" / ")}, but no usable supporting-document product evidence was stored."
+            when :source_unavailable
+              "Invoice and supporting-document product evidence are present, but no current imported Better Homes BC air-to-water / combined heat pump product-list rows were available to search."
+            when :conflict
+              "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} did not resolve to the same imported AWHP product as supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")}."
+            when :matched
+              "Invoice and supporting-document product evidence both matched awhp_products.id=#{product.id} from source=#{product.import_run&.awhp_source&.description}. #{field_summary(field_bundle)}."
+            else
+              "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} and supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")} were searched against the current imported Better Homes BC qualifying list, but code could not confirm a shared matching row."
+            end
+
+          [
+            base,
+            "download_lookup: table=claims.v_current_awhp_products; matched_product_id=#{product&.id || "(none)"}",
+            subcheck_lines(
+              product_validation_subchecks(
+                field_bundle: field_bundle,
+                status: status,
+                product: product
+              )
+            )
+          ].join("\n")
+        end
+
+        def product_validation_subchecks(field_bundle:, status:, product:)
+          {
+            invoice_product_identity_present:
+              if field_bundle.fetch(:invoice_model_values).empty?
+                ["warn", "No invoice hydronic product identity was extracted."]
+              else
+                [
+                  "pass",
+                  "Invoice product evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}."
+                ]
+              end,
+            supporting_document_matches_invoice:
+              case status
+              when :missing_supporting
+                [
+                  "warn",
+                  "No supporting-document hydronic product identity was extracted."
+                ]
+              when :conflict
+                [
+                  "fail",
+                  "Invoice and supporting-document product evidence resolved to different AWHP rows."
+                ]
+              when :matched
+                [
+                  "pass",
+                  "Invoice and supporting-document product evidence resolved to the same AWHP row."
+                ]
+              else
+                if field_bundle.fetch(:supporting_model_values).empty?
+                  [
+                    "warn",
+                    "No supporting-document hydronic product identity was extracted."
+                  ]
+                else
+                  [
+                    "warn",
+                    "Supporting-document product identity could not be fully corroborated."
+                  ]
+                end
+              end,
+            awhp_product_found_in_download:
+              case status
+              when :matched
+                ["pass", "Matched awhp_products.id=#{product.id}."]
+              when :source_unavailable
+                ["warn", "No current imported AWHP rows were available."]
+              when :missing_invoice, :missing_supporting
+                [
+                  "warn",
+                  "Download lookup could not fully run because prerequisite product identity evidence is missing."
+                ]
+              else
+                ["fail", "No shared matching AWHP product row was found."]
+              end
+          }
+        end
+
+        def subcheck_lines(subchecks)
+          all =
+            subchecks.map do |key, (status, reason)|
+              "- #{key}: #{status} - #{reason}"
+            end
+          failed =
+            subchecks
+              .select { |_key, (status, _reason)| status == "fail" }
+              .map { |key, (_status, reason)| "- #{key}: #{reason}" }
+          warned =
+            subchecks
+              .select { |_key, (status, _reason)| status == "warn" }
+              .map { |key, (_status, reason)| "- #{key}: #{reason}" }
+
+          [
+            "subchecks:\n#{all.join("\n")}",
+            ("failed_subchecks:\n#{failed.join("\n")}" if failed.any?),
+            ("warn_subchecks:\n#{warned.join("\n")}" if warned.any?)
+          ].compact.join("\n")
         end
 
         def product_list_reason_text(field_bundle:, status:, product:)

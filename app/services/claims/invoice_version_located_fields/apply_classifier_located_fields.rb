@@ -5,35 +5,6 @@ require "json"
 module Claims
   module InvoiceVersionLocatedFields
     class ApplyClassifierLocatedFields
-      AHRI_UPGRADE_TYPE_KEYS =
-        Claims::ProductLookupEnrichment::Apply::AHRI_UPGRADE_TYPE_KEYS.freeze
-      OIL_UPGRADE_TYPE_KEY =
-        Claims::ProductLookupEnrichment::Apply::OIL_UPGRADE_TYPE_KEY
-      HPWH_UPGRADE_TYPE_KEY =
-        Claims::ProductLookupEnrichment::Apply::HPWH_UPGRADE_TYPE_KEY
-      HYDRONIC_UPGRADE_TYPE_KEYS =
-        Claims::ProductLookupEnrichment::Apply::HYDRONIC_INVOICE_FIELD_KEYS.keys.freeze
-
-      PRODUCT_EQUIPMENT_TYPE_KEYS =
-        (
-          AHRI_UPGRADE_TYPE_KEYS +
-            [OIL_UPGRADE_TYPE_KEY, HPWH_UPGRADE_TYPE_KEY] +
-            HYDRONIC_UPGRADE_TYPE_KEYS
-        ).uniq.freeze
-
-      FIELD_ROUTES = {
-        "classifier.ahri_reference" =>
-          (
-            AHRI_UPGRADE_TYPE_KEYS + [OIL_UPGRADE_TYPE_KEY] +
-              HYDRONIC_UPGRADE_TYPE_KEYS
-          ).uniq,
-        "classifier.neea_reference" => [HPWH_UPGRADE_TYPE_KEY],
-        "classifier.awhp_reference" => HYDRONIC_UPGRADE_TYPE_KEYS,
-        "classifier.ohpa_reference" => [OIL_UPGRADE_TYPE_KEY],
-        "classifier.product_model_number" => PRODUCT_EQUIPMENT_TYPE_KEYS,
-        "classifier.product_manufacturer" => PRODUCT_EQUIPMENT_TYPE_KEYS
-      }.freeze
-
       def self.call(invoice_version_id:, classifier_payload:)
         new(
           invoice_version_id: invoice_version_id,
@@ -52,20 +23,9 @@ module Claims
         invoice_version = Claims::InvoiceVersion.find(invoice_version_id)
         common_type =
           Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common")
-        upgrade_types_by_key =
-          Claims::InvoiceUpgradeType.where(
-            upgrade_type_key: detected_upgrade_type_keys
-          ).index_by(&:upgrade_type_key)
-
         now = Time.current
         rows = []
         add_common_rows(rows, invoice_version, common_type, now)
-        add_product_reference_rows(
-          rows,
-          invoice_version,
-          upgrade_types_by_key,
-          now
-        )
 
         Claims::InvoiceVersionLocatedField.transaction do
           Claims::InvoiceVersionLocatedField.where(
@@ -103,37 +63,6 @@ module Claims
         )
       end
 
-      def add_product_reference_rows(
-        rows,
-        invoice_version,
-        upgrade_types_by_key,
-        now
-      )
-        product_references.each do |field_key, reference|
-          value = reference.fetch(:value)
-          next if value.to_s.strip.blank?
-
-          Array(FIELD_ROUTES.fetch(field_key)).each do |upgrade_type_key|
-            upgrade_type = upgrade_types_by_key[upgrade_type_key]
-            next unless upgrade_type
-
-            add_row(
-              rows,
-              invoice_version_id: invoice_version.id,
-              invoice_upgrade_type_id: upgrade_type.id,
-              field_key: field_key,
-              value_type: "text",
-              value: value,
-              confidence: reference.fetch(:confidence) || 90,
-              page: reference.fetch(:page),
-              polygon: reference.fetch(:polygon),
-              evidence_text: reference.fetch(:evidence_text),
-              now: now
-            )
-          end
-        end
-      end
-
       def add_row(
         rows,
         invoice_version_id:,
@@ -166,53 +95,6 @@ module Claims
           created_at: now,
           updated_at: now
         }
-      end
-
-      def detected_upgrade_type_rows
-        rows =
-          classifier_payload["detected_upgrade_types"] ||
-            classifier_payload[:detected_upgrade_types]
-
-        Array(rows).select { |row| row.is_a?(Hash) }
-      end
-
-      def detected_upgrade_type_keys
-        @detected_upgrade_type_keys ||=
-          begin
-            keys =
-              detected_upgrade_type_rows.filter_map do |row|
-                row["upgrade_type_key"] || row[:upgrade_type_key]
-              end
-
-            keys
-              .map { |key| key.to_s.strip }
-              .reject { |key| key.empty? || key == "common" }
-              .uniq
-          end
-      end
-
-      def product_references
-        refs =
-          classifier_payload["product_references"] ||
-            classifier_payload[:product_references]
-        refs = {} unless refs.is_a?(Hash)
-
-        {
-          "classifier.ahri_reference" =>
-            refs["ahri_reference"] || refs[:ahri_reference],
-          "classifier.neea_reference" =>
-            refs["neea_reference"] || refs[:neea_reference],
-          "classifier.awhp_reference" =>
-            refs["awhp_reference"] || refs[:awhp_reference],
-          "classifier.ohpa_reference" =>
-            refs["ohpa_reference"] || refs[:ohpa_reference],
-          "classifier.product_model_number" =>
-            refs["product_model_number"] || refs[:product_model_number] ||
-              refs["model_number"] || refs[:model_number],
-          "classifier.product_manufacturer" =>
-            refs["product_manufacturer"] || refs[:product_manufacturer] ||
-              refs["manufacturer"] || refs[:manufacturer]
-        }.transform_values { |value| located_payload(value) }
       end
 
       def located_payload(raw)

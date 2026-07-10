@@ -13,7 +13,6 @@ module Claims
       ].freeze
       VALIDATION_STEP_TYPES = %w[
         case_facts
-        product_lookup_enrichment
         genai_common
         genai_upgrade
         code_common

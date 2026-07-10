@@ -67,11 +67,7 @@ module Claims
         fix_supporting_document_extraction
       ].freeze
 
-      REQUIRED_FINAL_STEPS = %w[
-        case_facts
-        product_lookup_enrichment
-        aggregate_advice
-      ].freeze
+      REQUIRED_FINAL_STEPS = %w[case_facts aggregate_advice].freeze
 
       FIX_REPROCESS_DOCUMENT_STEPS = %w[
         fix_ocr_read

@@ -5,13 +5,13 @@ module Claims
     module OilHeatPumpOhpa
       class ApplyProductListMatch
         OIL_UPGRADE_TYPE_KEY = "air_source_heat_pump_oil"
-        INVOICE_AHRI_FIELD_KEY = "classifier.ahri_reference"
+        INVOICE_AHRI_FIELD_KEY = "hp_ahri_reference"
         SUPPORTING_AHRI_FIELD_KEY = "ahri_reference"
 
         RULES = {
           product_list_match: {
             number: 3,
-            key: "ashp_oil_ohpa_bc_product_found_in_list"
+            key: "ashp_oil_ohpa_product_validation"
           }
         }.freeze
 
@@ -41,6 +41,7 @@ module Claims
 
           ahri_evidence = ahri_evidence_bundle
           product = product_for_ahri_evidence(ahri_evidence)
+          invoice_version.update!(ohpa_product_id: product&.id)
           rule_rows =
             rulecheck_rows(
               ahri_evidence: ahri_evidence,
@@ -101,7 +102,7 @@ module Claims
             .where(
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: "classifier",
+              source_engine: "genai",
               field_key: INVOICE_AHRI_FIELD_KEY
             )
             .where.not(value_text: [nil, ""])
@@ -184,6 +185,12 @@ module Claims
           matched = product.present?
           status =
             ahri_evidence_status(ahri_evidence: ahri_evidence, product: product)
+          subchecks =
+            product_validation_subchecks(
+              ahri_evidence: ahri_evidence,
+              product: product,
+              status: status
+            )
 
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
@@ -192,10 +199,10 @@ module Claims
             expected_text:
               "After invoice AHRI evidence is present and corroborated by supporting-document AHRI evidence, the agreed AHRI should match a row in the imported NRCan Oil to Heat Pump Affordability BC qualified product list.",
             calculation:
-              product_list_calculation_text(
+              product_validation_calculation_text(
                 ahri_evidence: ahri_evidence,
-                status: status,
-                product: product
+                product: product,
+                subchecks: subchecks
               ),
             evidence_text: ahri_evidence_text(ahri_evidence),
             reason_and_likely_causes:
@@ -252,12 +259,9 @@ module Claims
         end
 
         def product_list_rule_result(status)
-          if %i[
-               missing_invoice
-               missing_supporting
-               conflict
-               source_unavailable
-             ].include?(status)
+          if %i[missing_invoice missing_supporting source_unavailable].include?(
+               status
+             )
             "warn"
           else
             (status == :matched ? "pass" : "fail")
@@ -277,6 +281,105 @@ module Claims
           return :source_unavailable unless current_ohpa_products_available?
 
           product.present? ? :matched : :not_found
+        end
+
+        def product_validation_subchecks(ahri_evidence:, product:, status:)
+          invoice_ahri = ahri_evidence.fetch(:invoice_ahri)
+          supporting_ahris = ahri_evidence.fetch(:supporting_ahris)
+
+          {
+            invoice_ahri_reference_present:
+              if invoice_ahri.present?
+                subcheck(
+                  "pass",
+                  "Invoice GenAI field hp_ahri_reference=#{invoice_ahri}."
+                )
+              else
+                subcheck(
+                  "warn",
+                  "No invoice GenAI field hp_ahri_reference was found."
+                )
+              end,
+            supporting_document_ahri_matches_invoice:
+              case status
+              when :missing_invoice
+                subcheck(
+                  "warn",
+                  "Cannot compare supporting documents because invoice AHRI is missing."
+                )
+              when :missing_supporting
+                subcheck(
+                  "warn",
+                  "No supporting-document AHRI reference was extracted."
+                )
+              when :conflict
+                subcheck(
+                  "fail",
+                  "Invoice AHRI #{invoice_ahri} does not match supporting-document AHRI values #{supporting_ahris.join(" / ")}."
+                )
+              else
+                subcheck(
+                  "pass",
+                  "Supporting-document AHRI values match invoice AHRI #{invoice_ahri}."
+                )
+              end,
+            ohpa_product_found_in_download:
+              case status
+              when :matched
+                subcheck(
+                  "pass",
+                  "AHRI #{invoice_ahri} matched ohpa_products.id=#{product.id}."
+                )
+              when :source_unavailable
+                subcheck(
+                  "warn",
+                  "No current imported NRCan OHPA BC product-list rows were available."
+                )
+              when :missing_invoice, :missing_supporting, :conflict
+                subcheck(
+                  "warn",
+                  "OHPA lookup was not run because prerequisite AHRI evidence did not pass."
+                )
+              else
+                subcheck(
+                  "fail",
+                  "AHRI #{invoice_ahri} was not found in the current imported NRCan OHPA BC qualified product list."
+                )
+              end
+          }
+        end
+
+        def subcheck(status, reason)
+          { status: status, reason: reason }
+        end
+
+        def product_validation_calculation_text(
+          ahri_evidence:,
+          product:,
+          subchecks:
+        )
+          [
+            "invoice_product_identity: hp_ahri_reference=#{ahri_evidence.fetch(:invoice_ahri).presence || "(missing)"}",
+            "supporting_document_product_identity: ahri_reference=#{supporting_ahri_text(ahri_evidence)}",
+            "download_lookup: table=claims.v_current_ohpa_products; matched_product_id=#{product&.id || "(none)"}",
+            subcheck_lines("subchecks", subchecks),
+            subcheck_lines("failed_subchecks", subchecks, status: "fail"),
+            subcheck_lines("warn_subchecks", subchecks, status: "warn")
+          ].compact.join("\n")
+        end
+
+        def subcheck_lines(label, subchecks, status: nil)
+          selected =
+            subchecks.select do |_key, row|
+              status.nil? || row.fetch(:status) == status
+            end
+          return nil if selected.empty? && status.present?
+
+          lines =
+            selected.map do |key, row|
+              "- #{key}: #{row.fetch(:status)} - #{row.fetch(:reason)}"
+            end
+          "#{label}:\n#{lines.join("\n")}"
         end
 
         def product_list_calculation_text(ahri_evidence:, status:, product:)
@@ -301,15 +404,15 @@ module Claims
           when :missing_invoice
             "The oil-to-heat-pump OHPA product-list lookup depends on the invoice AHRI check. " \
               "Because the invoice located fields did not include a usable AHRI reference, code cannot search the NRCan OHPA BC list for the billed equipment. " \
-              "Resolve hp_invoice_ahri_reference_present first, then rerun code checks."
+              "Review the invoice AHRI extraction and rerun code checks."
           when :missing_supporting
             "The oil-to-heat-pump OHPA product-list lookup depends on supporting product evidence corroborating the invoice AHRI. " \
               "The invoice includes AHRI evidence, but the processed supporting documents did not include usable AHRI evidence. " \
-              "Resolve hp_supporting_document_ahri_matches_invoice first, then rerun code checks."
+              "Review the supporting product evidence and rerun code checks."
           when :conflict
             "The oil-to-heat-pump OHPA product-list lookup was not evaluated because the invoice AHRI does not match the AHRI evidence extracted from supporting documents. " \
               "Invoice evidence is #{ahri_evidence.fetch(:invoice_ahri)}; supporting-document evidence is #{supporting_ahri_text(ahri_evidence)}. " \
-              "Resolve hp_supporting_document_ahri_matches_invoice first, then rerun code checks."
+              "Admin should verify whether the wrong supporting document was uploaded, the invoice references a different system, or extraction needs correction."
           when :source_unavailable
             "The invoice and supporting documents agree on AHRI #{ahri_evidence.fetch(:invoice_ahri)}, but there are no current imported NRCan OHPA BC product-list rows available for code to search. " \
               "This is an information-on-record problem, not a product failure. Admin should refresh the OHPA download and rerun GenAI/code checks."

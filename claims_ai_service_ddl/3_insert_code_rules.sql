@@ -16,40 +16,14 @@ WITH code_rules_seed (
   VALUES
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53021'::uuid,
-    'hp_invoice_ahri_reference_present',
-    'Checks whether the classifier stored an invoice AHRI reference in claims.invoice_version_located_fields for AHRI-backed heat-pump upgrade types.',
+    'hp_ahri_product_validation',
+    'Checks AHRI-backed heat pump product validation as one code-owned decision. Pseudocode: 1. Read hp_ahri_reference from GenAI invoice located fields. 2. Read ahri_reference from supporting product documents. 3. Search claims.v_current_ahri_products for the invoice AHRI reference. 4. Subcheck invoice_ahri_reference_present passes when hp_ahri_reference is present, otherwise warns. 5. Subcheck supporting_document_ahri_matches_invoice passes when supporting-document AHRI includes the invoice AHRI, warns when supporting AHRI is missing, and fails when supporting AHRI conflicts. 6. Subcheck ahri_product_found_in_download passes when the invoice AHRI is found in the current imported AHRI product list, warns when invoice AHRI or source rows are missing, and fails when the AHRI is searched and not found. 7. Overall result fails if any subcheck fails, warns if no subcheck fails but any subcheck warns, otherwise passes. 8. Write invoice_versions.ahri_product_id when a clean product-list match is found. 9. In calculation, list invoice product identity, supporting-document product identity, download lookup, subchecks, failed_subchecks, and warn_subchecks.',
     true,
-    'No follow-up is required when the classifier stored an invoice AHRI reference for this heat-pump upgrade type.',
-    'Review the invoice and rerun classifier extraction if the AHRI reference is visible but no classifier AHRI field was stored.',
+    'No follow-up is required when the invoice AHRI, supporting-document AHRI, and imported AHRI product-list row agree.',
+    'Review invoice/supporting product evidence or refresh the AHRI import when one AHRI validation subcheck is incomplete.',
+    'Ask the contractor for corrected product evidence when AHRI evidence conflicts or the invoice AHRI is not found in the imported product list.',
     NULL,
-    NULL,
-    'Reads claims.invoice_version_located_fields where source_engine=classifier and field_key=classifier.ahri_reference. This rule only checks presence of the invoice classifier AHRI field.',
-    TIMESTAMP '2026-07-06 00:00:00',
-    NOW()
-  ),
-  (
-    '590f2f3a-3e23-449a-a7d4-2f35c3d53022'::uuid,
-    'hp_supporting_document_ahri_matches_invoice',
-    'Checks whether AHRI evidence extracted from supporting product documents matches the classifier AHRI reference found on the invoice.',
-    true,
-    'No follow-up is required when supporting-document AHRI evidence matches the invoice classifier AHRI reference.',
-    'Review the supporting product evidence when no supporting-document AHRI reference was extracted or the invoice AHRI is missing.',
-    'Ask the contractor for corrected product evidence when supporting-document AHRI evidence conflicts with the invoice AHRI reference.',
-    NULL,
-    'Compares claims.invoice_version_located_fields source_engine=classifier field_key=classifier.ahri_reference with claims.supporting_document_located_fields field_key=ahri_reference for supporting documents on the same invoice version.',
-    TIMESTAMP '2026-07-06 00:00:00',
-    NOW()
-  ),
-  (
-    '590f2f3a-3e23-449a-a7d4-2f35c3d53023'::uuid,
-    'hp_ahri_reference_found_in_product_list',
-    'Checks whether the classifier AHRI reference found on the invoice exists in the current imported BC Hydro heat-pump product list.',
-    true,
-    'No follow-up is required when the invoice AHRI reference is found in the imported product list.',
-    'Review the invoice AHRI reference when it is missing or when no current imported AHRI product-list rows are available.',
-    'Ask the contractor for corrected product evidence when the invoice AHRI reference is not found in the imported product list.',
-    NULL,
-    'Reads claims.invoice_version_located_fields source_engine=classifier field_key=classifier.ahri_reference and searches claims.v_current_ahri_products. Supporting-document AHRI corroboration is handled by hp_supporting_document_ahri_matches_invoice.',
+    'Reads normal GenAI located field hp_ahri_reference, not classifier product references.',
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
@@ -147,7 +121,7 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53042'::uuid,
     'dfhp_product_specs_meet_requirements',
-    'Checks dual-fuel ducted heat pump product specifications from the matched AHRI product-list row. Pseudocode: 1. Resolve the matched AHRI product row from invoice_versions.ahri_product_id, falling back to classifier.ahri_reference searched against claims.v_current_ahri_products. 2. If no matched AHRI product row is available, return info because hp_ahri_reference_found_in_product_list owns the product-list match. 3. Read SEER, HSPF, SEER2, HSPF2, and rated_capacity_btu_at_minus_5c from the matched AHRI product row. 4. Pass the efficiency check when either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5. 5. Warn when neither complete efficiency pair is available. 6. Fail when complete values are available and neither efficiency path passes. 7. Pass the capacity check when the matched product row capacity is at least 12,000 BTU. 8. Warn when capacity is missing or not numeric. 9. Fail when capacity is present and below 12,000 BTU. 10. Do not check variable speed compressor because the dual-fuel ducted heat pump requirements table says variable speed compressor is not required. 11. Do not check multi-split indoor-head count because the dual-fuel ducted heat pump table has no multi-split indoor-head rule. 12. Combine the checks: fail if any check fails, warn if no check fails but any check is incomplete, otherwise pass. 13. In calculation, show the matched AHRI row values used.',
+    'Checks dual-fuel ducted heat pump product specifications from the matched AHRI product-list row. Pseudocode: 1. Resolve the matched AHRI product row from invoice_versions.ahri_product_id, which is written by hp_ahri_product_validation. 2. If no matched AHRI product row is available, return info because product validation owns the product-list match. 3. Read SEER, HSPF, SEER2, HSPF2, and rated_capacity_btu_at_minus_5c from the matched AHRI product row. 4. Pass the efficiency check when either SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5. 5. Warn when neither complete efficiency pair is available. 6. Fail when complete values are available and neither efficiency path passes. 7. Pass the capacity check when the matched product row capacity is at least 12,000 BTU. 8. Warn when capacity is missing or not numeric. 9. Fail when capacity is present and below 12,000 BTU. 10. Do not check variable speed compressor because the dual-fuel ducted heat pump requirements table says variable speed compressor is not required. 11. Do not check multi-split indoor-head count because the dual-fuel ducted heat pump table has no multi-split indoor-head rule. 12. Combine the checks: fail if any check fails, warn if no check fails but any check is incomplete, otherwise pass. 13. In calculation, show the matched AHRI row values used.',
     true,
     'No follow-up is required when the matched AHRI row satisfies the DFHP efficiency and 12,000 BTU capacity checks.',
     'Review the matched AHRI product-list row when DFHP efficiency or capacity values are missing or incomplete.',
@@ -224,27 +198,14 @@ WITH code_rules_seed (
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53101'::uuid,
-    'hpwh_neea_found_in_product_list',
-    'Checks whether the heat pump water heater manufacturer/model found on the invoice exists in the current imported NEEA Residential HPWH Qualified Products List.',
+    'hpwh_neea_product_validation',
+    'Checks heat pump water heater NEEA product validation as one code-owned decision. Pseudocode: 1. Read HPWH product identity from hpwh_manufacturer, hpwh_model_number, hpwh_model_components, and hpwh_make_model. 2. Search claims.v_current_neea_products. 3. Subcheck invoice_hpwh_product_identity_present passes when invoice model evidence exists, otherwise warns. 4. Subcheck neea_product_found_in_download passes when product evidence matches the current imported NEEA list, warns when invoice identity or source rows are missing, and fails when product identity is searched and not found. 5. Subcheck neea_tier_2_or_higher passes when the matched row effective tier is at least 2, warns when no matched row or tier value is available, and fails when the matched row is below Tier 2. 6. Overall result fails if any subcheck fails, warns if no subcheck fails but any subcheck warns, otherwise passes. 7. Write invoice_versions.neea_product_id when a clean product-list match is found. 8. In calculation, list invoice product identity, download lookup, subchecks, failed_subchecks, and warn_subchecks.',
     true,
-    'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched NEEA product-list row.',
-    'Ask the contractor to provide corrected manufacturer/model evidence if the invoice does not clearly identify a NEEA-listed heat pump water heater.',
-    'Ask the contractor for corrected product evidence or an eligible NEEA-listed heat pump water heater model.',
+    'No follow-up is required when the HPWH product identity matches the NEEA list and the matched row is Tier 2 or higher.',
+    'Review HPWH model evidence, NEEA import status, or tier values when a NEEA validation subcheck is incomplete.',
+    'Ask the contractor for corrected product evidence or an eligible Tier 2+ heat pump water heater model when NEEA validation fails.',
     NULL,
-    'The code supplies the detailed NEEA match explanation; these messages are short admin guidance additions only.',
-    TIMESTAMP '2026-05-15 00:00:00',
-    NOW()
-  ),
-  (
-    '590f2f3a-3e23-449a-a7d4-2f35c3d53102'::uuid,
-    'hpwh_neea_tier_2_or_higher',
-    'Checks whether the matched NEEA heat pump water heater product-list row is Tier 2 or higher.',
-    true,
-    'No follow-up is required for the NEEA Tier 2+ threshold if the product-list match is correct.',
-    'Review the NEEA product-list row and invoice evidence before moving the claim forward.',
-    'Ask the contractor for corrected product evidence or an eligible Tier 2+ heat pump water heater model.',
-    'Resolve the NEEA product-list match first, then rerun checks.',
-    'The code supplies the detailed NEEA tier comparison; these messages are short admin guidance additions only.',
+    'This consolidated rule owns HPWH NEEA product-list matching and Tier 2+ validation.',
     TIMESTAMP '2026-05-15 00:00:00',
     NOW()
   ),
@@ -262,6 +223,19 @@ WITH code_rules_seed (
     NOW()
   ),
   (
+    '590f2f3a-3e23-449a-a7d4-2f35c3d53234'::uuid,
+    'esu_timing_within_six_months_of_heat_pump_installation',
+    'Checks electrical service upgrade timing against the associated heat pump or heat pump water heater installation date. Pseudocode: 1. Read heat pump installation timing from esu_heat_pump_installation_date_reference. 2. Read ESU service/connection/completion timing from utility supporting-document located field service_completion_or_invoice_date on utility_bill or electrical_utility_upgrade_document. 3. If both dates are parseable, pass when the ESU date is within six months before or after the heat pump installation date; fail when it is outside that window. 4. If the invoice visibly associates the ESU with a heat pump or heat pump water heater on the same invoice and the invoice date is present, pass using the invoice date as a shared timing proxy. 5. Warn when the needed timing evidence is missing or not parseable and same-invoice proxy evidence is not available. 6. In calculation, show ESU service date, heat pump installation date, allowed window, same_invoice_proxy status, and missing date flags when relevant.',
+    true,
+    'No follow-up is required when the ESU timing is within six months of the associated heat pump or heat pump water heater installation.',
+    'Review the ESU utility document date and associated heat pump installation date before deciding whether the six-month timing requirement was met.',
+    'The ESU timing appears to be outside the six-month window around the associated heat pump or heat pump water heater installation date.',
+    NULL,
+    'Requirement PDF: ELECTRICAL SERVICE UPGRADE rebate requirement 3. Uses esu_heat_pump_installation_date_reference, esu_associated_heat_pump_or_hpwh_reference, utility_bill/electrical_utility_upgrade_document service_completion_or_invoice_date, and invoice_versions.di_ocr_invoice_date for same-invoice proxy.',
+    TIMESTAMP '2026-07-10 00:00:00',
+    NOW()
+  ),
+  (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53105'::uuid,
     'esu_rebate_math_within_cap',
     'Checks electrical service upgrade rebate amount against the ESU upgrade line amount and the income-level cap. Pseudocode: 1. Read upgrade_specific_rebate_line_amount. 2. Read esu_line_amount. 3. Read users_eligibilitycodes.income_level, falling back to the stored code located field only when needed. 4. Apply cap table: ESP1 $5,000, ESP2 $3,500, ESP3 $1,500. 5. If rebate amount, ESU upgrade amount, or income level is missing or ambiguous, warn. 6. If rebate amount exceeds the income-level cap, fail. 7. If rebate amount exceeds the ESU upgrade amount, fail. 8. Pass only when all named values are clear and the rebate is less than or equal to both the ESU upgrade amount and the applicable cap. 9. In calculation, show upgrade_specific_rebate_line_amount, esu_line_amount, income level, and cap.',
@@ -276,27 +250,27 @@ WITH code_rules_seed (
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53151'::uuid,
-    'hydronic_product_found_in_qualifying_list',
-    'Checks whether invoice and supporting-document air-to-water or combined heat pump product evidence match each other and exist in the current imported Better Homes BC Air-to-Water and Combination Heat Pump Qualifying Product List.',
+    'hydronic_awhp_product_validation',
+    'Checks hydronic air-to-water / combined heat pump product validation as one code-owned decision. Pseudocode: read invoice product identity fields, read supporting-document product identity fields, confirm both resolve to the same current AWHP product row, write invoice_versions.awhp_product_id when matched, and report subchecks for invoice identity presence, supporting-document match, and product found in download.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched Better Homes BC qualifying-list row.',
     'Refresh the AWHP product-list import if invoice and supporting-document product evidence agree but no current imported list rows are available.',
     'Ask the contractor for corrected invoice/supporting product evidence when product evidence is missing, conflicting, or not found in the imported qualifying list.',
     NULL,
-    'The code supplies the detailed invoice/supporting-document product comparison and Better Homes BC qualifying-list match explanation; these messages are short admin guidance additions only.',
+    'The code supplies the detailed invoice/supporting-document product comparison and Better Homes BC qualifying-list match explanation.',
     TIMESTAMP '2026-06-01 00:00:00',
     NOW()
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53181'::uuid,
-    'ashp_oil_ohpa_bc_product_found_in_list',
-    'Checks whether the corroborated invoice/supporting-document AHRI reference exists in the current imported NRCan Oil to Heat Pump Affordability BC qualified product list.',
+    'ashp_oil_ohpa_product_validation',
+    'Checks oil-to-heat-pump OHPA product validation as one code-owned decision. Pseudocode: read hp_ahri_reference from GenAI invoice located fields, read supporting-document ahri_reference, confirm supporting evidence matches invoice AHRI, search claims.v_current_ohpa_products, write invoice_versions.ohpa_product_id when matched, and report subchecks for invoice AHRI presence, supporting-document match, and OHPA product found in download.',
     true,
     'No follow-up is required unless the visible invoice equipment appears inconsistent with the matched NRCan OHPA BC product-list row.',
     'Refresh the OHPA product-list import if invoice and supporting-document AHRI evidence agree but no current imported list rows are available.',
     'Ask the contractor for corrected product evidence when the agreed AHRI reference is not found in the imported OHPA BC product list.',
     NULL,
-    'This rule owns only the NRCan OHPA BC product-list lookup. Invoice AHRI presence is handled by hp_invoice_ahri_reference_present, and invoice/supporting-document AHRI agreement is handled by hp_supporting_document_ahri_matches_invoice.',
+    'This consolidated rule owns invoice AHRI presence, supporting-document AHRI agreement, and the NRCan OHPA BC product-list lookup for oil ASHP.',
     TIMESTAMP '2026-06-02 00:00:00',
     NOW()
   ),
@@ -415,13 +389,14 @@ fail if current_has_space_heating and prior_has_space_heating
 fail if current has heat_pump_water_heater and prior has heat_pump_water_heater
 fail if current has insulation and prior has insulation
 fail if current has windows_doors and prior has windows_doors
+fail if current has electrical_service_upgrade and prior has electrical_service_upgrade
 otherwise pass',
     true,
     'No prior non-ineligible current invoice was found for the same participant and same one-rebate-limited upgrade area.',
     NULL,
     'This participant appears to already have a non-ineligible current invoice for the same one-rebate-limited upgrade area. Review the prior invoice before approving another payment.',
     NULL,
-    'Uses invoice_versions.participant_user_id, current invoice versions for other invoice parents, claims.invoice_version_upgrade_types, and claims.invoices.status. Primary space heating is checked as one grouped area; heat pump water heater, insulation, and windows/doors are exact upgrade-type checks. The rule returns pass or fail only.',
+    'Uses invoice_versions.participant_user_id, current invoice versions for other invoice parents, claims.invoice_version_upgrade_types, and claims.invoices.status. Primary space heating is checked as one grouped area; heat pump water heater, insulation, windows/doors, and electrical service upgrade are exact upgrade-type checks. The rule returns pass or fail only.',
     TIMESTAMP '2026-06-18 00:00:00',
     NOW()
   ),
@@ -545,18 +520,18 @@ otherwise pass',
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53120'::uuid,
-    'vent_herv_nrcan_energy_star_product_list_match',
+    'vent_herv_nrcan_product_validation',
     'Checks whether an HRV/ERV ventilation product is listed in the imported NRCan ENERGY STAR heat/energy recovery ventilator product list.
 
 Pseudo-code:
 1. Run only for ventilation upgrade types when this code rule is enabled.
-2. Read invoice-side named fields: classifier.product_model_number, classifier.product_manufacturer, vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
+2. Read invoice-side named fields: vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
 3. Read supporting-document named fields from documents on the same invoice version: brand_and_model, model_number, product_category_or_system_type, energy_star_reference, nrcan_reference, and product_list_reference.
 4. If the named evidence clearly indicates bathroom/exhaust fan and does not indicate HRV/ERV, return info because the HRV/ERV product-list lookup is not applicable.
 5. If the named evidence does not clearly indicate HRV/ERV, return warn so admin can review vent_system_type and product evidence.
 6. Extract usable model values from invoice fields and supporting-document fields.
-7. If invoice model evidence is missing, fail because the invoice does not independently identify the installed HRV/ERV product.
-8. If supporting-document model evidence is missing, fail because the invoice product is not corroborated by supporting product evidence.
+7. If invoice model evidence is missing, warn because the invoice does not independently identify the installed HRV/ERV product.
+8. If supporting-document model evidence is missing, warn because the invoice product is not corroborated by supporting product evidence.
 9. If no current imported HERV product-list rows are available, warn and ask admin to refresh the HERV product-list download.
 10. Search claims.v_current_herv_products by normalized model number, allowing exact, normalized, regex, and contained-model matches with manufacturer/brand as a scoring boost.
 11. Resolve invoice evidence and supporting-document evidence separately.
@@ -575,12 +550,12 @@ Pseudo-code:
   ),
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53121'::uuid,
-    'vent_fan_energy_star_product_list_match',
+    'vent_fan_energy_star_product_validation',
     'Checks whether a bathroom, utility, exhaust, or ventilating fan product is listed in the imported ENERGY STAR certified ventilating fan product list.
 
 Pseudo-code:
 1. Run only for ventilation upgrade types when this code rule is enabled.
-2. Read invoice-side named fields: classifier.product_model_number, classifier.product_manufacturer, vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
+2. Read invoice-side named fields: vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
 3. Read supporting-document named fields from documents on the same invoice version: brand_and_model, model_number, product_category_or_system_type, energy_star_reference, and product_list_reference.
 4. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return info because the fan product-list lookup is not applicable.
 5. If the named evidence does not clearly identify fan equipment, return warn so admin can review vent_system_type and product evidence.
@@ -610,7 +585,7 @@ Pseudo-code:
 
 Pseudo-code:
 1. Run only for ventilation upgrade types when this code rule is enabled.
-2. Use the same named product identity fields as vent_fan_energy_star_product_list_match to determine whether the visible ventilation equipment is a bathroom/utility/exhaust fan or HRV/ERV.
+2. Use the same named product identity fields as vent_fan_energy_star_product_validation to determine whether the visible ventilation equipment is a bathroom/utility/exhaust fan or HRV/ERV.
 3. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return info because this fan-capacity requirement is not applicable.
 4. Use supporting-document named capacity fields bathroom_fan_cfm and static_pressure from documents on the same invoice version.
 5. If visible named supporting-document capacity evidence clearly shows at least 85 cfm or 40 L/s at 50 Pa or 0.2 in. w.c., pass.
@@ -684,20 +659,10 @@ WITH code_rule_upgrade_type_seed (
   upgrade_type_key
 ) AS (
   VALUES
-  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_electric'),
-  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_wood'),
-  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_gas_propane'),
-  ('hp_invoice_ahri_reference_present', 'air_source_heat_pump_oil'),
-  ('hp_invoice_ahri_reference_present', 'dual_fuel_ducted_heat_pump'),
-  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_electric'),
-  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_wood'),
-  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_gas_propane'),
-  ('hp_supporting_document_ahri_matches_invoice', 'air_source_heat_pump_oil'),
-  ('hp_supporting_document_ahri_matches_invoice', 'dual_fuel_ducted_heat_pump'),
-  ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_electric'),
-  ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_wood'),
-  ('hp_ahri_reference_found_in_product_list', 'air_source_heat_pump_gas_propane'),
-  ('hp_ahri_reference_found_in_product_list', 'dual_fuel_ducted_heat_pump'),
+  ('hp_ahri_product_validation', 'air_source_heat_pump_electric'),
+  ('hp_ahri_product_validation', 'air_source_heat_pump_wood'),
+  ('hp_ahri_product_validation', 'air_source_heat_pump_gas_propane'),
+  ('hp_ahri_product_validation', 'dual_fuel_ducted_heat_pump'),
   ('dfhp_product_specs_meet_requirements', 'dual_fuel_ducted_heat_pump'),
   ('ashp_electric_wood_rebate_math_within_cap', 'air_source_heat_pump_electric'),
   ('ashp_electric_wood_rebate_math_within_cap', 'air_source_heat_pump_wood'),
@@ -732,18 +697,18 @@ WITH code_rule_upgrade_type_seed (
   ('income_level_1_or_2_required', 'health_and_safety_remediation'),
   ('income_level_1_or_2_required', 'ventilation'),
   ('vent_rebate_math_within_cap', 'ventilation'),
-  ('vent_herv_nrcan_energy_star_product_list_match', 'ventilation'),
-  ('vent_fan_energy_star_product_list_match', 'ventilation'),
+  ('vent_herv_nrcan_product_validation', 'ventilation'),
+  ('vent_fan_energy_star_product_validation', 'ventilation'),
   ('vent_fan_capacity_meets_minimum', 'ventilation'),
   ('wd_u_factor_threshold', 'windows_doors'),
   ('esu_rebate_math_within_cap', 'electrical_service_upgrade'),
-  ('hpwh_neea_found_in_product_list', 'heat_pump_water_heater'),
-  ('hpwh_neea_tier_2_or_higher', 'heat_pump_water_heater'),
+  ('esu_timing_within_six_months_of_heat_pump_installation', 'electrical_service_upgrade'),
+  ('hpwh_neea_product_validation', 'heat_pump_water_heater'),
   ('hpwh_rebate_math_within_cap', 'heat_pump_water_heater'),
   ('hs_rebate_math_within_cap', 'health_and_safety_remediation'),
-  ('hydronic_product_found_in_qualifying_list', 'air_to_water_heat_pump'),
-  ('hydronic_product_found_in_qualifying_list', 'combined_space_water_heat_pump'),
-  ('ashp_oil_ohpa_bc_product_found_in_list', 'air_source_heat_pump_oil')
+  ('hydronic_awhp_product_validation', 'air_to_water_heat_pump'),
+  ('hydronic_awhp_product_validation', 'combined_space_water_heat_pump'),
+  ('ashp_oil_ohpa_product_validation', 'air_source_heat_pump_oil')
 )
 INSERT INTO claims.code_rule_upgrade_types (
   code_rule_id,

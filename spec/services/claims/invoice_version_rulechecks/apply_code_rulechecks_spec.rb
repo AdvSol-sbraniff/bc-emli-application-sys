@@ -158,6 +158,43 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
       )
     end
 
+    it "fails when current and prior current invoices both have electrical service upgrades" do
+      enable_common_code_rule("prior_same_upgrade_type_rebate_payment_found")
+
+      participant = create(:user)
+      contractor = Contractor.create!(business_name: "Test Contractor")
+      prior_version =
+        create_invoice_version(
+          participant: participant,
+          contractor: contractor,
+          status: "genai_complete"
+        )
+      add_upgrade_type(prior_version, "electrical_service_upgrade")
+      current_version =
+        create_invoice_version(
+          participant: participant,
+          contractor: contractor,
+          status: "genai_in_progress"
+        )
+      add_upgrade_type(current_version, "electrical_service_upgrade")
+
+      result = described_class.call(invoice_version_id: current_version.id)
+
+      expect(result[:ok]).to be(true)
+      rulecheck =
+        Claims::InvoiceVersionRulecheck.find_by!(
+          invoice_version_id: current_version.id,
+          rule_key: "prior_same_upgrade_type_rebate_payment_found"
+        )
+      expect(rulecheck.rule_result).to eq("fail")
+      expect(rulecheck.calculation).to include(
+        "current_has_electrical_service_upgrade=true",
+        "prior_has_electrical_service_upgrade=true",
+        "failed_checks=electrical_service_upgrade",
+        "result=fail"
+      )
+    end
+
     it "fails when the current invoice contains multiple primary space heating upgrade types" do
       enable_common_code_rule(
         "current_invoice_cannot_contain_multiple_space_systems"

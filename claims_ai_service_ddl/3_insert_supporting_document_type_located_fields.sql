@@ -105,8 +105,6 @@ WITH field_seed (
   ('product_spec_sheet', 'product_list_reference', 4, 'Locate AHRI, NEEA, NRCan, ENERGY STAR, CPD, or other product-list/certification reference if visible.', true),
   ('product_spec_sheet', 'energy_star_reference', 5, 'Locate ENERGY STAR certification, ENERGY STAR product list, logo text, or qualified product wording if visible.', true),
   ('product_spec_sheet', 'nrcan_reference', 6, 'Locate Natural Resources Canada, NRCan searchable product list, or Canadian product-list reference if visible.', true),
-  ('product_spec_sheet', 'neea_reference', 7, 'Locate NEEA Advanced Water Heater Specification, NEEA qualified product list, or similar water-heater product-list reference if visible.', true),
-  ('product_spec_sheet', 'tier_reference', 8, 'Locate Tier 2 or higher evidence if visible.', true),
   ('product_spec_sheet', 'bathroom_fan_cfm', 9, 'Locate bathroom fan capacity in cfm or L/s if visible.', true),
   ('product_spec_sheet', 'static_pressure', 10, 'Locate static pressure rating evidence, such as 50 Pa, 0.2 in. w.c., 0.6 in. WC, or similar.', true),
   ('product_spec_sheet', 'direct_exterior_ducting_evidence', 13, 'Locate direct-to-outdoors ducting, exterior exhaust, sealed ducting, insulated ducting, duct hood, or screened hood evidence if visible.', true),

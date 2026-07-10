@@ -7,8 +7,6 @@ module Claims
         VENTILATION_UPGRADE_TYPE_KEY = "ventilation"
 
         INVOICE_FIELD_KEYS = %w[
-          classifier.product_model_number
-          classifier.product_manufacturer
           vent_system_type
           vent_manufacturer
           vent_model_number
@@ -29,7 +27,7 @@ module Claims
         RULES = {
           product_list_match: {
             number: 4,
-            key: "vent_herv_nrcan_energy_star_product_list_match"
+            key: "vent_herv_nrcan_product_validation"
           }
         }.freeze
 
@@ -128,17 +126,11 @@ module Claims
             .where(
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: %w[classifier genai],
+              source_engine: "genai",
               field_key: INVOICE_FIELD_KEYS
             )
             .where.not(value_text: [nil, ""])
-            .order(
-              Arel.sql(
-                "CASE source_engine WHEN 'classifier' THEN 0 ELSE 1 END"
-              ),
-              confidence: :desc,
-              created_at: :desc
-            )
+            .order(confidence: :desc, created_at: :desc)
             .to_a
         end
 
@@ -456,7 +448,8 @@ module Claims
             "pass"
           when :bathroom_fan
             "info"
-          when :unclear_system_type, :source_unavailable
+          when :unclear_system_type, :missing_invoice, :missing_supporting,
+               :source_unavailable
             "warn"
           else
             "fail"
@@ -464,24 +457,123 @@ module Claims
         end
 
         def product_list_calculation_text(field_bundle:, status:, product:)
-          case status
-          when :bathroom_fan
-            "Named ventilation evidence indicates a bathroom/exhaust fan rather than an HRV/ERV. HERV NRCan product-list lookup was not applicable."
-          when :unclear_system_type
-            "Named ventilation evidence did not clearly show HRV/ERV wording. Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).presence&.join(" / ") || "(none)"}; supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
-          when :missing_invoice
-            "No usable HRV/ERV model evidence was stored in invoice fields. Supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
-          when :missing_supporting
-            "Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}; no usable HRV/ERV model evidence was stored from supporting documents."
-          when :source_unavailable
-            "Invoice and supporting-document HRV/ERV product evidence are present, but no current imported NRCan ENERGY STAR HERV product-list rows were available to search."
-          when :conflict
-            "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} did not resolve to the same imported HERV product as supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")}."
-          when :matched
-            "Invoice and supporting-document product evidence both matched herv_products.id=#{product.id} from source=#{product.import_run&.herv_source&.description}. #{field_summary(field_bundle)}."
-          else
-            "Invoice model evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} and supporting-document model evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")} were searched against the current imported NRCan ENERGY STAR HERV product list, but code could not confirm a shared matching row."
-          end
+          base =
+            case status
+            when :bathroom_fan
+              "Named ventilation evidence indicates a bathroom/exhaust fan rather than an HRV/ERV. HERV NRCan product-list lookup was not applicable."
+            when :unclear_system_type
+              "Named ventilation evidence did not clearly show HRV/ERV wording. Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).presence&.join(" / ") || "(none)"}; supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
+            when :missing_invoice
+              "No usable HRV/ERV model evidence was stored in invoice fields. Supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
+            when :missing_supporting
+              "Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}; no usable HRV/ERV model evidence was stored from supporting documents."
+            when :source_unavailable
+              "Invoice and supporting-document HRV/ERV product evidence are present, but no current imported NRCan ENERGY STAR HERV product-list rows were available to search."
+            when :conflict
+              "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} did not resolve to the same imported HERV product as supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")}."
+            when :matched
+              "Invoice and supporting-document product evidence both matched herv_products.id=#{product.id} from source=#{product.import_run&.herv_source&.description}. #{field_summary(field_bundle)}."
+            else
+              "Invoice model evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} and supporting-document model evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")} were searched against the current imported NRCan ENERGY STAR HERV product list, but code could not confirm a shared matching row."
+            end
+
+          [
+            base,
+            "download_lookup: table=claims.v_current_herv_products; matched_product_id=#{product&.id || "(none)"}",
+            subcheck_lines(
+              product_validation_subchecks(
+                field_bundle: field_bundle,
+                status: status,
+                product: product
+              )
+            )
+          ].join("\n")
+        end
+
+        def product_validation_subchecks(field_bundle:, status:, product:)
+          {
+            invoice_herv_product_identity_present:
+              (
+                if field_bundle.fetch(:invoice_model_values).empty?
+                  ["warn", "No invoice HRV/ERV product identity was extracted."]
+                else
+                  [
+                    "pass",
+                    "Invoice product evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}."
+                  ]
+                end
+              ),
+            supporting_document_matches_invoice:
+              case status
+              when :missing_supporting
+                [
+                  "warn",
+                  "No supporting-document HRV/ERV product identity was extracted."
+                ]
+              when :conflict
+                [
+                  "fail",
+                  "Invoice and supporting-document product evidence resolved to different HERV rows."
+                ]
+              when :matched
+                [
+                  "pass",
+                  "Invoice and supporting-document product evidence resolved to the same HERV row."
+                ]
+              else
+                if field_bundle.fetch(:supporting_model_values).empty?
+                  [
+                    "warn",
+                    "No supporting-document HRV/ERV product identity was extracted."
+                  ]
+                else
+                  [
+                    "warn",
+                    "Supporting-document product identity could not be fully corroborated."
+                  ]
+                end
+              end,
+            herv_product_found_in_download:
+              case status
+              when :matched
+                ["pass", "Matched herv_products.id=#{product.id}."]
+              when :bathroom_fan
+                [
+                  "pass",
+                  "Not applicable because evidence indicates bathroom/exhaust fan."
+                ]
+              when :source_unavailable
+                ["warn", "No current imported HERV rows were available."]
+              when :missing_invoice, :missing_supporting, :unclear_system_type
+                [
+                  "warn",
+                  "Download lookup could not fully run because product identity or equipment type evidence is incomplete."
+                ]
+              else
+                ["fail", "No shared matching HERV product row was found."]
+              end
+          }
+        end
+
+        def subcheck_lines(subchecks)
+          all =
+            subchecks.map do |key, (status, reason)|
+              "- #{key}: #{status} - #{reason}"
+            end
+          failed =
+            subchecks
+              .select { |_key, (status, _reason)| status == "fail" }
+              .map { |key, (_status, reason)| "- #{key}: #{reason}" }
+          warned =
+            subchecks
+              .select { |_key, (status, _reason)| status == "warn" }
+              .map { |key, (_status, reason)| "- #{key}: #{reason}" }
+
+          [
+            "subchecks:\n#{all.join("\n")}",
+            ("failed_subchecks:\n#{failed.join("\n")}" if failed.any?),
+            ("warn_subchecks:\n#{warned.join("\n")}" if warned.any?)
+          ].compact.join("\n")
         end
 
         def product_list_reason_text(field_bundle:, status:, product:)

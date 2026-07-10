@@ -5,7 +5,6 @@ module Claims
     module Dfhp
       class ApplyProductSpecs
         DFHP_UPGRADE_TYPE_KEY = "dual_fuel_ducted_heat_pump"
-        INVOICE_AHRI_FIELD_KEY = "classifier.ahri_reference"
 
         MIN_CAPACITY_BTU = BigDecimal("12000")
         MIN_SEER = BigDecimal("16.0")
@@ -63,20 +62,7 @@ module Claims
         end
 
         def matched_ahri_product
-          if invoice_version.ahri_product.present?
-            return invoice_version.ahri_product
-          end
-
-          invoice_ahri = normalized_ahri(invoice_ahri_field&.value_text)
-          return nil if invoice_ahri.blank?
-
-          current_match =
-            ::Claims::CurrentAhriProduct
-              .where(ahri_reference_number: invoice_ahri)
-              .order(:source_description, :id)
-              .first
-
-          ::Claims::AhriProduct.find_by(id: current_match.id) if current_match
+          invoice_version.ahri_product
         end
 
         def product_specs_row(product:)
@@ -88,8 +74,8 @@ module Claims
                 expected_text:
                   "The matched AHRI product row should show qualifying SEER/HSPF or SEER2/HSPF2 values and minimum capacity of 12,000 BTU for this dual-fuel ducted heat pump.",
                 calculation:
-                  "No matched AHRI product row was available from invoice_versions.ahri_product_id or classifier.ahri_reference.",
-                evidence_text: field_evidence(invoice_ahri_field),
+                  "No matched AHRI product row was available from invoice_versions.ahri_product_id. Resolve hp_ahri_product_validation first.",
+                evidence_text: nil,
                 reason_and_likely_causes:
                   "This DFHP product-spec rule depends on the AHRI product-list match. The AHRI product-list rule records whether the invoice AHRI reference was missing, not found, or matched; this dependent metric check is informational until that match exists."
               )
@@ -236,20 +222,6 @@ module Claims
           end
         end
 
-        def invoice_ahri_field
-          @invoice_ahri_field ||=
-            ::Claims::InvoiceVersionLocatedField
-              .where(
-                invoice_version_id: invoice_version.id,
-                invoice_upgrade_type_id: upgrade_type.id,
-                source_engine: "classifier",
-                field_key: INVOICE_AHRI_FIELD_KEY
-              )
-              .where.not(value_text: [nil, ""])
-              .order(confidence: :desc, created_at: :desc)
-              .first
-        end
-
         def replace_rulechecks!(rows)
           ::Claims::InvoiceVersionRulecheck.transaction do
             ::Claims::InvoiceVersionRulecheck.where(
@@ -359,14 +331,6 @@ module Claims
           decimal.frac.zero? ? decimal.to_i.to_s : decimal.to_s("F")
         rescue ArgumentError
           nil
-        end
-
-        def normalized_ahri(raw_ahri)
-          text = raw_ahri.to_s.strip
-          return "" if text.blank?
-
-          digits = text.gsub(/\D/, "")
-          digits.presence || text
         end
       end
     end

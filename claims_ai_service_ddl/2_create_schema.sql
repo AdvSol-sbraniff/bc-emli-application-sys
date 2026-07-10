@@ -2654,7 +2654,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   supporting_document_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload_package_stage | ocr_read | classifier_files | supporting_document_extraction | ocr_invoice | fix_upload_package_stage | fix_ocr_read | fix_classifier_files | fix_clone_existing_evidence | fix_supporting_document_extraction | fix_ocr_invoice | ruleclone_clone_existing_evidence | case_facts | product_lookup_enrichment | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice
+  step_type text NOT NULL,  -- upload_package_stage | ocr_read | classifier_files | supporting_document_extraction | ocr_invoice | fix_upload_package_stage | fix_ocr_read | fix_classifier_files | fix_clone_existing_evidence | fix_supporting_document_extraction | fix_ocr_invoice | ruleclone_clone_existing_evidence | case_facts | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice
 
   status character varying NOT NULL DEFAULT 'queued',
 
@@ -2703,7 +2703,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     ON DELETE CASCADE,
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload_package_stage','fix_upload_package_stage','ocr_read','fix_ocr_read','classifier_files','fix_classifier_files','supporting_document_extraction','fix_supporting_document_extraction','ocr_invoice','fix_ocr_invoice','fix_clone_existing_evidence','ruleclone_clone_existing_evidence','case_facts','product_lookup_enrichment','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice')),
+    CHECK (step_type IN ('upload_package_stage','fix_upload_package_stage','ocr_read','fix_ocr_read','classifier_files','fix_classifier_files','supporting_document_extraction','fix_supporting_document_extraction','ocr_invoice','fix_ocr_invoice','fix_clone_existing_evidence','ruleclone_clone_existing_evidence','case_facts','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),

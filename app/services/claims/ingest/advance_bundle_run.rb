@@ -807,7 +807,6 @@ module Claims
             invoice_version_id: invoice_version_id,
             step_type: %w[
               case_facts
-              product_lookup_enrichment
               genai_common
               genai_upgrade
               code_common

@@ -12,7 +12,6 @@ module Claims
         REBATE_FIELD_KEY = "upgrade_specific_rebate_line_amount"
         EQUIPMENT_TYPE_FIELD_KEY = "hp_new_equipment_type"
         EFFICIENCY_AND_CAPACITY_FIELD_KEY = "hp_efficiency_and_capacity"
-        INVOICE_AHRI_FIELD_KEY = "classifier.ahri_reference"
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
 
         ESP_CAP_BY_INCOME_LEVEL = {
@@ -142,37 +141,11 @@ module Claims
         end
 
         def matched_ahri_product
-          if invoice_version.ahri_product.present?
-            return invoice_version.ahri_product
-          end
-
-          invoice_ahri = normalized_ahri(invoice_ahri_field&.value_text)
-          return nil if invoice_ahri.blank?
-
-          current_match =
-            ::Claims::CurrentAhriProduct
-              .where(ahri_reference_number: invoice_ahri)
-              .order(:source_description, :id)
-              .first
-
-          ::Claims::AhriProduct.find_by(id: current_match.id) if current_match
+          invoice_version.ahri_product
         end
 
         def matched_ohpa_product
-          if invoice_version.ohpa_product.present?
-            return invoice_version.ohpa_product
-          end
-
-          invoice_ahri = normalized_ahri(invoice_ahri_field&.value_text)
-          return nil if invoice_ahri.blank?
-
-          current_match =
-            ::Claims::CurrentOhpaProduct
-              .where(ahri_reference_number: invoice_ahri)
-              .order(:source_description, :id)
-              .first
-
-          ::Claims::OhpaProduct.find_by(id: current_match.id) if current_match
+          invoice_version.ohpa_product
         end
 
         def source_product_label(product)
@@ -186,9 +159,9 @@ module Claims
 
         def source_product_pointer
           if ohpa_backed_upgrade_type?
-            "invoice_versions.ohpa_product_id or classifier.ahri_reference"
+            "invoice_versions.ohpa_product_id"
           else
-            "invoice_versions.ahri_product_id or classifier.ahri_reference"
+            "invoice_versions.ahri_product_id"
           end
         end
 
@@ -608,20 +581,6 @@ module Claims
           @income_level_field ||= best_code_field(INCOME_LEVEL_FIELD_KEY)
         end
 
-        def invoice_ahri_field
-          @invoice_ahri_field ||=
-            ::Claims::InvoiceVersionLocatedField
-              .where(
-                invoice_version_id: invoice_version.id,
-                invoice_upgrade_type_id: upgrade_type.id,
-                source_engine: "classifier",
-                field_key: INVOICE_AHRI_FIELD_KEY
-              )
-              .where.not(value_text: [nil, ""])
-              .order(confidence: :desc, created_at: :desc)
-              .first
-        end
-
         def best_genai_field(field_key)
           ::Claims::InvoiceVersionLocatedField
             .where(
@@ -775,7 +734,7 @@ module Claims
             expected_text: expected_text,
             calculation:
               "No matched product row was available from #{source_product_pointer}.",
-            evidence_text: field_evidence(invoice_ahri_field),
+            evidence_text: nil,
             reason_and_likely_causes:
               "This ASHP product-spec rule depends on the product-list match. The product-list rule records whether the invoice AHRI reference was missing, not found, or matched; this dependent metric check is informational until that match exists."
           )
@@ -938,14 +897,6 @@ module Claims
           return nil if value.nil?
 
           "$#{format_decimal(value)}"
-        end
-
-        def normalized_ahri(raw_ahri)
-          text = raw_ahri.to_s.strip
-          return "" if text.blank?
-
-          digits = text.gsub(/\D/, "")
-          digits.presence || text
         end
       end
     end

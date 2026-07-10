@@ -12,13 +12,9 @@ module Claims
         MAKE_MODEL_FIELD_KEY = "hpwh_make_model"
 
         RULES = {
-          product_list_match: {
+          product_validation: {
             number: 1,
-            key: "hpwh_neea_found_in_product_list"
-          },
-          tier_two_or_higher: {
-            number: 2,
-            key: "hpwh_neea_tier_2_or_higher"
+            key: "hpwh_neea_product_validation"
           }
         }.freeze
 
@@ -48,6 +44,7 @@ module Claims
 
           field_bundle = located_field_bundle
           product = product_for(field_bundle)
+          invoice_version.update!(neea_product_id: product&.id)
           rule_rows =
             rulecheck_rows(
               field_bundle: field_bundle,
@@ -259,16 +256,8 @@ module Claims
         def rulecheck_rows(field_bundle:, product:, enabled_rules:)
           [
             (
-              if enabled_rules.key?(:product_list_match)
-                product_list_match_row(
-                  field_bundle: field_bundle,
-                  product: product
-                )
-              end
-            ),
-            (
-              if enabled_rules.key?(:tier_two_or_higher)
-                tier_two_or_higher_row(
+              if enabled_rules.key?(:product_validation)
+                product_validation_row(
                   field_bundle: field_bundle,
                   product: product
                 )
@@ -277,27 +266,177 @@ module Claims
           ].compact
         end
 
-        def product_list_match_row(field_bundle:, product:)
-          matched = product.present?
+        def product_validation_row(field_bundle:, product:)
+          subchecks =
+            product_validation_subchecks(
+              field_bundle: field_bundle,
+              product: product
+            )
+          result = aggregate_subcheck_result(subchecks)
 
           base_rulecheck_row(
-            rule: RULES.fetch(:product_list_match),
-            rule_result: matched ? "pass" : "warn",
-            confidence: matched ? 100 : 0,
+            rule: RULES.fetch(:product_validation),
+            rule_result: result,
+            confidence: %w[pass fail].include?(result) ? 100 : 0,
             expected_text:
-              "The heat pump water heater manufacturer/model found on the invoice should match a row in the imported NEEA Residential HPWH Qualified Products List.",
+              "The heat pump water heater invoice product identity should match the imported NEEA Residential HPWH Qualified Products List and the matched row should show Tier 2 or higher.",
             calculation:
-              product_list_calculation_text(
+              product_validation_calculation_text(
                 field_bundle: field_bundle,
-                product: product
+                product: product,
+                subchecks: subchecks
               ),
             evidence_text: field_evidence(field_bundle),
             reason_and_likely_causes:
+              product_validation_reason_text(
+                field_bundle: field_bundle,
+                product: product,
+                subchecks: subchecks
+              )
+          )
+        end
+
+        def product_validation_subchecks(field_bundle:, product:)
+          tier = effective_tier(product) if product
+
+          {
+            invoice_hpwh_product_identity_present:
+              if field_bundle.fetch(:model_values).empty?
+                subcheck(
+                  "warn",
+                  "No HPWH model evidence was stored in GenAI located fields."
+                )
+              else
+                subcheck(
+                  "pass",
+                  "HPWH model evidence=#{field_bundle.fetch(:model_values).join(" / ")}."
+                )
+              end,
+            neea_product_found_in_download:
+              if field_bundle.fetch(:model_values).empty?
+                subcheck(
+                  "warn",
+                  "NEEA lookup could not run because model evidence is missing."
+                )
+              elsif !current_neea_products_available?
+                subcheck(
+                  "warn",
+                  "No current imported NEEA product-list rows were available."
+                )
+              elsif product
+                subcheck(
+                  "pass",
+                  "Product evidence matched neea_products.id=#{product.id}."
+                )
+              else
+                subcheck(
+                  "fail",
+                  "Product evidence was not found in the current imported NEEA product list."
+                )
+              end,
+            neea_tier_2_or_higher:
+              if product.nil?
+                subcheck(
+                  "warn",
+                  "Tier check could not run because no NEEA product row matched."
+                )
+              elsif tier.nil?
+                subcheck(
+                  "warn",
+                  "Matched NEEA row did not provide indoor_tier or outdoor_tier."
+                )
+              elsif tier >= 2
+                subcheck("pass", "Effective NEEA tier=#{tier}.")
+              else
+                subcheck(
+                  "fail",
+                  "Effective NEEA tier=#{tier}, below required Tier 2."
+                )
+              end
+          }
+        end
+
+        def subcheck(status, reason)
+          { status: status, reason: reason }
+        end
+
+        def aggregate_subcheck_result(subchecks)
+          statuses = subchecks.values.map { |row| row.fetch(:status) }
+          return "fail" if statuses.include?("fail")
+          return "warn" if statuses.include?("warn")
+
+          "pass"
+        end
+
+        def product_validation_calculation_text(
+          field_bundle:,
+          product:,
+          subchecks:
+        )
+          [
+            "invoice_product_identity: #{field_summary(field_bundle).presence || "(missing)"}",
+            "supporting_document_product_identity: not_configured_for_this_rule",
+            "download_lookup: table=claims.v_current_neea_products; matched_product_id=#{product&.id || "(none)"}",
+            ("matched_product: #{product_evidence(product)}" if product),
+            subcheck_lines("subchecks", subchecks),
+            subcheck_lines("failed_subchecks", subchecks, status: "fail"),
+            subcheck_lines("warn_subchecks", subchecks, status: "warn")
+          ].compact.join("\n")
+        end
+
+        def subcheck_lines(label, subchecks, status: nil)
+          selected =
+            subchecks.select do |_key, row|
+              status.nil? || row.fetch(:status) == status
+            end
+          return nil if selected.empty? && status.present?
+
+          lines =
+            selected.map do |key, row|
+              "- #{key}: #{row.fetch(:status)} - #{row.fetch(:reason)}"
+            end
+          "#{label}:\n#{lines.join("\n")}"
+        end
+
+        def product_validation_reason_text(field_bundle:, product:, subchecks:)
+          result = aggregate_subcheck_result(subchecks)
+          if result == "pass"
+            return(
+              "The HPWH product identity matched the NEEA list and the matched product row is Tier 2 or higher."
+            )
+          end
+
+          failed =
+            subchecks
+              .select { |_key, row| row.fetch(:status) == "fail" }
+              .map { |key, row| "#{key}: #{row.fetch(:reason)}" }
+          warned =
+            subchecks
+              .select { |_key, row| row.fetch(:status) == "warn" }
+              .map { |key, row| "#{key}: #{row.fetch(:reason)}" }
+
+          [
+            "HPWH NEEA product validation did not fully pass.",
+            ("Failed subchecks: #{failed.join(" | ")}" if failed.any?),
+            ("Warning subchecks: #{warned.join(" | ")}" if warned.any?),
+            product_validation_followup_text(
+              field_bundle: field_bundle,
+              product: product
+            )
+          ].compact.join(" ")
+        end
+
+        def product_validation_followup_text(field_bundle:, product:)
+          if product.nil?
+            return(
               product_list_reason_text(
                 field_bundle: field_bundle,
                 product: product
               )
-          )
+            )
+          end
+
+          "Admin should verify the matched NEEA product-list row and tier values if the visible invoice equipment appears inconsistent."
         end
 
         def tier_two_or_higher_row(field_bundle:, product:)

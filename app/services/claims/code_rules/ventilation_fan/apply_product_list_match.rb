@@ -7,8 +7,6 @@ module Claims
         VENTILATION_UPGRADE_TYPE_KEY = "ventilation"
 
         INVOICE_FIELD_KEYS = %w[
-          classifier.product_model_number
-          classifier.product_manufacturer
           vent_system_type
           vent_manufacturer
           vent_model_number
@@ -35,7 +33,7 @@ module Claims
         RULES = {
           product_list_match: {
             number: 5,
-            key: "vent_fan_energy_star_product_list_match"
+            key: "vent_fan_energy_star_product_validation"
           },
           capacity_minimum: {
             number: 6,
@@ -152,17 +150,11 @@ module Claims
             .where(
               invoice_version_id: invoice_version.id,
               invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: %w[classifier genai],
+              source_engine: "genai",
               field_key: field_keys
             )
             .where.not(value_text: [nil, ""])
-            .order(
-              Arel.sql(
-                "CASE source_engine WHEN 'classifier' THEN 0 ELSE 1 END"
-              ),
-              confidence: :desc,
-              created_at: :desc
-            )
+            .order(confidence: :desc, created_at: :desc)
             .to_a
         end
 
@@ -549,24 +541,126 @@ module Claims
         end
 
         def product_list_calculation_text(field_bundle:, status:, product:)
-          case status
-          when :hrv_or_erv
-            "Named ventilation evidence indicates HRV/ERV rather than a bathroom/utility/exhaust fan. ENERGY STAR ventilating-fan lookup was not applicable."
-          when :unclear_system_type
-            "Named ventilation evidence did not clearly show bathroom/utility/exhaust fan wording. Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).presence&.join(" / ") || "(none)"}; supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
-          when :missing_invoice
-            "No usable fan model evidence was stored in invoice fields. Supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
-          when :missing_supporting
-            "Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}; no usable fan model evidence was stored from supporting documents."
-          when :source_unavailable
-            "Invoice and supporting-document fan product evidence are present, but no current imported ENERGY STAR ventilating-fan product-list rows were available to search."
-          when :conflict
-            "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} did not resolve to the same imported fan product as supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")}."
-          when :matched
-            "Invoice and supporting-document product evidence both matched vent_fan_products.id=#{product.id} from source=#{product.import_run&.vent_fan_source&.description}. #{field_summary(field_bundle)}; matched fan type=#{product.fan_type}; markets=#{product.markets}; ENERGY STAR Unique ID=#{product.energy_star_unique_id}; CB Model Identifier=#{product.cb_model_identifier}."
-          else
-            "Invoice model evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} and supporting-document model evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")} were searched against the current imported ENERGY STAR certified ventilating-fan product list, but code could not confirm a shared matching row."
-          end
+          base =
+            case status
+            when :hrv_or_erv
+              "Named ventilation evidence indicates HRV/ERV rather than a bathroom/utility/exhaust fan. ENERGY STAR ventilating-fan lookup was not applicable."
+            when :unclear_system_type
+              "Named ventilation evidence did not clearly show bathroom/utility/exhaust fan wording. Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).presence&.join(" / ") || "(none)"}; supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
+            when :missing_invoice
+              "No usable fan model evidence was stored in invoice fields. Supporting-document model evidence=#{field_bundle.fetch(:supporting_model_values).presence&.join(" / ") || "(none)"}."
+            when :missing_supporting
+              "Invoice model evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}; no usable fan model evidence was stored from supporting documents."
+            when :source_unavailable
+              "Invoice and supporting-document fan product evidence are present, but no current imported ENERGY STAR ventilating-fan product-list rows were available to search."
+            when :conflict
+              "Invoice product evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} did not resolve to the same imported fan product as supporting-document product evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")}."
+            when :matched
+              "Invoice and supporting-document product evidence both matched vent_fan_products.id=#{product.id} from source=#{product.import_run&.vent_fan_source&.description}. #{field_summary(field_bundle)}; matched fan type=#{product.fan_type}; markets=#{product.markets}; ENERGY STAR Unique ID=#{product.energy_star_unique_id}; CB Model Identifier=#{product.cb_model_identifier}."
+            else
+              "Invoice model evidence #{field_bundle.fetch(:invoice_model_values).join(" / ")} and supporting-document model evidence #{field_bundle.fetch(:supporting_model_values).join(" / ")} were searched against the current imported ENERGY STAR certified ventilating-fan product list, but code could not confirm a shared matching row."
+            end
+
+          [
+            base,
+            "download_lookup: table=claims.v_current_vent_fan_products; matched_product_id=#{product&.id || "(none)"}",
+            subcheck_lines(
+              product_validation_subchecks(
+                field_bundle: field_bundle,
+                status: status,
+                product: product
+              )
+            )
+          ].join("\n")
+        end
+
+        def product_validation_subchecks(field_bundle:, status:, product:)
+          {
+            invoice_fan_product_identity_present:
+              (
+                if field_bundle.fetch(:invoice_model_values).empty?
+                  ["warn", "No invoice fan product identity was extracted."]
+                else
+                  [
+                    "pass",
+                    "Invoice product evidence=#{field_bundle.fetch(:invoice_model_values).join(" / ")}."
+                  ]
+                end
+              ),
+            supporting_document_matches_invoice:
+              case status
+              when :missing_supporting
+                [
+                  "warn",
+                  "No supporting-document fan product identity was extracted."
+                ]
+              when :conflict
+                [
+                  "fail",
+                  "Invoice and supporting-document product evidence resolved to different fan rows."
+                ]
+              when :matched
+                [
+                  "pass",
+                  "Invoice and supporting-document product evidence resolved to the same fan row."
+                ]
+              else
+                if field_bundle.fetch(:supporting_model_values).empty?
+                  [
+                    "warn",
+                    "No supporting-document fan product identity was extracted."
+                  ]
+                else
+                  [
+                    "warn",
+                    "Supporting-document product identity could not be fully corroborated."
+                  ]
+                end
+              end,
+            vent_fan_product_found_in_download:
+              case status
+              when :matched
+                ["pass", "Matched vent_fan_products.id=#{product.id}."]
+              when :hrv_or_erv
+                ["pass", "Not applicable because evidence indicates HRV/ERV."]
+              when :source_unavailable
+                [
+                  "warn",
+                  "No current imported ENERGY STAR fan rows were available."
+                ]
+              when :missing_invoice, :missing_supporting, :unclear_system_type
+                [
+                  "warn",
+                  "Download lookup could not fully run because product identity or equipment type evidence is incomplete."
+                ]
+              else
+                [
+                  "fail",
+                  "No shared matching ENERGY STAR fan product row was found."
+                ]
+              end
+          }
+        end
+
+        def subcheck_lines(subchecks)
+          all =
+            subchecks.map do |key, (status, reason)|
+              "- #{key}: #{status} - #{reason}"
+            end
+          failed =
+            subchecks
+              .select { |_key, (status, _reason)| status == "fail" }
+              .map { |key, (_status, reason)| "- #{key}: #{reason}" }
+          warned =
+            subchecks
+              .select { |_key, (status, _reason)| status == "warn" }
+              .map { |key, (_status, reason)| "- #{key}: #{reason}" }
+
+          [
+            "subchecks:\n#{all.join("\n")}",
+            ("failed_subchecks:\n#{failed.join("\n")}" if failed.any?),
+            ("warn_subchecks:\n#{warned.join("\n")}" if warned.any?)
+          ].compact.join("\n")
         end
 
         def product_list_reason_text(field_bundle:, status:, product:)
