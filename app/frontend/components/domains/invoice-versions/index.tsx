@@ -9,11 +9,23 @@ import {
   Accordion,
   AccordionItem,
   Badge,
+  Button,
+  Checkbox,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
   Switch,
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
   IconButton,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList,
   Tooltip,
   useToast,
 } from '@chakra-ui/react';
@@ -34,6 +46,7 @@ import {
   CheckCircle,
   CornersOut,
   FrameCorners,
+  Info,
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
   PaperPlaneTilt,
@@ -46,6 +59,7 @@ import {
 // ============================================================
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -63,13 +77,27 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 type FieldRowProps = {
   label: string;
   value: any;
+  hint?: string;
   active?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   inline?: boolean;
 };
 
-const FieldRow = ({ label, value, active, disabled, onClick, inline }: FieldRowProps) => {
+const FieldRow = ({ label, value, hint, active, disabled, onClick, inline }: FieldRowProps) => {
+  const valueText = String(value);
+  const valueNode = (
+    <Text
+      fontSize="sm"
+      fontWeight={active ? 'semibold' : 'normal'}
+      noOfLines={inline ? 1 : 2}
+      textAlign={inline ? 'right' : undefined}
+      cursor={hint ? 'help' : undefined}
+    >
+      {valueText}
+    </Text>
+  );
+
   return (
     <Box
       role={disabled ? undefined : 'button'}
@@ -100,14 +128,13 @@ const FieldRow = ({ label, value, active, disabled, onClick, inline }: FieldRowP
       <Text fontSize="sm" opacity={0.7} flexShrink={0}>
         {label}
       </Text>
-      <Text
-        fontSize="sm"
-        fontWeight={active ? 'semibold' : 'normal'}
-        noOfLines={inline ? 1 : 2}
-        textAlign={inline ? 'right' : undefined}
-      >
-        {String(value)}
-      </Text>
+      {hint ? (
+        <Tooltip label={hint} hasArrow placement="top">
+          {valueNode}
+        </Tooltip>
+      ) : (
+        valueNode
+      )}
     </Box>
   );
 };
@@ -116,8 +143,7 @@ const ruleDisplayTitle = (rulecheck: any) => {
   const ruleKey = String(rulecheck.rule_key ?? '').trim();
   if (ruleKey) return ruleKey;
 
-  const num = rulecheck.rule_number != null ? Number(rulecheck.rule_number) : null;
-  return num != null ? `advice_${num}` : 'advice';
+  return 'advice';
 };
 
 const ruleSourceLabel = (rulecheck: any) => {
@@ -127,11 +153,162 @@ const ruleSourceLabel = (rulecheck: any) => {
   return sourceEngine || '';
 };
 
+const ruleConfidenceLabel = (rulecheck: any, label = 'confidence') => {
+  const sourceEngine = String(rulecheck?.source_engine ?? '').toLowerCase();
+  if (sourceEngine !== 'genai') return '';
+  if (rulecheck?.confidence == null || rulecheck.confidence === '') return '';
+  return `${label} ${Number(rulecheck.confidence).toFixed(0)}`;
+};
+
+const ruleDefinitionLabel = (rulecheck: any) => {
+  const sourceEngine = String(rulecheck?.source_engine ?? '').toLowerCase();
+  return sourceEngine === 'code' ? 'Code description' : 'GenAI prompt';
+};
+
+const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return (
+      <Text fontSize="sm" opacity={0.7}>
+        No contractor advice found for this invoice version.
+      </Text>
+    );
+  }
+
+  return (
+    <Box
+      fontSize="sm"
+      bg="orange.50"
+      borderWidth="1px"
+      borderColor="orange.200"
+      borderLeftWidth="5px"
+      borderLeftColor="orange.400"
+      borderRadius="lg"
+      px="4"
+      py="3"
+      boxShadow="sm"
+      sx={{
+        p: { marginBottom: '0.7rem' },
+        'p:last-child': { marginBottom: 0 },
+        ul: { paddingLeft: '0', marginTop: '0.7rem', marginBottom: '0.7rem', listStyleType: 'none' },
+        li: {
+          marginBottom: '0.75rem',
+          padding: '0.85rem',
+          borderRadius: '0.75rem',
+          background: 'white',
+          border: '1px solid var(--chakra-colors-orange-100)',
+          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
+        },
+        'li:last-child': { marginBottom: 0 },
+        em: { fontStyle: 'italic', color: 'var(--chakra-colors-gray-800)' },
+        strong: { color: 'var(--chakra-colors-orange-700)' },
+      }}
+    >
+      <ReactMarkdown
+        components={{
+          p: ({ children }: any) => (
+            <Text as="p" fontSize="sm" whiteSpace="pre-wrap">
+              {children}
+            </Text>
+          ),
+          ul: ({ children }: any) => (
+            <Box as="ul" pl="0" mt="2" mb="3">
+              {children}
+            </Box>
+          ),
+          li: ({ children }: any) => <Box as="li">{children}</Box>,
+          em: ({ children }: any) => (
+            <Text as="em" fontStyle="italic">
+              {children}
+            </Text>
+          ),
+          strong: ({ children }: any) => (
+            <Text as="strong" fontWeight="bold">
+              {children}
+            </Text>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </Box>
+  );
+};
+
+const SourceQuoteMarkdown = ({ value }: { value?: unknown }) => {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+
+  return (
+    <Box
+      fontSize="sm"
+      sx={{
+        p: { marginBottom: '0.25rem' },
+        'p:last-child': { marginBottom: 0 },
+        em: { fontStyle: 'italic' },
+        strong: { color: 'var(--chakra-colors-orange-700)' },
+      }}
+    >
+      <ReactMarkdown
+        components={{
+          p: ({ children }: any) => (
+            <Text as="p" fontSize="sm" whiteSpace="pre-wrap">
+              {children}
+            </Text>
+          ),
+          em: ({ children }: any) => (
+            <Text as="em" fontStyle="italic">
+              {children}
+            </Text>
+          ),
+          strong: ({ children }: any) => (
+            <Text as="strong" fontWeight="bold">
+              {children}
+            </Text>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </Box>
+  );
+};
+
+const RuleDetailDrawerSection = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <Box mb="18px">
+    <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.06em" opacity={0.65} mb="6px">
+      {label}
+    </Text>
+    {children}
+  </Box>
+);
+
+const RuleDetailText = ({ value }: { value?: unknown }) => {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return (
+      <Text fontSize="sm" opacity={0.6}>
+        Not provided.
+      </Text>
+    );
+  }
+
+  return (
+    <Text fontSize="sm" whiteSpace="pre-wrap">
+      {text}
+    </Text>
+  );
+};
+
 const displayLocatedFieldValue = (row: any): string => {
   if (row?.value_text != null && row.value_text !== '') return String(row.value_text);
   if (row?.value_json != null) return JSON.stringify(row.value_json);
   return '-';
 };
+
+const isClassifierEligibilityField = (row: any) =>
+  String(row?.source_engine ?? '').toLowerCase() === 'classifier' &&
+  String(row?.field_key ?? '').toLowerCase() === 'classifier.eligibility_code';
 
 const fmtBytes = (value: any): string => {
   const n = Number(value);
@@ -160,6 +337,14 @@ const upgradeTypeDescriptionFor = (row: any) => {
 // ============================================================
 
 type RuleResult = 'pass' | 'info' | 'warn' | 'fail' | null | undefined;
+type RuleResultFilter = 'fail' | 'warn' | 'info' | 'pass';
+
+const RULE_RESULT_FILTER_OPTIONS: Array<{ result: RuleResultFilter; label: string }> = [
+  { result: 'fail', label: 'red' },
+  { result: 'warn', label: 'yellow' },
+  { result: 'info', label: 'blue' },
+  { result: 'pass', label: 'green' },
+];
 
 const normalizeResult = (result: unknown): RuleResult => {
   const value = String(result ?? '')
@@ -205,6 +390,12 @@ const StatusDot = ({ result }: { result: unknown }) => {
       <Box as="span" w="10px" h="10px" borderRadius="full" display="inline-block" bg={bg} flexShrink={0} />
     </Tooltip>
   );
+};
+
+const ruleMatchesResultFilter = (rulecheck: any, filters: RuleResultFilter[]) => {
+  if (filters.length === 0) return true;
+  const normalized = normalizeResult(rulecheck?.rule_result);
+  return normalized != null && filters.includes(normalized);
 };
 
 type InvoiceStatusTransition = 'screen_in' | 'request_revision' | 'approve_pending' | 'mark_ineligible';
@@ -505,6 +696,44 @@ export const InvoiceVersionShowScreen = () => {
 
   const [genAiRulechecks, setGenAiRulechecks] = useState<any[]>([]);
   const [genAiRulechecksError, setGenAiRulechecksError] = useState<string | null>(null);
+  const [ruleResultFilters, setRuleResultFilters] = useState<RuleResultFilter[]>([]);
+  const [ruleDetailsDrawerRulecheck, setRuleDetailsDrawerRulecheck] = useState<any | null>(null);
+
+  const toggleRuleResultFilter = (result: RuleResultFilter) => {
+    setRuleResultFilters((current) =>
+      current.includes(result) ? current.filter((item) => item !== result) : [...current, result],
+    );
+  };
+
+  const ruleFilterLabel =
+    ruleResultFilters.length === 0
+      ? 'all'
+      : RULE_RESULT_FILTER_OPTIONS.filter((option) => ruleResultFilters.includes(option.result))
+          .map((option) => option.label)
+          .join(', ');
+
+  const ruleFilterMenu = (
+    <Menu closeOnSelect={false} placement="bottom-end">
+      <MenuButton as={Button} size="xs" variant="outline" onClick={(event) => event.stopPropagation()}>
+        Rule filter: {ruleFilterLabel}
+      </MenuButton>
+      <MenuList minW="190px" onClick={(event) => event.stopPropagation()}>
+        <MenuItem onClick={() => setRuleResultFilters([])}>
+          <Checkbox size="sm" isChecked={ruleResultFilters.length === 0} pointerEvents="none" mr="8px" />
+          <Text fontSize="sm">all</Text>
+        </MenuItem>
+        {RULE_RESULT_FILTER_OPTIONS.map((option) => (
+          <MenuItem key={option.result} onClick={() => toggleRuleResultFilter(option.result)}>
+            <Checkbox size="sm" isChecked={ruleResultFilters.includes(option.result)} pointerEvents="none" mr="8px" />
+            <StatusDot result={option.result} />
+            <Text fontSize="sm" ml="8px">
+              {option.label}
+            </Text>
+          </MenuItem>
+        ))}
+      </MenuList>
+    </Menu>
+  );
 
   // ============================================================
   // SECTION 05.04 - LINEITEMS STATE
@@ -1179,6 +1408,16 @@ export const InvoiceVersionShowScreen = () => {
 
   const overlayWidthPx = renderWidthPx;
 
+  const classifierEligibilityFields = useMemo(
+    () => classifierFields.filter((row) => isClassifierEligibilityField(row)),
+    [classifierFields],
+  );
+
+  const classifierDisplayFields = useMemo(
+    () => classifierFields.filter((row) => !isClassifierEligibilityField(row)),
+    [classifierFields],
+  );
+
   const upgradeTypeGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -1208,6 +1447,13 @@ export const InvoiceVersionShowScreen = () => {
     };
 
     genAiFields.forEach((row) => ensureGroup(row).fields.push(row));
+    classifierEligibilityFields.forEach((row) =>
+      ensureGroup({ ...row, upgrade_type_key: 'common', upgrade_type_description: 'Common' }).fields.push({
+        ...row,
+        upgrade_type_key: 'common',
+        upgrade_type_description: 'Common',
+      }),
+    );
     upgradeTypeResults
       .filter((row) => row?.source_engine !== 'classifier')
       .forEach((row) => ensureGroup(row).results.push(row));
@@ -1219,7 +1465,12 @@ export const InvoiceVersionShowScreen = () => {
       if (sortA !== sortB) return sortA - sortB;
       return a.description.localeCompare(b.description);
     });
-  }, [genAiFields, genAiRulechecks, upgradeTypeResults]);
+  }, [classifierEligibilityFields, genAiFields, genAiRulechecks, upgradeTypeResults]);
+
+  const filteredGenAiRulechecks = useMemo(
+    () => genAiRulechecks.filter((row) => ruleMatchesResultFilter(row, ruleResultFilters)),
+    [genAiRulechecks, ruleResultFilters],
+  );
 
   const classifierUpgradeTypeRows = useMemo(
     () =>
@@ -1401,6 +1652,8 @@ export const InvoiceVersionShowScreen = () => {
                   isDisabled={!canOpenRevisionMessages}
                 />
               </Tooltip>
+
+              {ruleFilterMenu}
             </Box>
             {statusActionError && (
               <Box mb="8px">
@@ -1650,36 +1903,32 @@ export const InvoiceVersionShowScreen = () => {
                     </AccordionPanel>
                   </AccordionItem>
 
-                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                    <h2>
-                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                        <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
-                            Product & Eligibility Codes
+                  {classifierDisplayFields.length > 0 && (
+                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                          <Box flex="1" textAlign="left">
+                            <Text size="sm" fontWeight="bold">
+                              Product Codes
+                            </Text>
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+
+                      <AccordionPanel px="0" pt="3px">
+                        {genAiError && (
+                          <Text fontSize="xs" color="red.500" mb="8px">
+                            {genAiError}
                           </Text>
-                        </Box>
-                        <AccordionIcon />
-                      </AccordionButton>
-                    </h2>
+                        )}
 
-                    <AccordionPanel px="0" pt="3px">
-                      {genAiError && (
-                        <Text fontSize="xs" color="red.500" mb="8px">
-                          {genAiError}
-                        </Text>
-                      )}
-
-                      {!genAiError && classifierFields.length === 0 ? (
-                        <Text fontSize="sm" opacity={0.7}>
-                          No product or eligibility codes found.
-                        </Text>
-                      ) : (
                         <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
-                          {classifierFields.map((r: any) => {
+                          {classifierDisplayFields.map((r: any) => {
                             const label = r.field_key || 'field';
                             const value = displayLocatedFieldValue(r);
                             const confidence =
-                              r.confidence != null ? `confidence ${Number(r.confidence).toFixed(2)}` : '';
+                              r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
                             const clickable = r.page != null;
 
                             return (
@@ -1717,16 +1966,24 @@ export const InvoiceVersionShowScreen = () => {
                                 <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1}>
                                   {label}
                                 </Text>
-                                <Text fontSize="sm" noOfLines={2} textAlign="right">
-                                  {[value, confidence].filter(Boolean).join('  ')}
-                                </Text>
+                                {confidence ? (
+                                  <Tooltip label={confidence} hasArrow placement="top">
+                                    <Text fontSize="sm" noOfLines={2} textAlign="right" cursor="help">
+                                      {value}
+                                    </Text>
+                                  </Tooltip>
+                                ) : (
+                                  <Text fontSize="sm" noOfLines={2} textAlign="right">
+                                    {value}
+                                  </Text>
+                                )}
                               </Box>
                             );
                           })}
                         </Box>
-                      )}
-                    </AccordionPanel>
-                  </AccordionItem>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  )}
 
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                     <h2>
@@ -1752,7 +2009,7 @@ export const InvoiceVersionShowScreen = () => {
                             const explanation = String(r.classification_explanation || '').trim();
                             const evidenceText = String(r.evidence_text || '').trim();
                             const confidence =
-                              r.confidence != null ? `confidence ${Number(r.confidence).toFixed(0)}` : '';
+                              r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(0)}` : '';
                             const clickable = r.page != null;
                             const highlightKey = `classifier_upgrade_${r.id}`;
                             const isActive =
@@ -1784,19 +2041,24 @@ export const InvoiceVersionShowScreen = () => {
                               >
                                 <Box
                                   display="grid"
-                                  gridTemplateColumns="minmax(210px, 0.75fr) minmax(260px, 1.25fr) 100px"
+                                  gridTemplateColumns="minmax(210px, 0.75fr) minmax(260px, 1.25fr)"
                                   gap="8px"
                                   alignItems="baseline"
                                 >
                                   <Text fontSize="sm" fontWeight={isActive ? 'semibold' : 'normal'} noOfLines={1}>
                                     {meta.label}
                                   </Text>
-                                  <Text fontSize="sm" noOfLines={1}>
-                                    {evidenceText || '-'}
-                                  </Text>
-                                  <Text fontSize="sm" textAlign="right" opacity={0.7} noOfLines={1}>
-                                    {confidence}
-                                  </Text>
+                                  {confidence ? (
+                                    <Tooltip label={confidence} hasArrow placement="top">
+                                      <Text fontSize="sm" noOfLines={1} cursor="help">
+                                        {evidenceText || '-'}
+                                      </Text>
+                                    </Tooltip>
+                                  ) : (
+                                    <Text fontSize="sm" noOfLines={1}>
+                                      {evidenceText || '-'}
+                                    </Text>
+                                  )}
                                 </Box>
                                 {explanation && (
                                   <Box mt="4px" pl="12px">
@@ -2318,7 +2580,7 @@ export const InvoiceVersionShowScreen = () => {
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
                           <Text size="sm" fontWeight="bold">
-                            Overall advice
+                            Contractor Advice
                           </Text>
                         </Box>
                         <AccordionIcon />
@@ -2327,18 +2589,7 @@ export const InvoiceVersionShowScreen = () => {
 
                     <AccordionPanel px="0" pt="6px">
                       <Box px="10px" py="3px">
-                        <Flex align="center" gap="8px" mb="6px" wrap="wrap">
-                          <StatusDot result={readData?.genai_result} />
-                          <Badge colorScheme={resultColorScheme(readData?.genai_result)}>
-                            {resultLabel(readData?.genai_result)}
-                          </Badge>
-                          <Text fontSize="xs" opacity={0.75}>
-                            confidence: {readData?.genai_overall_confidence ?? '-'}
-                          </Text>
-                        </Flex>
-                        <Text fontSize="sm" whiteSpace="pre-wrap">
-                          {readData?.genai_admin_advice || 'No overall advice found for this invoice version.'}
-                        </Text>
+                        <ContractorAdviceMarkdown value={readData?.contractor_advice} />
                       </Box>
                     </AccordionPanel>
                   </AccordionItem>
@@ -2760,201 +3011,191 @@ export const InvoiceVersionShowScreen = () => {
                       </AccordionPanel>
                     </AccordionItem>
                   ) : (
-                    upgradeTypeGroups.map((group) => {
-                      const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
+                    <>
+                      {upgradeTypeGroups.map((group) => {
+                        const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
+                        const visibleRulechecks = group.rulechecks.filter((row) =>
+                          ruleMatchesResultFilter(row, ruleResultFilters),
+                        );
 
-                      return (
-                        <AccordionItem key={group.upgradeTypeKey} borderTopWidth="1px" borderColor="gray.200">
-                          <h2>
-                            <AccordionButton px="0" py="8px" _hover={{ bg: 'transparent' }}>
-                              <Flex flex="1" align="center" gap="8px" textAlign="left" minW={0}>
-                                <Box minW={0}>
-                                  <Text fontSize="md" lineHeight="1.25" fontWeight="bold" noOfLines={1}>
-                                    {meta.label} - Fields & Advice
-                                  </Text>
-                                </Box>
-                                <InvoiceUpgradeTypeTile
-                                  upgradeTypeKey={group.upgradeTypeKey}
-                                  description={group.description}
-                                  size={30}
-                                />
-                              </Flex>
-                              <AccordionIcon />
-                            </AccordionButton>
-                          </h2>
+                        return (
+                          <AccordionItem key={group.upgradeTypeKey} borderTopWidth="1px" borderColor="gray.200">
+                            <h2>
+                              <AccordionButton px="0" py="8px" _hover={{ bg: 'transparent' }}>
+                                <Flex flex="1" align="center" gap="8px" textAlign="left" minW={0}>
+                                  <Box minW={0}>
+                                    <Text fontSize="md" lineHeight="1.25" fontWeight="bold" noOfLines={1}>
+                                      {meta.label} - Fields & Advice
+                                    </Text>
+                                  </Box>
+                                  <InvoiceUpgradeTypeTile
+                                    upgradeTypeKey={group.upgradeTypeKey}
+                                    description={group.description}
+                                    size={30}
+                                  />
+                                </Flex>
+                                <AccordionIcon />
+                              </AccordionButton>
+                            </h2>
 
-                          <AccordionPanel px="0" pt="4px">
-                            <Accordion allowMultiple defaultIndex={[0, 1]}>
-                              <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                                <h3>
-                                  <AccordionButton px="10px" py="5px" _hover={{ bg: 'transparent' }}>
-                                    <Box flex="1" textAlign="left">
-                                      <Text fontSize="sm" fontWeight="bold">
-                                        Located fields
+                            <AccordionPanel px="0" pt="4px">
+                              <Accordion allowMultiple defaultIndex={[0, 1]}>
+                                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                                  <h3>
+                                    <AccordionButton px="10px" py="5px" _hover={{ bg: 'transparent' }}>
+                                      <Box flex="1" textAlign="left">
+                                        <Text fontSize="sm" fontWeight="bold">
+                                          Located fields
+                                        </Text>
+                                      </Box>
+                                      <AccordionIcon />
+                                    </AccordionButton>
+                                  </h3>
+
+                                  <AccordionPanel px="10px" pt="3px" pb="6px">
+                                    {genAiError && (
+                                      <Text fontSize="xs" color="red.500" mb="8px">
+                                        {genAiError}
                                       </Text>
-                                    </Box>
-                                    <AccordionIcon />
-                                  </AccordionButton>
-                                </h3>
-
-                                <AccordionPanel px="10px" pt="3px" pb="6px">
-                                  {genAiError && (
-                                    <Text fontSize="xs" color="red.500" mb="8px">
-                                      {genAiError}
-                                    </Text>
-                                  )}
-                                  {group.fields.length === 0 ? (
-                                    <Text fontSize="sm" opacity={0.7}>
-                                      No located fields for this upgrade type.
-                                    </Text>
-                                  ) : (
-                                    <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
-                                      {group.fields.map((r: any) => {
-                                        const label = r.field_key || 'field';
-                                        const value = displayLocatedFieldValue(r);
-                                        const highlightKey = `found_${r.id}`;
-                                        const confidence =
-                                          r.confidence != null ? `confidence ${Number(r.confidence).toFixed(0)}` : '';
-                                        const clickable = r.page != null;
-
-                                        return (
-                                          <FieldRow
-                                            key={r.id}
-                                            label={label}
-                                            value={[value, confidence].filter(Boolean).join('  ')}
-                                            active={activeHighlightKey === highlightKey}
-                                            disabled={!clickable}
-                                            inline
-                                            onClick={
-                                              clickable
-                                                ? () => {
-                                                    setActiveHighlight({
-                                                      source: 'genai',
-                                                      genaiId: Number(r.id),
-                                                      pageNumber: Number(r.page),
-                                                      polygon: r.polygon ?? null,
-                                                    });
-                                                    setShowPdf(true);
-                                                    setActiveHighlightKey(highlightKey);
-                                                  }
-                                                : undefined
-                                            }
-                                          />
-                                        );
-                                      })}
-                                    </Box>
-                                  )}
-                                </AccordionPanel>
-                              </AccordionItem>
-
-                              <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                                <h3>
-                                  <AccordionButton px="10px" py="5px" _hover={{ bg: 'transparent' }}>
-                                    <Box flex="1" textAlign="left">
-                                      <Text fontSize="sm" fontWeight="bold">
-                                        Advice
+                                    )}
+                                    {group.fields.length === 0 ? (
+                                      <Text fontSize="sm" opacity={0.7}>
+                                        No located fields for this upgrade type.
                                       </Text>
-                                    </Box>
-                                    <AccordionIcon />
-                                  </AccordionButton>
-                                </h3>
+                                    ) : (
+                                      <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
+                                        {group.fields.map((r: any) => {
+                                          const label = r.field_key || 'field';
+                                          const value = displayLocatedFieldValue(r);
+                                          const sourceEngine = String(r?.source_engine ?? 'genai').toLowerCase();
+                                          const highlightSource =
+                                            sourceEngine === 'classifier' ? 'classifier' : 'genai';
+                                          const highlightKey = `${highlightSource}_${r.id}`;
+                                          const confidence =
+                                            r.confidence != null
+                                              ? `Confidence: ${Number(r.confidence).toFixed(0)}`
+                                              : '';
+                                          const clickable = r.page != null;
 
-                                <AccordionPanel px="10px" pt="3px" pb="6px">
-                                  {genAiRulechecksError && (
-                                    <Text fontSize="xs" color="red.500" mb="8px">
-                                      {genAiRulechecksError}
-                                    </Text>
-                                  )}
-                                  {group.rulechecks.length === 0 ? (
-                                    <Text fontSize="sm" opacity={0.7}>
-                                      No advice for this upgrade type.
-                                    </Text>
-                                  ) : (
-                                    <Box display="flex" flexDirection="column" gap="6px">
-                                      {group.rulechecks.map((r: any) => {
-                                        const title = ruleDisplayTitle(r);
-                                        const sourceLabel = ruleSourceLabel(r);
-                                        const expected = r.expected_text ?? r.expected ?? '';
-                                        const calc = r.calculation ?? '';
-                                        const reason = r.reason_and_likely_causes ?? '';
-                                        const evText = r.evidence_text ?? '';
-                                        const confidence =
-                                          r.confidence != null ? `confidence ${Number(r.confidence).toFixed(0)}` : '';
+                                          return (
+                                            <FieldRow
+                                              key={r.id}
+                                              label={label}
+                                              value={value}
+                                              hint={confidence}
+                                              active={activeHighlightKey === highlightKey}
+                                              disabled={!clickable}
+                                              inline
+                                              onClick={
+                                                clickable
+                                                  ? () => {
+                                                      setActiveHighlight({
+                                                        source: highlightSource,
+                                                        genaiId: Number(r.id),
+                                                        pageNumber: Number(r.page),
+                                                        polygon: r.polygon ?? null,
+                                                      });
+                                                      setShowPdf(true);
+                                                      setActiveHighlightKey(highlightKey);
+                                                    }
+                                                  : undefined
+                                              }
+                                            />
+                                          );
+                                        })}
+                                      </Box>
+                                    )}
+                                  </AccordionPanel>
+                                </AccordionItem>
 
-                                        return (
-                                          <Box
-                                            key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_key}`}
-                                            px="10px"
-                                            py="2px"
-                                            borderRadius="md"
-                                          >
+                                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                                  <h3>
+                                    <AccordionButton px="10px" py="5px" _hover={{ bg: 'transparent' }}>
+                                      <Box flex="1" textAlign="left">
+                                        <Text fontSize="sm" fontWeight="bold">
+                                          Advice
+                                        </Text>
+                                      </Box>
+                                      <AccordionIcon />
+                                    </AccordionButton>
+                                  </h3>
+
+                                  <AccordionPanel px="10px" pt="3px" pb="6px">
+                                    {genAiRulechecksError && (
+                                      <Text fontSize="xs" color="red.500" mb="8px">
+                                        {genAiRulechecksError}
+                                      </Text>
+                                    )}
+                                    {group.rulechecks.length === 0 ? (
+                                      <Text fontSize="sm" opacity={0.7}>
+                                        No advice for this upgrade type.
+                                      </Text>
+                                    ) : visibleRulechecks.length === 0 ? (
+                                      <Text fontSize="sm" opacity={0.7}>
+                                        No advice matching the selected rule filter.
+                                      </Text>
+                                    ) : (
+                                      <Box display="flex" flexDirection="column" gap="6px">
+                                        {visibleRulechecks.map((r: any) => {
+                                          const title = ruleDisplayTitle(r);
+                                          const sourceLabel = ruleSourceLabel(r);
+                                          const reason = r.reason_and_likely_causes ?? '';
+                                          const confidence = ruleConfidenceLabel(r);
+
+                                          return (
                                             <Box
-                                              display="grid"
-                                              gridTemplateColumns="18px minmax(180px, 1fr) 160px"
-                                              gap="8px"
-                                              alignItems="baseline"
+                                              key={r.id ?? `${r.source_engine}-${r.rule_key}`}
+                                              px="10px"
+                                              py="2px"
+                                              borderRadius="md"
                                             >
-                                              <StatusDot result={r.rule_result} />
-                                              <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                                                {title}
-                                              </Text>
-                                              <Text fontSize="sm" opacity={0.7} textAlign="right" noOfLines={1}>
-                                                {[sourceLabel, confidence].filter(Boolean).join('  ')}
-                                              </Text>
-                                            </Box>
+                                              <Box
+                                                display="grid"
+                                                gridTemplateColumns="18px 28px minmax(180px, 1fr)"
+                                                gap="8px"
+                                                alignItems="center"
+                                              >
+                                                <StatusDot result={r.rule_result} />
+                                                <Tooltip label="Rule details" hasArrow placement="top">
+                                                  <IconButton
+                                                    aria-label={`Rule details for ${title}`}
+                                                    icon={<Info size={16} />}
+                                                    size="xs"
+                                                    variant="ghost"
+                                                    onClick={(event) => {
+                                                      event.stopPropagation();
+                                                      setRuleDetailsDrawerRulecheck(r);
+                                                    }}
+                                                  />
+                                                </Tooltip>
+                                                <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
+                                                  {title}
+                                                </Text>
+                                              </Box>
 
-                                            {expected && (
-                                              <Box mt="2px" pl="26px">
-                                                <Text as="span" fontSize="sm" fontWeight="bold">
-                                                  Expected:{' '}
-                                                </Text>
-                                                <Text as="span" fontSize="sm">
-                                                  {String(expected)}
-                                                </Text>
-                                              </Box>
-                                            )}
-                                            {calc && (
-                                              <Box mt="2px" pl="26px">
-                                                <Text as="span" fontSize="sm" fontWeight="bold">
-                                                  Calculation:{' '}
-                                                </Text>
-                                                <Text as="span" fontSize="sm">
-                                                  {String(calc)}
-                                                </Text>
-                                              </Box>
-                                            )}
-                                            {reason && (
-                                              <Box mt="2px" pl="26px">
-                                                <Text as="span" fontSize="sm" fontWeight="bold">
-                                                  Reason:{' '}
-                                                </Text>
-                                                <Text as="span" fontSize="sm">
-                                                  {String(reason)}
-                                                </Text>
-                                              </Box>
-                                            )}
-                                            {evText && (
-                                              <Box mt="2px" pl="26px">
-                                                <Text as="span" fontSize="sm" fontWeight="bold">
-                                                  Evidence:{' '}
-                                                </Text>
-                                                <Text as="span" fontSize="sm">
-                                                  {String(evText)}
-                                                </Text>
-                                              </Box>
-                                            )}
-                                          </Box>
-                                        );
-                                      })}
-                                    </Box>
-                                  )}
-                                </AccordionPanel>
-                              </AccordionItem>
-                            </Accordion>
-                          </AccordionPanel>
-                        </AccordionItem>
-                      );
-                    })
+                                              {reason && (
+                                                <Box mt="2px" pl="26px">
+                                                  <Text as="span" fontSize="sm" fontWeight="bold">
+                                                    Reason:{' '}
+                                                  </Text>
+                                                  <Text as="span" fontSize="sm">
+                                                    {String(reason)}
+                                                  </Text>
+                                                </Box>
+                                              )}
+                                            </Box>
+                                          );
+                                        })}
+                                      </Box>
+                                    )}
+                                  </AccordionPanel>
+                                </AccordionItem>
+                              </Accordion>
+                            </AccordionPanel>
+                          </AccordionItem>
+                        );
+                      })}
+                    </>
                   )}
 
                   {false && (
@@ -3113,9 +3354,8 @@ export const InvoiceVersionShowScreen = () => {
                               const label = r.field_key || 'field';
                               const value = displayLocatedFieldValue(r);
 
-                              const meta = [r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null]
-                                .filter(Boolean)
-                                .join(' - ');
+                              const confidence =
+                                r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
 
                               return (
                                 <Box
@@ -3155,12 +3395,15 @@ export const InvoiceVersionShowScreen = () => {
                                   <Text fontSize="xs" opacity={0.7}>
                                     {label}
                                   </Text>
-                                  <Text fontSize="sm" noOfLines={3}>
-                                    {value}
-                                  </Text>
-                                  {meta && (
-                                    <Text fontSize="xs" opacity={0.6}>
-                                      {meta}
+                                  {confidence ? (
+                                    <Tooltip label={confidence} hasArrow placement="top">
+                                      <Text fontSize="sm" noOfLines={3} cursor="help">
+                                        {value}
+                                      </Text>
+                                    </Tooltip>
+                                  ) : (
+                                    <Text fontSize="sm" noOfLines={3}>
+                                      {value}
                                     </Text>
                                   )}
                                 </Box>
@@ -3197,9 +3440,8 @@ export const InvoiceVersionShowScreen = () => {
                             {classifierFields.map((r: any) => {
                               const label = r.field_key || 'field';
                               const value = displayLocatedFieldValue(r);
-                              const meta = [r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null]
-                                .filter(Boolean)
-                                .join(' - ');
+                              const confidence =
+                                r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
                               const clickable = r.page != null;
 
                               return (
@@ -3242,12 +3484,15 @@ export const InvoiceVersionShowScreen = () => {
                                   <Text fontSize="xs" opacity={0.7}>
                                     {label}
                                   </Text>
-                                  <Text fontSize="sm" noOfLines={3}>
-                                    {value}
-                                  </Text>
-                                  {meta && (
-                                    <Text fontSize="xs" opacity={0.6}>
-                                      {meta}
+                                  {confidence ? (
+                                    <Tooltip label={confidence} hasArrow placement="top">
+                                      <Text fontSize="sm" noOfLines={3} cursor="help">
+                                        {value}
+                                      </Text>
+                                    </Tooltip>
+                                  ) : (
+                                    <Text fontSize="sm" noOfLines={3}>
+                                      {value}
                                     </Text>
                                   )}
                                 </Box>
@@ -3288,9 +3533,8 @@ export const InvoiceVersionShowScreen = () => {
                               const label = r.field_key || 'field';
                               const value = displayLocatedFieldValue(r);
 
-                              const meta = [r.confidence != null ? `conf ${Number(r.confidence).toFixed(2)}` : null]
-                                .filter(Boolean)
-                                .join(' - ');
+                              const confidence =
+                                r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
 
                               return (
                                 <Box
@@ -3326,12 +3570,15 @@ export const InvoiceVersionShowScreen = () => {
                                   <Text fontSize="xs" opacity={0.7}>
                                     {label}
                                   </Text>
-                                  <Text fontSize="sm" noOfLines={3}>
-                                    {value}
-                                  </Text>
-                                  {meta && (
-                                    <Text fontSize="xs" opacity={0.6}>
-                                      {meta}
+                                  {confidence ? (
+                                    <Tooltip label={confidence} hasArrow placement="top">
+                                      <Text fontSize="sm" noOfLines={3} cursor="help">
+                                        {value}
+                                      </Text>
+                                    </Tooltip>
+                                  ) : (
+                                    <Text fontSize="sm" noOfLines={3}>
+                                      {value}
                                     </Text>
                                   )}
                                 </Box>
@@ -3362,7 +3609,7 @@ export const InvoiceVersionShowScreen = () => {
     REQUIRES: readData includes these invoice_versions columns:
       ? genai_overall_confidence
       ? genai_result
-      ? genai_admin_advice
+      ? contractor_advice
    ============================================================ */}
                           <Box
                             mb="10px"
@@ -3373,36 +3620,7 @@ export const InvoiceVersionShowScreen = () => {
                             borderColor="gray.200"
                             bg="gray.50"
                           >
-                            <Flex direction="column" align="flex-start" gap="4px" mb="6px">
-                              <Text fontSize="xs" opacity={0.7}>
-                                Overall (GenAI)
-                              </Text>
-
-                              <Flex align="center" gap="8px">
-                                <Box
-                                  as="span"
-                                  w="10px"
-                                  h="10px"
-                                  borderRadius="full"
-                                  display="inline-block"
-                                  bg={resultDotColor(readData?.genai_result)}
-                                />
-
-                                <Text fontSize="xs" opacity={0.6}>
-                                  {resultLabel(readData?.genai_result)} - conf {readData?.genai_overall_confidence ?? 0}
-                                </Text>
-                              </Flex>
-                            </Flex>
-
-                            {String(readData?.genai_admin_advice ?? '').trim() ? (
-                              <Text fontSize="sm" whiteSpace="pre-wrap">
-                                {String(readData.genai_admin_advice)}
-                              </Text>
-                            ) : (
-                              <Text fontSize="sm" opacity={0.7}>
-                                No admin advice.
-                              </Text>
-                            )}
+                            <ContractorAdviceMarkdown value={readData?.contractor_advice} />
                           </Box>
 
                           {/* error */}
@@ -3418,28 +3636,23 @@ export const InvoiceVersionShowScreen = () => {
                               No advice checks found.
                             </Text>
                           )}
+                          {!genAiRulechecksError &&
+                            genAiRulechecks.length > 0 &&
+                            filteredGenAiRulechecks.length === 0 && (
+                              <Text fontSize="sm" opacity={0.7}>
+                                No advice checks matching the selected rule filter.
+                              </Text>
+                            )}
 
                           {/* list */}
-                          {genAiRulechecks.map((r: any) => {
+                          {filteredGenAiRulechecks.map((r: any) => {
                             const title = ruleDisplayTitle(r);
-                            const sourceLabel = ruleSourceLabel(r);
-
-                            const conf =
-                              r.confidence != null && r.confidence !== ''
-                                ? `conf ${Number(r.confidence).toFixed(0)}`
-                                : '';
-
-                            const meta = conf;
-
                             // Keep rule explanations compact but readable in the admin viewer.
-                            const expected = r.expected_text ?? r.expected ?? '';
-                            const calc = r.calculation ?? '';
                             const reason = r.reason_and_likely_causes ?? '';
-                            const evText = r.evidence_text ?? '';
 
                             return (
                               <Box
-                                key={r.id ?? `${r.source_engine}-${r.rule_number}-${r.rule_key}`}
+                                key={r.id ?? `${r.source_engine}-${r.rule_key}`}
                                 px="10px"
                                 py="8px"
                                 mb="8px"
@@ -3450,43 +3663,22 @@ export const InvoiceVersionShowScreen = () => {
                               >
                                 <Flex align="center" gap="8px">
                                   <StatusDot result={r.rule_result} />
+                                  <Tooltip label="Rule details" hasArrow placement="top">
+                                    <IconButton
+                                      aria-label={`Rule details for ${title}`}
+                                      icon={<Info size={16} />}
+                                      size="xs"
+                                      variant="ghost"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setRuleDetailsDrawerRulecheck(r);
+                                      }}
+                                    />
+                                  </Tooltip>
                                   <Text fontSize="xs" opacity={0.7}>
                                     {title}
                                   </Text>
-                                  {sourceLabel && (
-                                    <Badge colorScheme="gray" variant="subtle" textTransform="lowercase">
-                                      {sourceLabel}
-                                    </Badge>
-                                  )}
                                 </Flex>
-
-                                {meta && (
-                                  <Text fontSize="xs" opacity={0.6} mb="6px">
-                                    {meta}
-                                  </Text>
-                                )}
-
-                                {expected && (
-                                  <Box mb="6px">
-                                    <Text fontSize="xs" opacity={0.7}>
-                                      expected
-                                    </Text>
-                                    <Text fontSize="sm" whiteSpace="pre-wrap">
-                                      {String(expected)}
-                                    </Text>
-                                  </Box>
-                                )}
-
-                                {calc && (
-                                  <Box mb="6px">
-                                    <Text fontSize="xs" opacity={0.7}>
-                                      calculation
-                                    </Text>
-                                    <Text fontSize="sm" whiteSpace="pre-wrap">
-                                      {String(calc)}
-                                    </Text>
-                                  </Box>
-                                )}
 
                                 {reason && (
                                   <Box mb="6px">
@@ -3495,17 +3687,6 @@ export const InvoiceVersionShowScreen = () => {
                                     </Text>
                                     <Text fontSize="sm" whiteSpace="pre-wrap">
                                       {String(reason)}
-                                    </Text>
-                                  </Box>
-                                )}
-
-                                {evText && (
-                                  <Box>
-                                    <Text fontSize="xs" opacity={0.7}>
-                                      evidence
-                                    </Text>
-                                    <Text fontSize="sm" whiteSpace="pre-wrap">
-                                      {String(evText)}
                                     </Text>
                                   </Box>
                                 )}
@@ -3917,6 +4098,78 @@ export const InvoiceVersionShowScreen = () => {
         {/*  ADD THIS: closes the first Box inside Container (Box A) */}
       </Container>{' '}
       {/*  THIS is the closecontainer line */}
+      <Drawer
+        isOpen={!!ruleDetailsDrawerRulecheck}
+        placement="right"
+        onClose={() => setRuleDetailsDrawerRulecheck(null)}
+        size="xl"
+      >
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>
+            <Flex direction="column" gap="4px" pr="32px">
+              <Flex align="center" gap="8px" wrap="wrap">
+                <StatusDot result={ruleDetailsDrawerRulecheck?.rule_result} />
+                <Text fontSize="md" fontWeight="bold" noOfLines={2}>
+                  {ruleDetailsDrawerRulecheck ? ruleDisplayTitle(ruleDetailsDrawerRulecheck) : 'Rule details'}
+                </Text>
+              </Flex>
+              {ruleDetailsDrawerRulecheck?.upgrade_type_description && (
+                <Text fontSize="sm" opacity={0.7}>
+                  {String(ruleDetailsDrawerRulecheck.upgrade_type_description)}
+                </Text>
+              )}
+              <Flex align="center" gap="8px" wrap="wrap">
+                {ruleDetailsDrawerRulecheck?.source_engine && (
+                  <Badge colorScheme="gray" variant="subtle" textTransform="lowercase">
+                    {ruleSourceLabel(ruleDetailsDrawerRulecheck)}
+                  </Badge>
+                )}
+                {ruleConfidenceLabel(ruleDetailsDrawerRulecheck) && (
+                  <Text fontSize="xs" opacity={0.7}>
+                    {ruleConfidenceLabel(ruleDetailsDrawerRulecheck)}
+                  </Text>
+                )}
+              </Flex>
+            </Flex>
+          </DrawerHeader>
+          <DrawerBody>
+            <RuleDetailDrawerSection label="Source Quote">
+              {String(ruleDetailsDrawerRulecheck?.source_quote ?? '').trim() ? (
+                <>
+                  <SourceQuoteMarkdown value={ruleDetailsDrawerRulecheck?.source_quote} />
+                  <Text fontSize="xs" opacity={0.65} mt="4px">
+                    {ruleDetailsDrawerRulecheck?.contractor_visible_flag !== false
+                      ? 'Contractor visible'
+                      : 'Hidden from contractor advice'}
+                  </Text>
+                </>
+              ) : (
+                <RuleDetailText value="" />
+              )}
+            </RuleDetailDrawerSection>
+
+            <RuleDetailDrawerSection label={ruleDefinitionLabel(ruleDetailsDrawerRulecheck)}>
+              <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_definition_text} />
+            </RuleDetailDrawerSection>
+
+            <RuleDetailDrawerSection label="Expected">
+              <RuleDetailText
+                value={ruleDetailsDrawerRulecheck?.expected_text ?? ruleDetailsDrawerRulecheck?.expected}
+              />
+            </RuleDetailDrawerSection>
+
+            <RuleDetailDrawerSection label="Calculation">
+              <RuleDetailText value={ruleDetailsDrawerRulecheck?.calculation} />
+            </RuleDetailDrawerSection>
+
+            <RuleDetailDrawerSection label="Evidence">
+              <RuleDetailText value={ruleDetailsDrawerRulecheck?.evidence_text} />
+            </RuleDetailDrawerSection>
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Flex>
   );
 };

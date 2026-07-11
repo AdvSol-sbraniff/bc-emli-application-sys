@@ -16,6 +16,9 @@ module Claims
              through: :genai_rule_upgrade_types,
              class_name: "Claims::InvoiceUpgradeType"
 
+    validates :source_quote, presence: true
+    validates :contractor_visible_flag, inclusion: { in: [true, false] }
+
     private
 
     def snapshot_history!
@@ -24,6 +27,8 @@ module Claims
         genai_rule_key: genai_rule_key,
         prompt_text: prompt_text,
         enabled: enabled,
+        source_quote: source_quote,
+        contractor_visible_flag: contractor_visible_flag,
         source_created_at: created_at,
         source_updated_at: updated_at
       )

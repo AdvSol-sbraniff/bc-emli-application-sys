@@ -573,7 +573,22 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                   <Badge colorScheme={selectedRow.enabled ? 'green' : 'gray'}>
                     {selectedRow.enabled ? 'Enabled' : 'Disabled'}
                   </Badge>
+                  <Badge colorScheme={selectedRow.detail?.contractor_visible_flag === false ? 'gray' : 'teal'}>
+                    {selectedRow.detail?.contractor_visible_flag === false
+                      ? 'Hidden from contractor advice'
+                      : 'Contractor visible'}
+                  </Badge>
                 </HStack>
+                <Box>
+                  <Text fontSize="sm" opacity={0.7} mb={1}>
+                    Source quote
+                  </Text>
+                  <Box borderWidth="1px" borderColor="gray.200" borderRadius="md" p={3} bg="gray.50">
+                    <Text as="i" fontSize="sm" whiteSpace="pre-wrap">
+                      {selectedRow.detail?.source_quote || 'n/a'}
+                    </Text>
+                  </Box>
+                </Box>
                 <Box>
                   <Text fontSize="sm" opacity={0.7} mb={1}>
                     Description / prompt

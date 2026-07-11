@@ -14,7 +14,6 @@ module Claims
         ].freeze
 
         RULE = {
-          number: 4,
           key: "esu_timing_within_six_months_of_heat_pump_installation"
         }.freeze
 
@@ -71,7 +70,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
             rule_result: result,
             confidence: confidence,

@@ -44,7 +44,6 @@ module Claims
           invoice_version.update!(
             genai_overall_confidence: 0,
             genai_result: nil,
-            genai_admin_advice: nil,
             ahri_product_id: nil,
             neea_product_id: nil,
             awhp_product_id: nil,

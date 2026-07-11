@@ -14,7 +14,7 @@ module Claims
           dual_fuel_ducted_heat_pump
         ].freeze
 
-        RULE = { number: 1, key: "hp_ahri_product_validation" }.freeze
+        RULE = { key: "hp_ahri_product_validation" }.freeze
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
             invoice_version_id: invoice_version_id,
@@ -327,7 +327,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

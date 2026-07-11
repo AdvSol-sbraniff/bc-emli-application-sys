@@ -40,12 +40,16 @@ type SharedProps = {
 
 type CodeRuleEditorProps = SharedProps & {
   description: string;
+  sourceQuote: string;
+  contractorVisibleFlag: boolean;
   passAdminMessage: string;
   warnAdminMessage: string;
   failAdminMessage: string;
   infoAdminMessage: string;
   adminNotes: string;
   onDescriptionChange: (next: string) => void;
+  onSourceQuoteChange: (next: string) => void;
+  onContractorVisibleFlagChange: (next: boolean) => void;
   onPassAdminMessageChange: (next: string) => void;
   onWarnAdminMessageChange: (next: string) => void;
   onFailAdminMessageChange: (next: string) => void;
@@ -63,6 +67,13 @@ type GenaiEditorProps = SharedProps & {
   onPromptTextChange: (next: string) => void;
 };
 
+type GenaiRuleEditorProps = GenaiEditorProps & {
+  sourceQuote: string;
+  contractorVisibleFlag: boolean;
+  onSourceQuoteChange: (next: string) => void;
+  onContractorVisibleFlagChange: (next: boolean) => void;
+};
+
 function MappingSection({
   mappings,
   selectedUpgradeTypeId,
@@ -78,31 +89,23 @@ function MappingSection({
         Upgrade type mappings
       </Text>
       <Text fontSize="sm" opacity={0.75} mb={4}>
-        Check the upgrade types that should use this record. The current taxonomy
-        is highlighted so shared usage stays visible without exposing ordering.
+        Check the upgrade types that should use this record. The current taxonomy is highlighted so shared usage stays
+        visible without exposing ordering.
       </Text>
 
       <Grid templateColumns="repeat(2, minmax(0, 1fr))" gap={3}>
         {mappings.map((mapping) => (
-          <GridItem
-            key={mapping.invoice_upgrade_type_id}
-          >
+          <GridItem key={mapping.invoice_upgrade_type_id}>
             <Box
               borderWidth="1px"
               borderRadius="md"
               p={3}
               h="100%"
-              bg={
-                mapping.invoice_upgrade_type_id === selectedUpgradeTypeId
-                  ? 'blue.50'
-                  : 'white'
-              }
+              bg={mapping.invoice_upgrade_type_id === selectedUpgradeTypeId ? 'blue.50' : 'white'}
             >
               <Checkbox
                 isChecked={mapping.checked}
-                onChange={(e) =>
-                  onMappingCheckedChange(mapping.invoice_upgrade_type_id, e.target.checked)
-                }
+                onChange={(e) => onMappingCheckedChange(mapping.invoice_upgrade_type_id, e.target.checked)}
               >
                 {mapping.label}
               </Checkbox>
@@ -114,15 +117,7 @@ function MappingSection({
   );
 }
 
-function EditorFooter({
-  onCancel,
-  onSave,
-  saving,
-}: {
-  onCancel: () => void;
-  onSave: () => void;
-  saving: boolean;
-}) {
+function EditorFooter({ onCancel, onSave, saving }: { onCancel: () => void; onSave: () => void; saving: boolean }) {
   return (
     <HStack spacing={3} justify="end">
       <Button variant="ghost" onClick={onCancel}>
@@ -162,6 +157,33 @@ function SharedTopFields({
   );
 }
 
+function RuleSourceFields({
+  sourceQuote,
+  contractorVisibleFlag,
+  onSourceQuoteChange,
+  onContractorVisibleFlagChange,
+}: {
+  sourceQuote: string;
+  contractorVisibleFlag: boolean;
+  onSourceQuoteChange: (next: string) => void;
+  onContractorVisibleFlagChange: (next: boolean) => void;
+}) {
+  return (
+    <>
+      <FormControl isRequired>
+        <FormLabel>Source quote from requirement PDF</FormLabel>
+        <Textarea value={sourceQuote} onChange={(e) => onSourceQuoteChange(e.target.value)} minH="110px" />
+      </FormControl>
+
+      <FormControl>
+        <Checkbox isChecked={contractorVisibleFlag} onChange={(e) => onContractorVisibleFlagChange(e.target.checked)}>
+          Visible to contractor advice
+        </Checkbox>
+      </FormControl>
+    </>
+  );
+}
+
 export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
   return (
     <VStack align="stretch" spacing={5}>
@@ -190,6 +212,13 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
                   minH="120px"
                 />
               </FormControl>
+
+              <RuleSourceFields
+                sourceQuote={props.sourceQuote}
+                contractorVisibleFlag={props.contractorVisibleFlag}
+                onSourceQuoteChange={props.onSourceQuoteChange}
+                onContractorVisibleFlagChange={props.onContractorVisibleFlagChange}
+              />
             </VStack>
           </TabPanel>
 
@@ -225,10 +254,7 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
               </FormControl>
               <FormControl>
                 <FormLabel>Admin notes</FormLabel>
-                <Textarea
-                  value={props.adminNotes}
-                  onChange={(e) => props.onAdminNotesChange(e.target.value)}
-                />
+                <Textarea value={props.adminNotes} onChange={(e) => props.onAdminNotesChange(e.target.value)} />
               </FormControl>
             </VStack>
           </TabPanel>
@@ -260,11 +286,7 @@ export function CodeLocatedFieldEditorScreen(props: CodeLocatedFieldEditorProps)
 
       <FormControl isRequired>
         <FormLabel>Description</FormLabel>
-        <Textarea
-          value={props.description}
-          onChange={(e) => props.onDescriptionChange(e.target.value)}
-          minH="120px"
-        />
+        <Textarea value={props.description} onChange={(e) => props.onDescriptionChange(e.target.value)} minH="120px" />
       </FormControl>
 
       <Box borderWidth="1px" borderRadius="md" p={4} bg="gray.50">
@@ -279,7 +301,7 @@ export function CodeLocatedFieldEditorScreen(props: CodeLocatedFieldEditorProps)
   );
 }
 
-export function GenaiRuleEditorScreen(props: GenaiEditorProps) {
+export function GenaiRuleEditorScreen(props: GenaiRuleEditorProps) {
   return (
     <VStack align="stretch" spacing={5}>
       <Tabs variant="enclosed" isLazy>
@@ -306,6 +328,13 @@ export function GenaiRuleEditorScreen(props: GenaiEditorProps) {
                   minH="180px"
                 />
               </FormControl>
+
+              <RuleSourceFields
+                sourceQuote={props.sourceQuote}
+                contractorVisibleFlag={props.contractorVisibleFlag}
+                onSourceQuoteChange={props.onSourceQuoteChange}
+                onContractorVisibleFlagChange={props.onContractorVisibleFlagChange}
+              />
             </VStack>
           </TabPanel>
 

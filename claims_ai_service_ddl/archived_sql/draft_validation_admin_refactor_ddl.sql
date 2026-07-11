@@ -48,7 +48,6 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_types (
 
   genai_rule_id uuid NOT NULL,
   invoice_upgrade_type_id uuid NOT NULL,
-  rule_number integer NOT NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -64,14 +63,11 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_types (
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id),
 
-  CONSTRAINT genai_rule_upgrade_types_rule_number_chk
-    CHECK (rule_number >= 1),
-
   CONSTRAINT genai_rule_upgrade_types_uniq
     UNIQUE (genai_rule_id, invoice_upgrade_type_id),
 
   CONSTRAINT genai_rule_upgrade_types_order_uniq
-    UNIQUE (invoice_upgrade_type_id, rule_number)
+    UNIQUE (genai_rule_id, invoice_upgrade_type_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_types_rule
@@ -302,7 +298,6 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_type_history (
   source_id uuid NULL,
   genai_rule_id uuid NULL,
   invoice_upgrade_type_id uuid NOT NULL,
-  rule_number integer NOT NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -310,9 +305,6 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_type_history (
   history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
 
   CONSTRAINT genai_rule_upgrade_type_history_pkey PRIMARY KEY (id),
-  CONSTRAINT genai_rule_upgrade_type_history_rule_number_chk
-    CHECK (rule_number >= 1),
-
   CONSTRAINT fk_genai_rule_upgrade_type_history_upgrade_type
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id)

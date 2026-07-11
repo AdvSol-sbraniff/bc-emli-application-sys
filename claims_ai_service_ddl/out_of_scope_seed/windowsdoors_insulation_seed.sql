@@ -1,0 +1,92 @@
+-- Out-of-scope legacy seed: windows/doors and insulation.
+--
+-- Client decision, July 2026: windows/doors and insulation are not in scope for
+-- the active claims AI validation build. This file intentionally parks the
+-- related legacy configuration outside the numbered rebuild path.
+--
+-- Do not run this file as part of the nightly gold rebuild unless those upgrade
+-- types are brought back into scope. The active seed files no longer create:
+--
+-- invoice_upgrade_types:
+-- - windows_doors
+-- - insulation
+--
+-- GenAI rules:
+-- - ins_health_safety_issue_flag
+-- - ins_material_and_location_present
+-- - ins_minimum_r_value_and_boundary_present
+-- - ins_r_value_and_area_present
+-- - ins_rebate_math_within_cap
+-- - ins_supporting_documents_attached
+-- - wd_certification_reference_present
+-- - wd_customer_portion_math_matches
+-- - wd_envelope_replacement_evidence_present
+-- - wd_label_photo_supporting_document_attached
+-- - wd_no_skylights
+-- - wd_per_home_rebate_math_within_cap
+-- - wd_per_unit_rebate_math_within_cap
+-- - wd_preapproval_supporting_document_attached
+-- - wd_rough_opening_evidence_present
+-- - wd_vancouver_municipal_boundary_review
+--
+-- Code rules:
+-- - wd_u_factor_threshold
+--
+-- GenAI located fields:
+-- - brand_and_model
+-- - certification_body_reference
+-- - city_of_vancouver_evidence
+-- - cpd_number
+-- - envelope_replacement_evidence
+-- - hardware_per_unit
+-- - ins_area_square_feet
+-- - ins_conditioned_boundary_evidence
+-- - ins_existing_r_value
+-- - ins_floor_plan_reference
+-- - ins_health_safety_resolution_evidence
+-- - ins_line_amount
+-- - ins_location_specific_rebate_amount
+-- - ins_material_type
+-- - ins_minimum_r_value_requirement_evidence
+-- - ins_new_r_value
+-- - ins_r_value_added
+-- - ins_rebate_formula_or_rate_evidence
+-- - ins_registered_contractor_evidence
+-- - ins_removed_existing_insulation_evidence
+-- - ins_upgrade_location
+-- - labour_per_unit
+-- - manufacturer_label_photo_reference
+-- - metric_u_factor
+-- - nrcan_number
+-- - pane_count
+-- - quote_preapproval_reference
+-- - rough_opening_count
+-- - skylight_detected
+-- - wd_registered_contractor_evidence
+-- - window_or_door_line_amount
+-- - window_or_door_quantity
+--
+-- Supporting-document mappings:
+-- - before_after_photo_set -> insulation
+-- - floor_plan_document -> insulation
+-- - preapproval_quote -> windows_doors
+-- - preapproval_notice -> windows_doors
+-- - certification_sheet -> windows_doors
+-- - fenestration_energy_performance_label -> windows_doors
+-- - manufacturer_label_photo -> windows_doors
+--
+-- Supporting-document types now outside active scope:
+-- - certification_sheet
+-- - fenestration_energy_performance_label
+-- - floor_plan_document
+-- - preapproval_quote
+--
+-- If this scope returns, recover the full legacy row definitions from git
+-- history around the commit that introduced this parking file, then re-audit
+-- against the current requirement PDF before re-enabling.
+
+BEGIN;
+
+-- Intentionally no active inserts. This file is a dormant parking script.
+
+COMMIT;

@@ -161,7 +161,7 @@ module Api
                  invoice_version_count:
                    ::Claims::InvoiceVersion.where(invoice_id: invoice_id).count,
                  read:
-                   iv.as_json.merge(
+                   invoice_version_read_json(iv).merge(
                      "ahri_product_match" => serialize_ahri_product_match(iv),
                      "neea_product_match" => serialize_neea_product_match(iv),
                      "awhp_product_match" => serialize_awhp_product_match(iv),
@@ -305,7 +305,10 @@ module Api
           return
         end
 
-        render json: { invoice_version: row.as_json }, status: :ok
+        render json: {
+                 invoice_version: invoice_version_read_json(row)
+               },
+               status: :ok
       rescue => e
         Rails.logger.error(
           "[claims][invoice_versions_admin][show] ERROR: #{e.class}: #{e.message}"
@@ -338,7 +341,7 @@ module Api
                      invoice_id: iv.invoice_id
                    ).count,
                  read:
-                   iv.as_json.merge(
+                   invoice_version_read_json(iv).merge(
                      "ahri_product_match" => serialize_ahri_product_match(iv),
                      "neea_product_match" => serialize_neea_product_match(iv),
                      "awhp_product_match" => serialize_awhp_product_match(iv),
@@ -465,6 +468,15 @@ module Api
 
       private
 
+      def invoice_version_read_json(invoice_version)
+        invoice_version.as_json.merge(
+          "contractor_advice" =>
+            ::Claims::InvoiceVersions::BuildContractorAdvice.call(
+              invoice_version_id: invoice_version.id
+            )
+        )
+      end
+
       def stream_blob_pdf!(storage_key:, container: ENV["AZURE_BLOB_CONTAINER"])
         res =
           node_download_blob!(storage_key: storage_key, container: container)
@@ -567,12 +579,25 @@ module Api
           .joins(
             "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_rulechecks.invoice_upgrade_type_id"
           )
+          .joins(
+            "LEFT JOIN claims.genai_rules gr ON claims.invoice_version_rulechecks.source_engine = 'genai' AND gr.genai_rule_key = claims.invoice_version_rulechecks.rule_key"
+          )
+          .joins(
+            "LEFT JOIN claims.code_rules cr ON claims.invoice_version_rulechecks.source_engine = 'code' AND cr.code_rule_key = claims.invoice_version_rulechecks.rule_key"
+          )
           .where(
             invoice_version_id: invoice_version_id,
             source_engine: source_engine
           )
-          .select(upgrade_type_select_sql("claims.invoice_version_rulechecks"))
-          .order(:rule_number, :created_at)
+          .select(
+            [
+              upgrade_type_select_sql("claims.invoice_version_rulechecks"),
+              "COALESCE(gr.source_quote, cr.source_quote) AS source_quote",
+              "COALESCE(gr.contractor_visible_flag, cr.contractor_visible_flag) AS contractor_visible_flag",
+              "CASE WHEN claims.invoice_version_rulechecks.source_engine = 'genai' THEN gr.prompt_text ELSE cr.description END AS rule_definition_text"
+            ].join(", ")
+          )
+          .order(:source_engine, :rule_key, :created_at)
       end
 
       def upgrade_type_results_for(invoice_version_id)
@@ -627,7 +652,6 @@ module Api
               invoice_upgrade_type_id
               source_engine
               rule_key
-              rule_number
               rule_result
               confidence
               expected_text
@@ -640,7 +664,11 @@ module Api
           ).merge(
             "upgrade_type_key" => row.read_attribute("upgrade_type_key"),
             "upgrade_type_description" =>
-              row.read_attribute("upgrade_type_description")
+              row.read_attribute("upgrade_type_description"),
+            "source_quote" => row.read_attribute("source_quote"),
+            "contractor_visible_flag" =>
+              row.read_attribute("contractor_visible_flag"),
+            "rule_definition_text" => row.read_attribute("rule_definition_text")
           )
         end
       end

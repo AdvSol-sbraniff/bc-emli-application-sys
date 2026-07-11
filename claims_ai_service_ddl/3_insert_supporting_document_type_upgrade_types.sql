@@ -12,15 +12,6 @@ WITH supporting_document_type_upgrade_types_seed (
   ('utility_bill', 'common'),
   ('landlord_consent_form', 'common'),
 
-  ('before_after_photo_set', 'insulation'),
-  ('floor_plan_document', 'insulation'),
-
-  ('preapproval_quote', 'windows_doors'),
-  ('preapproval_notice', 'windows_doors'),
-  ('certification_sheet', 'windows_doors'),
-  ('fenestration_energy_performance_label', 'windows_doors'),
-  ('manufacturer_label_photo', 'windows_doors'),
-
   ('utility_bill', 'air_source_heat_pump_electric'),
   ('f280_heat_load_calculation', 'air_source_heat_pump_electric'),
   ('product_spec_sheet', 'air_source_heat_pump_electric'),

@@ -104,7 +104,6 @@ module Claims
         pass = missing.empty?
 
         row(
-          rule_number: 2,
           rule_key: "first_class_invoice_fields_present",
           rule_result: pass ? "pass" : "warn",
           confidence: 100,
@@ -148,7 +147,6 @@ module Claims
         if missing.any?
           return(
             warn_row(
-              rule_number: 3,
               rule_key: "submission_within_six_months",
               expected_text:
                 "invoices.submitted_at <= invoice_date + 6 months.",
@@ -162,7 +160,6 @@ module Claims
         pass = submitted_date <= deadline
 
         row(
-          rule_number: 3,
           rule_key: "submission_within_six_months",
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
@@ -196,7 +193,6 @@ module Claims
         if missing.any?
           return(
             warn_row(
-              rule_number: 4,
               rule_key: "eligibility_code_valid_for_invoice_date",
               expected_text:
                 "Invoice date is within six months of the eligibility-code approval date.",
@@ -210,7 +206,6 @@ module Claims
         pass = invoice_date >= approved_date && invoice_date <= deadline
 
         row(
-          rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
@@ -225,7 +220,6 @@ module Claims
         )
       rescue ArgumentError
         warn_row(
-          rule_number: 4,
           rule_key: "eligibility_code_valid_for_invoice_date",
           expected_text: "Eligibility approval date is a parseable date.",
           detail_text: "Could not parse eligibility-code approval date."
@@ -251,7 +245,6 @@ module Claims
         if eligibility_code_record.present?
           return(
             row(
-              rule_number: 5,
               rule_key: "eligibility_code_found_in_database",
               rule_result: "pass",
               confidence: 100,
@@ -268,7 +261,6 @@ module Claims
         end
 
         row(
-          rule_number: 5,
           rule_key: "eligibility_code_found_in_database",
           rule_result: "fail",
           confidence: 100,
@@ -292,7 +284,6 @@ module Claims
         pass = space_heating_keys.size <= 1
 
         row(
-          rule_number: 7,
           rule_key: MULTIPLE_SPACE_SYSTEMS_RULE_KEY,
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
@@ -317,20 +308,26 @@ module Claims
         return nil unless enabled_common_rule?(PRIOR_REBATE_RULE_KEY)
 
         if invoice_version.participant_user_id.blank?
+          classifier_code =
+            first_field_value(
+              classifier_fields,
+              "classifier.eligibility_code"
+            ) || first_field_value(classifier_fields, "eligibility_code")
           return(
             row(
-              rule_number: 6,
               rule_key: PRIOR_REBATE_RULE_KEY,
-              rule_result: "fail",
+              rule_result: "warn",
               confidence: 0,
               expected_text:
                 "Matched participant is available before checking prior rebate payments.",
               detail_text:
-                "invoice_versions.participant_user_id is missing; duplicate-payment history cannot be checked.",
-              calculation: "participant_user_id is populated => false",
-              evidence_text: "invoice_versions.participant_user_id",
+                "No matched participant was available, so duplicate-payment history was not checked.",
+              calculation:
+                "classifier.eligibility_code=#{classifier_code.presence || "missing"}; users_eligibilitycode_id=#{invoice_version.users_eligibilitycode_id.presence || "missing"}; participant_user_id=#{invoice_version.participant_user_id.presence || "missing"}; prior rebate history check not run.",
+              evidence_text:
+                "classifier.eligibility_code + invoice_versions.users_eligibilitycode_id + invoice_versions.participant_user_id",
               reason_and_likely_causes:
-                "The deterministic enrichment step did not populate participant_user_id, so code cannot safely compare this invoice against the participant's prior invoices."
+                "Could not check prior rebate history because the invoice eligibility code did not match a participant eligibility record in the database. Confirm the eligibility code record, then rerun validation before approving."
             )
           )
         end
@@ -364,7 +361,6 @@ module Claims
         rule_result = failed_checks.any? ? "fail" : "pass"
 
         row(
-          rule_number: 6,
           rule_key: PRIOR_REBATE_RULE_KEY,
           rule_result: rule_result,
           confidence: 100,
@@ -474,12 +470,6 @@ module Claims
       def prior_rebate_reason(rule_result:, failed_checks:)
         return nil unless rule_result == "fail"
 
-        if failed_checks.empty?
-          return(
-            "The deterministic duplicate-rebate check could not run because participant_user_id was missing."
-          )
-        end
-
         "A current non-ineligible invoice for this participant already contains one of the same one-rebate-limited upgrade areas: #{failed_checks.join(", ")}."
       end
 
@@ -546,13 +536,14 @@ module Claims
 
         return reason_text if message.blank?
         return message if reason_text.blank?
+        return reason_text if reason_text.include?(message)
+        return reason_text if message.include?(reason_text)
 
         [reason_text, message].join(" ")
       end
 
-      def warn_row(rule_number:, rule_key:, expected_text:, detail_text:)
+      def warn_row(rule_key:, expected_text:, detail_text:)
         row(
-          rule_number: rule_number,
           rule_key: rule_key,
           rule_result: "warn",
           confidence: 0,
@@ -565,7 +556,6 @@ module Claims
       end
 
       def row(
-        rule_number:,
         rule_key:,
         rule_result:,
         confidence:,
@@ -577,11 +567,11 @@ module Claims
       )
         now = Time.current
 
-        attrs = {
+        {
           invoice_version_id: invoice_version.id,
           invoice_upgrade_type_id: common_upgrade_type_id,
           source_engine: "code",
-          rule_number: rule_number,
+          rule_key: rule_key,
           rule_result: rule_result,
           confidence: confidence,
           expected_text: expected_text,
@@ -596,18 +586,6 @@ module Claims
           created_at: now,
           updated_at: now
         }
-
-        optional_metadata = { rule_key: rule_key }
-
-        optional_metadata.each do |key, value|
-          attrs[
-            key
-          ] = value if Claims::InvoiceVersionRulecheck.column_names.include?(
-            key.to_s
-          )
-        end
-
-        attrs
       end
     end
   end

@@ -13,7 +13,6 @@ module Claims
 
         RULES = {
           product_validation: {
-            number: 1,
             key: "hpwh_neea_product_validation"
           }
         }.freeze
@@ -522,7 +521,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: rule.fetch(:number),
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

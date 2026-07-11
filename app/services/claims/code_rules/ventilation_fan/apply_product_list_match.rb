@@ -32,11 +32,9 @@ module Claims
 
         RULES = {
           product_list_match: {
-            number: 5,
             key: "vent_fan_energy_star_product_validation"
           },
           capacity_minimum: {
-            number: 6,
             key: "vent_fan_capacity_meets_minimum"
           }
         }.freeze
@@ -473,7 +471,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: rule.fetch(:number),
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

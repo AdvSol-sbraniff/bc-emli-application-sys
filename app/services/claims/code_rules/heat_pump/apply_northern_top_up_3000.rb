@@ -14,10 +14,7 @@ module Claims
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
         TOP_UP_CAP = BigDecimal("3000")
 
-        RULE = {
-          number: 7,
-          key: "heat_pump_northern_top_up_3000_within_cap"
-        }.freeze
+        RULE = { key: "heat_pump_northern_top_up_3000_within_cap" }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
@@ -77,7 +74,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

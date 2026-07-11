@@ -4,6 +4,8 @@ WITH genai_rules_seed (
   genai_rule_key,
   prompt_text,
   enabled,
+  source_quote,
+  contractor_visible_flag,
   created_at,
   updated_at
 ) AS (
@@ -13,7 +15,7 @@ A primary heating system must have the capacity to heat a minimum of 50% of the 
 Use invoice evidence first, and treat supporting-document facts only as corroborating context.
 Set rule_result="pass" when electric primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
-Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, 'The home must primarily be heated by electricity (a primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C).', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_electric_backup_heat_electric_present', 'Check whether the electric-to-heat-pump backup space heating system is electric.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -26,7 +28,7 @@ Set rule_result="pass" when hp_backup_heat_evidence clearly shows electric backu
 Set rule_result="warn" when backup heat context is missing, ambiguous, or only implied by the prior electric heating system without clear backup wording.
 Set rule_result="fail" when hp_backup_heat_evidence clearly shows wood, natural gas, propane, oil, dual-fuel fossil backup, or another non-electric backup space heating system.
 In calculation, state hp_backup_heat_evidence and whether the backup heat is electric, non-electric, or unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'replace an existing hard-wired electric heating system (e.g. electric baseboards, radiant ceilings, radiant floors, or forced-air furnace). The back-up space heating system must be electric.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_gas_propane_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by fossil fuel natural gas or propane and that the new air-source heat pump is replacing that system.
 
 Natural-gas or propane primary-heating evidence includes natural gas furnace, propane furnace, fossil-fuel furnace, gas boiler, propane boiler, FortisBC gas, PNG gas, propane tank, or similar wording.
@@ -37,7 +39,7 @@ Use invoice evidence first, and treat supporting-document facts only as corrobor
 
 Set rule_result="pass" when natural-gas/propane primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
-Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, 'The home must be primarily heated by fossil fuel (natural gas or propane). A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C. A fireplace is not considered a primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_fossil_fuel_removal_supporting_document_attached', 'Check whether an acceptable fossil-fuel heating-system removal supporting document is present for this air-source heat pump conversion from natural gas, propane, or oil.
 
 Use these named document types and located fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -55,7 +57,13 @@ Set rule_result="pass" when either accepted path is present, usable, and has the
 Set rule_result="warn" when an acceptable document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears relevant but one or more required located fields for its path are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when both acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
 In calculation, state which path was used: permit_or_inspection, removal_invoice, both, missing, or unclear; then list the required fields for that path and whether each is present/usable.
-In evidence_text, cite the exact supporting-document summary and located-field wording that supports the path decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact supporting-document summary and located-field wording that supports the path decision.', true, '3. Proof of fossil fuel (natural gas or propane) system removal. One of the following documents will be accepted:
+a. local government permit or inspection report, which must include:
+i. date of inspection.
+ii. address where inspection took place.
+b. invoice from the removal company or heat pump installation company, which must include:
+i. description of the work completed (e.g. the oil system, including oil tank, was removed according to applicable regulations and local government bylaws).
+ii. date of removal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_consumption_baseline_proof_present', 'Check whether the submitted evidence proves the 500 L annual oil-consumption baseline for this oil-to-heat-pump claim.
 
 Use these named document types and located fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -68,7 +76,7 @@ Set rule_result="pass" when utility_bill is present with supporting_document_rou
 Set rule_result="warn" when an accepted document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears to be oil-consumption proof but the fuel type, date/service period, quantity, account/home tie, or located-field text is missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when utility_bill is missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, present only with supporting_document_routing_quality="unusable", clearly does not show oil/fuel-oil consumption proof, or clearly shows consumption below 500 L for the relevant annual period.
 In calculation, state whether utility_bill was present, missing, or unclear; list the relevant located fields and whether each is present/usable; and show the visible oil quantity/date comparison to the 500 L annual baseline when available.
-In evidence_text, cite the exact supporting-document summary and located-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact supporting-document summary and located-field wording that supports the decision.', true, 'The home must meet a minimum oil consumption baseline of 500 Ltrs. annually. Proof of oil consumption from the 12 months prior to application must be submitted at the time of application, such as receipts, fuel bills or invoices.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_oil_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by oil and that the new air-source heat pump is replacing that system.
 
 Oil primary-heating evidence includes oil furnace, oil boiler, oil-fired heating system, heating oil tank, fuel oil delivery or consumption, or similar wording.
@@ -79,11 +87,11 @@ Use invoice evidence first, and treat supporting-document facts only as corrobor
 
 Set rule_result="pass" when oil primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
-Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, relies only on a fireplace as the prior primary heating system, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, relies only on a fireplace as the prior primary heating system, or is contradicted by supplied supporting-document facts.', true, 'The home must be primarily heated by oil. A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C. A fireplace is not considered a primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_backup_heat_not_fossil_present', 'Check whether visible backup heat evidence for this wood-to-heat-pump upgrade appears to be wood or electric rather than fossil fuel.
 Set rule_result="pass" when backup heat is clearly wood/electric or no fossil-backup concern is visible.
 Set rule_result="warn" when backup fuel context is missing or ambiguous.
-Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.', true, 'The back-up heating system must be wood or electric. Fossil fuel back-up systems (e.g. dual fuel ducted heat pumps or standalone fossil fuel heating systems) are not eligible for wood-to-heat pump upgrades.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by a wood or solid fuel heating system and that the new air-source heat pump is replacing that system.
 
 Wood or solid fuel heating evidence includes wood stove, pellet stove, insert, wood furnace, solid fuel furnace, or similar wording.
@@ -94,7 +102,7 @@ Use invoice evidence first, and treat supporting-document facts only as corrobor
 
 Set rule_result="pass" when wood/solid-fuel primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.
-Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" when the prior heating context is missing, points to a different fuel path, or is contradicted by supplied supporting-document facts.', true, 'The home must primarily be heated by a wood or solid fuel heating system (wood or pellet stove, insert or furnace). A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('ashp_wood_removal_or_wett_supporting_document_attached', 'Check whether the required wood/solid-fuel removal or safe-retention supporting document is present for this wood-to-heat-pump upgrade.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -111,7 +119,7 @@ Set rule_result="pass" when the removal/retention path is clear and the required
 Set rule_result="warn" when the removal/retention path is unclear, or when the required document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or key located fields are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when the removal/retention path is clear and the required document type for that path is missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
 In calculation, state the visible path used: removed, retained, or unclear; then list the required document type and whether it is present/usable.
-In evidence_text, cite the exact invoice or supporting-document wording/located fields that support the path and document decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact invoice or supporting-document wording/located fields that support the path and document decision.', true, 'The inspection report must be dated within the 12-month period before or 6-month period following the date of the heat pump installation invoice and include the inspector’s WETT certification number, the site address of the wood or solid fuel heating system, and whether the installation is compliant with relevant codes.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('contractor_identity_matches_record', 'Check whether the contractor/vendor identity visible on the invoice appears to match the contractor record that uploaded or owns the invoice.
 Use contractors.business_name and contractors.address from the supplied database values.
 Use invoice_contractor_name and invoice_contractor_address from the OCR/DI JSON.
@@ -120,7 +128,7 @@ Set rule_result="info" when the contractor appears to match but there is a harml
 Set rule_result="warn" when the visible contractor name or address is missing/ambiguous, or when the database contractor fact is missing, so admin should verify identity from the contractor record or supporting documents.
 Set rule_result="fail" when the invoice visibly appears to belong to a different contractor/vendor than the database contractor record.
 In evidence_text, include the visible invoice contractor name/address and the supplied database contractor name/address.
-In reason_and_likely_causes, explain exactly what matches, what differs, and whether the admin should ignore, verify, or treat it as a likely wrong-contractor upload.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In reason_and_likely_causes, explain exactly what matches, what differs, and whether the admin should ignore, verify, or treat it as a likely wrong-contractor upload.', true, 'All upgrades must be installed by a Registered Contractor, as defined by the CleanBC Better Homes Energy Savings Program Registered Contractor Terms and Conditions. To find a Registered Contractor, use the Find a Contractor search tool or email betterhomesESP@clearesult.com. Registered Contractors must comply with the CleanBC Better Homes Energy Savings Program Registered Contractor Terms and Conditions.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_fossil_fuel_removal_or_modification_supporting_document_attached', 'Check whether an acceptable fossil-fuel propane or natural-gas system removal or modification supporting document is present for this dual-fuel ducted heat-pump upgrade.
 
 Use these named document types and located fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -139,7 +147,13 @@ Set rule_result="pass" when either accepted path is present, usable, and has the
 Set rule_result="warn" when an acceptable document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears relevant but one or more required located fields for its path are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when all acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
 In calculation, state which path was used: permit_or_inspection, removal_or_modification_invoice, both, missing, or unclear; then list the required fields for that path and whether each is present/usable.
-In evidence_text, cite the exact supporting-document summary and located-field wording that supports the path decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact supporting-document summary and located-field wording that supports the path decision.', true, '2. Proof of fossil fuel (propane or natural gas) system removal or modification (as applicable for the upgrade). One of the following documents will be accepted:
+a. local government permit or inspection report, which must include:
+i. date of inspection.
+ii. address where inspection took place.
+b. invoice from the removal or modification company or heat pump installation company, which must include:
+i. description of work completed pertaining to removal or modification, as applicable for the upgrade.
+ii. date of removal or modification.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_heat_load_calc_supporting_document_acceptable', 'Check whether an acceptable program-approved heat-load calculation is present for this dual-fuel ducted heat-pump upgrade.
 
 Use these named document types and located fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -152,7 +166,7 @@ Set rule_result="pass" when f280_heat_load_calculation is present with supportin
 Set rule_result="warn" when f280_heat_load_calculation is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears relevant but approval/program acceptance, sizing method, design heat-load value, or supplemental-heat assumptions are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when f280_heat_load_calculation is missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, present only with supporting_document_routing_quality="unusable", clearly uses rule-of-thumb equipment sizing, or clearly considers fossil-fuel supplemental heat such as a gas fireplace, natural gas, propane, or oil system.
 In calculation, state whether f280_heat_load_calculation is present/usable, then list calculation_standard_reference, design_heat_load_value, approval_or_professional_reference, approval_status_or_condition, sizing_method_or_rule_of_thumb_evidence, and supplemental_heat_source_assumptions.
-In evidence_text, cite the exact supporting-document summary and located-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact supporting-document summary and located-field wording that supports the decision.', true, 'A program approved Heat Load Calculation is required to properly size the system. Rule of thumb equipment sizing will not be accepted. Supplemental heating from other electric or non-fossil fuel heating systems may be considered in the heat load calculation. Supplemental heating from fossil fuel heating systems (e.g. gas fireplace) cannot be considered in the heat load calculation. If you’re unsure if your current heat load calculation methodology meets the program criteria, please contact betterhomesbc@gov.bc.ca.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by tanked propane or natural gas provided by Pacific Northern Gas (PNG), and that the new dual-fuel ducted heat pump is integrated with that existing fossil-fuel heating system.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -166,7 +180,7 @@ Set rule_result="pass" when the named evidence clearly supports that the prior p
 Set rule_result="warn" when the prior primary heat context is plausible but incomplete, such as visible propane without clear tanked-propane evidence, visible natural gas without clear PNG evidence, or dual-fuel integration wording without enough prior-heating context.
 Set rule_result="fail" when the prior primary heating evidence is missing, points to a different fuel path, relies only on a fireplace as the prior primary heating system, shows generic natural gas without PNG support, shows generic propane without tanked-propane support, or is contradicted by supplied supporting-document facts.
 In calculation, state dfhp_existing_heat_evidence, dfhp_source_fuel_path, and whether the accepted path is PNG natural gas, PNG propane, tanked propane, generic/unsupported, unclear, or contradicted.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'The home must be primarily heated by tanked propane or natural gas provided by Pacific Northern Gas (PNG). A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C. A fireplace is not considered a primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_switchover_setpoint_specific', 'Check whether the thermostat, outdoor temperature switch-over control, or equipment control board is set to the required region-specific temperature for this dual-fuel ducted heat pump.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -181,7 +195,7 @@ Set rule_result="pass" when the named evidence clearly identifies a thermostat, 
 Set rule_result="warn" when control equipment is referenced but the setpoint is missing, the region is missing, the equipment tie is unclear, or the located fields are low-confidence, visually limited, or too ambiguous for confident comparison.
 Set rule_result="fail" when the named evidence clearly shows the setpoint is above the required threshold for the visible region, or clearly shows no thermostat/switch-over/control-board setup for the dual-fuel ducted heat pump.
 In calculation, state the visible region, required threshold, visible setpoint, whether the evidence came from dfhp_switchover_setpoint_evidence or dual_fuel_control_document, and whether the setpoint is within threshold.
-In evidence_text, cite the exact named-field wording that supports the region, setpoint, and control-equipment decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the region, setpoint, and control-equipment decision.', true, 'Southern Interior and Northern B.C. regions: ≤2°C', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_contractor_utility_billed_work_on_one_invoice', 'Check whether the electrician and/or heat pump contractor managed the electrical utility line upgrade with BC Hydro or FortisBC, and whether the one-invoice condition is satisfied when the contractor was billed by the utility for the line upgrade.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -199,7 +213,7 @@ Set rule_result="info" when utility involvement is visible but the supplied evid
 Set rule_result="warn" when contractor/electrician utility-management evidence is missing or ambiguous; when BC Hydro/FortisBC utility involvement is visible but billing path is unclear; when contractor-billed utility work may be present but the invoice/supporting-document relationship is too ambiguous to confirm one-invoice treatment; or when utility charges appear only in a separate supporting document without enough invoice linkage.
 Set rule_result="fail" when the named evidence clearly shows no contractor/electrician management of the line upgrade with BC Hydro/FortisBC, or clearly shows the contractor was billed by the utility for the line upgrade and contractor work and utility work are split across separate invoices in conflict with the one-invoice requirement.
 In calculation, state esu_contractor_utility_management_evidence, esu_utility_billing_reference, esu_utility_reference, utility provider, billing path classified as participant_billed, contractor_billed, unclear, or not_visible, and whether contractor and utility work appear on one invoice.
-In evidence_text, cite the exact named-field wording that supports the utility-management, billing-path, and one-invoice decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the utility-management, billing-path, and one-invoice decision.', true, 'To be eligible for the electrical service upgrade the electrician and/or heat pump contractor completing the electrical service upgrade must manage the line upgrade with the electrical utility (BC Hydro or FortisBC) that the home is connected to. Either the contractor or the participant can be billed by the utility for the line upgrade. If the contractor is being billed by the utility for the line upgrade, then all work completed by the contractor and the utility must be on one invoice. See the sample invoice or contact betterhomesESP@clearesult.com.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_eligible_expense_lines_present', 'Check whether the visible electrical service upgrade charge lines are for eligible electrical service upgrade expenses.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -214,7 +228,13 @@ Set rule_result="pass" when the named evidence clearly shows the claimed ESU cha
 Set rule_result="warn" when esu_line_amount is visible but the expense category is missing, generic, bundled, or too ambiguous to confirm the listed eligible categories; or when the charge appears potentially eligible but needs admin review to separate eligible ESU work from unrelated electrical work.
 Set rule_result="fail" when the named evidence clearly shows the claimed ESU charge lines are unrelated to the eligible expense categories or are only ineligible work, such as standalone heat-pump electrical connection, breaker-only work, EV charger work, generator work, general electrical repairs, or panel/sub-panel work with no utility service/new-wire upgrade context.
 In calculation, state esu_eligible_expense_lines, esu_line_amount, esu_utility_reference, esu_ineligible_panel_only_evidence, and classify the visible expense categories as eligible, unclear, mixed, or ineligible.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, '4. Eligible expenses include:
+a. utility connection fees.
+b. electrical panel or sub-panel upgrade.
+c. service mast alterations or replacement.
+d. conduit replacement, meter base alterations or replacements.
+e. weather head alteration or replacement.
+f. labour.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
   ('esu_heat_pump_conversion_context_present', 'Check whether the named evidence supports that the electrical service upgrade is associated with conversion from a fossil-fuel primary space and/or water heating system to a heat pump through the CleanBC Energy Savings Program.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -228,7 +248,7 @@ Set rule_result="warn" when the electrical service upgrade appears associated wi
 Set rule_result="fail" when the named evidence clearly shows the service upgrade is not tied to a fossil-fuel-to-heat-pump conversion, shows only an electric/wood/non-fossil conversion path, shows unrelated electrical work, or contradicts primary space and/or water heating conversion eligibility.
 Do not fail solely because the invoice does not prove every application-level fact, unless the named evidence clearly contradicts the required fossil-fuel-to-heat-pump conversion.
 In calculation, state esu_fossil_to_heat_pump_context, esu_associated_heat_pump_or_hpwh_reference, esu_heat_pump_installation_date_reference, esu_line_amount, the classified source path, whether primary space/water heating context is supported, and whether 50%/21C primary-space-heating capacity context is visible or not applicable/unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'Only homes that convert from a fossil fuel (oil, propane or natural gas) primary space and/or water heating system to a heat pump through the CleanBC Energy Savings Program are eligible. A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_not_panel_only_or_connection_only', 'Check whether the claimed electrical service upgrade includes an electric utility service/new-wire upgrade, rather than only a panel upgrade, sub-panel upgrade, breaker work, or heat-pump connection to the panel.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -242,26 +262,21 @@ Set rule_result="pass" when the named evidence shows utility service/new-wire/li
 Set rule_result="warn" when panel/sub-panel/connection work is visible and utility service evidence is missing, incomplete, or ambiguous after considering invoice and supporting-document evidence, but the work is not clearly limited to ineligible panel-only or heat-pump-connection-only scope.
 Set rule_result="fail" when the named evidence clearly shows only panel upgrade, sub-panel upgrade, breaker work, heat-pump connection to the panel, or other internal electrical work with no electric utility service/new-wire upgrade by BC Hydro or FortisBC.
 In calculation, state esu_ineligible_panel_only_evidence, esu_utility_reference, service-size evidence, utility supporting-document evidence used, and classify the visible scope as utility_service_upgrade, ambiguous, or panel_or_connection_only.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'Electrical panel or sub-panel upgrades or heat pump connections to the panel without an electric service upgrade by the utility are not eligible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_service_size_present', 'Check whether the invoice or configured supporting-document located fields clearly reference a 100, 200, or 400 amp electrical service upgrade.
 Use utility_bill and electrical_utility_upgrade_document located fields such as previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
-Set rule_result="warn" if electrical work is visible but service size is missing or ambiguous after checking the utility supporting documents.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="warn" if electrical work is visible but service size is missing or ambiguous after checking the utility supporting documents.', true, 'The service upgrade (new wire) is for upgrading to 100, 200 or 400-amp service to an existing home and must be installed within six months of the heat pump installation.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_upgrade_supporting_document_attached', 'Check whether the electrical service new-wire upgrade is supported by an acceptable electrical utility document showing the participant''s electrical utility is BC Hydro or FortisBC.
 
-Use these named document types and located fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
-- supporting_document_summary_for_upgrade_type: routed document types, supporting_document_routing_quality, present documents, and not_present_applicable_type_keys.
-- electrical_utility_upgrade_document: utility_provider, previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
-- utility_bill: utility_provider, service_address, account_or_bill_date, utility_service_type_or_fuel_evidence, previous_service_size, new_service_size, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
-- esu_utility_reference: visible invoice evidence for BC Hydro, FortisBC, utility connection, line upgrade, or utility bill/invoice references.
+Use named document types and located fields as evidence for your reasoning, including supporting_document_summary_for_upgrade_type, electrical_utility_upgrade_document, utility_bill, and esu_utility_reference when available. Accepted document paths are utility_bill or electrical_utility_upgrade_document.
 
-Accepted document path: utility_bill or electrical_utility_upgrade_document.
-Require an acceptable document with supporting_document_routing_quality="usable", readable utility_provider showing BC Hydro or FortisBC, and readable utility upgrade/new-wire/line/service-upgrade evidence from new_service_size, previous_service_size, utility_upgrade_cost_or_reference, utility_service_type_or_fuel_evidence, or service_completion_or_invoice_date. Use esu_utility_reference as invoice corroboration when available.
+A strong pass has a usable accepted document that identifies BC Hydro or FortisBC and supports an electrical utility new-wire, line, service, or connection upgrade. Helpful evidence may include utility_provider, previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, utility_upgrade_cost_or_reference, utility_service_type_or_fuel_evidence, or invoice text referring to a BC Hydro/FortisBC utility upgrade.
 
-Set rule_result="pass" when an accepted document is present, usable, identifies BC Hydro or FortisBC, and supports an electrical utility new-wire/line/service upgrade.
-Set rule_result="warn" when an accepted document is present but supporting_document_routing_quality is needs_review or requires_visual_review; utility_provider is missing, ambiguous, or not clearly BC Hydro/FortisBC; service-upgrade/new-wire evidence is incomplete; or the invoice/supporting-document relationship needs admin verification.
-Set rule_result="fail" when both acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, present only with supporting_document_routing_quality="unusable", or clearly identify a utility provider other than BC Hydro or FortisBC for the claimed electric service new-wire upgrade.
-In calculation, state which document path was used, utility_provider, service-upgrade/new-wire evidence, service address/date if visible, supporting_document_routing_quality, and esu_utility_reference when used.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" when the supplied evidence supports that BC Hydro or FortisBC upgraded the electric service/new wire.
+Set rule_result="warn" when the expected utility document is missing, not clearly routed, needs visual review, has incomplete located fields, or the invoice mentions a utility upgrade but the attached supporting-document evidence is absent or not enough for a confident pass.
+Set rule_result="fail" only when the supplied evidence clearly contradicts the requirement, such as a document showing a utility provider other than BC Hydro or FortisBC, an unusable/wrong attached document that is clearly presented as the utility evidence, or invoice/supporting-document evidence showing the work was only a panel/sub-panel/contractor connection with no utility service/new-wire upgrade.
+In calculation, explain the document path or missing-document situation, utility_provider if visible, service-upgrade/new-wire evidence, service address/date if visible, supporting_document_routing_quality when available, and esu_utility_reference when used.
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'The electric service (new wire) must be upgraded by the participants electrical utility (BC Hydro or FortisBC).', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('homeowner_identity_matches_eligibility_record', 'Check whether the homeowner/customer name visible on the invoice appears to match the participant/homeowner associated with the eligibility code on record.
 Use users.participant_name, users_eligibilitycodes.eligibility_code, and classifier.eligibility_code from the supplied database values.
 Use invoice_homeowner_name and eligibility_code from the OCR/DI JSON.
@@ -271,7 +286,7 @@ Set rule_result="warn" when the invoice homeowner/customer name is missing or am
 Set rule_result="fail" when both names are clear and the invoice visibly appears to be for a different homeowner/customer than the participant associated with the eligibility code.
 If the visible invoice eligibility code conflicts with users_eligibilitycodes.eligibility_code or classifier.eligibility_code, mention that conflict here only as identity context; the eligibility-code date/window code rule owns final eligibility-code timing.
 In evidence_text, include the visible invoice homeowner/customer name, visible invoice eligibility code if present, database participant name, and database eligibility code.
-In reason_and_likely_causes, explain whether this is a clear match, harmless formatting variation, missing/ambiguous evidence, or likely wrong-homeowner invoice.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In reason_and_likely_causes, explain whether this is a clear match, harmless formatting variation, missing/ambiguous evidence, or likely wrong-homeowner invoice.', true, 'Participants must pre-register and confirm eligibility prior to installing upgrades. Following pre-registration, eligible participants will receive an eligibility code.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_fossil_backup_not_fossil_primary', 'Check whether the backup heating system for this fossil-fuel-to-heat-pump upgrade is electric or wood, with only the allowed exception for a retained natural-gas/propane fireplace that is clearly secondary.
 
 Use this named field as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -283,11 +298,11 @@ Set rule_result="warn" when backup heat context is missing, ambiguous, or when a
 Set rule_result="fail" when hp_backup_heat_evidence clearly shows natural gas, propane, oil, dual-fuel fossil backup, or another fossil-fuel system remains as the backup heating system.
 Set rule_result="fail" when a natural-gas/propane fireplace is visible and the evidence shows it is primary, backup, or not clearly limited to a secondary fireplace role.
 In calculation, state hp_backup_heat_evidence and classify the visible backup context as electric, wood, secondary gas/propane fireplace, fossil backup, or unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'The back-up heating system must be electric or wood. Homes with a natural gas or propane fireplaces are able to retain the fireplace, if the fireplace is a secondary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_no_existing_or_secondary_heat_pump_flag', 'Check whether invoice text suggests the work is replacing, adding to, or adding a secondary heat pump for a home with an existing heat pump.
 Set rule_result="pass" when no existing/add-on/secondary heat-pump concern is visible.
 Set rule_result="warn" when the invoice wording is ambiguous and admin should verify whether this is a new eligible primary system.
-Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" when visible evidence shows replacement of an existing heat pump, an add-on to an existing heat pump, or a secondary heat pump for a home with an existing heat pump.', true, 'Replacing, adding to an existing heat pump or adding a secondary heat pump to a home with an existing heat pump is not eligible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_fossil_removal_supporting_document_attached', 'Check whether an acceptable gas/fossil-fuel water-heater removal supporting document is present when the heat pump water heater replaced a fossil-fuel water heating system.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -310,7 +325,13 @@ Set rule_result="pass" when fossil-fuel water-heater replacement is visible and 
 Set rule_result="warn" when the water-heater source path is unclear, when an acceptable document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears relevant but one or more required located fields for its path are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when fossil-fuel water-heater replacement is visible and both acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
 In calculation, state fossil_removal_required, which path was used: permit_or_inspection, removal_invoice, both, missing, not_required, or unclear; then list the required fields for that path and whether each is present/usable.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, '2. Proof of gas water heater removal if the heat pump water heater replaced a fossil fuel water heating system. One of the following documents will be accepted:
+a. local government permit or inspection report, which must include:
+i. date of inspection.
+ii. address where inspection took place.
+b. invoice from the removal company or heat pump water heater installation company, which must include:
+i. description of work completed (e.g. the gas water heater was removed according to applicable regulations and local government bylaws).
+ii. date of removal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_no_existing_or_secondary_hpwh_flag', 'Check whether the named evidence suggests the upgrade is replacing an existing heat pump water heater, adding to a home with an existing heat pump water heater, or adding a secondary/additional heat pump water heater.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -322,9 +343,9 @@ Set rule_result="pass" when the named evidence shows a new heat pump water heate
 Set rule_result="warn" when the evidence is incomplete or ambiguous about whether an existing heat pump water heater is already present or whether the new system is secondary/additional.
 Set rule_result="fail" when the named evidence clearly shows replacement of an existing heat pump water heater, adding a secondary/additional heat pump water heater, or adding a heat pump water heater to a home that already has an existing heat pump water heater.
 In calculation, state hpwh_existing_hpwh_flag, hpwh_existing_water_heater_evidence, hpwh_secondary_system_flag, and classify the concern as none, existing_hpwh_replacement, secondary_or_additional_hpwh, existing_hpwh_home, or unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'Replacing or adding a secondary heat pump water heater to a home with an existing heat pump water heater is not eligible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hpwh_primary_replacement_context_present', 'Check whether the invoice provides evidence that the heat pump water heater replaces the home''s primary water heater.
-Set rule_result="warn" if this likely requires application/DB context and the invoice does not show a secondary/additional system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="warn" if this likely requires application/DB context and the invoice does not show a secondary/additional system.', true, 'The existing water heater being replaced must be the home’s primary water heater.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_associated_upgrade_present', 'Check whether the named evidence supports that health and safety remediation was required to enable safe installation and operation of an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade, and was completed in association with that eligible upgrade rather than claimed on its own.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -338,11 +359,11 @@ Set rule_result="pass" when the named evidence clearly connects the remediation 
 Set rule_result="warn" when the remediation appears plausibly associated with an eligible upgrade but the connection likely requires application/DB context, associated-invoice context, or admin confirmation; or when the invoice does not contradict association but the association is incomplete or ambiguous.
 Set rule_result="fail" when the named evidence clearly shows health and safety remediation is being claimed on its own without an associated eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade, or clearly connects the remediation only to an ineligible/unrelated project.
 In calculation, state hs_associated_upgrade_evidence, hs_remediation_scope, hs_issue_type, any supplied upgrade-type context, and classify the association as associated_eligible_upgrade, standalone, unrelated_ineligible_project, or unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'Health and safety remediation must be completed in association with an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade. Rebates will not be paid for health and safety remediation on its own.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_before_after_photos_attached', 'Check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set.
 Set rule_result="pass" if present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
 Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="fail" if missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present with supporting_document_routing_quality="unusable".', true, 'Before and after photos of the health and safety issue that was remediated.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_issue_type_present', 'Check whether the named evidence identifies an existing health and safety issue in the home that was remediated.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -355,7 +376,7 @@ Set rule_result="pass" when the named evidence clearly identifies an existing he
 Set rule_result="warn" when remediation work is visible but the pre-existing health/safety issue type is missing, generic, incomplete, or too ambiguous to classify confidently.
 Set rule_result="fail" when the named evidence clearly shows the work is not remediation for an existing health and safety issue in the home, or the visible issue is unrelated to health/safety remediation eligibility.
 In calculation, state hs_issue_type, hs_remediation_scope, hs_resolution_completion_date, hs_technical_safety_or_permit_reference, and classify the issue as eligible_issue, unclear, or unrelated.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'Health and safety remediation is for existing health and safety issues in the home.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hs_pre_confirmation_evidence_present', 'Check whether the named evidence supports that the health and safety remediation was confirmed as rebate-eligible before remediation began.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -368,7 +389,7 @@ Set rule_result="pass" when the named evidence clearly shows the remediation was
 Set rule_result="warn" when pre-confirmation evidence is missing, incomplete, or likely lives in application/admin records rather than invoice OCR, and the named evidence does not contradict pre-confirmation.
 Set rule_result="fail" when the named evidence clearly shows remediation began or was completed before rebate-eligibility confirmation, or shows confirmation was denied/not eligible.
 In calculation, state hs_pre_confirmation_reference, hs_confirmation_date_or_reference, hs_remediation_scope, hs_resolution_completion_date, and classify pre-confirmation status as confirmed_before_remediation, missing_or_admin_context_needed, contradicted, or unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'Health and safety remediation must be confirmed as rebate-eligible prior to beginning remediation. For confirmation, contact betterhomesESP@clearesult.com.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_conversion_context_present', 'Check whether the named evidence supports that the home was primarily heated by fossil fuel, electricity, or wood/solid fuel before the hydronic heat-pump upgrade.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -384,7 +405,7 @@ Set rule_result="warn" when the source-fuel path, primary-heating status, 50%/21
 Set rule_result="fail" when the named evidence clearly shows the prior heating source is outside the accepted paths, the only prior heat evidence is a fireplace, the evidence contradicts primary-heating status, or the visible conversion story contradicts hydronic heat-pump eligibility.
 Do not fail this rule solely because fossil-removal/photo/WETT supporting documents are missing; hydronic_fossil_fuel_removal_supporting_document_attached and hydronic_wood_removal_or_wett_supporting_document_attached own those conditional attachment checks.
 In calculation, state hydronic_conversion_source_fuel_evidence, the classified prior source path, whether primary-heating status is supported, whether fireplace-only evidence is present, and whether supporting-document corroboration was used.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'The home must be primarily heated by fossil fuel (oil, propane or natural gas), electricity, or wood. A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C. A fireplace is not considered a primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_fossil_fuel_removal_supporting_document_attached', 'Check whether an acceptable fossil-fuel heating-system removal supporting document is present when the hydronic heat pump replaced an oil, propane, or natural-gas heating system.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -407,7 +428,13 @@ Set rule_result="pass" when fossil-fuel replacement is visible and either accept
 Set rule_result="warn" when the source-fuel path is unclear, when an acceptable document type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or when the document appears relevant but one or more required located fields for its path are missing, null, low-confidence, visually limited, or too unclear for confident review.
 Set rule_result="fail" when fossil-fuel replacement is visible and both acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".
 In calculation, state fossil_removal_required, which path was used: permit_or_inspection, removal_invoice, both, missing, not_required, or unclear; then list the required fields for that path and whether each is present/usable.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, '3. Proof of fossil fuel (oil, propane or natural gas) system removal if the heat pump replaced a fossil fuel heating system. One of the following documents will be accepted:
+a. local government permit or inspection report, which must include:
+i. date of inspection.
+ii. address where inspection took place.
+b. invoice from the removal company or heat pump water heater installation company, which must include:
+i. description of work completed (e.g. the gas water heater was removed according to applicable regulations and local government bylaws).
+ii. date of removal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_wood_removal_or_wett_supporting_document_attached', 'If the visible source-fuel path is wood or solid fuel, check whether the required wood/solid-fuel removal or safe-retention supporting document is present.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -433,27 +460,7 @@ Set rule_result="pass" when the wood/solid-fuel path does not apply, or when the
 Set rule_result="warn" when the wood/solid-fuel source path or removal/retention path is unclear; when the required document type is present but supporting_document_routing_quality is needs_review or requires_visual_review; when required located fields are missing, null, low-confidence, visually limited, or too unclear for confident review; when before/after photo roles cannot be confidently distinguished; or when InvoiceDate or wett_inspection_date is missing or ambiguous so the WETT date window cannot be confidently checked.
 Set rule_result="fail" when the wood/solid-fuel source path and removal/retention path are clear and the required document type is missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, present only with supporting_document_routing_quality="unusable", missing a clearly required before or after photo, or has clear WETT date evidence outside the allowed date window.
 In calculation, state the visible source-fuel path, removal/retention path, required document type, before_photo_present, after_photo_present, WETT required fields present/usable, InvoiceDate, wett_inspection_date, allowed WETT date window, and whether the date window is satisfied.
-In evidence_text, cite the exact invoice or supporting-document wording/located fields that support the path and document decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_health_safety_issue_flag', 'Check whether the invoice references pest, rodent, vermiculite, asbestos, mould, or removed insulation issues.
-Set rule_result="fail" only if unresolved issues appear to block processing or if evidence is unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_material_and_location_present', 'Check whether the invoice identifies insulation material and eligible installation location clearly enough for admin pre-review.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_minimum_r_value_and_boundary_present', 'Check whether the invoice provides enough evidence that the insulation location is eligible, is between conditioned and unconditioned space, and meets the minimum R-value added for that location.
-Set rule_result="warn" when location, boundary, or R-value evidence is missing/ambiguous and admin should verify the calculation inputs.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_r_value_and_area_present', 'Check whether the invoice provides R-value and area/square-foot evidence needed for rebate calculation review.
-Set rule_result="warn" if one or both values are missing or ambiguous and admin should verify the insulation calculation inputs.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_rebate_math_within_cap', 'Check whether the claimed rebate for this insulation upgrade appears to stay within the visible insulation cost and the program maximum.
-Use the visible ins_line_amount, upgrade_specific_rebate_line_amount, ins_upgrade_location, and eligibility code.
-Use these maximum rebate rules: ESP1/ESP2 only; ESP3 has no insulation rebate; the total insulation rebate is capped at $5,500 per home; a clearly isolated single upgrade location should not visibly exceed the $2,000 location-specific maximum.
-When R-value added and area are visible, apply these location-specific formula/rates: attic = R-value added times square feet times $0.05 for ESP1 or $0.04 for ESP2; exterior wall cavity/sheathing and basement/crawlspace = R-value added times square feet times $0.20 for ESP1 or $0.16 for ESP2; exposed floor, floor over crawlspace, or basement header = R-value added times square feet times $0.125 for ESP1 or $0.10 for ESP2.
-Minimum new R-value added by location: attic R12; exterior wall cavity R12; exterior wall sheathing R3.8; basement/crawlspace R10; exposed floor, floor over crawlspace, or basement header R20.
-Set rule_result="pass" only when the invoice clearly shows the rebate amount, visible insulation cost, and enough location context, and the claimed rebate is less than or equal to the visible insulation cost and does not clearly exceed the visible program cap.
-Set rule_result="warn" when the rebate amount or visible insulation cost is missing/ambiguous but no visible value clearly exceeds the cap/formula.
-Set rule_result="fail" when the rebate clearly exceeds the visible insulation cost, clearly exceeds $5,500 overall, clearly exceeds the visible single-location cap/formula, or is claimed for ESP3.
-In calculation, show the visible location context, R-value added, area, formula/rate if available, visible insulation cost, claimed rebate, and cap comparison.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_supporting_documents_attached', 'Check whether supporting_document_summary_for_upgrade_type includes before_after_photo_set and, when applicable, floor_plan_document.
-Set rule_result="pass" if the required document package is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if required document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact invoice or supporting-document wording/located fields that support the path and document decision.', true, 'The inspection report must be dated within the 12-month period before or 6-month period following the date of the heat pump installation invoice and include the inspector’s WETT certification number, the site address of the wood or solid fuel heating system, and whether the installation is compliant with relevant codes.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_invoice_arithmetic_consistent', 'Check whether the visible invoice arithmetic is internally consistent when invoice total, overall rebate, deposit, and amount due after rebate are shown.
 Invoices may use either of these acceptable arithmetic patterns:
 1. Customer amount owing model: expected_customer_due = invoice_total - overall_rebate_line_amount - customer_payment_or_deposit. Pass when expected_customer_due matches the visible customer amount due within normal invoice rounding.
@@ -464,7 +471,7 @@ Set rule_result="info" when the invoice reconciles, but the model is worth expla
 Set rule_result="warn" only when required values are missing, unreadable, duplicated without a clear total, or labelled ambiguously enough that the model cannot determine whether arithmetic reconciles. If warning, state the exact missing or ambiguous value and the concrete review step.
 Set rule_result="fail" when the visible values clearly do not reconcile under either acceptable model.
 In reason_and_likely_causes, name which model appears to fit the invoice.
-In calculation, show both the formula and visible values used, for example: invoice_total - customer_payment_or_deposit = amount_due, and amount_due equals visible rebate total.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In calculation, show both the formula and visible values used, for example: invoice_total - customer_payment_or_deposit = amount_due, and amount_due equals visible rebate total.', true, 'Invoice (see sample invoice for requirements), which must show the itemized CleanBC rebate and deduct the CleanBC rebate from the total amount owed by the participant. The rebate must be accurately calculated in accordance with the participant’s income level and the Rebate Eligibility Requirements.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_rebate_not_over_invoice_total', 'Check whether the visible overall CleanBC / Better Homes / ESP rebate does not exceed the invoice total.
 
 Use these named fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -476,24 +483,24 @@ This rule is intended to compare against InvoiceTotal rather than AmountDue. Whe
 Set rule_result="pass" only when both overall_rebate_line_amount and InvoiceTotal are present, clear, and overall_rebate_line_amount is less than or equal to InvoiceTotal.
 Set rule_result="warn" when overall_rebate_line_amount or InvoiceTotal is missing, null, ambiguous, unreadable, or not confidently tied to the invoice totals.
 Set rule_result="fail" when overall_rebate_line_amount is greater than InvoiceTotal.
-In calculation, show the named fields and values used, including overall_rebate_line_amount and InvoiceTotal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('overall_rebate_not_over_paid_cost_of_upgrade', 'Check whether the visible overall CleanBC / Better Homes / ESP rebate does not exceed the paid cost of the upgrade.
+In calculation, show the named fields and values used, including overall_rebate_line_amount and InvoiceTotal.', true, 'Rebates cannot exceed the cost on the invoice and the paid cost of the upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+  ('overall_rebate_not_over_paid_cost_of_upgrade', 'Check whether the visible overall CleanBC / Better Homes / ESP rebate appears to exceed the paid or payable cost of the claimed upgrade.
 
-Use these named fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
-- overall_rebate_line_amount: the visible total program rebate amount for the invoice.
-- paid_cost_of_upgrade_amount: the visible paid cost of the upgrade.
+Use named fields and visible invoice totals as evidence for your reasoning, including overall_rebate_line_amount, paid_cost_of_upgrade_amount, InvoiceTotal, upgrade-specific cost fields, customer payments, credits, deposits, warranty_or_home_insurance_cost_evidence, and surrounding totals text when available.
 
-Set rule_result="pass" only when both overall_rebate_line_amount and paid_cost_of_upgrade_amount are present, clear, and overall_rebate_line_amount is less than or equal to paid_cost_of_upgrade_amount.
-Set rule_result="warn" when overall_rebate_line_amount or paid_cost_of_upgrade_amount is missing, null, ambiguous, unreadable, or not confidently tied to the claimed upgrade.
-Set rule_result="fail" when overall_rebate_line_amount is greater than paid_cost_of_upgrade_amount.
-In calculation, show the named fields and values used, including overall_rebate_line_amount and paid_cost_of_upgrade_amount.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Do not mechanically compare the rebate to a post-rebate customer balance. Labels such as customer portion owed, balance after rebate, amount due after rebate, customer owing after rebate, or similar wording usually represent the amount remaining after the program rebate has already been deducted; that amount is useful arithmetic evidence, but it is not by itself the paid/payable cost basis for this comparison.
+
+Set rule_result="pass" when the visible invoice arithmetic supports that the rebate does not exceed the cost paid or payable for the claimed upgrade work.
+Set rule_result="warn" when the relevant cost basis is missing, bundled with unrelated work, unclear, or the invoice layout prevents a confident comparison.
+Set rule_result="fail" only when the visible arithmetic clearly shows the rebate exceeds the cost paid or payable for the claimed upgrade, including cases where warranty, insurance, no-charge replacement, or other non-program coverage clearly reduces the paid/payable upgrade cost below the rebate.
+In calculation, explain the reasoning and name the fields or visible labels used. If you disregard a field such as customer portion owed because it is a post-rebate balance, say so.', true, 'Rebates cannot exceed the cost on the invoice and the paid cost of the upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('rebate_line_evidence_present', 'Check whether the invoice visibly identifies CleanBC / Better Homes / ESP rebate amounts and makes the rebate amount understandable.
 Set rule_result="pass" when one overall program rebate amount is clearly labelled and no useful extra context is needed.
 Set rule_result="info" when multiple upgrade-specific CleanBC / Better Homes / ESP rebate amounts are clearly labelled, summable, and useful to call out as context. A split rebate presentation is acceptable when the amounts are clear; do not warn merely because rebates are split by upgrade type.
 Set rule_result="warn" only when rebate evidence exists but the rebate label, amount, or allocation by upgrade type is genuinely unclear from the invoice text. If warning, say exactly which value or label is unclear and what admin should inspect.
 Set rule_result="fail" only when no CleanBC / Better Homes / ESP rebate evidence is visible, or when visible invoice text clearly contradicts the existence of a program rebate.
 Do not re-check invoice arithmetic in this rule. The common invoice-arithmetic rule owns whether rebate/payment/amount-due math reconciles.
-When split rebate lines are visible, show the summed rebate calculation in calculation, such as HVAC rebate + service upgrade rebate = total CleanBC / Better Homes portion.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+When split rebate lines are visible, show the summed rebate calculation in calculation, such as HVAC rebate + service upgrade rebate = total CleanBC / Better Homes portion.', true, 'Invoice (see sample invoice for requirements), which must show the itemized CleanBC rebate and deduct the CleanBC rebate from the total amount owed by the participant. The rebate must be accurately calculated in accordance with the participant’s income level and the Rebate Eligibility Requirements.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_associated_upgrade_present', 'Check whether the named evidence supports that the ventilation upgrade was installed in association with a CleanBC Energy Savings Program rebate-eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade, rather than claimed on its own.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -506,7 +513,7 @@ Set rule_result="pass" when the named evidence clearly connects the ventilation 
 Set rule_result="warn" when ventilation work is visible and the association with an eligible upgrade is missing, incomplete, or likely requires application/DB context, but the named evidence does not clearly show ventilation being claimed on its own.
 Set rule_result="fail" when the named evidence clearly shows the ventilation upgrade is being claimed on its own without an associated eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade, or clearly connects the ventilation work only to an ineligible/unrelated project.
 In calculation, state vent_associated_upgrade_evidence, invoice_upgrade_type_evidence, vent_system_type, any visible ventilation rebate/cost context, and classify the association as associated_eligible_upgrade, standalone_ventilation, unrelated_ineligible_project, or unclear.
-In evidence_text, cite the exact named-field wording that supports the decision.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+In evidence_text, cite the exact named-field wording that supports the decision.', true, 'be installed in association with a CleanBC Energy Savings Program rebate-eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade. Rebates will not be paid for ventilation upgrades on their own.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_multiple_ventilation_rebate_or_fan_count_review', 'Check whether the visible invoice evidence suggests more than one ventilation rebate, more than one eligible ventilation system, or multiple bathroom fans/HRV/ERV units that admin should review against the one-ventilation-rebate-per-home limit.
 
 Use named fields and visible invoice context as the main evidence:
@@ -521,7 +528,7 @@ Set rule_result="warn" when the invoice shows possible multiple bathroom fans, m
 Set rule_result="fail" only when the invoice clearly claims more than one separate ventilation rebate for the home, or explicitly claims separate rebates for multiple ventilation systems/fans.
 Do not fail merely because one line item uses plural wording if the invoice shows only one rebate amount or the count is ambiguous.
 In calculation, state the visible count/quantity/model/rebate evidence used and classify the review as single_visible_system, possible_multiple_systems_review, or multiple_rebates_claimed.
-In evidence_text, cite the exact visible line item, quantity, model, or rebate wording that supports the decision.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
+In evidence_text, cite the exact visible line item, quantity, model, or rebate wording that supports the decision.', true, 'Maximum one ventilation rebate per home.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
   ('warranty_or_home_insurance_costs_not_claimed', 'Check whether claimed upgrade costs exclude costs covered by warranty or home insurance.
 
 Use these named fields as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -532,80 +539,61 @@ Set rule_result="warn" when warranty_or_home_insurance_cost_evidence mentions wa
 Set rule_result="fail" when warranty_or_home_insurance_cost_evidence clearly shows claimed upgrade costs are covered by warranty or home insurance, paid by warranty or insurance, credited under warranty or insurance, supplied as a no-charge warranty/insurance replacement, reduced by a warranty/insurance discount or deductible arrangement, or otherwise not actually paid as an eligible upgrade cost.
 Do not fail solely because ordinary post-installation warranty coverage language is visible.
 In calculation, state warranty_or_home_insurance_cost_evidence and classify the evidence as none_visible, standard_post_installation_terms, possible_cost_coverage_review, or covered_cost_claimed.
-In reason_and_likely_causes, distinguish standard warranty/insurance terms from warranty-paid, insurance-paid, credited, no-charge, or otherwise covered invoice costs.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_certification_reference_present', 'Check whether the invoice or configured supporting documents contain any product/certification reference that would help an admin verify the accepted certification body requirement.
-Look specifically in certification_sheet, fenestration_energy_performance_label, manufacturer_label_photo, and their located fields for CSA, Intertek, Labtest/LC, QAI, Keystone/KC, NAMI, NFRC, CPD, NRCan/ENERGY STAR fenestration numbers, metric_u_factor, brand/model, label legibility, installed-unit coverage, or similar product-rating identifiers.
-Set rule_result="pass" if at least one useful certification/rating reference is clearly visible.
-Set rule_result="warn" if supporting documents are present but the product/certification fields are unreadable or incomplete.
-Set rule_result="fail" if there is no visible certification/rating reference in either invoice evidence or configured supporting-document located fields.
-This is not a final product-list validation.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_customer_portion_math_matches', 'Check whether the customer-portion calculation on the invoice appears to match the official customer-portion calculation.
-Use the original v1 calculation reference:
-1. afterrebate_invoicecost = total_invoice_cost - capped_invoice_total_rebate.
-2. customer_portion = afterrebate_invoicecost - customer_deposit.
-3. If customer_portion is positive, the homeowner/customer still owes the contractor.
-4. If customer_portion is negative, the contractor owes the customer.
-Set rule_result="pass" only when visible invoice values clearly match the calculated customer portion or amount due.
-Set rule_result="fail" only when visible invoice values clearly contradict the calculated customer portion or amount due.
-Set rule_result="warn" when total invoice cost, capped rebate, customer deposit, or amount due after rebate is missing/ambiguous but no visible arithmetic contradiction is present.
-Set rule_result="fail" when visible values clearly contradict the calculated customer portion or amount due.
-In calculation, show the visible formula and values used. Do not invent missing line-item values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_envelope_replacement_evidence_present', 'Check whether visible text supports replacement of existing exterior/building-envelope windows or doors rather than new construction, additions, skylights, interior doors, or unrelated glazing.
-Set rule_result="warn" if the scope is missing or ambiguous and admin should verify scope against application/quote context.
-Set rule_result="fail" if the visible scope appears ineligible, such as new construction, additions, skylights, interior doors, or unrelated glazing.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_label_photo_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes acceptable window/door label evidence. Accept either manufacturer_label_photo or fenestration_energy_performance_label for this rule.
-Set rule_result="pass" if at least one acceptable type is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable manufacturer/model, U-factor, NRCan, CPD, NFRC, ENERGY STAR, or similar label evidence for review.
-Set rule_result="warn" if an acceptable type is present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" only if both manufacturer_label_photo and fenestration_energy_performance_label are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_no_skylights', 'Check whether the invoice appears to include skylights as part of the Windows and doors claim.
-Set rule_result="fail" only if the invoice clearly claims skylights.
-Set rule_result="pass" if there is no clear skylight evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_per_home_rebate_math_within_cap', 'Check whether the total invoice/home rebate appears within the per-home cap.
-Use the original v1 calculation reference:
-1. Add the rebate_per_unit values for all eligible windows/doors across the invoice.
-2. The total invoice/home rebate is capped at $9,500.
-Windows/doors rebates are ESP1/ESP2 only; ESP3 has no windows/doors rebate.
-Set rule_result="pass" only when visible invoice values clearly show the total claimed rebate is at or below $9,500.
-Set rule_result="fail" only when the visible claimed rebate clearly exceeds $9,500.
-Set rule_result="warn" when eligible unit count, per-unit rebate values, or total claimed rebate are missing/ambiguous but no visible total clearly exceeds the cap.
-Set rule_result="fail" when the visible claimed total clearly exceeds $9,500 or the visible eligible cost.
-In calculation, show the visible total rebate and cap comparison. Do not invent missing line-item values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_per_unit_rebate_math_within_cap', 'Check whether the per-unit rebate calculations are visibly shown and appear to be within the per-window/per-door cap.
-Use the original v1 calculation reference:
-1. full_unit_subtotal = hardware price per unit + labour price per unit.
-2. If labour per unit is not shown, it may be estimated as labour total divided by quantity of units, but only when those values are clearly visible.
-3. full_unit_after_tax_subtotal = full_unit_subtotal * 1.05.
-4. rebate_percentage is 95% for ESP1 and 60% for ESP2. ESP3 has no windows/doors rebate. If the eligibility code/income level is missing or unclear, set rule_result="warn" and explain that admin should verify the eligibility record before accepting the math.
-5. rebate_per_unit = full_unit_after_tax_subtotal * rebate_percentage.
-6. Each rebate_per_unit is capped at $950 per window or door.
-For this rule, calculation must explicitly show the lower-of comparison: eligible cost after tax multiplied by the rebate percentage, eligible unit count multiplied by the $950 per-unit cap, the lower of those two values, and the comparison to the claimed windows/doors rebate.
-Set rule_result="pass" only when the invoice provides enough visible values and the claimed per-unit rebate appears within the cap.
-Set rule_result="fail" only when the visible values clearly show the claimed per-unit rebate exceeds the cap or calculation.
-Set rule_result="warn" when hardware, labour, quantity, eligibility code, tax basis, or claimed per-unit rebate is missing/ambiguous but no visible value clearly exceeds the cap.
-Set rule_result="fail" when visible values clearly show the claimed per-unit rebate exceeds the eligible cost calculation or $950 per-unit cap.
-In calculation, show the visible formula and values used. Do not invent missing line-item values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_preapproval_supporting_document_attached', 'Check whether supporting_document_summary_for_upgrade_type includes preapproval_quote or preapproval_notice.
-Set rule_result="pass" if an acceptable document is present with supporting_document_routing_quality="usable" and the expected located_fields are present with enough readable evidence for review.
-Set rule_result="warn" if present but supporting_document_routing_quality is needs_review or requires_visual_review, or if key located_fields are missing, null, low-confidence, or too unclear for confident review.
-Set rule_result="fail" if all acceptable document types are missing, listed in not_present_applicable_type_keys with no acceptable present equivalent, or present only with supporting_document_routing_quality="unusable".', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_rough_opening_evidence_present', 'Check whether the invoice appears to provide enough quantity/count evidence for an admin to reason about Rough Openings (RO).
-Program meaning:
-- The eligible count is based on Rough Openings (RO), not panes or individual glass sections.
-- Each RO counts as one eligible window/door rebate unit.
-- A bay window may contain several window sections/panes, but it counts as one RO and qualifies for one rebate.
-Set rule_result="pass" if the invoice clearly lists rough openings, window/door unit counts, or line items that appear to map cleanly to replacement openings.
-Set rule_result="fail" if the count basis is unclear.
-Set rule_result="fail" only if the invoice clearly appears to count panes/sections as separate rebate units without RO evidence.
-In reason_and_likely_causes, say whether the invoice appears RO-based, unit-count based, pane-count based, or unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_vancouver_municipal_boundary_review', 'Check whether any visible invoice/address evidence suggests the home is within the City of Vancouver municipal boundary.
-Set rule_result="fail" if the invoice or supplied case facts clearly show the home is within the City of Vancouver municipal boundary.
-Set rule_result="warn" if municipality cannot be determined from invoice/DB context; explain that admin/application data is needed and this is not a material invoice failure by itself.
-Set rule_result="pass" if visible invoice and supplied case-fact evidence clearly point outside the City of Vancouver or contain no City of Vancouver concern.', true, TIMESTAMP '2026-05-26 00:00:00', NOW())
+In reason_and_likely_causes, distinguish standard warranty/insurance terms from warranty-paid, insurance-paid, credited, no-charge, or otherwise covered invoice costs.', true, 'Upgrade costs covered by warranty or home insurance are not eligible for rebates.', true, TIMESTAMP '2026-05-26 00:00:00', NOW())
+),
+source_quote_metadata (
+  genai_rule_key,
+  section_name,
+  action_sentence
+) AS (
+  VALUES
+  ('ashp_electric_backup_heat_electric_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC)$$, $$Check that the invoice or supporting documents show the backup space heating system is electric. Upload clearer evidence if needed.$$),
+  ('ashp_electric_existing_heat_context_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC)$$, $$Check that the invoice shows the hard-wired electric heating system being replaced by the heat pump. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('ashp_fossil_fuel_removal_supporting_document_attached', $$AIR SOURCE HEAT PUMP fossil-fuel conversion$$, $$Upload one accepted removal proof document and make sure it clearly shows the required date, address, and work-completed details.$$),
+  ('ashp_gas_propane_existing_heat_context_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM NATURAL GAS OR PROPANE)$$, $$Check that the invoice shows the natural gas or propane primary heating system being replaced by the heat pump. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('ashp_oil_consumption_baseline_proof_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM OIL)$$, $$Upload oil-consumption proof from the relevant 12-month period and make sure the visible quantity supports the 500 L annual baseline.$$),
+  ('ashp_oil_existing_heat_context_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM OIL)$$, $$Check that the invoice shows the oil primary heating system being replaced by the heat pump. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('ashp_wood_backup_heat_not_fossil_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM WOOD)$$, $$Check that any visible backup heating evidence is wood or electric, not a fossil-fuel backup system. Upload clearer evidence if needed.$$),
+  ('ashp_wood_existing_heat_context_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM WOOD)$$, $$Check that the invoice shows the wood or solid-fuel primary heating system being replaced by the heat pump. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('ashp_wood_removal_or_wett_supporting_document_attached', $$AIR SOURCE HEAT PUMP (CONVERT FROM WOOD)$$, $$Upload the required before/after photo evidence if the wood system was removed, or the WETT inspection report if it was retained.$$),
+  ('contractor_identity_matches_record', $$General Eligibility Requirements$$, $$Check that the invoice contractor name matches the registered contractor account used for this submission. Upload a corrected invoice or contact program staff for assistance if needed.$$),
+  ('dfhp_existing_heat_context_present', $$DUAL FUEL DUCTED HEAT PUMP$$, $$Check that the invoice shows tanked propane or PNG natural gas as the prior primary heating system. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('dfhp_fossil_fuel_removal_or_modification_supporting_document_attached', $$DUAL FUEL DUCTED HEAT PUMP$$, $$Upload one accepted removal or modification proof document and make sure it clearly shows the required date, address, and work-completed details.$$),
+  ('dfhp_heat_load_calc_supporting_document_acceptable', $$DUAL FUEL DUCTED HEAT PUMP$$, $$Upload the required heat load calculation and make sure it identifies the sizing basis without relying on rule-of-thumb sizing.$$),
+  ('dfhp_switchover_setpoint_specific', $$DUAL FUEL DUCTED HEAT PUMP$$, $$Check that the invoice or supporting documents show the required switchover control settings for the applicable region. Upload clearer controls evidence if needed.$$),
+  ('esu_contractor_utility_billed_work_on_one_invoice', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or supporting documents show the BC Hydro/FortisBC line upgrade path and that contractor-billed utility work appears on one invoice when applicable.$$),
+  ('esu_eligible_expense_lines_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the claimed electrical service upgrade charges are from the eligible expense categories listed here. Upload a corrected invoice if needed.$$),
+  ('esu_heat_pump_conversion_context_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or supporting documents tie the service upgrade to a qualifying fossil-fuel-to-heat-pump conversion. Upload clearer evidence if needed.$$),
+  ('esu_not_panel_only_or_connection_only', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice shows a utility service/new-wire upgrade, not only a panel/sub-panel upgrade or heat-pump panel connection. Upload a corrected invoice if needed.$$),
+  ('esu_service_size_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or utility evidence shows the new service size is 100, 200, or 400 amps. Upload clearer evidence if needed.$$),
+  ('esu_utility_upgrade_supporting_document_attached', $$ELECTRICAL SERVICE UPGRADE$$, $$Upload evidence showing the electric service/new wire was upgraded by BC Hydro or FortisBC.$$),
+  ('homeowner_identity_matches_eligibility_record', $$General Eligibility Requirements$$, $$Check that the homeowner name and installation address on the invoice match the participant/application information. Upload a corrected invoice or contact program staff for assistance if needed.$$),
+  ('hp_fossil_backup_not_fossil_primary', $$AIR SOURCE HEAT PUMP fossil-fuel conversion$$, $$Check that backup heating is electric or wood, and that any retained gas or propane fireplace is only secondary. Upload clearer evidence if needed.$$),
+  ('hp_no_existing_or_secondary_heat_pump_flag', $$General Heat Pump Requirements$$, $$Check that the invoice does not describe replacing, adding to, or adding a secondary heat pump to a home with an existing heat pump. Upload a corrected invoice if needed.$$),
+  ('hpwh_fossil_removal_supporting_document_attached', $$HEAT PUMP WATER HEATER$$, $$Upload one accepted gas water-heater removal proof document and make sure it clearly shows the required date, address, and work-completed details when fossil-fuel water heating was replaced.$$),
+  ('hpwh_no_existing_or_secondary_hpwh_flag', $$HEAT PUMP WATER HEATER$$, $$Check that the invoice does not describe replacing or adding a secondary heat pump water heater where one already exists. Upload a corrected invoice if needed.$$),
+  ('hpwh_primary_replacement_context_present', $$HEAT PUMP WATER HEATER$$, $$Check that the invoice shows the home primary water heater was replaced. Upload clearer evidence if needed.$$),
+  ('hs_associated_upgrade_present', $$HEALTH AND SAFETY REMEDIATION$$, $$Check that the invoice or supporting documents connect the remediation to an eligible upgrade and not a standalone claim. Upload clearer evidence if needed.$$),
+  ('hs_before_after_photos_attached', $$HEALTH AND SAFETY REMEDIATION$$, $$Upload before and after photos showing the health and safety issue that was remediated.$$),
+  ('hs_issue_type_present', $$HEALTH AND SAFETY REMEDIATION$$, $$Check that the remediation scope is one of the eligible issue types. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('hs_pre_confirmation_evidence_present', $$HEALTH AND SAFETY REMEDIATION$$, $$Contact program staff for assistance if the remediation eligibility was reviewed before work began but the evidence is not being recognized.$$),
+  ('hydronic_conversion_context_present', $$AIR-TO-WATER AND COMBINED HEAT PUMP$$, $$Check that the invoice shows the prior primary heating system was fossil fuel, electricity, or wood. Upload a corrected invoice or clearer evidence if needed.$$),
+  ('hydronic_fossil_fuel_removal_supporting_document_attached', $$AIR-TO-WATER AND COMBINED HEAT PUMP$$, $$Upload one accepted fossil-fuel removal proof document and make sure it clearly shows the required date, address, and work-completed details when fossil-fuel heating was replaced.$$),
+  ('hydronic_wood_removal_or_wett_supporting_document_attached', $$AIR-TO-WATER AND COMBINED HEAT PUMP$$, $$Upload the required before/after photo evidence if the wood system was removed, or the WETT inspection report if it was retained.$$),
+  ('overall_invoice_arithmetic_consistent', $$General Eligibility Requirements$$, $$Check that the invoice shows the CleanBC rebate, deducts it from the participant amount owed, and reconciles clearly. Upload a corrected invoice if needed.$$),
+  ('overall_rebate_not_over_invoice_total', $$General Eligibility Requirements$$, $$Check that the overall rebate does not exceed the invoice cost. Upload a corrected invoice or contact program staff for assistance if needed.$$),
+  ('overall_rebate_not_over_paid_cost_of_upgrade', $$General Eligibility Requirements$$, $$Check that the overall rebate does not exceed the paid cost of the claimed upgrade. Upload a corrected invoice or contact program staff for assistance if needed.$$),
+  ('rebate_line_evidence_present', $$General Eligibility Requirements$$, $$Check that the invoice visibly itemizes the CleanBC rebate and makes the rebate amount understandable. Upload a corrected invoice if needed.$$),
+  ('vent_associated_upgrade_present', $$VENTILATION$$, $$Check that the invoice or supporting documents show the ventilation upgrade was completed with an eligible associated upgrade. Upload clearer evidence if needed.$$),
+  ('vent_multiple_ventilation_rebate_or_fan_count_review', $$VENTILATION$$, $$Check that the invoice is claiming no more than one ventilation rebate for the home. Upload a corrected invoice if needed.$$),
+  ('warranty_or_home_insurance_costs_not_claimed', $$General Eligibility Requirements$$, $$Check that the claimed upgrade costs are not covered by warranty or home insurance. Upload a corrected invoice or contact program staff for assistance if needed.$$)
 )
 INSERT INTO claims.genai_rules (
   genai_rule_key,
   prompt_text,
   enabled,
+  source_quote,
+  contractor_visible_flag,
   created_at,
   updated_at
 )
@@ -613,98 +601,90 @@ SELECT
   genai_rule_key,
   prompt_text,
   enabled,
+  CASE
+    WHEN source_quote_metadata.section_name IS NULL THEN source_quote
+    ELSE '**From the ' || source_quote_metadata.section_name || ' section of the PDF:**' || E'\n\n' ||
+      regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g') ||
+      E'\n\n**Action:** ' || source_quote_metadata.action_sentence
+  END AS source_quote,
+  contractor_visible_flag,
   created_at,
   updated_at
 FROM genai_rules_seed
+LEFT JOIN source_quote_metadata
+  USING (genai_rule_key)
 ON CONFLICT (genai_rule_key) DO UPDATE SET
   prompt_text = EXCLUDED.prompt_text,
+  source_quote = EXCLUDED.source_quote,
+  contractor_visible_flag = EXCLUDED.contractor_visible_flag,
   updated_at = NOW();
 
 WITH genai_rule_upgrade_types_seed (
   upgrade_type_key,
-  genai_rule_key,
-  rule_number
+  genai_rule_key
 ) AS (
   VALUES
-  ('air_source_heat_pump_electric', 'ashp_electric_existing_heat_context_present', 1),
-  ('air_source_heat_pump_electric', 'ashp_electric_backup_heat_electric_present', 8),
-  ('air_source_heat_pump_electric', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
-  ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_existing_heat_context_present', 1),
-  ('air_source_heat_pump_gas_propane', 'ashp_fossil_fuel_removal_supporting_document_attached', 3),
-  ('air_source_heat_pump_gas_propane', 'hp_fossil_backup_not_fossil_primary', 6),
-  ('air_source_heat_pump_gas_propane', 'hp_no_existing_or_secondary_heat_pump_flag', 7),
-  ('air_source_heat_pump_oil', 'ashp_oil_consumption_baseline_proof_present', 6),
-  ('air_source_heat_pump_oil', 'ashp_oil_existing_heat_context_present', 1),
-  ('air_source_heat_pump_oil', 'ashp_fossil_fuel_removal_supporting_document_attached', 3),
-  ('air_source_heat_pump_oil', 'hp_fossil_backup_not_fossil_primary', 7),
-  ('air_source_heat_pump_oil', 'hp_no_existing_or_secondary_heat_pump_flag', 8),
-  ('air_source_heat_pump_wood', 'ashp_wood_backup_heat_not_fossil_present', 8),
-  ('air_source_heat_pump_wood', 'ashp_wood_existing_heat_context_present', 1),
-  ('air_source_heat_pump_wood', 'hp_no_existing_or_secondary_heat_pump_flag', 6),
-  ('air_source_heat_pump_wood', 'ashp_wood_removal_or_wett_supporting_document_attached', 3),
-  ('air_to_water_heat_pump', 'hydronic_conversion_context_present', 3),
-  ('air_to_water_heat_pump', 'hydronic_fossil_fuel_removal_supporting_document_attached', 9),
-  ('air_to_water_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag', 7),
-  ('air_to_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
-  ('combined_space_water_heat_pump', 'hydronic_conversion_context_present', 3),
-  ('combined_space_water_heat_pump', 'hydronic_fossil_fuel_removal_supporting_document_attached', 9),
-  ('combined_space_water_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag', 7),
-  ('combined_space_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached', 10),
-  ('common', 'contractor_identity_matches_record', 7),
-  ('common', 'homeowner_identity_matches_eligibility_record', 8),
-  ('common', 'overall_invoice_arithmetic_consistent', 6),
-  ('common', 'overall_rebate_not_over_invoice_total', 4),
-  ('common', 'overall_rebate_not_over_paid_cost_of_upgrade', 5),
-  ('common', 'rebate_line_evidence_present', 2),
-  ('common', 'warranty_or_home_insurance_costs_not_claimed', 3),
-  ('dual_fuel_ducted_heat_pump', 'dfhp_fossil_fuel_removal_or_modification_supporting_document_attached', 9),
-  ('dual_fuel_ducted_heat_pump', 'dfhp_heat_load_calc_supporting_document_acceptable', 3),
-  ('dual_fuel_ducted_heat_pump', 'dfhp_existing_heat_context_present', 6),
-  ('dual_fuel_ducted_heat_pump', 'dfhp_switchover_setpoint_specific', 7),
-  ('dual_fuel_ducted_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag', 11),
-  ('electrical_service_upgrade', 'esu_contractor_utility_billed_work_on_one_invoice', 9),
-  ('electrical_service_upgrade', 'esu_eligible_expense_lines_present', 5),
-  ('electrical_service_upgrade', 'esu_heat_pump_conversion_context_present', 3),
-  ('electrical_service_upgrade', 'esu_not_panel_only_or_connection_only', 7),
-  ('electrical_service_upgrade', 'esu_service_size_present', 1),
-  ('electrical_service_upgrade', 'esu_utility_upgrade_supporting_document_attached', 2),
-  ('health_and_safety_remediation', 'hs_associated_upgrade_present', 2),
-  ('health_and_safety_remediation', 'hs_before_after_photos_attached', 7),
-  ('health_and_safety_remediation', 'hs_issue_type_present', 1),
-  ('health_and_safety_remediation', 'hs_pre_confirmation_evidence_present', 4),
-  ('heat_pump_water_heater', 'hpwh_fossil_removal_supporting_document_attached', 9),
-  ('heat_pump_water_heater', 'hpwh_no_existing_or_secondary_hpwh_flag', 8),
-  ('heat_pump_water_heater', 'hpwh_primary_replacement_context_present', 1),
-  ('insulation', 'ins_health_safety_issue_flag', 3),
-  ('insulation', 'ins_material_and_location_present', 1),
-  ('insulation', 'ins_minimum_r_value_and_boundary_present', 7),
-  ('insulation', 'ins_r_value_and_area_present', 2),
-  ('insulation', 'ins_rebate_math_within_cap', 6),
-  ('insulation', 'ins_supporting_documents_attached', 4),
-  ('ventilation', 'vent_associated_upgrade_present', 1),
-  ('ventilation', 'vent_multiple_ventilation_rebate_or_fan_count_review', 2),
-  ('windows_doors', 'wd_certification_reference_present', 2),
-  ('windows_doors', 'wd_customer_portion_math_matches', 9),
-  ('windows_doors', 'wd_envelope_replacement_evidence_present', 11),
-  ('windows_doors', 'wd_label_photo_supporting_document_attached', 5),
-  ('windows_doors', 'wd_no_skylights', 1),
-  ('windows_doors', 'wd_per_home_rebate_math_within_cap', 8),
-  ('windows_doors', 'wd_per_unit_rebate_math_within_cap', 7),
-  ('windows_doors', 'wd_preapproval_supporting_document_attached', 6),
-  ('windows_doors', 'wd_rough_opening_evidence_present', 3),
-  ('windows_doors', 'wd_vancouver_municipal_boundary_review', 10)
+  ('air_source_heat_pump_electric', 'ashp_electric_backup_heat_electric_present'),
+  ('air_source_heat_pump_electric', 'ashp_electric_existing_heat_context_present'),
+  ('air_source_heat_pump_electric', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('air_source_heat_pump_gas_propane', 'ashp_fossil_fuel_removal_supporting_document_attached'),
+  ('air_source_heat_pump_gas_propane', 'ashp_gas_propane_existing_heat_context_present'),
+  ('air_source_heat_pump_gas_propane', 'hp_fossil_backup_not_fossil_primary'),
+  ('air_source_heat_pump_gas_propane', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('air_source_heat_pump_oil', 'ashp_fossil_fuel_removal_supporting_document_attached'),
+  ('air_source_heat_pump_oil', 'ashp_oil_consumption_baseline_proof_present'),
+  ('air_source_heat_pump_oil', 'ashp_oil_existing_heat_context_present'),
+  ('air_source_heat_pump_oil', 'hp_fossil_backup_not_fossil_primary'),
+  ('air_source_heat_pump_oil', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('air_source_heat_pump_wood', 'ashp_wood_backup_heat_not_fossil_present'),
+  ('air_source_heat_pump_wood', 'ashp_wood_existing_heat_context_present'),
+  ('air_source_heat_pump_wood', 'ashp_wood_removal_or_wett_supporting_document_attached'),
+  ('air_source_heat_pump_wood', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('air_to_water_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('air_to_water_heat_pump', 'hydronic_conversion_context_present'),
+  ('air_to_water_heat_pump', 'hydronic_fossil_fuel_removal_supporting_document_attached'),
+  ('air_to_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached'),
+  ('combined_space_water_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('combined_space_water_heat_pump', 'hydronic_conversion_context_present'),
+  ('combined_space_water_heat_pump', 'hydronic_fossil_fuel_removal_supporting_document_attached'),
+  ('combined_space_water_heat_pump', 'hydronic_wood_removal_or_wett_supporting_document_attached'),
+  ('common', 'contractor_identity_matches_record'),
+  ('common', 'homeowner_identity_matches_eligibility_record'),
+  ('common', 'overall_invoice_arithmetic_consistent'),
+  ('common', 'overall_rebate_not_over_invoice_total'),
+  ('common', 'overall_rebate_not_over_paid_cost_of_upgrade'),
+  ('common', 'rebate_line_evidence_present'),
+  ('common', 'warranty_or_home_insurance_costs_not_claimed'),
+  ('dual_fuel_ducted_heat_pump', 'dfhp_existing_heat_context_present'),
+  ('dual_fuel_ducted_heat_pump', 'dfhp_fossil_fuel_removal_or_modification_supporting_document_attached'),
+  ('dual_fuel_ducted_heat_pump', 'dfhp_heat_load_calc_supporting_document_acceptable'),
+  ('dual_fuel_ducted_heat_pump', 'dfhp_switchover_setpoint_specific'),
+  ('dual_fuel_ducted_heat_pump', 'hp_no_existing_or_secondary_heat_pump_flag'),
+  ('electrical_service_upgrade', 'esu_contractor_utility_billed_work_on_one_invoice'),
+  ('electrical_service_upgrade', 'esu_eligible_expense_lines_present'),
+  ('electrical_service_upgrade', 'esu_heat_pump_conversion_context_present'),
+  ('electrical_service_upgrade', 'esu_not_panel_only_or_connection_only'),
+  ('electrical_service_upgrade', 'esu_service_size_present'),
+  ('electrical_service_upgrade', 'esu_utility_upgrade_supporting_document_attached'),
+  ('health_and_safety_remediation', 'hs_associated_upgrade_present'),
+  ('health_and_safety_remediation', 'hs_before_after_photos_attached'),
+  ('health_and_safety_remediation', 'hs_issue_type_present'),
+  ('health_and_safety_remediation', 'hs_pre_confirmation_evidence_present'),
+  ('heat_pump_water_heater', 'hpwh_fossil_removal_supporting_document_attached'),
+  ('heat_pump_water_heater', 'hpwh_no_existing_or_secondary_hpwh_flag'),
+  ('heat_pump_water_heater', 'hpwh_primary_replacement_context_present'),
+  ('ventilation', 'vent_associated_upgrade_present'),
+  ('ventilation', 'vent_multiple_ventilation_rebate_or_fan_count_review')
 )
 INSERT INTO claims.genai_rule_upgrade_types (
   genai_rule_id,
   invoice_upgrade_type_id,
-  rule_number,
   created_at,
   updated_at
 )
 SELECT
   gr.id,
   iut.id,
-  seed.rule_number,
   NOW(),
   NOW()
 FROM genai_rule_upgrade_types_seed seed
@@ -713,7 +693,6 @@ JOIN claims.genai_rules gr
 JOIN claims.invoice_upgrade_types iut
   ON iut.upgrade_type_key = seed.upgrade_type_key
 ON CONFLICT (genai_rule_id, invoice_upgrade_type_id) DO UPDATE SET
-  rule_number = EXCLUDED.rule_number,
   updated_at = NOW();
 
 WITH genai_located_fields_seed (
@@ -729,21 +708,7 @@ WITH genai_located_fields_seed (
   ('atw_product_list_reference', 'Locate air-to-water qualifying product list references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('atw_space_heating_only_evidence', 'Locate evidence that the air-to-water system is for space heating only rather than combined domestic hot water.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('before_after_photo_reference', 'Locate text indicating before and after photos are attached or required.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('brand_and_model', 'Locate brand and model of windows/doors if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('certification_body_reference', 'Locate references to accepted certification bodies or rating/certification identifiers.
-Accepted certification bodies and common references include:
-- Canadian Standards Association (CSA)
-- Intertek Canada (Intertek)
-- Labtest Certification (LC / LabTest)
-- QAI Laboratories (QAI)
-- Keystone Certification (KC / Keystone)
-- National Accreditation and Management Institute Certification (NAMI)
-- National Fenestration Ratings Council (NFRC)
-- NFRC Certified Products Directory (CPD)
-Return the exact text found, not a paraphrase.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('city_of_vancouver_evidence', 'Locate any address, municipality, or explicit City of Vancouver evidence. This is usually application/DB context, but capture visible invoice text if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('contractor_gst_number', 'Locate contractor GST number within the invoice.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('cpd_number', 'Locate CPD / NFRC Certified Products Directory identifier, if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('cshp_line_amount', 'Locate combined space/water heat pump line-item totals.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('cshp_product_list_reference', 'Locate air-to-water/combined heat pump qualifying product list references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('customer_deposit', 'Locate customer deposit or customer payment already made.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -756,7 +721,6 @@ Return the exact text found, not a paraphrase.', true, TIMESTAMP '2026-05-26 00:
   ('dfhp_source_fuel_path', 'Locate whether the visible source/fuel path appears to be PNG natural gas, PNG propane, tank propane, generic natural gas, generic propane, or unclear.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('dfhp_switchover_setpoint_evidence', 'Locate thermostat, outdoor temperature switchover, equipment control board, <=5 C, <=2 C, or similar controls evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('eligibility_code', 'Locate the eligibility code if visible in invoice text. Expected prefixes are ESP1, ESP2, or ESP3. If the invoice does not visibly show one, do not invent it from the supplied database values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('envelope_replacement_evidence', 'Locate evidence that the work replaces existing windows/doors between heated indoor space and unheated/outdoor space.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_associated_heat_pump_or_hpwh_reference', 'Locate visible evidence connecting the electrical service upgrade to an associated heat pump or heat pump water heater installation. Include invoice/work references such as heat pump, air-source heat pump, air-to-water heat pump, dual-fuel heat pump, heat pump water heater, HPWH, model/equipment references, installation wording, or same-invoice work descriptions. Use value=null when the invoice does not visibly connect the electrical service upgrade to a heat pump or heat pump water heater. In evidence_text, cite the exact wording used.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_contractor_utility_management_evidence', 'Locate evidence that contractor/electrician managed the line upgrade with the electrical utility.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_eligible_expense_lines', 'Locate service upgrade expense lines, such as connection fees, panel or sub-panel upgrade, service mast, conduit, meter base, weather head, or labour.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -770,7 +734,6 @@ Return the exact text found, not a paraphrase.', true, TIMESTAMP '2026-05-26 00:
   ('esu_service_size', 'Locate upgraded electrical service size, such as 100 amp, 200 amp, or 400 amp service.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_billing_reference', 'Locate utility billing evidence for the line/service upgrade.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_utility_reference', 'Locate BC Hydro, FortisBC, utility connection, line upgrade, or utility bill/invoice references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('hardware_per_unit', 'Locate hardware/material price per unit.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_backup_heat_evidence', 'Locate backup heat evidence and note if it appears electric, wood, fossil fuel, fireplace-only, secondary, primary, or unclear. If a natural-gas or propane fireplace is visible, state whether the wording supports that it is secondary rather than the backup or primary heating system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_efficiency_and_capacity', 'Locate SEER/HSPF/SEER2/HSPF2, variable speed compressor, BTU/tonnage, or capacity evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_existing_electric_heat_evidence', 'Locate hard-wired electric baseboard, radiant ceiling/floor, electric furnace, electric boiler, or other electric primary heat evidence.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -834,32 +797,11 @@ Health and safety', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_conversion_source_fuel_evidence', 'Locate visible evidence of the home''s existing primary heating source before the hydronic heat pump upgrade. Accepted source paths are fossil fuel (oil, propane, or natural gas), electricity, and wood/solid fuel. Include wording that supports whether the system was the primary heating system, whether it could heat at least 50% of the home for the full heating season to 21 degrees Celsius, and whether any fireplace evidence appears to be only a fireplace rather than the primary heating system. Use value=null when the prior primary heating source is not visible. In evidence_text, cite the exact wording used.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_fossil_removal_evidence', 'Locate fossil-fuel removal/decommissioning evidence if fossil fuel is involved.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hydronic_wood_removal_or_wett_evidence', 'Locate wood-system removal or WETT evidence if wood is involved.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_area_square_feet', 'Locate square feet / upgrade area.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_conditioned_boundary_evidence', 'Locate evidence that insulation is between conditioned and unconditioned space.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_existing_r_value', 'Locate pre-existing R-value if visible.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_floor_plan_reference', 'Locate floor plan drawing references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_health_safety_resolution_evidence', 'Locate evidence that pest, rodent, vermiculite, asbestos, or mould issues were resolved before insulation work.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_line_amount', 'Locate insulation line-item totals.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_location_specific_rebate_amount', 'Locate location-specific insulation rebate amounts if itemized.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_material_type', 'Locate insulation material type, such as batt, loose fill, board, or spray foam.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_minimum_r_value_requirement_evidence', 'Locate any stated minimum R-value requirement or code/program reference.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_new_r_value', 'Locate new R-value.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_r_value_added', 'Locate R-value added or difference in R-value.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_rebate_formula_or_rate_evidence', 'Locate rebate-rate/formula text, such as dollars per R-value added per square foot.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_registered_contractor_evidence', 'Locate registered/approved insulation contractor evidence if visible.
-
-Insulation', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_removed_existing_insulation_evidence', 'Locate evidence of removed pre-existing insulation due to pest, mould, or similar issue.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ins_upgrade_location', 'Locate insulation location, such as attic, exterior wall cavity, exterior wall sheathing, basement/crawlspace, exposed floor, floor over crawlspace, or basement header.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_contractor_address', 'Locate the contractor/vendor business address visibly shown on the invoice if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_contractor_name', 'Locate the contractor, vendor, supplier, or business name visibly shown on the invoice. Prefer the invoice header/vendor name over generic text in descriptions.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_homeowner_name', 'Locate the homeowner, customer, bill-to, ship-to, or participant name visibly shown on the invoice. Prefer explicit customer/bill-to/homeowner fields over payment-history names or generic references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_upgrade_type_evidence', 'Locate text that indicates the broad upgrade type, such as windows, doors, heat pump, insulation, ventilation, electrical service, health/safety, or water heater.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('labour_cost_invoice_total', 'Locate total invoice labour cost if shown separately.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('labour_per_unit', 'Locate labour breakdown per unit.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('manufacturer_label_photo_reference', 'Locate text suggesting manufacturer label photos are included, attached, or required.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('metric_u_factor', 'Locate metric U-factor numeric values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('nrcan_number', 'Locate NRCan ENERGY STAR fenestration registration number, if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_rebate_line_amount', 'Locate the visible overall CleanBC / Better Homes / Energy Savings Program rebate amount for the whole invoice.
 
 Return the single invoice-level total rebate amount when the invoice clearly shows one.
@@ -868,19 +810,15 @@ Use value=null when neither a single invoice-level total rebate amount nor summa
 Do not include discounts, taxes, deposits, customer payments, credits, financing amounts, warranty coverage, insurance coverage, or non-program rebates unless the visible label clearly identifies the amount as a CleanBC / Better Homes / ESP rebate.
 In evidence_text, cite the exact visible rebate label or totals-line wording. If summing multiple upgrade-specific rebate amounts, show the arithmetic using the visible labels and values.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_rebate_line_description', 'Locate the text description for the overall rebate line, explicit total rebate summary, or visible split upgrade-specific rebate lines that together form the invoice-level rebate.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('paid_cost_of_upgrade_amount', 'Locate the visible paid cost of the upgrade.
+  ('paid_cost_of_upgrade_amount', 'Locate the best visible evidence for the paid or payable cost of the claimed upgrade work.
 
-This field is the participant/customer paid cost for the claimed upgrade after CleanBC / Better Homes / ESP rebates have been applied, including amounts already paid by the participant and amounts still owed by the participant for that upgrade.
-Use value only when the invoice clearly shows the paid cost of the claimed upgrade, or when the invoice clearly shows enough named totals to calculate it from visible invoice arithmetic.
-Treat InvoiceTotal as supporting evidence for this field only when the invoice clearly shows no rebate, credit, deposit, payment, insurance, warranty, or other deduction affects the participant-paid cost.
-Treat AmountDue as supporting evidence only when the invoice label, totals section, or visible arithmetic clearly shows AmountDue represents the participant/customer paid cost for the claimed upgrade.
-Use value=null when the paid cost of the upgrade is missing, ambiguous, not separated from other upgrades, or cannot be confidently calculated from visible named invoice fields.
-In evidence_text, cite the exact visible labels and arithmetic used, such as participant total owed, customer payment, deposit, balance paid, amount due, rebate, credit, or upgrade subtotal.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Prefer a visible claimed-upgrade cost, upgrade subtotal, project total for the claimed work, or invoice total when the invoice shows that the total is for the claimed upgrade work. Also capture relevant visible arithmetic involving rebates, customer payments, deposits, credits, warranty coverage, insurance coverage, no-charge replacement, amount due, or customer portion owed when those labels help explain what was paid or payable.
+
+Do not treat a post-rebate customer balance as the whole paid/payable upgrade cost when the invoice arithmetic shows it is only the amount remaining after the CleanBC / Better Homes / ESP rebate was deducted. In that case, return the best cost basis supported by the invoice and explain the post-rebate balance in evidence_text.
+
+Use value=null when the paid/payable cost basis for the claimed upgrade is missing, bundled with unrelated work, or too ambiguous to identify confidently.
+In evidence_text, cite the exact visible labels and arithmetic used, and note when a visible amount is a post-rebate balance rather than the cost basis.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('warranty_or_home_insurance_cost_evidence', 'Locate visible evidence that any claimed upgrade cost may be covered, paid, credited, reduced, or replaced at no charge by warranty or home insurance. Include wording such as warranty claim, warranty credit, covered by warranty, no-charge warranty replacement, insurance claim, home insurance, insurer paid, insurance credit, deductible, covered repair, covered replacement, or similar cost-coverage wording. Use value=null when the invoice shows no warranty or insurance wording, or when it shows only ordinary post-installation warranty terms such as manufacturer warranty, parts warranty, compressor warranty, labour warranty period, installation workmanship warranty, or warranty coverage available after installation with no cost coverage or credit. In evidence_text, cite the exact visible wording and explain whether it appears to be standard terms or possible cost coverage.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
-  ('pane_count', 'Locate pane count if invoice appears to count panes instead of rough openings.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('quote_preapproval_reference', 'Locate quote pre-approval, pre-approval, or approval-before-installation references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('rough_opening_count', 'Locate rough opening count if explicitly stated.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('skylight_detected', 'Locate evidence that any claimed item is a skylight; value should be true/false/null.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('upgrade_specific_rebate_line_amount', 'Locate the CleanBC/Better Homes/ESP rebate amount for this specific upgrade only.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_associated_upgrade_evidence', 'Locate visible evidence that the ventilation work was installed in association with a CleanBC Energy Savings Program rebate-eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade. Include same-invoice line items, headings, descriptions, bundled scope wording, or nearby upgrade references that connect HRV, ERV, bathroom fan, exhaust fan, or ventilation work to heat pump, HPWH, insulation, window, or door work. Use value=null when the invoice only shows ventilation work or the associated eligible upgrade is not visible. In evidence_text, cite the exact line item, heading, or surrounding wording used.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_contractor_license_evidence', 'Locate HVAC, heat pump, electrical, or approved contractor references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
@@ -896,12 +834,7 @@ Ventilation', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_main_bathroom_evidence', 'Locate main bathroom / bathtub / shower evidence for bathroom fan systems.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_model_number', 'Locate the HRV/ERV or bathroom fan model number exactly as shown on the invoice, label, quote, or product line. Do not include the manufacturer/brand unless the invoice only shows a combined phrase.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
   ('vent_nrcan_or_product_list_reference', 'Locate NRCan product list or ENERGY STAR product list references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('vent_system_type', 'Locate ventilation system type, such as HRV, ERV, heat recovery ventilator, energy recovery ventilator, bathroom fan, or fan system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('wd_registered_contractor_evidence', 'Locate registered contractor, approved contractor, or contractor company evidence if visible.
-
-Windows/doors', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('window_or_door_line_amount', 'Locate total amount for each window/door line item.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('window_or_door_quantity', 'Locate quantity of windows/doors.', true, TIMESTAMP '2026-05-26 00:00:00', NOW())
+  ('vent_system_type', 'Locate ventilation system type, such as HRV, ERV, heat recovery ventilator, energy recovery ventilator, bathroom fan, or fan system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW())
 )
 INSERT INTO claims.genai_located_fields (
   genai_field_key,
@@ -1068,23 +1001,6 @@ WITH genai_located_field_upgrade_types_seed (
   ('heat_pump_water_heater', 'hpwh_new_equipment_type', 3),
   ('heat_pump_water_heater', 'hpwh_secondary_system_flag', 10),
   ('heat_pump_water_heater', 'upgrade_specific_rebate_line_amount', 14),
-  ('insulation', 'before_after_photo_reference', 10),
-  ('insulation', 'ins_area_square_feet', 7),
-  ('insulation', 'ins_conditioned_boundary_evidence', 3),
-  ('insulation', 'ins_existing_r_value', 5),
-  ('insulation', 'ins_floor_plan_reference', 11),
-  ('insulation', 'ins_health_safety_resolution_evidence', 9),
-  ('insulation', 'ins_line_amount', 12),
-  ('insulation', 'ins_location_specific_rebate_amount', 14),
-  ('insulation', 'ins_material_type', 1),
-  ('insulation', 'ins_minimum_r_value_requirement_evidence', 15),
-  ('insulation', 'ins_new_r_value', 4),
-  ('insulation', 'ins_r_value_added', 6),
-  ('insulation', 'ins_rebate_formula_or_rate_evidence', 16),
-  ('insulation', 'ins_registered_contractor_evidence', 17),
-  ('insulation', 'ins_removed_existing_insulation_evidence', 8),
-  ('insulation', 'ins_upgrade_location', 2),
-  ('insulation', 'upgrade_specific_rebate_line_amount', 13),
   ('ventilation', 'upgrade_specific_rebate_line_amount', 13),
   ('ventilation', 'vent_associated_upgrade_evidence', 2),
   ('ventilation', 'vent_contractor_license_evidence', 11),
@@ -1098,25 +1014,7 @@ WITH genai_located_field_upgrade_types_seed (
   ('ventilation', 'vent_main_bathroom_evidence', 15),
   ('ventilation', 'vent_model_number', 19),
   ('ventilation', 'vent_nrcan_or_product_list_reference', 5),
-  ('ventilation', 'vent_system_type', 1),
-  ('windows_doors', 'brand_and_model', 6),
-  ('windows_doors', 'certification_body_reference', 1),
-  ('windows_doors', 'city_of_vancouver_evidence', 17),
-  ('windows_doors', 'cpd_number', 5),
-  ('windows_doors', 'envelope_replacement_evidence', 16),
-  ('windows_doors', 'hardware_per_unit', 11),
-  ('windows_doors', 'labour_per_unit', 12),
-  ('windows_doors', 'manufacturer_label_photo_reference', 2),
-  ('windows_doors', 'metric_u_factor', 7),
-  ('windows_doors', 'nrcan_number', 4),
-  ('windows_doors', 'pane_count', 10),
-  ('windows_doors', 'quote_preapproval_reference', 3),
-  ('windows_doors', 'rough_opening_count', 9),
-  ('windows_doors', 'skylight_detected', 15),
-  ('windows_doors', 'upgrade_specific_rebate_line_amount', 14),
-  ('windows_doors', 'wd_registered_contractor_evidence', 18),
-  ('windows_doors', 'window_or_door_line_amount', 13),
-  ('windows_doors', 'window_or_door_quantity', 8)
+  ('ventilation', 'vent_system_type', 1)
 )
 INSERT INTO claims.genai_located_field_upgrade_types (
   genai_field_id,

@@ -4,7 +4,7 @@ module Claims
   module CodeRules
     module IncomeLevel
       class ApplyLevelOneOrTwoRequired
-        RULE = { number: 90, key: "income_level_1_or_2_required" }.freeze
+        RULE = { key: "income_level_1_or_2_required" }.freeze
 
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
         ELIGIBILITY_CODE_FIELD_KEY = "users_eligibilitycodes.eligibility_code"
@@ -66,7 +66,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

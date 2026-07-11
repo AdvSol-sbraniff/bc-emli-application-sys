@@ -15,7 +15,7 @@ module Claims
           3 => BigDecimal("1500")
         }.freeze
 
-        RULE = { number: 6, key: "esu_rebate_math_within_cap" }.freeze
+        RULE = { key: "esu_rebate_math_within_cap" }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
@@ -73,7 +73,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

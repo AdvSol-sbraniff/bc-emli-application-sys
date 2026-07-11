@@ -16,6 +16,9 @@ module Claims
              through: :code_rule_upgrade_types,
              class_name: "Claims::InvoiceUpgradeType"
 
+    validates :source_quote, presence: true
+    validates :contractor_visible_flag, inclusion: { in: [true, false] }
+
     private
 
     def snapshot_history!
@@ -29,6 +32,8 @@ module Claims
         fail_admin_message: fail_admin_message,
         info_admin_message: info_admin_message,
         admin_notes: admin_notes,
+        source_quote: source_quote,
+        contractor_visible_flag: contractor_visible_flag,
         source_created_at: created_at,
         source_updated_at: updated_at
       )

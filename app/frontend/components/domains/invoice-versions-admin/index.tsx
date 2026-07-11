@@ -258,7 +258,6 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
   const overallDefs = [
     { key: 'genai_overall_confidence', label: 'Overall confidence' },
     { key: 'genai_result', label: 'Overall result' },
-    { key: 'genai_admin_advice', label: 'Admin advice' },
   ];
 
   const overallChanges = overallDefs
@@ -354,8 +353,7 @@ function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
   unmatchedAdded.forEach((x) => addedFields.push(x));
   unmatchedRemoved.forEach((x) => removedFields.push(x));
 
-  const ruleKey = (r: any) =>
-    [r?.source_engine ?? '', r?.upgrade_type_key ?? '', r?.rule_key ?? r?.rule_number ?? r?.id ?? ''].join('|');
+  const ruleKey = (r: any) => [r?.source_engine ?? '', r?.upgrade_type_key ?? '', r?.rule_key ?? r?.id ?? ''].join('|');
   const toRuleComparable = (r: any) => ({
     rule_key: r?.rule_key ?? null,
     result: r?.rule_result ?? null,

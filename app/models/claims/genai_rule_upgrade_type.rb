@@ -23,7 +23,6 @@ module Claims
         source_id: id,
         genai_rule_id: genai_rule_id,
         invoice_upgrade_type_id: invoice_upgrade_type_id,
-        rule_number: rule_number,
         source_created_at: created_at,
         source_updated_at: updated_at
       )

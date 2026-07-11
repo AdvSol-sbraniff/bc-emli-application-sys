@@ -69,15 +69,13 @@ puts
 
 Claims::InvoiceVersionRulecheck
   .where(invoice_version_id: invoice_version.id, source_engine: "code")
-  .order(:rule_number)
-  .pluck(:rule_number, :rule_key, :rule_result, :confidence, :observed_text)
-  .each do |rule_number, rule_key, pass_flag, confidence, observed|
-    status = pass_flag ? "PASS" : "FAIL"
+  .order(:rule_key)
+  .pluck(:rule_key, :rule_result, :confidence, :evidence_text)
+  .each do |rule_key, rule_result, confidence, evidence|
     puts [
-           rule_number.to_s.rjust(4),
-           status.ljust(7),
+           rule_result.to_s.upcase.ljust(7),
            "conf=#{confidence.to_i.to_s.rjust(3)}",
            rule_key,
-           observed
+           evidence
          ].join(" | ")
   end

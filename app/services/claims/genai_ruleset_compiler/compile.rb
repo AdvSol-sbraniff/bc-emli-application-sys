@@ -49,7 +49,7 @@ module Claims
         body_parts.concat(
           rule_mappings.map do |mapping|
             [
-              "rule #{mapping.rule_number} [rule_key: #{mapping.genai_rule.genai_rule_key}]",
+              "rule_key: #{mapping.genai_rule.genai_rule_key}",
               mapping.genai_rule.prompt_text.to_s.strip
             ].join("\n")
           end
@@ -109,7 +109,7 @@ module Claims
             .joins(:genai_rule)
             .merge(::Claims::GenaiRule.where(enabled: true))
             .includes(:genai_rule)
-            .order(:rule_number, "claims.genai_rules.genai_rule_key")
+            .order("claims.genai_rules.genai_rule_key")
       end
 
       def common_upgrade_type?

@@ -1194,22 +1194,19 @@ GenAI rule definitions are separate from GenAI located-field definitions. Locate
 
 ### 7.5 `claims.genai_rule_upgrade_types`
 
-`claims.genai_rule_upgrade_types` maps GenAI rules to invoice upgrade types and controls rule ordering inside each upgrade type.
+`claims.genai_rule_upgrade_types` maps GenAI rules to invoice upgrade types.
 
 Important columns are:
 
 - `genai_rule_id`: points to `claims.genai_rules`.
 - `invoice_upgrade_type_id`: points to `claims.invoice_upgrade_types`.
-- `rule_number`: the ordered rule number sent to GenAI and returned in runtime rulechecks.
 - `created_at` and `updated_at`: support admin/history workflows.
 
 The schema enforces:
 
 - One mapping per GenAI rule and upgrade type.
-- One `rule_number` per upgrade type.
-- Rule numbers of `1` or higher.
 
-The prompt compiler loads enabled GenAI rules through this mapping, orders them by `rule_number`, and emits each task with both its rule number and `genai_rule_key`. The GenAI response is expected to copy those values back into `rulechecks`.
+The prompt compiler loads enabled GenAI rules through this mapping, orders them alphabetically by `genai_rule_key`, and emits each task by stable `rule_key`. The GenAI response is expected to copy `rule_key` back into `rulechecks`.
 
 ### 7.6 `claims.invoice_version_rulechecks`
 
@@ -1222,8 +1219,7 @@ Important columns are:
 - `invoice_version_id`: the processed invoice PDF version being evaluated.
 - `invoice_upgrade_type_id`: the `common` or upgrade-specific validation context.
 - `source_engine`: `genai` or `code`.
-- `rule_number`: numeric ordering within the engine and upgrade type.
-- `rule_key`: stable rule key when available.
+- `rule_key`: stable rule identity.
 - `rule_result`: `pass`, `info`, `warn`, or `fail`.
 - `confidence`: integer from 0 to 100.
 - `expected_text`: expected condition or requirement text.
@@ -1231,7 +1227,7 @@ Important columns are:
 - `evidence_text`: short evidence summary.
 - `reason_and_likely_causes`: fuller explanation for review and advice.
 
-The unique key is `(invoice_version_id, invoice_upgrade_type_id, source_engine, rule_number)`. This lets a GenAI rule number and a code rule number coexist for the same invoice version and upgrade type, while preventing duplicate rows from the same engine for the same rule number.
+The unique key is `(invoice_version_id, invoice_upgrade_type_id, source_engine, rule_key)`. This lets a GenAI rule and a code rule with the same key remain distinct by engine while preventing duplicate rows from the same engine for the same rule.
 
 GenAI persistence replaces existing GenAI rulechecks for the same invoice version and upgrade type before inserting the latest response. Code-rule services similarly replace their own code outputs for the scoped check they own. This keeps reruns readable: the current invoice version shows the latest output for each engine/scope, while previous invoice versions preserve their older outputs.
 
@@ -1311,7 +1307,6 @@ If no `fossil_fuel_removal_proof` or `permit_document` was promoted for that upg
 invoice_version_id: version 1
 invoice_upgrade_type_id: air_source_heat_pump_gas_propane
 source_engine: genai
-rule_number: 3
 rule_key: ashp_fossil_fuel_removal_supporting_document_attached
 rule_result: fail
 confidence: 94
@@ -1388,11 +1383,11 @@ The normalized GenAI configuration tables are:
 - `claims.genai_located_fields`: reusable invoice located-field tasks.
 - `claims.genai_located_field_upgrade_types`: maps located-field tasks to upgrade types and field order.
 - `claims.genai_rules`: reusable GenAI rulecheck tasks.
-- `claims.genai_rule_upgrade_types`: maps rulecheck tasks to upgrade types and rule order.
+- `claims.genai_rule_upgrade_types`: maps rulecheck tasks to upgrade types.
 
 This design avoids storing one large, duplicated prompt per upgrade type. A shared rule such as contractor identity matching can be defined once and mapped where needed. A highly specific rule such as a gas/propane removal-document check can be mapped only to the relevant upgrade type.
 
-The mapping tables also make ordering explicit. `field_number` controls located-field order, and `rule_number` controls rulecheck order. The runtime output stores these numbers so the UI and audit trail can connect a model result back to the task that produced it.
+The located-field mapping table keeps `field_number` for prompt order. Rulechecks do not use numeric identity; runtime output is connected back to rule definitions by stable `rule_key`, and display order is alphabetical by key.
 
 ### 8.3 System record
 
@@ -2263,11 +2258,10 @@ Important columns are:
 - `source_id`: id of the mapping row.
 - `genai_rule_id`: GenAI rule that was mapped.
 - `invoice_upgrade_type_id`: upgrade type the rule applied to.
-- `rule_number`: ordered rule number within that upgrade type.
 - `source_created_at` and `source_updated_at`: source timestamps before the change.
 - `history_created_at`: when the history row was created.
 
-This table preserves the previous GenAI rule ordering and upgrade-type applicability when mappings are changed or deleted.
+This table preserves previous GenAI rule upgrade-type applicability when mappings are changed or deleted.
 
 ### 11.9 `claims.genai_located_field_history`
 
@@ -2631,9 +2625,9 @@ Category: history.
 
 Parent/child shape: snapshot of `claims.genai_rule_upgrade_types`.
 
-Key columns: `source_id`, `genai_rule_id`, `invoice_upgrade_type_id`, `rule_number`, source timestamps, `history_created_at`.
+Key columns: `source_id`, `genai_rule_id`, `invoice_upgrade_type_id`, source timestamps, `history_created_at`.
 
-Lifecycle notes: preserves previous GenAI rule applicability and ordering when mappings change.
+Lifecycle notes: preserves previous GenAI rule applicability when mappings change.
 
 ### 13.20 `claims.genai_rule_upgrade_types`
 
@@ -2641,7 +2635,7 @@ Category: registry.
 
 Parent/child shape: joins `claims.genai_rules` to `claims.invoice_upgrade_types`.
 
-Key columns: `genai_rule_id`, `invoice_upgrade_type_id`, `rule_number`.
+Key columns: `genai_rule_id`, `invoice_upgrade_type_id`.
 
 Lifecycle notes: controls which GenAI rulecheck tasks are compiled into each common or upgrade-specific context window.
 
@@ -2711,7 +2705,7 @@ Category: evidence.
 
 Parent/child shape: belongs to `claims.invoice_versions` and `claims.invoice_upgrade_types`.
 
-Key columns: `invoice_version_id`, `invoice_upgrade_type_id`, `source_engine`, `rule_number`, `rule_key`, `rule_result`, `confidence`, `expected_text`, `calculation`, `evidence_text`, `reason_and_likely_causes`.
+Key columns: `invoice_version_id`, `invoice_upgrade_type_id`, `source_engine`, `rule_key`, `rule_result`, `confidence`, `expected_text`, `calculation`, `evidence_text`, `reason_and_likely_causes`.
 
 Lifecycle notes: stores validation outcomes from GenAI and deterministic code. It is the detailed source behind pass/warn/fail review evidence.
 

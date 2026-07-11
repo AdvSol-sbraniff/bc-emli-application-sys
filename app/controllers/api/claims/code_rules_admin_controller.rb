@@ -20,9 +20,7 @@ module Api
 
         if enabled.present?
           scope =
-            scope.where(
-              enabled: ActiveModel::Type::Boolean.new.cast(enabled)
-            )
+            scope.where(enabled: ActiveModel::Type::Boolean.new.cast(enabled))
         end
 
         if invoice_upgrade_type_id.present?
@@ -74,7 +72,9 @@ module Api
           :warn_admin_message,
           :fail_admin_message,
           :info_admin_message,
-          :admin_notes
+          :admin_notes,
+          :source_quote,
+          :contractor_visible_flag
         )
       end
 
@@ -89,16 +89,21 @@ module Api
           fail_admin_message: rule.fail_admin_message,
           info_admin_message: rule.info_admin_message,
           admin_notes: rule.admin_notes,
+          source_quote: rule.source_quote,
+          contractor_visible_flag: rule.contractor_visible_flag,
           created_at: rule.created_at,
           updated_at: rule.updated_at,
           upgrade_types:
-            rule.invoice_upgrade_types.sort_by(&:upgrade_type_key).map do |ut|
-              {
-                id: ut.id,
-                upgrade_type_key: ut.upgrade_type_key,
-                description: ut.description
-              }
-            end
+            rule
+              .invoice_upgrade_types
+              .sort_by(&:upgrade_type_key)
+              .map do |ut|
+                {
+                  id: ut.id,
+                  upgrade_type_key: ut.upgrade_type_key,
+                  description: ut.description
+                }
+              end
         }
       end
     end

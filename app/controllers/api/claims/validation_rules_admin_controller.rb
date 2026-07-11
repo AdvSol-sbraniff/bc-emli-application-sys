@@ -400,24 +400,11 @@ module Api
           mapping.destroy!
         end
 
-        next_rule_number =
-          existing
-            .values
-            .select do |mapping|
-              keep_ids.include?(mapping.invoice_upgrade_type_id.to_s)
-            end
-            .map(&:rule_number)
-            .compact
-            .max
-            .to_i
-
         mappings.each do |item|
           mapping = existing[item[:invoice_upgrade_type_id]]
           unless mapping
-            next_rule_number += 1
             row.genai_rule_upgrade_types.create!(
-              invoice_upgrade_type_id: item[:invoice_upgrade_type_id],
-              rule_number: next_rule_number
+              invoice_upgrade_type_id: item[:invoice_upgrade_type_id]
             )
           end
         end
@@ -503,7 +490,9 @@ module Api
           :warn_admin_message,
           :fail_admin_message,
           :info_admin_message,
-          :admin_notes
+          :admin_notes,
+          :source_quote,
+          :contractor_visible_flag
         )
       end
 
@@ -512,7 +501,13 @@ module Api
       end
 
       def genai_rule_params
-        params.permit(:genai_rule_key, :prompt_text, :enabled)
+        params.permit(
+          :genai_rule_key,
+          :prompt_text,
+          :enabled,
+          :source_quote,
+          :contractor_visible_flag
+        )
       end
 
       def genai_located_field_params
@@ -548,7 +543,9 @@ module Api
               warn_admin_message: row.warn_admin_message,
               fail_admin_message: row.fail_admin_message,
               info_admin_message: row.info_admin_message,
-              admin_notes: row.admin_notes
+              admin_notes: row.admin_notes,
+              source_quote: row.source_quote,
+              contractor_visible_flag: row.contractor_visible_flag
             },
             mappings:
               row.code_rule_upgrade_types.map do |mapping|
@@ -583,14 +580,15 @@ module Api
             created_at: row.created_at,
             upgrade_types: serialize_upgrade_types(row.invoice_upgrade_types),
             detail: {
-              prompt_text: row.prompt_text
+              prompt_text: row.prompt_text,
+              source_quote: row.source_quote,
+              contractor_visible_flag: row.contractor_visible_flag
             },
             mappings:
               row.genai_rule_upgrade_types.map do |mapping|
                 {
                   id: mapping.id,
-                  invoice_upgrade_type_id: mapping.invoice_upgrade_type_id,
-                  rule_number: mapping.rule_number
+                  invoice_upgrade_type_id: mapping.invoice_upgrade_type_id
                 }
               end
           }

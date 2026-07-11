@@ -64,6 +64,7 @@ module Claims
         message = error_message(error)
 
         return "configuration_missing" if configuration_error?(message)
+        return "code_rule_runtime_failure" if code_rule_error?(message)
         return "db_persistence_failure" if persistence_error?(error)
 
         "unknown_runtime_failure"
@@ -178,6 +179,13 @@ module Claims
         message.include?("storage write") ||
           message.include?("could not be saved") ||
           message.include?("write failure")
+      end
+
+      def code_rule_error?(message)
+        message.include?("code rules failed") ||
+          message.include?("applycoderulechecks") ||
+          message.include?("applyupgradecoderulechecks") ||
+          message.include?("code_rule")
       end
 
       def persistence_error?(error)

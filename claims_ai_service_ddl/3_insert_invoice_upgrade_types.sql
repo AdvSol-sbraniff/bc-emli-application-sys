@@ -16,13 +16,6 @@ WITH upgrade_types (
     NOW()
   ),
   (
-    '3f75a867-781c-4a11-9d9d-8d5018f9c11a'::uuid,
-    'windows_doors',
-    'Windows and doors',
-    TIMESTAMP '2026-05-06 00:00:00',
-    NOW()
-  ),
-  (
     '7a2a72db-3b8f-4d7d-bfa4-263e1b52b4f6'::uuid,
     'air_source_heat_pump_electric',
     'Air source heat pump - convert from electric',
@@ -86,13 +79,6 @@ WITH upgrade_types (
     NOW()
   ),
   (
-    '9f3ea8c4-9ed3-4dd6-9a92-c008a13f659b'::uuid,
-    'insulation',
-    'Insulation',
-    TIMESTAMP '2026-05-06 00:00:00',
-    NOW()
-  ),
-  (
     'c7599fa5-c56f-413a-9fd6-a4e7c5ebde24'::uuid,
     'ventilation',
     'Ventilation',
@@ -129,7 +115,6 @@ ON CONFLICT (upgrade_type_key) DO UPDATE SET
 DELETE FROM claims.invoice_upgrade_types ut
 WHERE ut.upgrade_type_key NOT IN (
   'common',
-  'windows_doors',
   'air_source_heat_pump_electric',
   'air_source_heat_pump_wood',
   'air_source_heat_pump_gas_propane',
@@ -139,7 +124,6 @@ WHERE ut.upgrade_type_key NOT IN (
   'combined_space_water_heat_pump',
   'heat_pump_water_heater',
   'electrical_service_upgrade',
-  'insulation',
   'ventilation',
   'health_and_safety_remediation'
 )

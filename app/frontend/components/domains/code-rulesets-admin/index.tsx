@@ -49,6 +49,8 @@ type CodeRuleRow = {
   fail_admin_message?: string | null;
   info_admin_message?: string | null;
   admin_notes?: string | null;
+  source_quote?: string | null;
+  contractor_visible_flag?: boolean | null;
   updated_at?: string | null;
   upgrade_types?: UpgradeTypeRow[];
 };
@@ -89,6 +91,8 @@ export default function CodeRulesetsAdminScreen() {
     fail_admin_message: '',
     info_admin_message: '',
     admin_notes: '',
+    source_quote: '',
+    contractor_visible_flag: true,
   });
 
   const fetchUpgradeTypes = useCallback(async () => {
@@ -151,6 +155,8 @@ export default function CodeRulesetsAdminScreen() {
       fail_admin_message: row.fail_admin_message || '',
       info_admin_message: row.info_admin_message || '',
       admin_notes: row.admin_notes || '',
+      source_quote: row.source_quote || '',
+      contractor_visible_flag: row.contractor_visible_flag !== false,
     });
     onOpen();
   };
@@ -326,7 +332,9 @@ export default function CodeRulesetsAdminScreen() {
                         </Flex>
                       </Td>
                       <Td>
-                        <Badge colorScheme={row.enabled ? 'green' : 'gray'}>{row.enabled ? 'enabled' : 'disabled'}</Badge>
+                        <Badge colorScheme={row.enabled ? 'green' : 'gray'}>
+                          {row.enabled ? 'enabled' : 'disabled'}
+                        </Badge>
                       </Td>
                       <Td maxW="300px">
                         <Text fontSize="sm" noOfLines={2}>
@@ -408,6 +416,27 @@ export default function CodeRulesetsAdminScreen() {
                     value={form.description}
                     onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                     minH="90px"
+                  />
+                </Box>
+
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    source_quote
+                  </Text>
+                  <Textarea
+                    value={form.source_quote}
+                    onChange={(e) => setForm((prev) => ({ ...prev, source_quote: e.target.value }))}
+                    minH="90px"
+                  />
+                </Box>
+
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    contractor_visible_flag
+                  </Text>
+                  <Switch
+                    isChecked={form.contractor_visible_flag}
+                    onChange={(e) => setForm((prev) => ({ ...prev, contractor_visible_flag: e.target.checked }))}
                   />
                 </Box>
 

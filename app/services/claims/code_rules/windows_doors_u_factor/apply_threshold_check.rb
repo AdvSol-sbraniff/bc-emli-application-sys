@@ -8,7 +8,7 @@ module Claims
         U_FACTOR_FIELD_KEY = "metric_u_factor"
         MAX_U_FACTOR = BigDecimal("1.22")
 
-        RULE = { number: 1, key: "wd_u_factor_threshold" }.freeze
+        RULE = { key: "wd_u_factor_threshold" }.freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
@@ -113,7 +113,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: RULE.fetch(:number),
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

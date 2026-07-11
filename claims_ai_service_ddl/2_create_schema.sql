@@ -1099,7 +1099,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   genai_raw_json jsonb NULL,
   genai_overall_confidence  smallint NOT NULL DEFAULT 0,
   genai_result text NULL,
-  genai_admin_advice text NULL,
 
   -- any parent level genai outputs such as overall conf and overall pass flags
   -- TBD
@@ -1303,12 +1302,16 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
   fail_admin_message text NULL,
   info_admin_message text NULL,
   admin_notes text NULL,
+  source_quote text NOT NULL,
+  contractor_visible_flag boolean NOT NULL DEFAULT true,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
 
   CONSTRAINT code_rules_pkey PRIMARY KEY (id),
-  CONSTRAINT code_rules_key_uniq UNIQUE (code_rule_key)
+  CONSTRAINT code_rules_key_uniq UNIQUE (code_rule_key),
+  CONSTRAINT code_rules_source_quote_present_chk
+    CHECK (btrim(source_quote) <> '')
 );
 
 CREATE INDEX IF NOT EXISTS idx_code_rules_enabled
@@ -1395,12 +1398,16 @@ CREATE TABLE IF NOT EXISTS claims.genai_rules (
   genai_rule_key text NOT NULL,
   prompt_text text NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
+  source_quote text NOT NULL,
+  contractor_visible_flag boolean NOT NULL DEFAULT true,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
 
   CONSTRAINT genai_rules_pkey PRIMARY KEY (id),
-  CONSTRAINT genai_rules_key_uniq UNIQUE (genai_rule_key)
+  CONSTRAINT genai_rules_key_uniq UNIQUE (genai_rule_key),
+  CONSTRAINT genai_rules_source_quote_present_chk
+    CHECK (btrim(source_quote) <> '')
 );
 
 CREATE INDEX IF NOT EXISTS idx_genai_rules_enabled
@@ -1413,7 +1420,7 @@ CREATE INDEX IF NOT EXISTS idx_genai_rules_updated_at
 -- ============================================================
 -- genai_rule_upgrade_types
 -- PURPOSE: Declares which invoice upgrade types each GenAI rule
--- applies to, and its order within that upgrade type.
+-- applies to.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_types (
@@ -1421,7 +1428,6 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_types (
 
   genai_rule_id uuid NOT NULL,
   invoice_upgrade_type_id uuid NOT NULL,
-  rule_number integer NOT NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1437,14 +1443,8 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_types (
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id),
 
-  CONSTRAINT genai_rule_upgrade_types_rule_number_chk
-    CHECK (rule_number >= 1),
-
   CONSTRAINT genai_rule_upgrade_types_uniq
-    UNIQUE (genai_rule_id, invoice_upgrade_type_id),
-
-  CONSTRAINT genai_rule_upgrade_types_order_uniq
-    UNIQUE (invoice_upgrade_type_id, rule_number)
+    UNIQUE (genai_rule_id, invoice_upgrade_type_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_genai_rule_upgrade_types_rule
@@ -1612,8 +1612,7 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
 
   source_engine text NOT NULL,   -- 'code' | 'genai'
 
-  rule_number integer NOT NULL,
-  rule_key text NULL,
+  rule_key text NOT NULL,
 
   rule_result text NOT NULL DEFAULT 'fail',
   confidence smallint NOT NULL DEFAULT 0,  -- 0..100
@@ -1648,11 +1647,8 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   CONSTRAINT invoice_version_rulechecks_confidence_chk
     CHECK (confidence BETWEEN 0 AND 100),
 
-  CONSTRAINT invoice_version_rulechecks_rule_number_chk
-    CHECK (rule_number >= 0),
-
   CONSTRAINT invoice_version_rulechecks_uniq
-    UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine, rule_number)
+    UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine, rule_key)
 );
 
 CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_id
@@ -2134,6 +2130,8 @@ CREATE TABLE IF NOT EXISTS claims.code_rule_history (
   fail_admin_message text NULL,
   info_admin_message text NULL,
   admin_notes text NULL,
+  source_quote text NULL,
+  contractor_visible_flag boolean NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -2232,6 +2230,8 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_history (
   genai_rule_key text NOT NULL,
   prompt_text text NOT NULL,
   enabled boolean NOT NULL,
+  source_quote text NULL,
+  contractor_visible_flag boolean NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -2262,7 +2262,6 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_type_history (
   source_id uuid NULL,
   genai_rule_id uuid NULL,
   invoice_upgrade_type_id uuid NOT NULL,
-  rule_number integer NOT NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -2270,9 +2269,6 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_upgrade_type_history (
   history_created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
 
   CONSTRAINT genai_rule_upgrade_type_history_pkey PRIMARY KEY (id),
-
-  CONSTRAINT genai_rule_upgrade_type_history_rule_number_chk
-    CHECK (rule_number >= 1),
 
   CONSTRAINT fk_genai_rule_upgrade_type_history_upgrade_type
     FOREIGN KEY (invoice_upgrade_type_id)

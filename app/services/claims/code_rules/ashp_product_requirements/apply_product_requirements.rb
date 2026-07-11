@@ -44,15 +44,12 @@ module Claims
 
         RULES = {
           rebate_cap: {
-            number: 4,
             key: "ashp_electric_wood_rebate_math_within_cap"
           },
           product_specs: {
-            number: 5,
             key: "ashp_product_specs_meet_requirements"
           },
           multisplit_heads: {
-            number: 6,
             key: "ashp_multisplit_minimum_two_indoor_heads"
           }
         }.freeze
@@ -755,7 +752,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: rule.fetch(:number),
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

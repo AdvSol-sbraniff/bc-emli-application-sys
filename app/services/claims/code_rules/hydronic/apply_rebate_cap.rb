@@ -11,7 +11,6 @@ module Claims
         CONFIG = {
           "air_to_water_heat_pump" => {
             rule: {
-              number: 5,
               key: "atw_rebate_math_within_cap"
             },
             line_amount_field_key: "atw_line_amount",
@@ -31,7 +30,6 @@ module Claims
           },
           "combined_space_water_heat_pump" => {
             rule: {
-              number: 5,
               key: "cshp_rebate_math_within_cap"
             },
             line_amount_field_key: "cshp_line_amount",
@@ -113,7 +111,6 @@ module Claims
             invoice_version_id: invoice_version.id,
             invoice_upgrade_type_id: upgrade_type.id,
             source_engine: "code",
-            rule_number: rule.fetch(:number),
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
             confidence: confidence,

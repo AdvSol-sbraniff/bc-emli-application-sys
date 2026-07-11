@@ -28,7 +28,7 @@ Output-json-schema:
   "overall": {
     "overall_confidence": 0,
     "overall_result": "pass|info|warn|fail",
-    "admin_advice": "string (SECTION-LEVEL ADVICE FOR THIS RULESET CALL ONLY. Do not write a greeting, intro, sign-off, or closing. Write directly and plainly. Use a concise bullet list. IMPORTANT: every bullet must reference a non-pass rule_number from rulechecks[] and must be consistent with that rule_result. Never mention a pass/green rule in admin_advice. If you want to mention useful context for a passed rule, set that rule_result to info instead of pass. Do not mention GenAI, OCR, source_engine, confidence scores, or internal implementation details.)"
+    "admin_advice": "string (SECTION-LEVEL ADVICE FOR THIS RULESET CALL ONLY. Do not write a greeting, intro, sign-off, or closing. Write directly and plainly. Use a concise bullet list. IMPORTANT: every bullet must reference a non-pass rule_key from rulechecks[] and must be consistent with that rule_result. Never mention a pass/green rule in admin_advice. If you want to mention useful context for a passed rule, set that rule_result to info instead of pass. Do not mention GenAI, OCR, source_engine, confidence scores, or internal implementation details.)"
   },
   "located_fields": [
     {
@@ -42,7 +42,6 @@ Output-json-schema:
   ],
   "rulechecks": [
     {
-      "rule_number": 0,
       "rule_key": "string",
       "rule_result": "pass|info|warn|fail",
       "confidence": 0,
@@ -57,7 +56,7 @@ Output-json-schema:
 Rules:
 - Return strict JSON only.
 - Do not include markdown outside JSON.
-- Copy rule_number and rule_key exactly from each rule task definition.
+- Copy rule_key exactly from each rule task definition.
 - Use rule_result instead of a boolean pass/fail. Allowed values are exactly "pass", "info", "warn", and "fail".
 - Use rule_result="pass" when the invoice/database evidence supports the rule, there is no meaningful note to call out, the rule must not appear in advice, and an admin can skim or ignore it.
 - Use rule_result="info" when the rule passes, but there is helpful context worth surfacing to the admin/contractor. Info is blue: not a requested fix, not a verification task, and not a risk flag.
@@ -108,7 +107,6 @@ Allowed document_kind values:
 - unknown
 
 Allowed upgrade_type_key values:
-- windows_doors
 - air_source_heat_pump_electric
 - air_source_heat_pump_wood
 - air_source_heat_pump_gas_propane
@@ -119,17 +117,13 @@ Allowed upgrade_type_key values:
 - electrical_service_upgrade
 - health_and_safety_remediation
 - heat_pump_water_heater
-- insulation
 - ventilation
 
 Allowed supporting_document_type_key values:
 - before_after_photo_set
-- certification_sheet
 - dual_fuel_control_document
-- fenestration_energy_performance_label
 - energy_star_label
 - f280_heat_load_calculation
-- floor_plan_document
 - fossil_backup_system_document
 - fossil_fuel_removal_proof
 - landlord_consent_form
@@ -137,7 +131,6 @@ Allowed supporting_document_type_key values:
 - oil_removal_proof
 - permit_document
 - preapproval_notice
-- preapproval_quote
 - product_spec_sheet
 - utility_bill
 - electrical_utility_upgrade_document
@@ -162,7 +155,7 @@ Output-json-schema:
   },
   "detected_upgrade_types": [
     {
-      "upgrade_type_key": "windows_doors",
+      "upgrade_type_key": "air_source_heat_pump_electric",
       "confidence": 0,
       "page": null,
       "polygon": null,
@@ -219,7 +212,7 @@ Rules:
 - For air_to_water_heat_pump and combined_space_water_heat_pump, require explicit air-to-water or combined space/water heat-pump evidence. Do not infer these from water-heater or generic heat-pump wording.
 - For electrical_service_upgrade, require utility/service-upgrade evidence such as 100/200/400 amp service, service mast, meter base, utility connection, BC Hydro/FortisBC service upgrade, or similar.
 - For heat_pump_water_heater, require water-heater evidence. Do not infer it from space-heating heat pump wording.
-- For insulation, windows_doors, and health_and_safety_remediation, require direct invoice evidence that this work is being claimed as an ESP/CleanBC/Better Homes rebate upgrade.
+- For health_and_safety_remediation, require direct invoice evidence that this work is being claimed as an ESP/CleanBC/Better Homes rebate upgrade.
 - For ventilation, require an explicit ventilation rebate claim or direct evidence of an eligible ventilation measure such as HRV, ERV, heat recovery ventilator, energy recovery ventilator, or eligible bathroom fan system. Generic ductwork, airflow, circulation, attic duct insulation, "Duct Work & Ventilation", or ventilation wording bundled inside a heat-pump/HVAC install is not enough by itself.
 - If the invoice shows exact rebate descriptions like "$10,500 for HVAC system" and "$1,500 for Service Upgrade", classify those rebate-claimed upgrade domains and do not infer unrelated upgrade claims from other scope text.
 - Use confidence from 0 to 100.
@@ -239,12 +232,9 @@ Allowed document_kind values:
 
 Allowed supporting_document_type_key values:
 - before_after_photo_set
-- certification_sheet
 - dual_fuel_control_document
-- fenestration_energy_performance_label
 - energy_star_label
 - f280_heat_load_calculation
-- floor_plan_document
 - fossil_backup_system_document
 - fossil_fuel_removal_proof
 - landlord_consent_form
@@ -252,7 +242,6 @@ Allowed supporting_document_type_key values:
 - oil_removal_proof
 - permit_document
 - preapproval_notice
-- preapproval_quote
 - product_spec_sheet
 - utility_bill
 - electrical_utility_upgrade_document
@@ -285,7 +274,6 @@ Rules:
 - Use document_kind="unknown" only when the image is too blank, irrelevant, unreadable, or ambiguous to route.
 - For before/after work photos, use supporting_document_type_key="before_after_photo_set".
 - For equipment/product nameplate photos, use supporting_document_type_key="manufacturer_label_photo".
-- For window/door energy label photos, use supporting_document_type_key="fenestration_energy_performance_label".
 - For ENERGY STAR label photos, use supporting_document_type_key="energy_star_label".
 - If a photographed page clearly belongs to another allowed supporting-document type, choose that type.
 - Set supporting_document_type_key only when document_kind="supporting_document"; otherwise return null.
@@ -398,7 +386,7 @@ Observed DI caveat from local samples:
 On contractor invoices, product details such as model numbers, certification references, quantities, U-factor, rebate notes, and install/material cost rows may appear in content/pages/tables but not in Items[*]. In those cases, prefer the raw text/table evidence over a missing or incomplete Items[*] record.
 $user0$,
     $intro$
-Thanks for submitting your invoice. We reviewed the information provided and noted the following items from the invoice review:
+Please check for potential issues with the following program requirement(s):
 $intro$,
     $closing$
 If any item asks for a correction or supporting document, please upload the updated invoice or document and resubmit when you are ready.

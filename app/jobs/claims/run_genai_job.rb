@@ -30,17 +30,18 @@ module Claims
       if %w[classifier_only triage_only].include?(requested_mode)
         raise "RunGenaiJob no longer runs classifier modes. Use RunIngestTriageJob through OCR/triage instead."
       end
+      iv = Claims::InvoiceVersion.find(invoice_version_id)
+      inv = Claims::Invoice.find(iv.invoice_id)
+
       if requested_mode == "finish_validation"
         finish_validation_if_ready!(
           session_id: session_id,
-          invoice_version_id: invoice_version_id,
+          invoice_version_id: iv.id,
           ingest_run_id: ingest_run_id
         )
         return
       end
 
-      iv = Claims::InvoiceVersion.find(invoice_version_id)
-      inv = Claims::Invoice.find(iv.invoice_id)
       sess = Claims::Session.find(session_id)
 
       step = nil
@@ -98,7 +99,14 @@ module Claims
       status_subtype =
         failure_subtype_from_step(
           failed_step,
-          fallback: genai_failure_subtype(e)
+          fallback:
+            (
+              if requested_mode == "finish_validation"
+                runtime_failure_subtype(e)
+              else
+                genai_failure_subtype(e)
+              end
+            )
         )
       # mark failed (best-effort)
       begin
@@ -401,8 +409,12 @@ module Claims
         genai_results_json: {
           genai_result: invoice_version.genai_result,
           genai_overall_confidence: invoice_version.genai_overall_confidence,
-          genai_admin_advice_present:
-            invoice_version.genai_admin_advice.to_s.strip.present?
+          contractor_advice_present:
+            Claims::InvoiceVersions::BuildContractorAdvice
+              .call(invoice_version_id: invoice_version.id)
+              .to_s
+              .strip
+              .present?
         },
         error_text: nil,
         updated_at: Time.current
@@ -1030,7 +1042,6 @@ module Claims
       classifier_payload:,
       ruleset_results:
     )
-      config = Claims::ValidationgenaiConfig.order(:created_at).first
       payloads =
         ruleset_results.map { |r| r[:payload] }.select { |p| p.is_a?(Hash) }
       overall_rows =
@@ -1046,15 +1057,6 @@ module Claims
         overall_rows.map { |overall| coerce_overall_result(overall) }.compact
       code_result_values =
         code_result_values_for(invoice_version_id: invoice_version.id)
-      code_advice_sections =
-        code_advice_sections_for(invoice_version_id: invoice_version.id)
-      advice =
-        combined_admin_advice(
-          config: config,
-          invoice_version_id: invoice_version.id,
-          extra_sections: code_advice_sections
-        )
-
       invoice_version.update!(
         genai_raw_json: {
           classifier: classifier_payload,
@@ -1067,47 +1069,8 @@ module Claims
             end
         },
         genai_overall_confidence: confidences.compact.min || 0,
-        genai_result: combined_result(result_values + code_result_values),
-        genai_admin_advice: advice
+        genai_result: combined_result(result_values + code_result_values)
       )
-    end
-
-    def combined_admin_advice(config:, invoice_version_id:, extra_sections: [])
-      sections =
-        Claims::InvoiceVersionUpgradeType
-          .joins(
-            "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
-          )
-          .where(invoice_version_id: invoice_version_id, source_engine: "genai")
-          .select(
-            "claims.invoice_version_upgrade_types.*",
-            "iut.description AS upgrade_type_description",
-            "iut.upgrade_type_key AS upgrade_type_key"
-          )
-          .order(
-            Arel.sql(
-              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key"
-            )
-          )
-          .filter_map do |row|
-            advice = row.admin_advice.to_s.strip
-            next if advice.blank?
-
-            title =
-              row.read_attribute("upgrade_type_description").presence ||
-                "Upgrade type"
-            "#{title}\n#{advice}"
-          end
-
-      sections.concat(Array(extra_sections).compact_blank)
-
-      return nil if sections.empty?
-
-      [
-        config&.admin_advice_intro.to_s.strip.presence,
-        sections.join("\n\n"),
-        config&.admin_advice_closing.to_s.strip.presence
-      ].compact.join("\n\n")
     end
 
     def code_advice_sections_for(invoice_version_id:)
@@ -1125,7 +1088,7 @@ module Claims
           )
           .order(
             Arel.sql(
-              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key, claims.invoice_version_rulechecks.rule_number"
+              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key, claims.invoice_version_rulechecks.rule_key"
             )
           )
 
@@ -1163,15 +1126,10 @@ module Claims
           message = advice_message_for_rule(row)
           next if message.blank?
 
-          rule_number = row["rule_number"] || row[:rule_number]
           rule_key = (row["rule_key"] || row[:rule_key]).to_s.strip
 
           label_parts = []
-          label_parts << "Rule #{rule_number}" if rule_number.present?
-          label_parts << "(#{rule_key})" if rule_key.present?
-          if label_parts.empty? && rule_number.present?
-            label_parts << "rule_#{rule_number}"
-          end
+          label_parts << rule_key if rule_key.present?
 
           result_label =
             case result
@@ -1198,11 +1156,9 @@ module Claims
           message = advice_message_for_rule(row)
           next if message.blank?
 
-          rule_number = row.rule_number
           rule_key = row.rule_key.to_s.strip
           label_parts = []
-          label_parts << "Code Rule #{rule_number}" if rule_number.present?
-          label_parts << "(#{rule_key})" if rule_key.present?
+          label_parts << rule_key if rule_key.present?
 
           result_label =
             case result

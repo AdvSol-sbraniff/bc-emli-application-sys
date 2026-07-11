@@ -40,6 +40,7 @@ module Claims
         genai_service_malformed_response
         genai_provider_timeout
         genai_unexpected_exception
+        code_rule_runtime_failure
         configuration_missing
         db_persistence_failure
         worker_retry_exhausted
@@ -101,6 +102,8 @@ module Claims
           "The GenAI service returned a response the app could not read.",
         "genai_provider_timeout" => "The GenAI provider timed out.",
         "genai_unexpected_exception" => "Unexpected GenAI runtime failure.",
+        "code_rule_runtime_failure" =>
+          "An internal program-rule check failed while processing the invoice.",
         "configuration_missing" => "Required runtime configuration is missing.",
         "db_persistence_failure" =>
           "The app could not save processing results.",

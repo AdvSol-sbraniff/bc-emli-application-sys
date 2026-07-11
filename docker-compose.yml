@@ -2,6 +2,7 @@
 
 #  Dummy shared ENV vars
 x-env-vars: &default-env-vars
+  PATH: /usr/local/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   BROWSER: "true" # so that launchy does not error out - @TODO: figure out local emails in docker compose environment
   RAILS_ENV: development
   REDIS_URL: redis://redis:6379/0
@@ -58,6 +59,8 @@ services:
       - /app/node_modules
     environment:
       <<: *default-env-vars
+      CLAMAV_ENABLED: "false"
+      IS_APP_SERVER: ""
       VITE_RUBY_HOST: '0.0.0.0'
     command: './bin/vite dev'
     ports:

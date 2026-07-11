@@ -10,6 +10,8 @@ WITH code_rules_seed (
   fail_admin_message,
   info_admin_message,
   admin_notes,
+  source_quote,
+  contractor_visible_flag,
   created_at,
   updated_at
 ) AS (
@@ -24,6 +26,8 @@ WITH code_rules_seed (
     'Ask the contractor for corrected product evidence when AHRI evidence conflicts or the invoice AHRI is not found in the imported product list.',
     NULL,
     'Reads normal GenAI located field hp_ahri_reference, not classifier product references.',
+    'have an AHRI certified reference number that references all components of the heat pump.',
+    true,
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
@@ -37,6 +41,8 @@ WITH code_rules_seed (
     'Confirm the invoice ASHP line amount, rebate line, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Requirement PDF: AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC), requirements table after item 9; AIR SOURCE HEAT PUMP (CONVERT FROM WOOD), requirements table after item 11. Uses ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    '100% of eligible upgrade costs, up to a maximum of $5,000 per home. 100% of eligible upgrade costs, up to a maximum of $4,000 per home.',
+    true,
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
@@ -50,6 +56,8 @@ WITH code_rules_seed (
     'Confirm the product-list match before asking the contractor for corrected product evidence.',
     'Resolve the product-list match first, then rerun checks.',
     'Requirement PDF: ASHP requirements tables for electric, wood, gas/propane, and oil conversion sections. Uses the matched AHRI/OHPA product row plus hp_efficiency_and_capacity evidence for variable-speed wording.',
+    'SEER >= 16.0, HSPF >= 10.0 or SEER2 >= 15.2, HSPF2 >= 8.5 (Region IV). Variable speed compressor. Minimum capacity of 12,000 BTU (1 ton).',
+    true,
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
@@ -63,6 +71,8 @@ WITH code_rules_seed (
     'Ask the contractor for corrected invoice or product evidence if a ductless multi-split shows fewer than two indoor heads.',
     NULL,
     'Requirement PDF: ASHP requirements tables for electric, wood, gas/propane, and oil conversion sections. Uses hp_new_equipment_type and the matched AHRI/OHPA source/product evidence.',
+    'Must install a minimum of two indoor head units',
+    true,
     TIMESTAMP '2026-07-06 00:00:00',
     NOW()
   ),
@@ -76,6 +86,8 @@ WITH code_rules_seed (
     'Confirm the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Uses hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by ashp_fossil_northern_top_up_within_cap.',
+    '100% of eligible upgrade costs, up to a maximum of $10,000 per home. 100% of eligible upgrade costs, up to a maximum of $14,000 per home. 100% of eligible upgrade costs, up to a maximum of $16,000 per home.',
+    true,
     TIMESTAMP '2026-07-07 00:00:00',
     NOW()
   ),
@@ -89,6 +101,8 @@ WITH code_rules_seed (
     'Confirm the top-up amount, equipment category, and income level before asking the contractor for correction.',
     NULL,
     'Uses hp_northern_top_up_evidence, hp_new_equipment_type, and users_eligibilitycodes.income_level. This code rule intentionally treats missing top-up evidence as pass because no top-up was claimed.',
+    'Northern top-up** Eligible for program approved central ducted, multi-split and 2 single-head mini-split heat pumps $3,000 $3,000 N/A. Northern top-up** Eligible for program approved single-head mini-split heat pump $1,500 $1,500 N/A.',
+    true,
     TIMESTAMP '2026-07-07 00:00:00',
     NOW()
   ),
@@ -102,6 +116,8 @@ WITH code_rules_seed (
     'Confirm the invoice ASHP line amount, rebate line, equipment category, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Uses hp_new_equipment_type, ashp_upgrade_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by ashp_fossil_northern_top_up_within_cap.',
+    '100% of eligible upgrade costs, up to a maximum of $11,500 per home. 100% of eligible upgrade costs, up to a maximum of $6,500 per home. 100% of eligible upgrade costs, up to a maximum of $15,000 per home. 100% of eligible upgrade costs, up to a maximum of $10,000 per home.',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -115,6 +131,8 @@ WITH code_rules_seed (
     'Confirm the invoice DFHP line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Uses dfhp_source_fuel_path, dfhp_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by heat_pump_northern_top_up_3000_within_cap.',
+    '100% of eligible upgrade costs, up to a maximum of $11,500 per home. 100% of eligible upgrade costs, up to a maximum of $6,500 per home. 100% of eligible upgrade costs, up to a maximum of $15,000 per home. 100% of eligible upgrade costs, up to a maximum of $10,000 per home.',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -128,6 +146,8 @@ WITH code_rules_seed (
     'Confirm the AHRI match before asking the contractor for corrected DFHP product evidence.',
     'Resolve the AHRI product-list match first, then rerun checks.',
     'DFHP-specific replacement for the generic hp_product_minimum_capacity_at_minus_5c and hp_product_efficiency_threshold mappings. It intentionally does not check variable-speed compressor or multi-split indoor-head count.',
+    'SEER >= 16.0, HSPF >= 10.0 or SEER2 >= 15.2, HSPF2 >= 8.5 (Region IV). Variable speed compressor not required. Minimum capacity of 12,000 BTU (1 ton).',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -141,6 +161,8 @@ WITH code_rules_seed (
     'Confirm the top-up amount and income level before asking the contractor for correction.',
     NULL,
     'Uses hp_northern_top_up_evidence and users_eligibilitycodes.income_level. This code rule intentionally treats missing top-up evidence as pass because no top-up was claimed.',
+    'Northern top-up* Eligible for program approved air-to-water and combined heat pumps. $3,000 $3,000 N/A.',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -154,6 +176,8 @@ WITH code_rules_seed (
     'Confirm the invoice ATW line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Uses hydronic_conversion_source_fuel_evidence, atw_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by heat_pump_northern_top_up_3000_within_cap.',
+    '100% of eligible upgrade costs, up to a maximum of $16,000 per home. 100% of eligible upgrade costs, up to a maximum of $12,000 per home. 100% of eligible upgrade costs, up to a maximum of $10,500 per home. 100% of eligible upgrade costs, up to a maximum of $5,000 per home.',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -167,6 +191,8 @@ WITH code_rules_seed (
     'Confirm the invoice CSHP line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Uses hydronic_conversion_source_fuel_evidence, cshp_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level. Northern top-up is handled by heat_pump_northern_top_up_3000_within_cap.',
+    '100% of eligible upgrade costs, up to a maximum of $19,500 per home. 100% of eligible upgrade costs, up to a maximum of $16,500 per home. 100% of eligible upgrade costs, up to a maximum of $14,000 per home. 100% of eligible upgrade costs, up to a maximum of $8,500 per home.',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -180,6 +206,8 @@ WITH code_rules_seed (
     'Confirm the AHRI match before asking the contractor for corrected product evidence.',
     'Resolve the AHRI product-list match first, then rerun checks.',
     'The code supplies the detailed capacity math and source values; these messages are short admin guidance additions only.',
+    '3. Minimum capacity of 12,000 BTU (1 ton).',
+    true,
     TIMESTAMP '2026-05-14 00:00:00',
     NOW()
   ),
@@ -193,6 +221,8 @@ WITH code_rules_seed (
     'Confirm the AHRI match before asking the contractor for corrected product evidence.',
     'Resolve the AHRI product-list match first, then rerun checks.',
     'The code supplies the detailed efficiency threshold comparison; these messages are short admin guidance additions only.',
+    'SEER >= 16.0, HSPF >= 10.0 or SEER2 >= 15.2, HSPF2 >= 8.5 (Region IV)',
+    true,
     TIMESTAMP '2026-05-14 00:00:00',
     NOW()
   ),
@@ -206,6 +236,8 @@ WITH code_rules_seed (
     'Ask the contractor for corrected product evidence or an eligible Tier 2+ heat pump water heater model when NEEA validation fails.',
     NULL,
     'This consolidated rule owns HPWH NEEA product-list matching and Tier 2+ validation.',
+    'Eligible systems are listed as Tier 2 or higher on NEEA’s Advanced Water Heater Specification Qualified Products List for Heat Pump Water Heaters.',
+    true,
     TIMESTAMP '2026-05-15 00:00:00',
     NOW()
   ),
@@ -219,6 +251,8 @@ WITH code_rules_seed (
     'Confirm the invoice HPWH line amount, rebate line, source-fuel path, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Requirement PDF: HEAT PUMP WATER HEATER requirements table. Uses hpwh_existing_fuel_type, hpwh_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    '100% of eligible upgrade costs, up to a maximum of $3,500 per home. 80% of eligible upgrade costs, up to a maximum of $2,800 per home. Maximum one heat pump water heater rebate per home, regardless of the number of systems installed.',
+    true,
     TIMESTAMP '2026-07-08 00:00:00',
     NOW()
   ),
@@ -232,6 +266,8 @@ WITH code_rules_seed (
     'The ESU timing appears to be outside the six-month window around the associated heat pump or heat pump water heater installation date.',
     NULL,
     'Requirement PDF: ELECTRICAL SERVICE UPGRADE rebate requirement 3. Uses esu_heat_pump_installation_date_reference, esu_associated_heat_pump_or_hpwh_reference, utility_bill/electrical_utility_upgrade_document service_completion_or_invoice_date, and invoice_versions.di_ocr_invoice_date for same-invoice proxy.',
+    'The service upgrade (new wire) is for upgrading to 100, 200 or 400-amp service to an existing home and must be installed within six months of the heat pump installation.',
+    true,
     TIMESTAMP '2026-07-10 00:00:00',
     NOW()
   ),
@@ -245,6 +281,8 @@ WITH code_rules_seed (
     'Confirm the invoice ESU line amount, rebate line, and eligibility-code match before asking the contractor for correction.',
     NULL,
     'Requirement PDF: ELECTRICAL SERVICE UPGRADE requirements table. Uses esu_line_amount, upgrade_specific_rebate_line_amount, and users_eligibilitycodes.income_level.',
+    '100% of eligible upgrade costs, up to a maximum of $5,000 per home. 100% of eligible upgrade costs, up to a maximum of $3,500 per home. 100% of eligible upgrade costs, up to a maximum of $1,500 per home. Maximum of one electrical service upgrade per home.',
+    true,
     TIMESTAMP '2026-07-09 00:00:00',
     NOW()
   ),
@@ -258,6 +296,8 @@ WITH code_rules_seed (
     'Ask the contractor for corrected invoice/supporting product evidence when product evidence is missing, conflicting, or not found in the imported qualifying list.',
     NULL,
     'The code supplies the detailed invoice/supporting-document product comparison and Better Homes BC qualifying-list match explanation.',
+    'be listed as an eligible system on the Air-to-Water and Combined Heat Pump Qualifying Product List.',
+    true,
     TIMESTAMP '2026-06-01 00:00:00',
     NOW()
   ),
@@ -271,6 +311,8 @@ WITH code_rules_seed (
     'Ask the contractor for corrected product evidence when the agreed AHRI reference is not found in the imported OHPA BC product list.',
     NULL,
     'This consolidated rule owns invoice AHRI presence, supporting-document AHRI agreement, and the NRCan OHPA BC product-list lookup for oil ASHP.',
+    'be listed as a qualifying system on the Natural Resources Canada Oil to Heat Pump Affordability Qualified Heat Pump Product List for British Columbia.',
+    true,
     TIMESTAMP '2026-06-02 00:00:00',
     NOW()
   ),
@@ -284,6 +326,8 @@ WITH code_rules_seed (
     'Not used by this rule.',
     'Not used by this rule.',
     'This is a data-completeness guardrail for downstream invoice review; it does not prove the field values are correct.',
+    'Invoice (see sample invoice for requirements), which must show the itemized CleanBC rebate and deduct the CleanBC rebate from the total amount owed by the participant.',
+    true,
     TIMESTAMP '2026-05-25 00:00:00',
     NOW()
   ),
@@ -319,6 +363,8 @@ calculation =
     'The invoice appears to have been submitted after the six-month deadline and needs correction or program review.',
     'This timing check passed with context worth surfacing to the reviewer.',
     'This is a core program deadline check using stored invoice and submission dates.',
+    'The rebate application and supporting documentation must be submitted by the Registered Contractor within six (6) months of the invoice date.',
+    true,
     TIMESTAMP '2026-05-25 00:00:00',
     NOW()
   ),
@@ -347,6 +393,8 @@ else:
     'The invoice date appears to fall outside the six-month eligibility-code completion window and needs correction or program review.',
     'This eligibility timing check passed with context worth surfacing to the reviewer.',
     'This rule compares claims.users_eligibilitycodes.approved_at against claims.invoice_versions.di_ocr_invoice_date and intentionally does not use users_eligibilitycodes.expires_at.',
+    'Eligibility codes for applications received on or after June 18, 2024, are valid for upgrades completed within 6 months of the participants approval date. Beyond this date participants must re-apply to determine their eligibility.',
+    true,
     TIMESTAMP '2026-05-25 00:00:00',
     NOW()
   ),
@@ -360,6 +408,8 @@ else:
     'Create or correct the eligibility-code record before approving if the invoice-visible eligibility code cannot be resolved to a database record.',
     NULL,
     'Reads claims.invoice_version_located_fields where source_engine=code and field_key=users_eligibilitycodes.eligibility_code; pass when populated, fail when missing.',
+    'Eligibility codes for applications received on or after June 18, 2024, are valid for upgrades completed within 6 months of the participants approval date. Beyond this date participants must re-apply to determine their eligibility.',
+    true,
     TIMESTAMP '2026-06-04 00:00:00',
     NOW()
   ),
@@ -379,12 +429,14 @@ primary_space_heating_upgrade_types = [
   combined_space_water_heat_pump
 ]
 
-current_upgrade_types = upgrade_type_keys on this invoice version
+current_upgrade_types = upgrade_type keys on this invoice version
+if participant_user_id is missing, warn because prior-rebate history cannot be checked
 prior_current_upgrade_types = upgrade_type_keys on current invoice versions for the same participant, excluding this invoice, where invoice status is not ineligible
 
 current_has_space_heating = current_upgrade_types has any key in primary_space_heating_upgrade_types
 prior_has_space_heating = prior_current_upgrade_types has any key in primary_space_heating_upgrade_types
 
+warn if participant_user_id is missing
 fail if current_has_space_heating and prior_has_space_heating
 fail if current has heat_pump_water_heater and prior has heat_pump_water_heater
 fail if current has insulation and prior has insulation
@@ -393,10 +445,12 @@ fail if current has electrical_service_upgrade and prior has electrical_service_
 otherwise pass',
     true,
     'No prior non-ineligible current invoice was found for the same participant and same one-rebate-limited upgrade area.',
+    'Could not check prior rebate history because the invoice eligibility code did not match a participant eligibility record in the database. Confirm the eligibility code record, then rerun validation before approving.',
+    'A current non-ineligible invoice for this participant already contains the same one-rebate-limited upgrade area. Review the prior invoice before approving another payment.',
     NULL,
-    'This participant appears to already have a non-ineligible current invoice for the same one-rebate-limited upgrade area. Review the prior invoice before approving another payment.',
-    NULL,
-    'Uses invoice_versions.participant_user_id, current invoice versions for other invoice parents, claims.invoice_version_upgrade_types, and claims.invoices.status. Primary space heating is checked as one grouped area; heat pump water heater, insulation, windows/doors, and electrical service upgrade are exact upgrade-type checks. The rule returns pass or fail only.',
+    'Uses invoice_versions.participant_user_id, current invoice versions for other invoice parents, claims.invoice_version_upgrade_types, and claims.invoices.status. Primary space heating is checked as one grouped area; heat pump water heater, insulation, windows/doors, and electrical service upgrade are exact upgrade-type checks. The rule warns when participant matching is missing, fails only when a same-area prior rebate is actually found, and otherwise passes.',
+    'Participants may only receive one rebate payment for a primary heating system (a central ducted heat pump, ductless mini-split heat pump, ductless multi-split heat pump, dual fuel ducted heat pump, air-to-water heat pump, combined air-to-water heat pump, natural gas furnace, boiler or combination space heating and hot water system), one rebate payment for a heat pump water heater, one rebate payment for an insulation upgrade, and one rebate for a windows and doors upgrade',
+    true,
     TIMESTAMP '2026-06-18 00:00:00',
     NOW()
   ),
@@ -426,6 +480,8 @@ otherwise pass',
     'The current invoice appears to contain multiple primary space heating system upgrade types. Review the detected upgrade types before approving.',
     NULL,
     'Uses claims.invoice_version_upgrade_types for the current invoice version only. The rule returns pass or fail only.',
+    'Participants may only receive one rebate payment for a primary heating system (a central ducted heat pump, ductless mini-split heat pump, ductless multi-split heat pump, dual fuel ducted heat pump, air-to-water heat pump, combined air-to-water heat pump, natural gas furnace, boiler or combination space heating and hot water system), one rebate payment for a heat pump water heater, one rebate payment for an insulation upgrade, and one rebate for a windows and doors upgrade',
+    true,
     TIMESTAMP '2026-06-24 00:00:00',
     NOW()
   ),
@@ -439,6 +495,8 @@ otherwise pass',
     'The participant appears to be Income Level 3, which is not eligible for this upgrade type under the current ESP requirements.',
     NULL,
     'Reads claims.users_eligibilitycodes.income_level from code located fields and returns pass for 1/2, fail for 3, warn when missing.',
+    'Electric to heat pump upgrades are only eligible for participants who are registered and approved as Income Level 1 or 2 in the CleanBC Better Homes Energy Savings Program.',
+    true,
     TIMESTAMP '2026-06-01 00:00:00',
     NOW()
   ),
@@ -472,6 +530,8 @@ otherwise pass',
     'The claimed health and safety remediation rebate appears to exceed the eligible remediation amount or calculated income-level cap.',
     NULL,
     'Uses genai located fields hs_line_amount and upgrade_specific_rebate_line_amount plus claims.users_eligibilitycodes.income_level. ESP1 cap is min(95% of cost, $800); ESP2 cap is min(60% of cost, $800); ESP3 has no health and safety remediation rebate.',
+    '95% of eligible upgrade costs, up to a maximum of $800 per home. 60% of eligible upgrade costs, up to a maximum of $800 per home.',
+    true,
     TIMESTAMP '2026-07-09 00:00:00',
     NOW()
   ),
@@ -515,6 +575,8 @@ otherwise pass',
     'The claimed ventilation rebate appears to exceed the eligible ventilation amount or calculated subtype/income-level cap.',
     NULL,
     'Uses genai located fields vent_line_amount, upgrade_specific_rebate_line_amount, vent_system_type; supporting-document product_category_or_system_type; invoice_versions.herv_product_id; invoice_versions.vent_fan_product_id; and claims.users_eligibilitycodes.income_level. Bathroom fan caps: ESP1 min(95% of cost, $300), ESP2 min(60% of cost, $300), ESP3 no rebate. HRV/ERV caps: ESP1 min(95% of cost, $1,600), ESP2 min(60% of cost, $1,600), ESP3 no rebate.',
+    '95% of eligible upgrade costs, up to a maximum of $300 per home. 60% of eligible upgrade costs, up to a maximum of $300 per home. 95% of eligible upgrade costs, up to a maximum of $1600 per home. 60% of eligible upgrade costs, up to a maximum of $1600 per home.',
+    true,
     TIMESTAMP '2026-07-09 00:00:00',
     NOW()
   ),
@@ -545,6 +607,8 @@ Pseudo-code:
     'Ask the contractor for corrected invoice/supporting product evidence when HRV/ERV product evidence is missing, conflicting, or not found in the imported NRCan ENERGY STAR HERV product list.',
     'This rule records information only when the visible ventilation evidence is for a bathroom/exhaust fan rather than an HRV/ERV.',
     'Code-owned deterministic lookup for the ventilation requirement that heat/energy recovery ventilators be ENERGY STAR certified and listed on NRCan searchable product list.',
+    'heat/energy recovery ventilators must be ENERGY STAR® certified and listed on Natural Resource’s Canada’s searchable product list.',
+    true,
     TIMESTAMP '2026-07-09 00:00:00',
     NOW()
   ),
@@ -575,6 +639,8 @@ Pseudo-code:
     'Ask the contractor for corrected invoice/supporting product evidence when fan product evidence is conflicting or not found in the imported ENERGY STAR certified ventilating fan product list.',
     'This rule records information only when the visible ventilation evidence is for HRV/ERV rather than a bathroom/utility/exhaust fan.',
     'Code-owned deterministic lookup for the ventilation requirement that fans be ENERGY STAR certified and listed on the EPA/DOE searchable product list.',
+    'fans must be ENERGY STAR certified and listed on the US Environmental Protection Agency and US Department of Energy’s searchable product list.',
+    true,
     TIMESTAMP '2026-07-09 00:00:00',
     NOW()
   ),
@@ -602,22 +668,50 @@ Pseudo-code:
     'Ask the contractor for corrected product specification evidence when named evidence clearly shows the fan below 85 cfm at 50 Pa / 0.2 in. w.c.',
     'Resolve the fan product-list match or request capacity/static-pressure evidence before relying on this requirement.',
     'Code-owned deterministic check for the ventilation requirement that fans have capacity of at least 85 cfm (40 L/s) at static pressure of 50 Pa (0.2 in. w.c.).',
+    'fans must have a capacity of at least 85 cfm (40 L/s), at static pressure of 50 pa (0.2” w.c.).',
+    true,
     TIMESTAMP '2026-07-09 00:00:00',
     NOW()
-  ),
-  (
-    '590f2f3a-3e23-449a-a7d4-2f35c3d53301'::uuid,
-    'wd_u_factor_threshold',
-    'Checks whether the structured metric U-factor values extracted for windows and doors are 1.22 W/m2-K or less.',
-    true,
-    'No follow-up is required for the U-factor threshold when all extracted metric U-factor values are at or below 1.22 W/m2-K.',
-    'Review the visible product/certification evidence and confirm the U-factor value before moving the claim forward.',
-    'Ask the contractor for corrected product or certification evidence if the installed window/door U-factor exceeds 1.22 W/m2-K.',
-    'Resolve the extracted U-factor evidence first, then rerun validation if needed.',
-    'This rule compares structured metric U-factor values after the windows/doors GenAI located-field pass. It is intended to remain admin-configurable like other code rules.',
-    TIMESTAMP '2026-05-28 00:00:00',
-    NOW()
   )
+),
+source_quote_metadata (
+  code_rule_key,
+  section_name,
+  action_sentence
+) AS (
+  VALUES
+  ('ashp_electric_wood_rebate_math_within_cap', $$AIR SOURCE HEAT PUMP electric and wood requirements tables$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('ashp_fossil_northern_top_up_within_cap', $$AIR SOURCE HEAT PUMP fossil-fuel conversion requirements table$$, $$Check that the invoice and supporting documents show the northern top-up amount, equipment type, location, and BC Hydro service evidence. Upload clearer documents if needed.$$),
+  ('ashp_gas_propane_rebate_math_within_cap', $$AIR SOURCE HEAT PUMP (CONVERT FROM NATURAL GAS OR PROPANE) requirements table$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('ashp_multisplit_minimum_two_indoor_heads', $$AIR SOURCE HEAT PUMP requirements table$$, $$Check that the invoice or product evidence shows at least two indoor head units for a ductless multi-split installation. Upload clearer product evidence if needed.$$),
+  ('ashp_oil_ohpa_product_validation', $$AIR SOURCE HEAT PUMP (CONVERT FROM OIL)$$, $$Check the heat pump product reference on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('ashp_oil_rebate_math_within_cap', $$AIR SOURCE HEAT PUMP (CONVERT FROM OIL) requirements table$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('ashp_product_specs_meet_requirements', $$AIR SOURCE HEAT PUMP requirements table$$, $$Check that the invoice or product documents clearly show the required efficiency, variable-speed, and capacity details. Upload clearer product evidence if needed.$$),
+  ('atw_rebate_math_within_cap', $$AIR-TO-WATER AND COMBINED HEAT PUMP requirements table$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('cshp_rebate_math_within_cap', $$AIR-TO-WATER AND COMBINED HEAT PUMP requirements table$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('current_invoice_cannot_contain_multiple_space_systems', $$General Eligibility Requirements$$, $$Check whether this invoice is claiming more than one primary space-heating system rebate. If so, upload a corrected invoice or contact program staff for assistance.$$),
+  ('dfhp_product_specs_meet_requirements', $$DUAL FUEL DUCTED HEAT PUMP requirements table$$, $$Check that the invoice or product documents clearly show the required dual-fuel heat pump efficiency and capacity details. Upload clearer product evidence if needed.$$),
+  ('dfhp_rebate_math_within_cap', $$DUAL FUEL DUCTED HEAT PUMP requirements table$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('eligibility_code_found_in_database', $$General Eligibility Requirements$$, $$Contact program staff for assistance if this eligibility code should be valid for the participant and this invoice.$$),
+  ('eligibility_code_valid_for_invoice_date', $$General Eligibility Requirements$$, $$Check that the invoice date is within the eligibility-code validity window. If the code or dates look wrong, contact program staff for assistance.$$),
+  ('esu_rebate_math_within_cap', $$ELECTRICAL SERVICE UPGRADE requirements table$$, $$Check the invoice rebate and electrical service upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('esu_timing_within_six_months_of_heat_pump_installation', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the service-upgrade date is within six months of the associated heat-pump installation. Upload clearer date evidence if needed.$$),
+  ('first_class_invoice_fields_present', $$General Eligibility Requirements$$, $$Check that the invoice has the required invoice details, including the itemized CleanBC rebate and amount-due math. Upload a corrected invoice if needed.$$),
+  ('heat_pump_northern_top_up_3000_within_cap', $$applicable heat pump requirements table$$, $$Check that the invoice and supporting documents show the northern top-up amount, location, and BC Hydro service evidence. Upload clearer documents if needed.$$),
+  ('hp_ahri_product_validation', $$applicable heat pump product requirements$$, $$Check that the AHRI reference on the invoice matches the supporting product documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('hp_product_efficiency_threshold', $$AIR SOURCE HEAT PUMP requirements table$$, $$Check that the invoice or product documents clearly show the required SEER/HSPF or SEER2/HSPF2 values. Upload clearer product evidence if needed.$$),
+  ('hp_product_minimum_capacity_at_minus_5c', $$AIR SOURCE HEAT PUMP requirements table$$, $$Check that the invoice or product documents clearly show the 12,000 BTU minimum-capacity requirement. Upload clearer product evidence if needed.$$),
+  ('hpwh_neea_product_validation', $$HEAT PUMP WATER HEATER$$, $$Check the heat pump water heater model on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('hpwh_rebate_math_within_cap', $$HEAT PUMP WATER HEATER requirements table$$, $$Check the invoice rebate and heat pump water heater cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('hs_rebate_math_within_cap', $$HEALTH AND SAFETY REMEDIATION requirements table$$, $$Check the invoice rebate and health and safety remediation cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
+  ('hydronic_awhp_product_validation', $$AIR-TO-WATER AND COMBINED HEAT PUMP$$, $$Check the hydronic heat pump product reference on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('income_level_1_or_2_required', $$applicable Income Level 1 or 2 limited upgrade section$$, $$Contact program staff for assistance if the participant should qualify as Income Level 1 or 2 for this upgrade.$$),
+  ('prior_same_upgrade_type_rebate_payment_found', $$General Eligibility Requirements$$, $$Contact program staff for assistance if this participant has not already received the same primary space-heating rebate.$$),
+  ('submission_within_six_months', $$General Eligibility Requirements$$, $$Check the invoice date and submission timing. If the dates are not clear, upload clearer date evidence or contact program staff for assistance.$$),
+  ('vent_fan_capacity_meets_minimum', $$VENTILATION$$, $$Check that the fan product evidence clearly shows at least 85 cfm at the required static pressure. Upload clearer product evidence if needed.$$),
+  ('vent_fan_energy_star_product_validation', $$VENTILATION$$, $$Check the bathroom fan model on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('vent_herv_nrcan_product_validation', $$VENTILATION$$, $$Check the HRV/ERV model on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('vent_rebate_math_within_cap', $$VENTILATION requirements table$$, $$Check the invoice rebate and ventilation cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$)
 )
 INSERT INTO claims.code_rules (
   id,
@@ -629,6 +723,8 @@ INSERT INTO claims.code_rules (
   fail_admin_message,
   info_admin_message,
   admin_notes,
+  source_quote,
+  contractor_visible_flag,
   created_at,
   updated_at
 )
@@ -642,9 +738,18 @@ SELECT
   fail_admin_message,
   info_admin_message,
   admin_notes,
+  CASE
+    WHEN source_quote_metadata.section_name IS NULL THEN source_quote
+    ELSE '**From the ' || source_quote_metadata.section_name || ' section of the PDF:**' || E'\n\n' ||
+      regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g') ||
+      E'\n\n**Action:** ' || source_quote_metadata.action_sentence
+  END AS source_quote,
+  contractor_visible_flag,
   created_at,
   updated_at
 FROM code_rules_seed
+LEFT JOIN source_quote_metadata
+  USING (code_rule_key)
 ON CONFLICT (code_rule_key) DO UPDATE SET
   description = EXCLUDED.description,
   pass_admin_message = EXCLUDED.pass_admin_message,
@@ -652,6 +757,8 @@ ON CONFLICT (code_rule_key) DO UPDATE SET
   fail_admin_message = EXCLUDED.fail_admin_message,
   info_admin_message = EXCLUDED.info_admin_message,
   admin_notes = COALESCE(claims.code_rules.admin_notes, EXCLUDED.admin_notes),
+  source_quote = EXCLUDED.source_quote,
+  contractor_visible_flag = EXCLUDED.contractor_visible_flag,
   updated_at = NOW();
 
 WITH code_rule_upgrade_type_seed (
@@ -690,8 +797,6 @@ WITH code_rule_upgrade_type_seed (
   ('eligibility_code_found_in_database', 'common'),
   ('current_invoice_cannot_contain_multiple_space_systems', 'common'),
   ('prior_same_upgrade_type_rebate_payment_found', 'common'),
-  ('income_level_1_or_2_required', 'insulation'),
-  ('income_level_1_or_2_required', 'windows_doors'),
   ('income_level_1_or_2_required', 'air_source_heat_pump_electric'),
   ('income_level_1_or_2_required', 'air_source_heat_pump_wood'),
   ('income_level_1_or_2_required', 'health_and_safety_remediation'),
@@ -700,7 +805,6 @@ WITH code_rule_upgrade_type_seed (
   ('vent_herv_nrcan_product_validation', 'ventilation'),
   ('vent_fan_energy_star_product_validation', 'ventilation'),
   ('vent_fan_capacity_meets_minimum', 'ventilation'),
-  ('wd_u_factor_threshold', 'windows_doors'),
   ('esu_rebate_math_within_cap', 'electrical_service_upgrade'),
   ('esu_timing_within_six_months_of_heat_pump_installation', 'electrical_service_upgrade'),
   ('hpwh_neea_product_validation', 'heat_pump_water_heater'),

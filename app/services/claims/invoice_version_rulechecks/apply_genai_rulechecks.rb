@@ -58,10 +58,9 @@ module Claims
       def build_row(r, now:)
         return nil unless r.is_a?(Hash)
 
-        rule_number = coerce_int_or_nil(r["rule_number"] || r[:rule_number])
-        return nil if rule_number.nil?
-
         rule_key = (r["rule_key"] || r[:rule_key]).to_s.strip
+        return nil if rule_key.blank?
+
         rule_result = coerce_rule_result(r)
         confidence = coerce_confidence(r["confidence"] || r[:confidence])
 
@@ -75,7 +74,7 @@ module Claims
           invoice_version_id: @invoice_version_id,
           invoice_upgrade_type_id: @invoice_upgrade_type_id,
           source_engine: "genai",
-          rule_number: rule_number,
+          rule_key: rule_key,
           rule_result: rule_result,
           confidence: confidence,
           expected_text: expected_text,
@@ -86,16 +85,6 @@ module Claims
           created_at: now,
           updated_at: now
         }
-
-        optional_metadata = { rule_key: rule_key.presence }
-
-        optional_metadata.each do |key, value|
-          attrs[
-            key
-          ] = value if Claims::InvoiceVersionRulecheck.column_names.include?(
-            key.to_s
-          )
-        end
 
         attrs
       end
@@ -108,15 +97,6 @@ module Claims
         JSON.generate(v)
       rescue StandardError
         v.to_s
-      end
-
-      def coerce_int_or_nil(v)
-        return nil if v.nil?
-        s = v.is_a?(String) ? v.strip : v
-        return nil if s == ""
-        Integer(s)
-      rescue StandardError
-        nil
       end
 
       def coerce_rule_result(row)
