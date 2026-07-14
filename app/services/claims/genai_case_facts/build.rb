@@ -484,7 +484,6 @@ module Claims
               page: finding.page,
               summary: finding.summary,
               legibility: finding.legibility,
-              relevant_text_seen: finding.relevant_text_seen,
               confidence: finding.confidence
             }
           end

@@ -94,9 +94,11 @@ type BaseEditorState = {
 
 type CodeRuleEditorState = BaseEditorState & {
   recordType: 'code_rule';
+  contractorDisplayName: string;
   description: string;
   sourceQuote: string;
-  contractorVisibleFlag: boolean;
+  contractorVisibility: string;
+  contractorBlockingPolicy: string;
   passAdminMessage: string;
   warnAdminMessage: string;
   failAdminMessage: string;
@@ -106,18 +108,22 @@ type CodeRuleEditorState = BaseEditorState & {
 
 type CodeLocatedFieldEditorState = BaseEditorState & {
   recordType: 'code_located_field';
+  contractorDisplayName: string;
   description: string;
 };
 
 type GenaiRuleEditorState = BaseEditorState & {
   recordType: 'genai_rule';
+  contractorDisplayName: string;
   promptText: string;
   sourceQuote: string;
-  contractorVisibleFlag: boolean;
+  contractorVisibility: string;
+  contractorBlockingPolicy: string;
 };
 
 type GenaiLocatedFieldEditorState = BaseEditorState & {
   recordType: 'genai_located_field';
+  contractorDisplayName: string;
   promptText: string;
 };
 
@@ -315,9 +321,11 @@ export default function ValidationRulesAdminScreen() {
             recordType,
             recordKey: '',
             enabled: true,
+            contractorDisplayName: '',
             description: '',
             sourceQuote: '',
-            contractorVisibleFlag: true,
+            contractorVisibility: 'fail_only',
+            contractorBlockingPolicy: 'non_blocking',
             passAdminMessage: '',
             warnAdminMessage: '',
             failAdminMessage: '',
@@ -330,6 +338,7 @@ export default function ValidationRulesAdminScreen() {
             recordType,
             recordKey: '',
             enabled: true,
+            contractorDisplayName: '',
             description: '',
             mappings,
           };
@@ -338,9 +347,11 @@ export default function ValidationRulesAdminScreen() {
             recordType,
             recordKey: '',
             enabled: true,
+            contractorDisplayName: '',
             promptText: '',
             sourceQuote: '',
-            contractorVisibleFlag: true,
+            contractorVisibility: 'fail_only',
+            contractorBlockingPolicy: 'non_blocking',
             mappings,
           };
         case 'genai_located_field':
@@ -348,6 +359,7 @@ export default function ValidationRulesAdminScreen() {
             recordType,
             recordKey: '',
             enabled: true,
+            contractorDisplayName: '',
             promptText: '',
             mappings,
           };
@@ -407,9 +419,11 @@ export default function ValidationRulesAdminScreen() {
           recordId: row.id,
           recordKey: row.record_key,
           enabled: Boolean(row.enabled),
+          contractorDisplayName: row.detail?.contractor_display_name || '',
           description: row.detail?.description || '',
           sourceQuote: row.detail?.source_quote || '',
-          contractorVisibleFlag: row.detail?.contractor_visible_flag !== false,
+          contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
+          contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
           passAdminMessage: row.detail?.pass_admin_message || '',
           warnAdminMessage: row.detail?.warn_admin_message || '',
           failAdminMessage: row.detail?.fail_admin_message || '',
@@ -424,6 +438,7 @@ export default function ValidationRulesAdminScreen() {
           recordId: row.id,
           recordKey: row.record_key,
           enabled: Boolean(row.enabled),
+          contractorDisplayName: row.detail?.contractor_display_name || '',
           description: row.detail?.description || '',
           mappings,
         });
@@ -434,9 +449,11 @@ export default function ValidationRulesAdminScreen() {
           recordId: row.id,
           recordKey: row.record_key,
           enabled: Boolean(row.enabled),
+          contractorDisplayName: row.detail?.contractor_display_name || '',
           promptText: row.detail?.prompt_text || '',
           sourceQuote: row.detail?.source_quote || '',
-          contractorVisibleFlag: row.detail?.contractor_visible_flag !== false,
+          contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
+          contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
           mappings,
         });
         break;
@@ -446,6 +463,7 @@ export default function ValidationRulesAdminScreen() {
           recordId: row.id,
           recordKey: row.record_key,
           enabled: Boolean(row.enabled),
+          contractorDisplayName: row.detail?.contractor_display_name || '',
           promptText: row.detail?.prompt_text || '',
           mappings,
         });
@@ -528,9 +546,11 @@ export default function ValidationRulesAdminScreen() {
             recordId: row.id,
             recordKey: row.record_key,
             enabled: Boolean(row.enabled),
+            contractorDisplayName: row.detail?.contractor_display_name || '',
             description: row.detail?.description || '',
             sourceQuote: row.detail?.source_quote || '',
-            contractorVisibleFlag: row.detail?.contractor_visible_flag !== false,
+            contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
+            contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
             passAdminMessage: row.detail?.pass_admin_message || '',
             warnAdminMessage: row.detail?.warn_admin_message || '',
             failAdminMessage: row.detail?.fail_admin_message || '',
@@ -545,6 +565,7 @@ export default function ValidationRulesAdminScreen() {
             recordId: row.id,
             recordKey: row.record_key,
             enabled: Boolean(row.enabled),
+            contractorDisplayName: row.detail?.contractor_display_name || '',
             description: row.detail?.description || '',
             mappings,
           });
@@ -555,9 +576,11 @@ export default function ValidationRulesAdminScreen() {
             recordId: row.id,
             recordKey: row.record_key,
             enabled: Boolean(row.enabled),
+            contractorDisplayName: row.detail?.contractor_display_name || '',
             promptText: row.detail?.prompt_text || '',
             sourceQuote: row.detail?.source_quote || '',
-            contractorVisibleFlag: row.detail?.contractor_visible_flag !== false,
+            contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
+            contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
             mappings,
           });
           break;
@@ -567,6 +590,7 @@ export default function ValidationRulesAdminScreen() {
             recordId: row.id,
             recordKey: row.record_key,
             enabled: Boolean(row.enabled),
+            contractorDisplayName: row.detail?.contractor_display_name || '',
             promptText: row.detail?.prompt_text || '',
             mappings,
           });
@@ -615,9 +639,11 @@ export default function ValidationRulesAdminScreen() {
 
       if (editor.recordType === 'code_rule') {
         body.code_rule_key = editor.recordKey;
+        body.contractor_display_name = editor.contractorDisplayName;
         body.description = editor.description;
         body.source_quote = editor.sourceQuote;
-        body.contractor_visible_flag = editor.contractorVisibleFlag;
+        body.contractor_visibility = editor.contractorVisibility;
+        body.contractor_blocking_policy = editor.contractorBlockingPolicy;
         body.pass_admin_message = editor.passAdminMessage;
         body.warn_admin_message = editor.warnAdminMessage;
         body.fail_admin_message = editor.failAdminMessage;
@@ -626,15 +652,19 @@ export default function ValidationRulesAdminScreen() {
         body.mappings = mappings;
       } else if (editor.recordType === 'code_located_field') {
         body.code_field_key = editor.recordKey;
+        body.contractor_display_name = editor.contractorDisplayName;
         body.description = editor.description;
       } else if (editor.recordType === 'genai_rule') {
         body.genai_rule_key = editor.recordKey;
+        body.contractor_display_name = editor.contractorDisplayName;
         body.prompt_text = editor.promptText;
         body.source_quote = editor.sourceQuote;
-        body.contractor_visible_flag = editor.contractorVisibleFlag;
+        body.contractor_visibility = editor.contractorVisibility;
+        body.contractor_blocking_policy = editor.contractorBlockingPolicy;
         body.mappings = mappings;
       } else if (editor.recordType === 'genai_located_field') {
         body.genai_field_key = editor.recordKey;
+        body.contractor_display_name = editor.contractorDisplayName;
         body.prompt_text = editor.promptText;
         body.mappings = mappings;
       }
@@ -754,9 +784,11 @@ export default function ValidationRulesAdminScreen() {
                 <CodeRuleEditorScreen
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
+                  contractorDisplayName={editor.contractorDisplayName}
                   description={editor.description}
                   sourceQuote={editor.sourceQuote}
-                  contractorVisibleFlag={editor.contractorVisibleFlag}
+                  contractorVisibility={editor.contractorVisibility}
+                  contractorBlockingPolicy={editor.contractorBlockingPolicy}
                   passAdminMessage={editor.passAdminMessage}
                   warnAdminMessage={editor.warnAdminMessage}
                   failAdminMessage={editor.failAdminMessage}
@@ -770,6 +802,11 @@ export default function ValidationRulesAdminScreen() {
                   onRecordKeyChange={(next) =>
                     setEditorField((current) => (isCodeRuleEditor(current) ? { ...current, recordKey: next } : current))
                   }
+                  onContractorDisplayNameChange={(next) =>
+                    setEditorField((current) =>
+                      isCodeRuleEditor(current) ? { ...current, contractorDisplayName: next } : current,
+                    )
+                  }
                   onDescriptionChange={(next) =>
                     setEditorField((current) =>
                       isCodeRuleEditor(current) ? { ...current, description: next } : current,
@@ -780,9 +817,14 @@ export default function ValidationRulesAdminScreen() {
                       isCodeRuleEditor(current) ? { ...current, sourceQuote: next } : current,
                     )
                   }
-                  onContractorVisibleFlagChange={(next) =>
+                  onContractorVisibilityChange={(next) =>
                     setEditorField((current) =>
-                      isCodeRuleEditor(current) ? { ...current, contractorVisibleFlag: next } : current,
+                      isCodeRuleEditor(current) ? { ...current, contractorVisibility: next } : current,
+                    )
+                  }
+                  onContractorBlockingPolicyChange={(next) =>
+                    setEditorField((current) =>
+                      isCodeRuleEditor(current) ? { ...current, contractorBlockingPolicy: next } : current,
                     )
                   }
                   onPassAdminMessageChange={(next) =>
@@ -821,6 +863,7 @@ export default function ValidationRulesAdminScreen() {
                 <CodeLocatedFieldEditorScreen
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
+                  contractorDisplayName={editor.contractorDisplayName}
                   description={editor.description}
                   mappings={editor.mappings}
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
@@ -832,6 +875,11 @@ export default function ValidationRulesAdminScreen() {
                   onRecordKeyChange={(next) =>
                     setEditorField((current) =>
                       isCodeLocatedFieldEditor(current) ? { ...current, recordKey: next } : current,
+                    )
+                  }
+                  onContractorDisplayNameChange={(next) =>
+                    setEditorField((current) =>
+                      isCodeLocatedFieldEditor(current) ? { ...current, contractorDisplayName: next } : current,
                     )
                   }
                   onDescriptionChange={(next) =>
@@ -850,9 +898,11 @@ export default function ValidationRulesAdminScreen() {
                 <GenaiRuleEditorScreen
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
+                  contractorDisplayName={editor.contractorDisplayName}
                   promptText={editor.promptText}
                   sourceQuote={editor.sourceQuote}
-                  contractorVisibleFlag={editor.contractorVisibleFlag}
+                  contractorVisibility={editor.contractorVisibility}
+                  contractorBlockingPolicy={editor.contractorBlockingPolicy}
                   mappings={editor.mappings}
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
                   onEnabledChange={(next) =>
@@ -861,6 +911,11 @@ export default function ValidationRulesAdminScreen() {
                   onRecordKeyChange={(next) =>
                     setEditorField((current) =>
                       isGenaiRuleEditor(current) ? { ...current, recordKey: next } : current,
+                    )
+                  }
+                  onContractorDisplayNameChange={(next) =>
+                    setEditorField((current) =>
+                      isGenaiRuleEditor(current) ? { ...current, contractorDisplayName: next } : current,
                     )
                   }
                   onPromptTextChange={(next) =>
@@ -873,9 +928,14 @@ export default function ValidationRulesAdminScreen() {
                       isGenaiRuleEditor(current) ? { ...current, sourceQuote: next } : current,
                     )
                   }
-                  onContractorVisibleFlagChange={(next) =>
+                  onContractorVisibilityChange={(next) =>
                     setEditorField((current) =>
-                      isGenaiRuleEditor(current) ? { ...current, contractorVisibleFlag: next } : current,
+                      isGenaiRuleEditor(current) ? { ...current, contractorVisibility: next } : current,
+                    )
+                  }
+                  onContractorBlockingPolicyChange={(next) =>
+                    setEditorField((current) =>
+                      isGenaiRuleEditor(current) ? { ...current, contractorBlockingPolicy: next } : current,
                     )
                   }
                   onMappingCheckedChange={(invoiceUpgradeTypeId, checked) =>
@@ -889,6 +949,7 @@ export default function ValidationRulesAdminScreen() {
                 <GenaiLocatedFieldEditorScreen
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
+                  contractorDisplayName={editor.contractorDisplayName}
                   promptText={editor.promptText}
                   mappings={editor.mappings}
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
@@ -900,6 +961,11 @@ export default function ValidationRulesAdminScreen() {
                   onRecordKeyChange={(next) =>
                     setEditorField((current) =>
                       isGenaiLocatedFieldEditor(current) ? { ...current, recordKey: next } : current,
+                    )
+                  }
+                  onContractorDisplayNameChange={(next) =>
+                    setEditorField((current) =>
+                      isGenaiLocatedFieldEditor(current) ? { ...current, contractorDisplayName: next } : current,
                     )
                   }
                   onPromptTextChange={(next) =>
@@ -986,7 +1052,7 @@ export default function ValidationRulesAdminScreen() {
                       <Table size="sm">
                         <Thead bg="gray.50">
                           <Tr>
-                            <Th>Key</Th>
+                            <Th>Name / key</Th>
                             <Th>Updated</Th>
                             <Th>Enabled</Th>
                             <Th textAlign="right">Actions</Th>
@@ -996,7 +1062,17 @@ export default function ValidationRulesAdminScreen() {
                           {(tabRows[recordType] || []).map((row) => (
                             <Tr key={`${row.record_type}-${row.id}`}>
                               <Td>
-                                <Text fontWeight="semibold">{row.record_key}</Text>
+                                {row.detail?.contractor_display_name ? (
+                                  <Text fontWeight="semibold">{row.detail.contractor_display_name}</Text>
+                                ) : null}
+                                <Text
+                                  fontFamily={row.detail?.contractor_display_name ? 'mono' : undefined}
+                                  fontSize={row.detail?.contractor_display_name ? 'xs' : 'sm'}
+                                  fontWeight={row.detail?.contractor_display_name ? 'normal' : 'semibold'}
+                                  opacity={row.detail?.contractor_display_name ? 0.7 : 1}
+                                >
+                                  {row.record_key}
+                                </Text>
                               </Td>
                               <Td>{fmtDate(row.updated_at)}</Td>
                               <Td>
@@ -1072,6 +1148,12 @@ export default function ValidationRulesAdminScreen() {
                     Type
                   </Text>
                   <Text fontWeight="bold">{TYPE_LABELS[selectedRow.record_type]}</Text>
+                </Box>
+                <Box>
+                  <Text fontSize="sm" opacity={0.7}>
+                    Contractor-friendly name
+                  </Text>
+                  <Text fontWeight="bold">{selectedRow.detail?.contractor_display_name || 'n/a'}</Text>
                 </Box>
                 <Box>
                   <Text fontSize="sm" opacity={0.7}>

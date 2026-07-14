@@ -9,6 +9,7 @@ import {
   GridItem,
   HStack,
   Input,
+  Select,
   Tab,
   TabList,
   TabPanel,
@@ -39,17 +40,21 @@ type SharedProps = {
 };
 
 type CodeRuleEditorProps = SharedProps & {
+  contractorDisplayName: string;
   description: string;
   sourceQuote: string;
-  contractorVisibleFlag: boolean;
+  contractorVisibility: string;
+  contractorBlockingPolicy: string;
   passAdminMessage: string;
   warnAdminMessage: string;
   failAdminMessage: string;
   infoAdminMessage: string;
   adminNotes: string;
+  onContractorDisplayNameChange: (next: string) => void;
   onDescriptionChange: (next: string) => void;
   onSourceQuoteChange: (next: string) => void;
-  onContractorVisibleFlagChange: (next: boolean) => void;
+  onContractorVisibilityChange: (next: string) => void;
+  onContractorBlockingPolicyChange: (next: string) => void;
   onPassAdminMessageChange: (next: string) => void;
   onWarnAdminMessageChange: (next: string) => void;
   onFailAdminMessageChange: (next: string) => void;
@@ -58,20 +63,26 @@ type CodeRuleEditorProps = SharedProps & {
 };
 
 type CodeLocatedFieldEditorProps = SharedProps & {
+  contractorDisplayName: string;
   description: string;
+  onContractorDisplayNameChange: (next: string) => void;
   onDescriptionChange: (next: string) => void;
 };
 
 type GenaiEditorProps = SharedProps & {
+  contractorDisplayName: string;
   promptText: string;
+  onContractorDisplayNameChange: (next: string) => void;
   onPromptTextChange: (next: string) => void;
 };
 
 type GenaiRuleEditorProps = GenaiEditorProps & {
   sourceQuote: string;
-  contractorVisibleFlag: boolean;
+  contractorVisibility: string;
+  contractorBlockingPolicy: string;
   onSourceQuoteChange: (next: string) => void;
-  onContractorVisibleFlagChange: (next: boolean) => void;
+  onContractorVisibilityChange: (next: string) => void;
+  onContractorBlockingPolicyChange: (next: string) => void;
 };
 
 function MappingSection({
@@ -159,14 +170,18 @@ function SharedTopFields({
 
 function RuleSourceFields({
   sourceQuote,
-  contractorVisibleFlag,
+  contractorVisibility,
+  contractorBlockingPolicy,
   onSourceQuoteChange,
-  onContractorVisibleFlagChange,
+  onContractorVisibilityChange,
+  onContractorBlockingPolicyChange,
 }: {
   sourceQuote: string;
-  contractorVisibleFlag: boolean;
+  contractorVisibility: string;
+  contractorBlockingPolicy: string;
   onSourceQuoteChange: (next: string) => void;
-  onContractorVisibleFlagChange: (next: boolean) => void;
+  onContractorVisibilityChange: (next: string) => void;
+  onContractorBlockingPolicyChange: (next: string) => void;
 }) {
   return (
     <>
@@ -175,11 +190,41 @@ function RuleSourceFields({
         <Textarea value={sourceQuote} onChange={(e) => onSourceQuoteChange(e.target.value)} minH="110px" />
       </FormControl>
 
-      <FormControl>
-        <Checkbox isChecked={contractorVisibleFlag} onChange={(e) => onContractorVisibleFlagChange(e.target.checked)}>
-          Visible to contractor advice
-        </Checkbox>
-      </FormControl>
+      <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={4}>
+        <FormControl>
+          <FormLabel>Contractor visibility</FormLabel>
+          <Select
+            value={contractorVisibility}
+            onChange={(e) => {
+              const next = e.target.value;
+              onContractorVisibilityChange(next);
+              if (next === 'hidden') onContractorBlockingPolicyChange('non_blocking');
+            }}
+          >
+            <option value="hidden">Hidden / non-impacting</option>
+            <option value="fail_only">Visible for errors only</option>
+            <option value="warn_and_fail">Visible for warnings and errors</option>
+          </Select>
+          <Text fontSize="xs" opacity={0.7} mt={1}>
+            Controls when this rule appears in contractor advice and submission review.
+          </Text>
+        </FormControl>
+
+        <FormControl>
+          <FormLabel>Submission blocking</FormLabel>
+          <Select
+            value={contractorBlockingPolicy}
+            onChange={(e) => onContractorBlockingPolicyChange(e.target.value)}
+            isDisabled={contractorVisibility === 'hidden'}
+          >
+            <option value="non_blocking">Does not block submission</option>
+            <option value="block_on_fail">Blocks submission on error</option>
+          </Select>
+          <Text fontSize="xs" opacity={0.7} mt={1}>
+            Warnings never block. A blocking error must be corrected before submission.
+          </Text>
+        </FormControl>
+      </Grid>
     </>
   );
 }
@@ -205,6 +250,14 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
               />
 
               <FormControl isRequired>
+                <FormLabel>Contractor-friendly name</FormLabel>
+                <Input
+                  value={props.contractorDisplayName}
+                  onChange={(e) => props.onContractorDisplayNameChange(e.target.value)}
+                />
+              </FormControl>
+
+              <FormControl isRequired>
                 <FormLabel>Description</FormLabel>
                 <Textarea
                   value={props.description}
@@ -215,9 +268,11 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
 
               <RuleSourceFields
                 sourceQuote={props.sourceQuote}
-                contractorVisibleFlag={props.contractorVisibleFlag}
+                contractorVisibility={props.contractorVisibility}
+                contractorBlockingPolicy={props.contractorBlockingPolicy}
                 onSourceQuoteChange={props.onSourceQuoteChange}
-                onContractorVisibleFlagChange={props.onContractorVisibleFlagChange}
+                onContractorVisibilityChange={props.onContractorVisibilityChange}
+                onContractorBlockingPolicyChange={props.onContractorBlockingPolicyChange}
               />
             </VStack>
           </TabPanel>
@@ -285,6 +340,14 @@ export function CodeLocatedFieldEditorScreen(props: CodeLocatedFieldEditorProps)
       />
 
       <FormControl isRequired>
+        <FormLabel>Contractor-friendly name</FormLabel>
+        <Input
+          value={props.contractorDisplayName}
+          onChange={(e) => props.onContractorDisplayNameChange(e.target.value)}
+        />
+      </FormControl>
+
+      <FormControl isRequired>
         <FormLabel>Description</FormLabel>
         <Textarea value={props.description} onChange={(e) => props.onDescriptionChange(e.target.value)} minH="120px" />
       </FormControl>
@@ -321,6 +384,14 @@ export function GenaiRuleEditorScreen(props: GenaiRuleEditorProps) {
               />
 
               <FormControl isRequired>
+                <FormLabel>Contractor-friendly name</FormLabel>
+                <Input
+                  value={props.contractorDisplayName}
+                  onChange={(e) => props.onContractorDisplayNameChange(e.target.value)}
+                />
+              </FormControl>
+
+              <FormControl isRequired>
                 <FormLabel>Prompt text</FormLabel>
                 <Textarea
                   value={props.promptText}
@@ -331,9 +402,11 @@ export function GenaiRuleEditorScreen(props: GenaiRuleEditorProps) {
 
               <RuleSourceFields
                 sourceQuote={props.sourceQuote}
-                contractorVisibleFlag={props.contractorVisibleFlag}
+                contractorVisibility={props.contractorVisibility}
+                contractorBlockingPolicy={props.contractorBlockingPolicy}
                 onSourceQuoteChange={props.onSourceQuoteChange}
-                onContractorVisibleFlagChange={props.onContractorVisibleFlagChange}
+                onContractorVisibilityChange={props.onContractorVisibilityChange}
+                onContractorBlockingPolicyChange={props.onContractorBlockingPolicyChange}
               />
             </VStack>
           </TabPanel>
@@ -371,6 +444,14 @@ export function GenaiLocatedFieldEditorScreen(props: GenaiEditorProps) {
                 onEnabledChange={props.onEnabledChange}
                 onRecordKeyChange={props.onRecordKeyChange}
               />
+
+              <FormControl isRequired>
+                <FormLabel>Contractor-friendly name</FormLabel>
+                <Input
+                  value={props.contractorDisplayName}
+                  onChange={(e) => props.onContractorDisplayNameChange(e.target.value)}
+                />
+              </FormControl>
 
               <FormControl isRequired>
                 <FormLabel>Prompt text</FormLabel>

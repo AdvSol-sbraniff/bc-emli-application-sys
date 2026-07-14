@@ -11,7 +11,7 @@ WITH code_rules_seed (
   info_admin_message,
   admin_notes,
   source_quote,
-  contractor_visible_flag,
+  legacy_contractor_visible_flag,
   created_at,
   updated_at
 ) AS (
@@ -674,6 +674,44 @@ Pseudo-code:
     NOW()
   )
 ),
+contractor_display_name_metadata (
+  code_rule_key,
+  contractor_display_name
+) AS (
+  VALUES
+  ('hp_ahri_product_validation', 'Heat pump AHRI product eligibility'),
+  ('ashp_electric_wood_rebate_math_within_cap', 'Heat pump rebate amount for electric or wood conversion'),
+  ('ashp_product_specs_meet_requirements', 'Heat pump product specifications'),
+  ('ashp_multisplit_minimum_two_indoor_heads', 'Minimum indoor heads for a multi-split heat pump'),
+  ('ashp_gas_propane_rebate_math_within_cap', 'Heat pump rebate amount for gas or propane conversion'),
+  ('ashp_fossil_northern_top_up_within_cap', 'Northern heat pump top-up amount for fossil-fuel conversion'),
+  ('ashp_oil_rebate_math_within_cap', 'Heat pump rebate amount for oil conversion'),
+  ('dfhp_rebate_math_within_cap', 'Dual-fuel heat pump rebate amount'),
+  ('dfhp_product_specs_meet_requirements', 'Dual-fuel heat pump product specifications'),
+  ('heat_pump_northern_top_up_3000_within_cap', 'Northern heat pump top-up amount'),
+  ('atw_rebate_math_within_cap', 'Air-to-water heat pump rebate amount'),
+  ('cshp_rebate_math_within_cap', 'Combined space and water heat pump rebate amount'),
+  ('hp_product_minimum_capacity_at_minus_5c', 'Heat pump cold-weather capacity'),
+  ('hp_product_efficiency_threshold', 'Heat pump energy efficiency'),
+  ('hpwh_neea_product_validation', 'Heat pump water heater product eligibility'),
+  ('hpwh_rebate_math_within_cap', 'Heat pump water heater rebate amount'),
+  ('esu_timing_within_six_months_of_heat_pump_installation', 'Electrical service upgrade timing'),
+  ('esu_rebate_math_within_cap', 'Electrical service upgrade rebate amount'),
+  ('hydronic_awhp_product_validation', 'Air-to-water heat pump product eligibility'),
+  ('ashp_oil_ohpa_product_validation', 'Oil-conversion heat pump product eligibility'),
+  ('first_class_invoice_fields_present', 'Required invoice information'),
+  ('submission_within_six_months', 'Application submitted within six months'),
+  ('eligibility_code_valid_for_invoice_date', 'Eligibility code valid on the invoice date'),
+  ('eligibility_code_found_in_database', 'Eligibility code recognized'),
+  ('prior_same_upgrade_type_rebate_payment_found', 'Previous rebate for the same upgrade'),
+  ('current_invoice_cannot_contain_multiple_space_systems', 'One primary heating system per invoice'),
+  ('income_level_1_or_2_required', 'Income qualification for this upgrade'),
+  ('hs_rebate_math_within_cap', 'Health and safety remediation rebate amount'),
+  ('vent_rebate_math_within_cap', 'Ventilation rebate amount'),
+  ('vent_herv_nrcan_product_validation', 'HRV or ERV product eligibility'),
+  ('vent_fan_energy_star_product_validation', 'Bathroom fan ENERGY STAR eligibility'),
+  ('vent_fan_capacity_meets_minimum', 'Bathroom fan airflow capacity')
+),
 source_quote_metadata (
   code_rule_key,
   section_name,
@@ -716,6 +754,7 @@ source_quote_metadata (
 INSERT INTO claims.code_rules (
   id,
   code_rule_key,
+  contractor_display_name,
   description,
   enabled,
   pass_admin_message,
@@ -724,13 +763,15 @@ INSERT INTO claims.code_rules (
   info_admin_message,
   admin_notes,
   source_quote,
-  contractor_visible_flag,
+  contractor_visibility,
+  contractor_blocking_policy,
   created_at,
   updated_at
 )
 SELECT
   id,
   code_rule_key,
+  contractor_display_name_metadata.contractor_display_name,
   description,
   enabled,
   pass_admin_message,
@@ -744,13 +785,20 @@ SELECT
       regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g') ||
       E'\n\n**Action:** ' || source_quote_metadata.action_sentence
   END AS source_quote,
-  contractor_visible_flag,
+  CASE
+    WHEN legacy_contractor_visible_flag THEN 'fail_only'
+    ELSE 'hidden'
+  END AS contractor_visibility,
+  'non_blocking' AS contractor_blocking_policy,
   created_at,
   updated_at
 FROM code_rules_seed
+JOIN contractor_display_name_metadata
+  USING (code_rule_key)
 LEFT JOIN source_quote_metadata
   USING (code_rule_key)
 ON CONFLICT (code_rule_key) DO UPDATE SET
+  contractor_display_name = EXCLUDED.contractor_display_name,
   description = EXCLUDED.description,
   pass_admin_message = EXCLUDED.pass_admin_message,
   warn_admin_message = EXCLUDED.warn_admin_message,
@@ -758,7 +806,8 @@ ON CONFLICT (code_rule_key) DO UPDATE SET
   info_admin_message = EXCLUDED.info_admin_message,
   admin_notes = COALESCE(claims.code_rules.admin_notes, EXCLUDED.admin_notes),
   source_quote = EXCLUDED.source_quote,
-  contractor_visible_flag = EXCLUDED.contractor_visible_flag,
+  contractor_visibility = EXCLUDED.contractor_visibility,
+  contractor_blocking_policy = EXCLUDED.contractor_blocking_policy,
   updated_at = NOW();
 
 WITH code_rule_upgrade_type_seed (

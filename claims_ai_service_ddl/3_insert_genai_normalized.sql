@@ -5,7 +5,7 @@ WITH genai_rules_seed (
   prompt_text,
   enabled,
   source_quote,
-  contractor_visible_flag,
+  legacy_contractor_visible_flag,
   created_at,
   updated_at
 ) AS (
@@ -541,6 +541,52 @@ Do not fail solely because ordinary post-installation warranty coverage language
 In calculation, state warranty_or_home_insurance_cost_evidence and classify the evidence as none_visible, standard_post_installation_terms, possible_cost_coverage_review, or covered_cost_claimed.
 In reason_and_likely_causes, distinguish standard warranty/insurance terms from warranty-paid, insurance-paid, credited, no-charge, or otherwise covered invoice costs.', true, 'Upgrade costs covered by warranty or home insurance are not eligible for rebates.', true, TIMESTAMP '2026-05-26 00:00:00', NOW())
 ),
+contractor_display_name_metadata (
+  genai_rule_key,
+  contractor_display_name
+) AS (
+  VALUES
+  ('ashp_electric_existing_heat_context_present', 'Existing electric heating system'),
+  ('ashp_electric_backup_heat_electric_present', 'Electric backup heating'),
+  ('ashp_gas_propane_existing_heat_context_present', 'Existing natural gas or propane heating system'),
+  ('ashp_fossil_fuel_removal_supporting_document_attached', 'Proof of fossil-fuel heating system removal'),
+  ('ashp_oil_consumption_baseline_proof_present', 'Proof of minimum oil consumption'),
+  ('ashp_oil_existing_heat_context_present', 'Existing oil heating system'),
+  ('ashp_wood_backup_heat_not_fossil_present', 'Backup heating is not fossil fuel'),
+  ('ashp_wood_existing_heat_context_present', 'Existing wood heating system'),
+  ('ashp_wood_removal_or_wett_supporting_document_attached', 'Proof of wood system removal or WETT inspection'),
+  ('contractor_identity_matches_record', 'Contractor information matches'),
+  ('dfhp_fossil_fuel_removal_or_modification_supporting_document_attached', 'Proof of fossil-fuel system removal or modification'),
+  ('dfhp_heat_load_calc_supporting_document_acceptable', 'Acceptable heat load calculation'),
+  ('dfhp_existing_heat_context_present', 'Existing heating system for a dual-fuel heat pump'),
+  ('dfhp_switchover_setpoint_specific', 'Dual-fuel heat pump switchover temperature'),
+  ('esu_contractor_utility_billed_work_on_one_invoice', 'Electrical and utility work billed correctly'),
+  ('esu_eligible_expense_lines_present', 'Eligible electrical service upgrade costs'),
+  ('esu_heat_pump_conversion_context_present', 'Electrical upgrade associated with a heat pump'),
+  ('esu_not_panel_only_or_connection_only', 'Complete electrical service upgrade'),
+  ('esu_service_size_present', 'Electrical service size'),
+  ('esu_utility_upgrade_supporting_document_attached', 'Utility electrical upgrade documents'),
+  ('homeowner_identity_matches_eligibility_record', 'Homeowner and installation address match'),
+  ('hp_fossil_backup_not_fossil_primary', 'Fossil-fuel fireplace is secondary only'),
+  ('hp_no_existing_or_secondary_heat_pump_flag', 'No existing heat pump at the home'),
+  ('hpwh_fossil_removal_supporting_document_attached', 'Proof of gas water heater removal'),
+  ('hpwh_no_existing_or_secondary_hpwh_flag', 'No existing heat pump water heater'),
+  ('hpwh_primary_replacement_context_present', 'Primary water heater replacement'),
+  ('hs_associated_upgrade_present', 'Health and safety work associated with an eligible upgrade'),
+  ('hs_before_after_photos_attached', 'Health and safety before and after photos'),
+  ('hs_issue_type_present', 'Eligible health and safety issue'),
+  ('hs_pre_confirmation_evidence_present', 'Health and safety pre-approval'),
+  ('hydronic_conversion_context_present', 'Existing heating system for hydronic heat pump conversion'),
+  ('hydronic_fossil_fuel_removal_supporting_document_attached', 'Proof of fossil-fuel system removal for a hydronic heat pump'),
+  ('hydronic_wood_removal_or_wett_supporting_document_attached', 'Proof of wood system removal or WETT inspection for a hydronic heat pump'),
+  ('overall_invoice_arithmetic_consistent', 'Invoice totals and rebate arithmetic'),
+  ('overall_rebate_not_over_invoice_total', 'Rebate does not exceed the invoice total'),
+  ('overall_rebate_not_over_paid_cost_of_upgrade', 'Rebate does not exceed the paid upgrade cost'),
+  ('rebate_line_evidence_present', 'CleanBC rebate shown on the invoice'),
+  ('vent_associated_upgrade_present', 'Ventilation installed with an eligible upgrade'),
+  ('vent_multiple_ventilation_rebate_or_fan_count_review', 'One ventilation rebate per home'),
+  ('warranty_or_home_insurance_costs_not_claimed', 'Costs are not covered by warranty or home insurance')
+),
 source_quote_metadata (
   genai_rule_key,
   section_name,
@@ -590,15 +636,18 @@ source_quote_metadata (
 )
 INSERT INTO claims.genai_rules (
   genai_rule_key,
+  contractor_display_name,
   prompt_text,
   enabled,
   source_quote,
-  contractor_visible_flag,
+  contractor_visibility,
+  contractor_blocking_policy,
   created_at,
   updated_at
 )
 SELECT
   genai_rule_key,
+  contractor_display_name_metadata.contractor_display_name,
   prompt_text,
   enabled,
   CASE
@@ -607,16 +656,24 @@ SELECT
       regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g') ||
       E'\n\n**Action:** ' || source_quote_metadata.action_sentence
   END AS source_quote,
-  contractor_visible_flag,
+  CASE
+    WHEN legacy_contractor_visible_flag THEN 'fail_only'
+    ELSE 'hidden'
+  END AS contractor_visibility,
+  'non_blocking' AS contractor_blocking_policy,
   created_at,
   updated_at
 FROM genai_rules_seed
+JOIN contractor_display_name_metadata
+  USING (genai_rule_key)
 LEFT JOIN source_quote_metadata
   USING (genai_rule_key)
 ON CONFLICT (genai_rule_key) DO UPDATE SET
+  contractor_display_name = EXCLUDED.contractor_display_name,
   prompt_text = EXCLUDED.prompt_text,
   source_quote = EXCLUDED.source_quote,
-  contractor_visible_flag = EXCLUDED.contractor_visible_flag,
+  contractor_visibility = EXCLUDED.contractor_visibility,
+  contractor_blocking_policy = EXCLUDED.contractor_blocking_policy,
   updated_at = NOW();
 
 WITH genai_rule_upgrade_types_seed (
@@ -835,9 +892,52 @@ Ventilation', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_model_number', 'Locate the HRV/ERV or bathroom fan model number exactly as shown on the invoice, label, quote, or product line. Do not include the manufacturer/brand unless the invoice only shows a combined phrase.', true, TIMESTAMP '2026-07-09 00:00:00', NOW()),
   ('vent_nrcan_or_product_list_reference', 'Locate NRCan product list or ENERGY STAR product list references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_system_type', 'Locate ventilation system type, such as HRV, ERV, heat recovery ventilator, energy recovery ventilator, bathroom fan, or fan system.', true, TIMESTAMP '2026-05-26 00:00:00', NOW())
+),
+genai_located_fields_with_names AS (
+  SELECT
+    seed.*,
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+      CASE
+        WHEN genai_field_key = 'before_after_photo_reference' THEN 'Before/after photo reference'
+        WHEN genai_field_key = 'labour_cost_invoice_total' THEN 'Total invoice labour cost'
+        WHEN genai_field_key = 'overall_rebate_line_amount' THEN 'Overall rebate amount'
+        WHEN genai_field_key = 'paid_cost_of_upgrade_amount' THEN 'Paid cost of upgrade'
+        WHEN genai_field_key = 'upgrade_specific_rebate_line_amount' THEN 'Upgrade-specific rebate amount'
+        WHEN genai_field_key LIKE 'ashp_%' THEN 'Air-source heat pump ' || lower(replace(substr(genai_field_key, 6), '_', ' '))
+        WHEN genai_field_key LIKE 'atw_%' THEN 'Air-to-water heat pump ' || lower(replace(substr(genai_field_key, 5), '_', ' '))
+        WHEN genai_field_key LIKE 'cshp_%' THEN 'Combined space and water heat pump ' || lower(replace(substr(genai_field_key, 6), '_', ' '))
+        WHEN genai_field_key LIKE 'dfhp_%' THEN 'Dual-fuel ducted heat pump ' || lower(replace(substr(genai_field_key, 6), '_', ' '))
+        WHEN genai_field_key LIKE 'esu_%' THEN 'Electrical service upgrade ' || lower(replace(substr(genai_field_key, 5), '_', ' '))
+        WHEN genai_field_key LIKE 'hpwh_%' THEN 'Heat pump water heater ' || lower(replace(substr(genai_field_key, 6), '_', ' '))
+        WHEN genai_field_key LIKE 'hp_%' THEN 'Heat pump ' || lower(replace(substr(genai_field_key, 4), '_', ' '))
+        WHEN genai_field_key LIKE 'hs_%' THEN 'Health and safety ' || lower(replace(substr(genai_field_key, 4), '_', ' '))
+        WHEN genai_field_key LIKE 'vent_%' THEN 'Ventilation ' || lower(replace(substr(genai_field_key, 6), '_', ' '))
+        ELSE upper(left(replace(genai_field_key, '_', ' '), 1)) || lower(substr(replace(genai_field_key, '_', ' '), 2))
+      END,
+      'ahri', 'AHRI'),
+      'hspf', 'HSPF'),
+      'hpwh', 'HPWH'),
+      'hvac', 'HVAC'),
+      'nrcan', 'NRCan'),
+      'seer', 'SEER'),
+      'wett', 'WETT'),
+      'gst', 'GST'),
+      'before after', 'before/after'),
+      'heat load calc', 'heat load calculation'),
+      'make model', 'make and model'),
+      'line amount', 'cost'),
+      'ahj', 'AHJ'),
+      'energy star', 'ENERGY STAR'),
+      ' flag', ' indicator'),
+      'top up', 'top-up'),
+      'pre confirmation', 'pre-confirmation'),
+      'upgrade specific', 'upgrade-specific'
+    ) AS contractor_display_name
+  FROM genai_located_fields_seed seed
 )
 INSERT INTO claims.genai_located_fields (
   genai_field_key,
+  contractor_display_name,
   prompt_text,
   enabled,
   created_at,
@@ -845,12 +945,14 @@ INSERT INTO claims.genai_located_fields (
 )
 SELECT
   genai_field_key,
+  contractor_display_name,
   prompt_text,
   enabled,
   created_at,
   updated_at
-FROM genai_located_fields_seed
+FROM genai_located_fields_with_names
 ON CONFLICT (genai_field_key) DO UPDATE SET
+  contractor_display_name = EXCLUDED.contractor_display_name,
   prompt_text = EXCLUDED.prompt_text,
   updated_at = NOW();
 

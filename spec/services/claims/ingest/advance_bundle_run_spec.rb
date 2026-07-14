@@ -61,6 +61,137 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       ).to eq(succeeded_step)
     end
 
+    it "binds a classifier-detected replacement invoice to the pending fix version" do
+      now = Time.zone.parse("2026-06-24 08:30:00")
+      contractor = Contractor.create!(business_name: "Replacement Contractor")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "ocr_in_progress",
+          created_at: now,
+          updated_at: now
+        )
+      Claims::InvoiceVersion.create!(
+        invoice_id: invoice.id,
+        invoice_versionno: 1,
+        storage_provider: "azure_blob",
+        storage_key: "source/original-invoice.pdf",
+        original_filename: "Original invoice.pdf",
+        content_type: "application/pdf",
+        created_at: now,
+        updated_at: now
+      )
+      pending_version =
+        Claims::InvoiceVersion.create!(
+          invoice_id: invoice.id,
+          invoice_versionno: 2,
+          storage_provider: "azure_blob",
+          storage_key: "PENDING/replacement-invoice.pdf",
+          created_at: now,
+          updated_at: now
+        )
+      run =
+        Claims::IngestRun.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          resolved_invoice_version_id: pending_version.id,
+          status: "running",
+          total_files: 1,
+          completed_files: 0,
+          failed_files: 0,
+          created_at: now,
+          updated_at: now
+        )
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        step_type: "fix_upload_package_stage",
+        status: "succeeded",
+        created_at: now,
+        updated_at: now
+      )
+      classifier_payload = {
+        "document_kind" => "invoice",
+        "document_kind_confidence" => 99,
+        "detected_upgrade_types" => [
+          {
+            "upgrade_type_key" => "windows_doors",
+            "confidence" => 98,
+            "evidence_text" => "Eligible window installation"
+          }
+        ]
+      }
+      windows_doors_upgrade_type(now)
+      replacement_document =
+        Claims::IngestDocument.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          resolved_invoice_version_id: pending_version.id,
+          storage_provider: "azure_blob",
+          storage_key: "uploaded/replacement-claim-document.pdf",
+          original_filename: "Replacement claim document.pdf",
+          content_type: "application/pdf",
+          byte_size: 3456,
+          sha256: SecureRandom.hex(32),
+          di_read_raw_json: {
+            "read" => "replacement invoice"
+          },
+          classifier_raw_json: classifier_payload,
+          document_kind: "invoice",
+          document_kind_confidence: 99,
+          document_kind_reason: "Primary replacement contractor invoice.",
+          classification_status: "classified",
+          classification_confidence: 99,
+          classification_reason: "Invoice content detected.",
+          classified_at: now,
+          created_at: now,
+          updated_at: now
+        )
+      %w[fix_ocr_read fix_classifier_files].each do |step_type|
+        Claims::IngestStepRun.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          ingest_document_id: replacement_document.id,
+          step_type: step_type,
+          status: "succeeded",
+          created_at: now,
+          updated_at: now
+        )
+      end
+
+      allow(Claims::RunOcrJob).to receive(:perform_async)
+
+      described_class.call(ingest_run_id: run.id)
+
+      pending_version.reload
+      expect(pending_version.storage_key).to eq(
+        replacement_document.storage_key
+      )
+      expect(pending_version.original_filename).to eq(
+        replacement_document.original_filename
+      )
+      expect(pending_version.content_type).to eq("application/pdf")
+      expect(
+        Claims::InvoiceVersionUpgradeType.exists?(
+          invoice_version_id: pending_version.id,
+          source_engine: "classifier"
+        )
+      ).to be(true)
+      expect(Claims::RunOcrJob).to have_received(:perform_async).with(
+        pending_version.id,
+        run.id,
+        "prebuilt-invoice",
+        true,
+        "use_existing_classifier",
+        "fix_ocr_invoice"
+      )
+    end
+
     it "marks an invoice with no supported detected upgrade type as package needs correction" do
       now = Time.zone.parse("2026-06-24 09:15:00")
       contractor =
@@ -396,6 +527,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       Claims::SupportingDocumentTypeLocatedField.create!(
         supporting_document_type_id: type.id,
         field_key: "model_number",
+        contractor_display_name: "Model number",
         prompt_text: "Find the model number.",
         field_number: 1,
         created_at: now,
@@ -565,6 +697,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::SupportingDocumentTypeLocatedField.create!(
           supporting_document_type_id: type.id,
           field_key: "field_#{index + 1}",
+          contractor_display_name: "Field #{index + 1}",
           prompt_text: "Find field #{index + 1}.",
           field_number: 1,
           created_at: now,

@@ -280,6 +280,32 @@ module Api
           return
         end
 
+        blocking_rulechecks =
+          latest_invoice_version!(invoice)
+            .rulechecks
+            .contractor_blocking
+            .order(:rule_key, :created_at)
+            .to_a
+
+        if blocking_rulechecks.any?
+          render json: {
+                   error:
+                     "This invoice has failed checks that must be resolved before submission.",
+                   error_code: "contractor_submission_blocked_by_rules",
+                   blocking_rulechecks:
+                     blocking_rulechecks.map do |rulecheck|
+                       {
+                         id: rulecheck.id,
+                         rule_key: rulecheck.rule_key,
+                         contractor_display_name:
+                           rulecheck.contractor_display_name
+                       }
+                     end
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
         invoice.set_workflow_status!(
           "admin_review_inbox",
           submitter_id: invoice.submitter_id || current_user.id,

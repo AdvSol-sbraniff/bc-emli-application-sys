@@ -4,8 +4,7 @@ BEGIN;
 WITH config_row (
   id,
   system_record,
-  classifier_system_record,
-  classifier_image_system_record,
+  document_triage_system_record,
   supporting_document_extraction_system_record,
   user_record0,
   admin_advice_intro,
@@ -95,9 +94,9 @@ Rule result examples:
 - FAIL: The invoice clearly shows standalone/ineligible scope for a rule that requires association with another upgrade.
 - FAIL: The invoice clearly shows warranty-paid, insurance-paid, credited, or no-charge costs being claimed.
 $system$,
-    $classifier$
+    $document_triage$
 purpose-statement:
-You classify whether the supplied Document Intelligence JSON appears to be an invoice, a supporting document, or unknown. If it is an invoice, also classify which Better Homes BC Energy Savings Program rebate upgrade claims appear to be made and locate the customer eligibility code if visible. If it is a supporting document, classify the supporting document type and routing quality only.
+You classify whether a supplied file is an invoice, a supporting document, or unknown. Use both the attached file and its Document Intelligence JSON. If it is an invoice, also classify which Better Homes BC Energy Savings Program rebate upgrade claims appear to be made and locate the customer eligibility code if visible. If it is a supporting document, classify the supporting document type and routing quality only.
 
 You are not making a final eligibility decision. You are triaging the document so the application can decide whether to treat it as the main invoice or as a supporting document and which downstream checks to run next. Supporting-document field extraction happens in a separate call after routing.
 
@@ -174,14 +173,15 @@ Output-json-schema:
 Rules:
 - Return strict JSON only.
 - Do not include markdown outside JSON.
+- Do not infer document kind from the filename, MIME type, or file extension. An invoice or supporting document may be supplied as either a PDF or an image.
+- Treat Document Intelligence text as the authoritative source for textual evidence, page numbers, and polygons. Use the attached file for visual and document context.
 - Classify document_kind first.
 - Use document_kind="invoice" only when the document appears to be the primary contractor invoice, estimate, sales invoice, or invoice-like claim document containing billed work, pricing, totals, or rebate-claimed work scope.
 - Use document_kind="supporting_document" for supporting documents such as utility bills, landlord consent, product labels, spec sheets, permits, preapproval notices, WETT reports, photos, and other non-invoice attachments.
 - Use document_kind="unknown" when the OCR does not provide enough evidence to decide between invoice and supporting document.
-- Treat supported image files such as JPG, JPEG, or PNG as likely supporting documents unless the metadata and OCR clearly indicate they are the primary invoice.
-- If an image file has little OCR text but its filename or visible text suggests before/after evidence, classify it as document_kind="supporting_document", supporting_document_type_key="before_after_photo_set", and supporting_document_routing_quality="requires_visual_review".
-- If an image file has little OCR text but its filename or visible text suggests a product/nameplate/label photo, classify it as document_kind="supporting_document", supporting_document_type_key="manufacturer_label_photo", and supporting_document_routing_quality="requires_visual_review".
-- Do not classify a readable JPG/PNG as unknown merely because DI-read has little text. Use unknown only when neither file metadata nor OCR gives enough safe clue for invoice versus supporting document.
+- If an image has little OCR text but visible evidence shows before/after work, classify it as document_kind="supporting_document", supporting_document_type_key="before_after_photo_set", and supporting_document_routing_quality="requires_visual_review".
+- If an image has little OCR text but visible evidence shows a product/nameplate/label, classify it as document_kind="supporting_document", supporting_document_type_key="manufacturer_label_photo", and supporting_document_routing_quality="requires_visual_review".
+- Do not classify a readable image as unknown merely because DI-read has little text. Use the attached file itself to decide whether it is an invoice, supporting document, or genuinely unknown.
 - document_kind_reason is mandatory.
 - Set supporting_document_type_key only when document_kind="supporting_document". Otherwise return null.
 - Set supporting_document_type_confidence only when document_kind="supporting_document". Otherwise return 0.
@@ -219,73 +219,7 @@ Rules:
 - Prefer exact invoice phrases in evidence_text.
 - Prefer under-classification over over-classification. If the invoice clearly has two upgrade domains, return two, not every related program possibility.
 - If no upgrade type is visible, return an empty detected_upgrade_types array.
-$classifier$,
-    $classifier_image$
-purpose-statement:
-You classify an attached image file for the Better Homes BC Energy Savings Program. Use the attached image as primary evidence. Use filename, MIME type, byte size, and Document Intelligence JSON only as weak hints.
-
-You are not extracting official visual findings or supporting-document located fields. This call only decides how the image should route. Official visual findings are extracted later by supporting-document single/group extraction.
-
-Allowed document_kind values:
-- supporting_document
-- unknown
-
-Allowed supporting_document_type_key values:
-- before_after_photo_set
-- dual_fuel_control_document
-- energy_star_label
-- f280_heat_load_calculation
-- fossil_backup_system_document
-- fossil_fuel_removal_proof
-- landlord_consent_form
-- manufacturer_label_photo
-- oil_removal_proof
-- permit_document
-- preapproval_notice
-- product_spec_sheet
-- utility_bill
-- electrical_utility_upgrade_document
-- wett_report
-
-Output-json-schema:
-{
-  "document_kind": "supporting_document|unknown",
-  "document_kind_confidence": 0,
-  "document_kind_reason": "2-4 sentences explaining why the image is a supporting document or unknown.",
-  "supporting_document_type_key": null,
-  "supporting_document_type_confidence": 0,
-  "supporting_document_type_reason": null,
-  "supporting_document_routing_quality": null,
-  "supporting_document_routing_quality_reason": null,
-  "visual_routing_summary": null,
-  "eligibility_code": null,
-  "detected_upgrade_types": [],
-  "not_detected_upgrade_types": []
-}
-
-Rules:
-- Return strict JSON only.
-- Do not include markdown outside JSON.
-- Use the attached image as the primary evidence.
-- Treat DI-read text, filename, and MIME type as weak hints only.
-- Do not return visual_findings.
-- Do not return supporting_document_located_fields.
-- Use document_kind="supporting_document" when the image appears to be a photo, label, product plate, form page, bill page, permit page, report page, or other non-invoice supporting evidence.
-- Use document_kind="unknown" only when the image is too blank, irrelevant, unreadable, or ambiguous to route.
-- For before/after work photos, use supporting_document_type_key="before_after_photo_set".
-- For equipment/product nameplate photos, use supporting_document_type_key="manufacturer_label_photo".
-- For ENERGY STAR label photos, use supporting_document_type_key="energy_star_label".
-- If a photographed page clearly belongs to another allowed supporting-document type, choose that type.
-- Set supporting_document_type_key only when document_kind="supporting_document"; otherwise return null.
-- Allowed supporting_document_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
-- Use supporting_document_routing_quality="usable" when the image is clear enough for downstream extraction.
-- Use supporting_document_routing_quality="requires_visual_review" when the image content is the evidence and later visual extraction must inspect it.
-- Use supporting_document_routing_quality="needs_review" when the likely type is clear but the image has blur, cutoff, glare, rotation, or ambiguity concerns.
-- Use supporting_document_routing_quality="unusable" when the image is blank, irrelevant, or too poor to route safely.
-- visual_routing_summary may briefly describe the image for routing only. It is not official evidence.
-- Return eligibility_code=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
-- Use confidence from 0 to 100.
-$classifier_image$,
+$document_triage$,
     $supporting_document_extraction$
 purpose-statement:
 You extract configured located fields from all supplied supporting documents of one supporting-document type for the Better Homes BC Energy Savings Program. The application has already classified the document type for each file. You are not deciding final eligibility.
@@ -312,7 +246,6 @@ Output-json-schema:
           "finding_type": "manufacturer_label_photo",
           "summary": "Short description of a useful visual observation from this supporting-document file.",
           "legibility": "legible",
-          "relevant_text_seen": ["visible text from the image, if any"],
           "confidence": 0
         }
       ]
@@ -330,9 +263,10 @@ Rules:
 - Copy each configured field_key exactly.
 - If a configured field value is not visible in that document, return value=null, confidence=0, page=null, polygon=null, and evidence_text=null for that field.
 - Inspect every attached supporting-document file when present.
-- Return visual_findings[] for useful visual observations from each file, such as equipment labels, before/after photos, energy labels, floor plans, fireplace/chimney photos, or unclear visual evidence.
+- Return visual_findings[] only for useful non-textual visual observations from each file, such as equipment being visible, before/after condition, floor-plan structure, fireplace/chimney condition, glare, cutoff, blur, or unclear visual evidence.
 - visual_findings[] is one row per useful observation for that file, not one row per embedded PDF image object.
 - If a file has no useful visual evidence, return visual_findings=[] for that file.
+- Do not transcribe or summarize visible text in visual_findings. Textual evidence belongs in configured supporting_document_located_fields, using exact Document Intelligence evidence_text, page, and polygon.
 - Use legibility values: legible, partially_legible, illegible, or not_applicable.
 - Use confidence from 0 to 100.
 - Prefer exact short evidence text copied from the OCR/DI content.
@@ -399,9 +333,7 @@ seeded_config AS (
 INSERT INTO claims.validationgenai_config (
   id,
   system_record,
-  classifier_system_record,
-  classifier_pdf_system_record,
-  classifier_image_system_record,
+  document_triage_system_record,
   supporting_document_extraction_system_record,
   user_record0,
   admin_advice_intro,
@@ -412,9 +344,7 @@ INSERT INTO claims.validationgenai_config (
   SELECT
     id,
     system_record,
-    classifier_system_record,
-    classifier_system_record,
-    classifier_image_system_record,
+    document_triage_system_record,
     supporting_document_extraction_system_record,
     user_record0,
     admin_advice_intro,
@@ -424,9 +354,7 @@ INSERT INTO claims.validationgenai_config (
   FROM config_row
   ON CONFLICT (id) DO UPDATE SET
     system_record = EXCLUDED.system_record,
-    classifier_system_record = EXCLUDED.classifier_system_record,
-    classifier_pdf_system_record = EXCLUDED.classifier_pdf_system_record,
-    classifier_image_system_record = EXCLUDED.classifier_image_system_record,
+    document_triage_system_record = EXCLUDED.document_triage_system_record,
     supporting_document_extraction_system_record = EXCLUDED.supporting_document_extraction_system_record,
     user_record0 = EXCLUDED.user_record0,
     admin_advice_intro = EXCLUDED.admin_advice_intro,

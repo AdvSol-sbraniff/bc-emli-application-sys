@@ -216,16 +216,12 @@ module Claims
             coerce_legibility(
               finding_payload["legibility"] || finding_payload[:legibility]
             ),
-          relevant_text_seen:
-            coerce_json_array_or_nil(
-              finding_payload["relevant_text_seen"] ||
-                finding_payload[:relevant_text_seen]
-            ),
           confidence:
             coerce_confidence(
               finding_payload["confidence"] || finding_payload[:confidence]
             ),
-          raw_json: finding_payload,
+          raw_json:
+            finding_payload.except("relevant_text_seen", :relevant_text_seen),
           created_at: now,
           updated_at: now
         }
@@ -245,28 +241,6 @@ module Claims
         end
 
         "not_applicable"
-      end
-
-      def coerce_json_array_or_nil(value)
-        return value if value.is_a?(Array)
-        return nil if value.nil?
-
-        if value.is_a?(String)
-          stripped = value.strip
-          return nil if stripped.empty?
-
-          parsed =
-            begin
-              JSON.parse(stripped)
-            rescue StandardError
-              nil
-            end
-          return parsed if parsed.is_a?(Array)
-
-          return [stripped]
-        end
-
-        [value.to_s]
       end
 
       def polygon_to_flat_float_array(raw)

@@ -745,20 +745,30 @@ Practical memory for next time
   6) after private endpoint exists, test DNS/reachability from both:
      - Gold/OpenShift pod
      - laptop with company VPN enabled
-  7) current dev Azure OpenAI deployment:
+  7) current dev Azure OpenAI deployment (updated 2026-07-13):
      - account: `aoai-esp-dev`
      - endpoint: `https://aoai-esp-dev.openai.azure.com/`
      - app base URL: `https://aoai-esp-dev.openai.azure.com/openai/v1/`
      - private endpoint IP: `10.46.78.4`
-     - deployment: `gpt-5-4-chat`
-     - model: `gpt-5.4` version `2026-03-05`
-     - SKU/capacity: `GlobalStandard` / `1`
-     - GPT-5.5 was attempted first but failed with Azure `InsufficientCapacity`
+     - active deployment: `gpt-5.6-terra`
+     - model: `gpt-5.6-terra` version `2026-07-09`
+     - SKU: `GlobalStandard`
+     - rollback deployment retained: `gpt-5-4-chat` (`gpt-5.4`, version `2026-03-05`)
+     - Gold secret `hesp` has `GENAI_DEPLOYMENT=gpt-5.6-terra`
+     - confirmed from the Gold `hesp-claims-ai` pod with Responses API HTTP 200 and output `GOLD_TERRA_OK`
+     - Global Standard can process inference outside Canada; this is not a Canada-only deployment
+     - BC Gov conditional-access policy currently prevents Azure CLI authentication from this workstation, so Azure model deployments must be created manually in the web portal
   8) current private-network status:
-     - local laptop resolves the endpoint to public IP `52.242.46.17`
-     - Gold/OpenShift resolves the endpoint to public IP `52.242.46.17`
-     - Gold data-plane test fails with `403 Public access is disabled. Please configure private endpoint.`
-     - remaining platform task is central private DNS/routing so callers resolve the endpoint through `privatelink.openai.azure.com` to `10.46.78.4`
+     - Gold/OpenShift uses Helm `claimsAi.hostAliases` to map the Azure OpenAI hostname to private endpoint IP `10.46.78.4`
+     - Gold data-plane access is working through the private endpoint
+     - local laptop DNS/private routing may still differ and should be tested separately when needed
+     - long-term platform task is central private DNS/routing so callers resolve the endpoint through `privatelink.openai.azure.com` to `10.46.78.4` without host aliases
+  9) Azure key security note from 2026-07-13:
+     - an Azure OpenAI account key was pasted into chat during the manual deployment handoff
+     - never copy that value into source files or the runbook
+     - identify whether the disclosed value is Key 1 or Key 2 in the Azure portal
+     - regenerate the other, unexposed key first; update Gold secret `hesp` / `GENAI_KEY` to that fresh key and verify inference
+     - only after Gold is confirmed on the fresh key, regenerate the disclosed key so the exposed value becomes invalid without downtime
 
 ============================================================
 SECTION I - LOCAL LEGACY CONTRACTOR ONBOARDING LESSONS

@@ -370,12 +370,19 @@ module Api
           .joins(
             "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_located_fields.invoice_upgrade_type_id"
           )
+          .joins(
+            "LEFT JOIN claims.genai_located_fields glf ON claims.invoice_version_located_fields.source_engine = 'genai' AND glf.genai_field_key = claims.invoice_version_located_fields.field_key"
+          )
+          .joins(
+            "LEFT JOIN claims.code_located_fields clf ON claims.invoice_version_located_fields.source_engine = 'code' AND clf.code_field_key = claims.invoice_version_located_fields.field_key"
+          )
           .where(
             invoice_version_id: invoice_version_id,
             source_engine: source_engine
           )
           .select(
-            *upgrade_type_select_sql("claims.invoice_version_located_fields")
+            *upgrade_type_select_sql("claims.invoice_version_located_fields"),
+            "COALESCE(glf.contractor_display_name, clf.contractor_display_name, CASE WHEN claims.invoice_version_located_fields.source_engine = 'classifier' AND claims.invoice_version_located_fields.field_key = 'classifier.eligibility_code' THEN 'Eligibility code' END) AS contractor_display_name"
           )
           .order(:field_key, :created_at)
       end
@@ -398,7 +405,8 @@ module Api
           .select(
             *upgrade_type_select_sql("claims.invoice_version_rulechecks"),
             "COALESCE(gr.source_quote, cr.source_quote) AS source_quote",
-            "COALESCE(gr.contractor_visible_flag, cr.contractor_visible_flag) AS contractor_visible_flag"
+            "COALESCE(gr.contractor_visibility, cr.contractor_visibility, 'hidden') AS effective_contractor_visibility",
+            "COALESCE(gr.contractor_blocking_policy, cr.contractor_blocking_policy, 'non_blocking') AS effective_contractor_blocking_policy"
           )
           .order(:source_engine, :rule_key, :created_at)
       end
@@ -441,7 +449,9 @@ module Api
             "source_engine" => row.source_engine,
             "upgrade_type_key" => row.read_attribute("upgrade_type_key"),
             "upgrade_type_description" =>
-              row.read_attribute("upgrade_type_description")
+              row.read_attribute("upgrade_type_description"),
+            "contractor_display_name" =>
+              row.read_attribute("contractor_display_name")
           )
         end
       end
@@ -455,6 +465,7 @@ module Api
               invoice_upgrade_type_id
               source_engine
               rule_key
+              contractor_display_name
               rule_result
               confidence
               expected_text
@@ -469,8 +480,10 @@ module Api
             "upgrade_type_description" =>
               row.read_attribute("upgrade_type_description"),
             "source_quote" => row.read_attribute("source_quote"),
-            "contractor_visible_flag" =>
-              row.read_attribute("contractor_visible_flag")
+            "contractor_visibility" =>
+              row.read_attribute("effective_contractor_visibility"),
+            "contractor_blocking_policy" =>
+              row.read_attribute("effective_contractor_blocking_policy")
           )
         end
       end
@@ -620,7 +633,6 @@ module Api
                 page
                 summary
                 legibility
-                relevant_text_seen
                 confidence
                 raw_json
                 created_at
@@ -655,6 +667,7 @@ module Api
               ]
             ).merge(
               "field_number" => definition&.field_number,
+              "contractor_display_name" => definition&.contractor_display_name,
               "prompt_text" => definition&.prompt_text
             )
           end

@@ -40,6 +40,7 @@ type LocatedFieldRow = {
   id: string;
   supporting_document_type_id: string;
   field_key: string;
+  contractor_display_name: string;
   prompt_text: string;
   field_number: number;
   enabled: boolean;
@@ -51,6 +52,7 @@ type LocatedFieldRow = {
 type EditorState = {
   id?: string;
   fieldKey: string;
+  contractorDisplayName: string;
   promptText: string;
   fieldNumber: string;
   enabled: boolean;
@@ -169,6 +171,7 @@ export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConf
       const nextNumber = rows.reduce((max, row) => Math.max(max, Number(row.field_number || 0)), 0) + 1;
       setEditor({
         fieldKey: '',
+        contractorDisplayName: '',
         promptText: '',
         fieldNumber: String(nextNumber),
         enabled: true,
@@ -195,6 +198,7 @@ export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConf
       setEditor({
         id: data.id,
         fieldKey: data.field_key || '',
+        contractorDisplayName: data.contractor_display_name || '',
         promptText: data.prompt_text || '',
         fieldNumber: String(data.field_number || ''),
         enabled: !!data.enabled,
@@ -244,6 +248,7 @@ export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConf
     try {
       const body = {
         field_key: editor.fieldKey,
+        contractor_display_name: editor.contractorDisplayName,
         prompt_text: editor.promptText,
         field_number: Number(editor.fieldNumber),
         enabled: editor.enabled,
@@ -344,6 +349,19 @@ export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConf
                     </NumberInput>
                   </FormControl>
 
+                  <FormControl isRequired>
+                    <FormLabel>Contractor-friendly name</FormLabel>
+                    <Input
+                      value={editor.contractorDisplayName}
+                      onChange={(event) =>
+                        setEditor((current) =>
+                          current ? { ...current, contractorDisplayName: event.target.value } : current,
+                        )
+                      }
+                      placeholder="Utility provider"
+                    />
+                  </FormControl>
+
                   <FormControl>
                     <FormLabel>Prompt text</FormLabel>
                     <Textarea
@@ -425,7 +443,7 @@ export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConf
                   <Thead bg="gray.50">
                     <Tr>
                       <Th w="80px">Order</Th>
-                      <Th>Field key</Th>
+                      <Th>Contractor-friendly name</Th>
                       <Th>Prompt</Th>
                       <Th>Enabled</Th>
                       <Th>Updated</Th>
@@ -437,7 +455,11 @@ export function SupportingDocumentTypeFieldsAdminScreen({ config = fileFieldConf
                       <Tr key={row.id}>
                         <Td>{row.field_number}</Td>
                         <Td>
-                          <Text fontWeight="semibold">{row.field_key}</Text>
+                          <Tooltip label={`Field key: ${row.field_key}`} hasArrow>
+                            <Text fontWeight="semibold" cursor="help">
+                              {row.contractor_display_name}
+                            </Text>
+                          </Tooltip>
                         </Td>
                         <Td maxW="560px">
                           <Text noOfLines={2}>{row.prompt_text}</Text>

@@ -58,6 +58,7 @@ RSpec.describe "Claims contractor invoice read", type: :request do
         Claims::SupportingDocumentTypeLocatedField.create!(
           supporting_document_type_id: supporting_type.id,
           field_key: "u_factor",
+          contractor_display_name: "U-factor",
           prompt_text: "Find the U-factor.",
           field_number: 1,
           enabled: true,
@@ -148,6 +149,7 @@ RSpec.describe "Claims contractor invoice read", type: :request do
       )
       expect(document.fetch("located_fields").first).to include(
         "field_key" => "u_factor",
+        "contractor_display_name" => "U-factor",
         "value_text" => "1.22",
         "field_number" => 1,
         "prompt_text" => "Find the U-factor."

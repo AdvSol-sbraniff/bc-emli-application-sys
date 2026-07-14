@@ -40,6 +40,7 @@ type ContextPayload = {
 type SupportingDocumentLocatedField = {
   id?: string;
   field_key?: string | null;
+  contractor_display_name?: string | null;
   value_text?: string | null;
   value_json?: any;
   confidence?: number | null;
@@ -57,7 +58,6 @@ type SupportingDocumentVisualFinding = {
   page?: number | null;
   summary?: string | null;
   legibility?: string | null;
-  relevant_text_seen?: string[] | null;
   confidence?: number | null;
 };
 
@@ -410,11 +410,6 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                             </Text>
                           </Flex>
                           <Text fontSize="sm">{finding.summary || '—'}</Text>
-                          {Array.isArray(finding.relevant_text_seen) && finding.relevant_text_seen.length > 0 && (
-                            <Text fontSize="xs" mt={2} opacity={0.72}>
-                              Text seen: {finding.relevant_text_seen.join('; ')}
-                            </Text>
-                          )}
                         </Box>
                       ))}
                     </VStack>
@@ -445,7 +440,11 @@ export default function InvoiceSupportingDocumentsAdminScreen() {
                         {selectedInfoRow.located_fields.map((field) => (
                           <Tr key={field.id || `${selectedInfoRow.id}:${field.field_key}`}>
                             <Td fontSize="xs" fontWeight="semibold">
-                              {field.field_key || 'field'}
+                              <Tooltip label={`Field key: ${field.field_key || 'unknown'}`} hasArrow>
+                                <Text as="span" fontSize="xs" fontWeight="semibold" cursor="help">
+                                  {field.contractor_display_name || field.field_key || 'Field'}
+                                </Text>
+                              </Tooltip>
                             </Td>
                             <Td fontSize="xs">{fmtLocatedFieldValue(field)}</Td>
                             <Td fontSize="xs">{field.confidence ?? 0}</Td>

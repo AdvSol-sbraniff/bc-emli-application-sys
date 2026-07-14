@@ -72,11 +72,23 @@ module Api
       private
 
       def create_params
-        params.permit(:field_key, :prompt_text, :field_number, :enabled)
+        params.permit(
+          :field_key,
+          :contractor_display_name,
+          :prompt_text,
+          :field_number,
+          :enabled
+        )
       end
 
       def update_params
-        params.permit(:field_key, :prompt_text, :field_number, :enabled)
+        params.permit(
+          :field_key,
+          :contractor_display_name,
+          :prompt_text,
+          :field_number,
+          :enabled
+        )
       end
 
       def serialize_row(row, include_type: false)
@@ -84,6 +96,7 @@ module Api
           id: row.id,
           supporting_document_type_id: row.supporting_document_type_id,
           field_key: row.field_key,
+          contractor_display_name: row.contractor_display_name,
           prompt_text: row.prompt_text,
           field_number: row.field_number,
           enabled: row.enabled,

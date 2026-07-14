@@ -68,7 +68,7 @@ The Bicep creates:
 - NSG required by BC Gov policy
 - private endpoint subnet in `cbdb71-dev-vwan-spoke`
 - private endpoint connected to the Azure OpenAI account
-- `gpt-5.4` model deployment named `gpt-5-4-chat`
+- `gpt-5.6-terra` model deployment named `gpt-5.6-terra`
 
 Private DNS is optional in the template because BC Gov policy says private DNS must be created centrally in the connectivity subscription. If the platform team provides the central private DNS zone resource id, set:
 
@@ -90,14 +90,16 @@ The account and model currently deployed in dev are:
 Account: aoai-esp-dev
 Endpoint: https://aoai-esp-dev.openai.azure.com/
 Private endpoint IP: 10.46.78.4
-Deployment: gpt-5-4-chat
-Model: gpt-5.4
-Model version: 2026-03-05
+Active deployment: gpt-5.6-terra
+Model: gpt-5.6-terra
+Model version: 2026-07-09
 SKU: GlobalStandard
-Capacity: 1
+Rollback deployment: gpt-5-4-chat (gpt-5.4, 2026-03-05)
 ```
 
-`gpt-5.5` was checked first because it was the smartest available model in the Canada regions, but Azure rejected the deployment with insufficient capacity for its required `GlobalProvisionedManaged` SKU. `gpt-5.4` was the best available successful deployment.
+`gpt-5.6-terra` was created manually in the Azure portal on 2026-07-13 because BC Gov conditional-access policy prevents this workstation from authenticating Azure CLI. Gold was switched by changing only `GENAI_DEPLOYMENT` in the `hesp` secret. The existing endpoint and account key were retained, and `gpt-5-4-chat` remains available for rollback.
+
+Terra is deployed with `GlobalStandard`. The Azure OpenAI resource is in Canada East, but Global Standard inference may be processed outside Canada and must not be described as Canada-only processing.
 
 The endpoint has public network access disabled. If a caller resolves `aoai-esp-dev.openai.azure.com` to a public IP, data-plane calls fail with:
 
@@ -105,7 +107,7 @@ The endpoint has public network access disabled. If a caller resolves `aoai-esp-
 Public access is disabled. Please configure private endpoint.
 ```
 
-Gold/OpenShift and local laptop testing both currently resolve the endpoint to a public Azure IP, so the remaining platform task is central private DNS/routing. The desired private DNS outcome is:
+Gold/OpenShift uses the `claimsAi.hostAliases` entries in `helm/main/values-ce8baa-dev.yaml` to resolve the Azure OpenAI, Document Intelligence, and Blob Storage hostnames to their private endpoint IPs. A live Responses API test from the Gold `hesp-claims-ai` pod succeeded against Terra on 2026-07-13. The desired long-term central private DNS outcome remains:
 
 ```text
 aoai-esp-dev.openai.azure.com -> aoai-esp-dev.privatelink.openai.azure.com -> 10.46.78.4

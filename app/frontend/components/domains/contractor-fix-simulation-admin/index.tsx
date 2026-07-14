@@ -55,7 +55,7 @@ type ProposedFileRow = {
   id: string;
   sourceId?: string | null;
   source: 'clone' | 'new';
-  fileRole: 'invoice' | 'supporting_document';
+  fileRole: 'invoice' | 'supporting_document' | 'auto_detect';
   filename: string;
   contentType?: string | null;
   byteSize?: number | null;
@@ -76,10 +76,6 @@ function fmtBytes(n?: number | null) {
 
 function fileSizeMb(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function guessNewFileRole(file: File): 'invoice' | 'supporting_document' {
-  return /invoice/i.test(file.name) ? 'invoice' : 'supporting_document';
 }
 
 export default function ContractorFixSimulationAdminScreen() {
@@ -160,14 +156,11 @@ export default function ContractorFixSimulationAdminScreen() {
 
   const currentRows = useMemo(() => proposedRows.filter((row) => row.source === 'clone'), [proposedRows]);
   const newRows = useMemo(() => proposedRows.filter((row) => row.source === 'new'), [proposedRows]);
-  const invoiceRows = useMemo(() => proposedRows.filter((row) => row.fileRole === 'invoice'), [proposedRows]);
 
   const validationMessage = useMemo(() => {
     if (!proposedRows.length) return 'The proposed package cannot be empty.';
-    if (invoiceRows.length === 0) return 'The proposed package must keep or add one invoice file.';
-    if (invoiceRows.length > 1) return 'The proposed package has more than one invoice file selected.';
     return '';
-  }, [invoiceRows.length, proposedRows.length]);
+  }, [proposedRows.length]);
 
   const addFiles = (files: File[]) => {
     if (!files.length) return;
@@ -177,7 +170,7 @@ export default function ContractorFixSimulationAdminScreen() {
       ...files.map((file) => ({
         id: `new-${crypto.randomUUID()}`,
         source: 'new' as const,
-        fileRole: guessNewFileRole(file),
+        fileRole: 'auto_detect' as const,
         filename: file.name,
         contentType: file.type || null,
         byteSize: file.size,
@@ -215,20 +208,6 @@ export default function ContractorFixSimulationAdminScreen() {
     setProposedRows((existing) => existing.filter((row) => row.id !== id));
   };
 
-  const toggleFileRole = (id: string) => {
-    setSubmitMessage('');
-    setProposedRows((existing) =>
-      existing.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              fileRole: row.fileRole === 'invoice' ? 'supporting_document' : 'invoice',
-            }
-          : row,
-      ),
-    );
-  };
-
   const handleSubmitFixPackage = async () => {
     if (validationMessage) {
       setSubmitMessage(validationMessage);
@@ -254,7 +233,6 @@ export default function ContractorFixSimulationAdminScreen() {
         .filter((row) => row.source === 'new' && row.file)
         .forEach((row) => {
           formData.append('files[]', row.file as File);
-          formData.append('file_roles[]', row.fileRole);
         });
 
       const res = await fetch(`/api/claims/invoices/${encodeURIComponent(invoiceId)}/upload_fix_package`, {
@@ -369,7 +347,7 @@ export default function ContractorFixSimulationAdminScreen() {
                   Add replacement or extra files
                 </Text>
                 <Text fontSize="xs" opacity={0.68}>
-                  New files are staged as NEW ADDITION. The final backend classifier remains the authority.
+                  New files are staged as NEW ADDITION and classified from their contents by the AI pipeline.
                 </Text>
               </Box>
               <Button
@@ -456,7 +434,7 @@ export default function ContractorFixSimulationAdminScreen() {
                 <Tr>
                   <Th>filename</Th>
                   <Th>status</Th>
-                  <Th>role</Th>
+                  <Th>classification</Th>
                   <Th>type</Th>
                   <Th isNumeric>size</Th>
                   <Th textAlign="right">actions</Th>
@@ -472,9 +450,17 @@ export default function ContractorFixSimulationAdminScreen() {
                       </Badge>
                     </Td>
                     <Td>
-                      <Button size="xs" variant="ghost" onClick={() => toggleFileRole(row.id)}>
-                        {row.fileRole === 'invoice' ? 'invoice' : 'supporting doc'}
-                      </Button>
+                      <Badge
+                        colorScheme={
+                          row.fileRole === 'auto_detect' ? 'orange' : row.fileRole === 'invoice' ? 'blue' : 'gray'
+                        }
+                      >
+                        {row.fileRole === 'auto_detect'
+                          ? 'pending auto-detection'
+                          : row.fileRole === 'invoice'
+                            ? 'invoice'
+                            : 'supporting doc'}
+                      </Badge>
                     </Td>
                     <Td fontSize="xs">{row.supportingType || row.contentType || '-'}</Td>
                     <Td isNumeric fontSize="xs">

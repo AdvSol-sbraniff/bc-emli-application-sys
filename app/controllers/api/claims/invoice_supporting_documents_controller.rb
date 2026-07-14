@@ -219,6 +219,7 @@ module Api
               ]
             ).merge(
               "field_number" => definition&.field_number,
+              "contractor_display_name" => definition&.contractor_display_name,
               "prompt_text" => definition&.prompt_text
             )
           end
@@ -239,7 +240,6 @@ module Api
                 page
                 summary
                 legibility
-                relevant_text_seen
                 confidence
                 raw_json
                 created_at

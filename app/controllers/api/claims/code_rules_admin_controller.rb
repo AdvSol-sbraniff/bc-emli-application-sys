@@ -35,7 +35,7 @@ module Api
           like = "%#{ActiveRecord::Base.sanitize_sql_like(q)}%"
           scope =
             scope.where(
-              "claims.code_rules.code_rule_key ILIKE :like OR claims.code_rules.description ILIKE :like OR claims.code_rules.admin_notes ILIKE :like",
+              "claims.code_rules.code_rule_key ILIKE :like OR claims.code_rules.contractor_display_name ILIKE :like OR claims.code_rules.description ILIKE :like OR claims.code_rules.admin_notes ILIKE :like",
               like: like
             )
         end
@@ -66,6 +66,7 @@ module Api
 
       def update_params
         params.permit(
+          :contractor_display_name,
           :description,
           :enabled,
           :pass_admin_message,
@@ -74,7 +75,8 @@ module Api
           :info_admin_message,
           :admin_notes,
           :source_quote,
-          :contractor_visible_flag
+          :contractor_visibility,
+          :contractor_blocking_policy
         )
       end
 
@@ -82,6 +84,7 @@ module Api
         {
           id: rule.id,
           code_rule_key: rule.code_rule_key,
+          contractor_display_name: rule.contractor_display_name,
           description: rule.description,
           enabled: rule.enabled,
           pass_admin_message: rule.pass_admin_message,
@@ -90,7 +93,8 @@ module Api
           info_admin_message: rule.info_admin_message,
           admin_notes: rule.admin_notes,
           source_quote: rule.source_quote,
-          contractor_visible_flag: rule.contractor_visible_flag,
+          contractor_visibility: rule.contractor_visibility,
+          contractor_blocking_policy: rule.contractor_blocking_policy,
           created_at: rule.created_at,
           updated_at: rule.updated_at,
           upgrade_types:

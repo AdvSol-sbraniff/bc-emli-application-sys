@@ -7,14 +7,7 @@ import {
   Box,
   Button,
   Container,
-  Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerHeader,
-  DrawerOverlay,
   Flex,
-  Heading,
   IconButton,
   Modal,
   ModalBody,
@@ -61,6 +54,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 
 type FieldRowProps = {
   label: string;
+  labelHint?: string;
   value: unknown;
   active?: boolean;
   disabled?: boolean;
@@ -71,7 +65,7 @@ type FieldRowProps = {
 type RuleResult = 'pass' | 'info' | 'warn' | 'fail' | null | undefined;
 type FitMode = 'width' | 'page';
 
-const FieldRow = ({ label, value, active, disabled, onClick, inline }: FieldRowProps) => (
+const FieldRow = ({ label, labelHint, value, active, disabled, onClick, inline }: FieldRowProps) => (
   <Box
     role={disabled ? undefined : 'button'}
     onClick={disabled ? undefined : onClick}
@@ -98,9 +92,17 @@ const FieldRow = ({ label, value, active, disabled, onClick, inline }: FieldRowP
     justifyContent={inline ? 'space-between' : undefined}
     gap={inline ? '6px' : '2px'}
   >
-    <Text fontSize="sm" opacity={0.7} flexShrink={0}>
-      {label}
-    </Text>
+    {labelHint ? (
+      <Tooltip label={labelHint} hasArrow placement="top">
+        <Text fontSize="sm" opacity={0.7} flexShrink={0} cursor="help">
+          {label}
+        </Text>
+      </Tooltip>
+    ) : (
+      <Text fontSize="sm" opacity={0.7} flexShrink={0}>
+        {label}
+      </Text>
+    )}
     <Text
       fontSize="sm"
       fontWeight={active ? 'semibold' : 'normal'}
@@ -238,7 +240,8 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
         },
         'li:last-child': { marginBottom: 0 },
         em: { fontStyle: 'italic', color: 'var(--chakra-colors-gray-800)' },
-        strong: { color: 'var(--chakra-colors-orange-700)' },
+        a: { color: 'var(--chakra-colors-orange-700)', cursor: 'help', textDecoration: 'none' },
+        strong: { color: 'inherit' },
       }}
     >
       <ReactMarkdown
@@ -263,6 +266,13 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
             <Text as="strong" fontWeight="bold">
               {children}
             </Text>
+          ),
+          a: ({ children, title }: any) => (
+            <Tooltip label={title} hasArrow placement="top">
+              <Text as="span" color="orange.700" cursor="help">
+                {children}
+              </Text>
+            </Tooltip>
           ),
         }}
       >
@@ -339,7 +349,10 @@ const hasLocatedFieldValue = (row: any): boolean => {
 };
 
 const displayLocatedFieldLabel = (row: any): string => {
-  const raw = String(row?.field_label || row?.field_key || 'field')
+  const configuredName = String(row?.contractor_display_name || '').trim();
+  if (configuredName) return configuredName;
+
+  const raw = String(row?.field_key || 'field')
     .trim()
     .replace(/^classifier\./i, '');
   if (!raw) return 'Field';
@@ -356,6 +369,16 @@ const displayLocatedFieldLabel = (row: any): string => {
     .replace(/\bEsp\b/g, 'ESP')
     .replace(/\bBc\b/g, 'BC')
     .replace(/\bDi\b/g, 'DI');
+};
+
+const locatedFieldKeyHint = (row: any): string => `Field key: ${String(row?.field_key || 'unknown')}`;
+
+const displayVisualFindingLabel = (value: unknown): string => {
+  const label = String(value || 'visual finding')
+    .trim()
+    .replace(/before_after/g, 'before/after')
+    .replace(/_/g, ' ');
+  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : 'Visual finding';
 };
 
 const fieldUpgradeTypeKey = (row: any) => String(row?.upgrade_type_key || 'common');
@@ -380,7 +403,6 @@ export default function ContractorInvoiceReviewScreen() {
 
   const [showPdf, setShowPdf] = useState<boolean>(true);
   const [readData, setReadData] = useState<any>(null);
-  const [lineitems, setLineitems] = useState<any[]>([]);
   const [genAiFields, setGenAiFields] = useState<any[]>([]);
   const [classifierFields, setClassifierFields] = useState<any[]>([]);
   const [genAiRulechecks, setGenAiRulechecks] = useState<any[]>([]);
@@ -423,9 +445,23 @@ export default function ContractorInvoiceReviewScreen() {
   const canSubmit = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
   const canUploadFix = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
   const currentStatusCopy = invoiceStatusCopy(currentStatus, currentStatusSubtype);
-  const failingRulechecks = useMemo(
-    () => genAiRulechecks.filter((row: any) => normalizeResult(row?.rule_result) === 'fail'),
+  const contractorActionableRulechecks = useMemo(
+    () =>
+      genAiRulechecks.filter((row: any) => {
+        const result = normalizeResult(row?.rule_result);
+        const visibility = String(row?.contractor_visibility || 'hidden');
+        if (visibility === 'warn_and_fail') return result === 'warn' || result === 'fail';
+        return visibility === 'fail_only' && result === 'fail';
+      }),
     [genAiRulechecks],
+  );
+  const blockingRulechecks = useMemo(
+    () =>
+      contractorActionableRulechecks.filter(
+        (row: any) =>
+          normalizeResult(row?.rule_result) === 'fail' && row?.contractor_blocking_policy === 'block_on_fail',
+      ),
+    [contractorActionableRulechecks],
   );
 
   const loadReviewData = useCallback(async () => {
@@ -462,7 +498,6 @@ export default function ContractorInvoiceReviewScreen() {
           }
         : null,
     );
-    setLineitems(Array.isArray(readJson?.lineitems) ? readJson.lineitems : []);
     const pdfJson = await pdfResp.json().catch(() => ({}));
     if (!pdfResp.ok || !pdfJson?.sas_url) {
       setPdfUrl(null);
@@ -654,6 +689,11 @@ export default function ContractorInvoiceReviewScreen() {
     [classifierFields],
   );
 
+  const commonInvoiceFields = useMemo(
+    () => genAiFields.filter((row) => hasLocatedFieldValue(row) && fieldUpgradeTypeKey(row) === 'common'),
+    [genAiFields],
+  );
+
   const detailsGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -678,7 +718,9 @@ export default function ContractorInvoiceReviewScreen() {
       return group;
     };
 
-    genAiFields.filter(hasLocatedFieldValue).forEach((row) => ensureGroup(row).fields.push(row));
+    genAiFields
+      .filter((row) => hasLocatedFieldValue(row) && fieldUpgradeTypeKey(row) !== 'common')
+      .forEach((row) => ensureGroup(row).fields.push(row));
 
     return Array.from(groups.values()).sort((a, b) => {
       const sortA = upgradeTypeSortValue(a.upgradeTypeKey);
@@ -687,16 +729,6 @@ export default function ContractorInvoiceReviewScreen() {
       return a.description.localeCompare(b.description);
     });
   }, [genAiFields]);
-
-  const sortedLineitems = useMemo(
-    () =>
-      [...lineitems].sort((a: any, b: any) => {
-        const seqA = Number(a.lineitem_seqno ?? a.seqno ?? 0);
-        const seqB = Number(b.lineitem_seqno ?? b.seqno ?? 0);
-        return seqA - seqB;
-      }),
-    [lineitems],
-  );
 
   const ahriProduct = readData?.ahri_product_match?.product;
   const neeaProduct = readData?.neea_product_match?.product;
@@ -900,14 +932,14 @@ export default function ContractorInvoiceReviewScreen() {
 
   const requestSubmitToAdmin = () => {
     if (!canSubmit) return;
-    if (failingRulechecks.length > 0) {
+    if (contractorActionableRulechecks.length > 0) {
       onSubmitWarningOpen();
       return;
     }
     void submitToAdmin();
   };
 
-  const submitToAdminDespiteFailures = () => {
+  const submitToAdminAfterReview = () => {
     onSubmitWarningClose();
     void submitToAdmin();
   };
@@ -918,6 +950,38 @@ export default function ContractorInvoiceReviewScreen() {
       `/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(currentInvoiceId)}/fix`,
       '_blank',
       'noopener,noreferrer',
+    );
+  };
+
+  const renderLocatedFieldRow = (row: any, key: React.Key) => {
+    const highlightKey = `found_${row.source_engine || 'field'}_${row.id}`;
+    const clickable = row.page != null;
+
+    return (
+      <FieldRow
+        key={key}
+        label={displayLocatedFieldLabel(row)}
+        labelHint={locatedFieldKeyHint(row)}
+        value={displayLocatedFieldValue(row)}
+        active={activeHighlightKey === highlightKey}
+        disabled={!clickable}
+        inline
+        onClick={
+          clickable
+            ? () => {
+                const sourceEngine = String(row.source_engine || '').toLowerCase();
+                setActiveHighlight({
+                  source: sourceEngine === 'classifier' ? 'classifier' : sourceEngine === 'code' ? 'code' : 'genai',
+                  genaiId: Number(row.id),
+                  pageNumber: Number(row.page),
+                  polygon: row.polygon ?? null,
+                });
+                setActiveHighlightKey(highlightKey);
+                setShowPdf(true);
+              }
+            : undefined
+        }
+      />
     );
   };
 
@@ -1038,6 +1102,24 @@ export default function ContractorInvoiceReviewScreen() {
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text size="sm" fontWeight="bold">
+                          Contractor Advice
+                        </Text>
+                      </Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel px="0" pt="8px">
+                    <Box px="10px" py="3px">
+                      <ContractorAdviceMarkdown value={readData?.contractor_advice} />
+                    </Box>
+                  </AccordionPanel>
+                </AccordionItem>
+
+                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                  <h2>
+                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                      <Box flex="1" textAlign="left">
+                        <Text size="sm" fontWeight="bold">
                           Invoice
                         </Text>
                       </Box>
@@ -1078,6 +1160,18 @@ export default function ContractorInvoiceReviewScreen() {
                         );
                       })}
                     </Box>
+                    {commonInvoiceFields.length > 0 && (
+                      <Box mt="10px" pt="10px" borderTopWidth="1px" borderColor="gray.200">
+                        <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" mb="4px">
+                          Additional details found
+                        </Text>
+                        <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
+                          {commonInvoiceFields.map((row: any) =>
+                            renderLocatedFieldRow(row, `common-${row.id ?? row.field_key}`),
+                          )}
+                        </Box>
+                      </Box>
+                    )}
                   </AccordionPanel>
                 </AccordionItem>
 
@@ -1086,89 +1180,43 @@ export default function ContractorInvoiceReviewScreen() {
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text size="sm" fontWeight="bold">
-                          Line items
+                          Details We Found
                         </Text>
                       </Box>
                       <AccordionIcon />
                     </AccordionButton>
                   </h2>
                   <AccordionPanel px="0" pt="8px">
-                    {sortedLineitems.length === 0 ? (
+                    {genAiError && (
+                      <Text fontSize="xs" color="red.500" mb="8px">
+                        {genAiError}
+                      </Text>
+                    )}
+                    {!genAiError && detailsGroups.length === 0 ? (
                       <Text fontSize="sm" opacity={0.7}>
-                        No line items found.
+                        No upgrade-specific details found.
                       </Text>
                     ) : (
-                      <Box display="flex" flexDirection="column" gap="1px">
-                        <Box
-                          display="grid"
-                          gridTemplateColumns="minmax(220px, 1fr) 72px 96px 96px"
-                          gap="8px"
-                          px="10px"
-                          py="0"
-                        >
-                          <Text fontSize="sm" opacity={0.6}>
-                            description
-                          </Text>
-                          <Text fontSize="sm" opacity={0.6} textAlign="right">
-                            qty
-                          </Text>
-                          <Text fontSize="sm" opacity={0.6} textAlign="right">
-                            unit
-                          </Text>
-                          <Text fontSize="sm" opacity={0.6} textAlign="right">
-                            amount
-                          </Text>
-                        </Box>
-                        {sortedLineitems.map((li: any) => {
-                          const seq = li.lineitem_seqno ?? li.seqno ?? '-';
-                          const lineitemKey = li.id ?? seq;
-                          const highlightKey = `lineitem_${lineitemKey}_desc`;
-                          const clickable = li.ocr_description_page != null && li.ocr_description_polygon != null;
+                      <Box display="flex" flexDirection="column" gap="14px">
+                        {detailsGroups.map((group) => {
+                          const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
 
                           return (
-                            <Box
-                              key={String(lineitemKey)}
-                              px="10px"
-                              py="3px"
-                              borderRadius="md"
-                              bg={activeHighlightKey === highlightKey ? 'blue.50' : 'transparent'}
-                              cursor={clickable ? 'pointer' : 'default'}
-                              _hover={
-                                clickable ? { bg: activeHighlightKey === highlightKey ? 'blue.50' : 'gray.50' } : {}
-                              }
-                              onClick={
-                                clickable
-                                  ? () => {
-                                      setActiveHighlight({
-                                        source: 'di',
-                                        key: highlightKey,
-                                        pageNumber: Number(li.ocr_description_page),
-                                        polygon: li.ocr_description_polygon,
-                                      });
-                                      setActiveHighlightKey(highlightKey);
-                                      setShowPdf(true);
-                                    }
-                                  : undefined
-                              }
-                            >
-                              <Box
-                                display="grid"
-                                gridTemplateColumns="minmax(220px, 1fr) 72px 96px 96px"
-                                gap="8px"
-                                alignItems="baseline"
-                              >
-                                <Text fontSize="sm" noOfLines={1}>
-                                  {String(li.ocr_description ?? '-')}
+                            <Box key={group.upgradeTypeKey}>
+                              <Flex align="center" gap="8px" mb="6px">
+                                <Text fontSize="sm" fontWeight="bold">
+                                  {meta.label}
                                 </Text>
-                                <Text fontSize="sm" textAlign="right" noOfLines={1}>
-                                  {li.ocr_quantity != null ? String(li.ocr_quantity) : '-'}
-                                </Text>
-                                <Text fontSize="sm" textAlign="right" noOfLines={1}>
-                                  {li.ocr_unit_price != null ? fmtMoney(li.ocr_unit_price) : '-'}
-                                </Text>
-                                <Text fontSize="sm" textAlign="right" noOfLines={1}>
-                                  {li.ocr_amount != null ? fmtMoney(li.ocr_amount) : '-'}
-                                </Text>
+                                <InvoiceUpgradeTypeTile
+                                  upgradeTypeKey={group.upgradeTypeKey}
+                                  description={group.description}
+                                  size={24}
+                                />
+                              </Flex>
+                              <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
+                                {group.fields.map((row: any) =>
+                                  renderLocatedFieldRow(row, `${group.upgradeTypeKey}-${row.id ?? row.field_key}`),
+                                )}
                               </Box>
                             </Box>
                           );
@@ -1197,259 +1245,270 @@ export default function ContractorInvoiceReviewScreen() {
                     </AccordionPanel>
                   </AccordionItem>
                 ) : (
-                  supportingDocumentEvidenceSections.map((section) => (
-                    <AccordionItem key={section.key} borderTopWidth="1px" borderColor="gray.200">
-                      <h2>
-                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                          <Box flex="1" textAlign="left" minW={0}>
-                            <Text size="sm" fontWeight="bold" noOfLines={1}>
-                              Supporting document - {section.title}
-                            </Text>
-                          </Box>
-                          <AccordionIcon />
-                        </AccordionButton>
-                      </h2>
+                  supportingDocumentEvidenceSections.flatMap((section) =>
+                    section.documents.map((doc: any) => {
+                      const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
+                      const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
+                      const filename = String(doc?.original_filename || 'Unnamed file');
+                      const showFilename = section.documents.length > 1;
 
-                      <AccordionPanel px="0" pt="8px">
-                        <Accordion
-                          allowMultiple
-                          defaultIndex={[0, 1]}
-                          sx={{
-                            '& .chakra-accordion__button': {
-                              pl: '10px',
-                              pr: '8px',
-                            },
-                            '& .chakra-accordion__panel': {
-                              ml: '8px',
-                              pl: '10px',
-                            },
-                          }}
+                      return (
+                        <AccordionItem
+                          key={String(doc?.id || doc?.storage_key || 'supporting-doc')}
+                          borderTopWidth="1px"
+                          borderColor="gray.200"
                         >
-                          {section.documents.map((doc: any) => {
-                            const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
-                            const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
-                            const filename = String(doc?.original_filename || 'Unnamed file');
+                          <h2>
+                            <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                              <Box flex="1" textAlign="left" minW={0}>
+                                <Text size="sm" fontWeight="bold" noOfLines={1}>
+                                  {`Supporting document - ${section.title}${showFilename ? ` - ${filename}` : ''}`}
+                                </Text>
+                              </Box>
+                              <AccordionIcon />
+                            </AccordionButton>
+                          </h2>
+                          <AccordionPanel px="0" pt="8px">
+                            <Box px="10px" py="3px">
+                              <Flex justify="flex-end" gap="8px" mb="6px">
+                                <Tooltip label={`Show ${filename} in application`}>
+                                  <IconButton
+                                    aria-label={`Show ${filename} in application`}
+                                    icon={<FrameCorners size={24} weight="bold" />}
+                                    size="lg"
+                                    variant="outline"
+                                    colorScheme="green"
+                                    onClick={() => void showSupportingDocumentInViewer(doc)}
+                                  />
+                                </Tooltip>
+                                <Tooltip label={`Open ${filename} in browser`}>
+                                  <IconButton
+                                    aria-label={`Open ${filename} in browser`}
+                                    icon={<ArrowSquareOut size={24} weight="bold" />}
+                                    size="lg"
+                                    variant="outline"
+                                    colorScheme="blue"
+                                    onClick={() => void openSupportingDocumentFile(doc)}
+                                  />
+                                </Tooltip>
+                              </Flex>
 
-                            return (
-                              <AccordionItem
-                                key={String(doc?.id || doc?.storage_key || 'supporting-doc')}
-                                borderTopWidth="1px"
-                                borderColor="gray.200"
+                              <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
+                                File details
+                              </Text>
+                              <Box
+                                display="grid"
+                                gridTemplateColumns="160px minmax(0, 1fr)"
+                                columnGap="8px"
+                                rowGap="2px"
+                                alignItems="baseline"
+                                pl="12px"
+                                mt="2px"
                               >
-                                <h3>
-                                  <AccordionButton py="6px" _hover={{ bg: 'transparent' }}>
-                                    <Box flex="1" textAlign="left" minW={0}>
-                                      <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
-                                        Uploaded file - {filename}
-                                      </Text>
-                                    </Box>
-                                    <AccordionIcon />
-                                  </AccordionButton>
-                                </h3>
-                                <AccordionPanel px="0" pt="6px">
-                                  <Box px="10px" py="3px">
-                                    <Flex justify="flex-end" gap="8px" mb="6px">
-                                      <Tooltip label={`Show ${filename} in application`}>
-                                        <IconButton
-                                          aria-label={`Show ${filename} in application`}
-                                          icon={<FrameCorners size={24} weight="bold" />}
-                                          size="lg"
-                                          variant="outline"
-                                          colorScheme="green"
-                                          onClick={() => void showSupportingDocumentInViewer(doc)}
-                                        />
-                                      </Tooltip>
-                                      <Tooltip label={`Open ${filename} in browser`}>
-                                        <IconButton
-                                          aria-label={`Open ${filename} in browser`}
-                                          icon={<ArrowSquareOut size={24} weight="bold" />}
-                                          size="lg"
-                                          variant="outline"
-                                          colorScheme="blue"
-                                          onClick={() => void openSupportingDocumentFile(doc)}
-                                        />
-                                      </Tooltip>
-                                    </Flex>
+                                <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                  details
+                                </Text>
+                                <Text fontSize="sm" noOfLines={1}>
+                                  {[
+                                    `size ${fmtBytes(doc?.byte_size)}`,
+                                    doc?.classification_confidence != null
+                                      ? `confidence ${String(doc.classification_confidence)}`
+                                      : '',
+                                    String(doc?.supporting_document_routing_quality || '').trim()
+                                      ? `routing ${String(doc.supporting_document_routing_quality)}`
+                                      : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join('  ')}
+                                </Text>
+                              </Box>
 
-                                    <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
-                                      File details
-                                    </Text>
-                                    <Box
-                                      display="grid"
-                                      gridTemplateColumns="160px minmax(0, 1fr)"
-                                      columnGap="8px"
-                                      rowGap="2px"
-                                      alignItems="baseline"
-                                      pl="12px"
-                                      mt="2px"
-                                    >
-                                      <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                        details
-                                      </Text>
-                                      <Text fontSize="sm" noOfLines={1}>
-                                        {[
-                                          `size ${fmtBytes(doc?.byte_size)}`,
-                                          doc?.classification_confidence != null
-                                            ? `confidence ${String(doc.classification_confidence)}`
-                                            : '',
-                                          String(doc?.supporting_document_routing_quality || '').trim()
-                                            ? `routing ${String(doc.supporting_document_routing_quality)}`
-                                            : '',
-                                        ]
-                                          .filter(Boolean)
-                                          .join('  ')}
-                                      </Text>
-                                    </Box>
+                              {fields.length > 0 && (
+                                <Box
+                                  mt="3px"
+                                  display="grid"
+                                  gridTemplateColumns="160px minmax(0, 1fr)"
+                                  columnGap="8px"
+                                  rowGap="2px"
+                                  alignItems="baseline"
+                                  pl="12px"
+                                >
+                                  {fields.map((field: any) => {
+                                    const clickable = field?.page != null && field?.polygon != null;
+                                    const fieldKey = `supporting_field_${String(
+                                      field?.id || field?.field_key || 'unknown',
+                                    )}`;
+                                    const isActive =
+                                      activeHighlight?.source === 'supporting_document' &&
+                                      activeHighlight?.supportingDocumentId === String(doc?.id) &&
+                                      activeHighlight?.key === fieldKey;
+                                    const fieldValue =
+                                      field?.value_text != null
+                                        ? String(field.value_text)
+                                        : field?.value_json != null
+                                          ? JSON.stringify(field.value_json)
+                                          : 'not found';
+                                    const handleClick = clickable
+                                      ? () => void showSupportingDocumentInViewer(doc, field)
+                                      : undefined;
 
-                                    {fields.length > 0 && (
-                                      <Box
-                                        mt="3px"
-                                        display="grid"
-                                        gridTemplateColumns="160px minmax(0, 1fr)"
-                                        columnGap="8px"
-                                        rowGap="2px"
-                                        alignItems="baseline"
-                                        pl="12px"
-                                      >
-                                        {fields.map((field: any) => {
-                                          const clickable = field?.page != null && field?.polygon != null;
-                                          const fieldKey = `supporting_field_${String(
-                                            field?.id || field?.field_key || 'unknown',
-                                          )}`;
-                                          const isActive =
-                                            activeHighlight?.source === 'supporting_document' &&
-                                            activeHighlight?.supportingDocumentId === String(doc?.id) &&
-                                            activeHighlight?.key === fieldKey;
-                                          const fieldValue =
-                                            field?.value_text != null
-                                              ? String(field.value_text)
-                                              : field?.value_json != null
-                                                ? JSON.stringify(field.value_json)
-                                                : 'not found';
-                                          const handleClick = clickable
-                                            ? () => void showSupportingDocumentInViewer(doc, field)
-                                            : undefined;
+                                    return (
+                                      <React.Fragment key={String(field?.id || field?.field_key)}>
+                                        <Tooltip label={locatedFieldKeyHint(field)} hasArrow placement="top">
+                                          <Text
+                                            fontSize="sm"
+                                            opacity={0.7}
+                                            noOfLines={1}
+                                            cursor="help"
+                                            bg={isActive ? 'red.50' : 'transparent'}
+                                            borderRadius="sm"
+                                            onClick={handleClick}
+                                          >
+                                            {displayLocatedFieldLabel(field)}
+                                          </Text>
+                                        </Tooltip>
+                                        <Text
+                                          fontSize="sm"
+                                          noOfLines={1}
+                                          cursor={clickable ? 'pointer' : 'default'}
+                                          bg={isActive ? 'red.50' : 'transparent'}
+                                          borderRadius="sm"
+                                          onClick={handleClick}
+                                          _hover={clickable ? { bg: 'gray.50' } : undefined}
+                                        >
+                                          {fieldValue}
+                                        </Text>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </Box>
+                              )}
 
-                                          return (
-                                            <React.Fragment key={String(field?.id || field?.field_key)}>
-                                              <Text
-                                                fontSize="sm"
-                                                opacity={0.7}
-                                                noOfLines={1}
-                                                cursor={clickable ? 'pointer' : 'default'}
-                                                bg={isActive ? 'red.50' : 'transparent'}
-                                                borderRadius="sm"
-                                                onClick={handleClick}
-                                              >
-                                                {String(field?.field_key || 'field')}
+                              {findings.length > 0 && (
+                                <Box mt="10px">
+                                  <Text fontSize="sm" fontWeight="bold" opacity={0.78}>
+                                    Visual findings
+                                  </Text>
+                                  <Box
+                                    mt="4px"
+                                    display="grid"
+                                    gridTemplateColumns="160px minmax(0, 1fr)"
+                                    columnGap="8px"
+                                    rowGap="6px"
+                                    alignItems="start"
+                                    pl="12px"
+                                  >
+                                    {findings.map((finding: any) => {
+                                      const findingMeta = [
+                                        finding?.page != null ? `page ${String(finding.page)}` : '',
+                                        finding?.confidence != null ? `confidence ${String(finding.confidence)}` : '',
+                                        String(finding?.legibility || '').trim()
+                                          ? `legibility ${String(finding.legibility)}`
+                                          : '',
+                                      ]
+                                        .filter(Boolean)
+                                        .join('  ');
+
+                                      return (
+                                        <React.Fragment
+                                          key={String(finding?.id || finding?.finding_seqno || finding?.summary)}
+                                        >
+                                          <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                            {displayVisualFindingLabel(finding?.finding_type)}
+                                          </Text>
+                                          <Box>
+                                            <Text fontSize="sm" noOfLines={2}>
+                                              {String(finding?.summary || '')}
+                                            </Text>
+                                            {findingMeta && (
+                                              <Text fontSize="xs" opacity={0.65} noOfLines={1} mt="1px">
+                                                {findingMeta}
                                               </Text>
-                                              <Text
-                                                fontSize="sm"
-                                                noOfLines={1}
-                                                cursor={clickable ? 'pointer' : 'default'}
-                                                bg={isActive ? 'red.50' : 'transparent'}
-                                                borderRadius="sm"
-                                                onClick={handleClick}
-                                                _hover={clickable ? { bg: 'gray.50' } : undefined}
-                                              >
-                                                {fieldValue}
-                                              </Text>
-                                            </React.Fragment>
-                                          );
-                                        })}
-                                      </Box>
-                                    )}
-
-                                    {findings.length > 0 && (
-                                      <Box mt="10px" display="flex" flexDirection="column" gap="6px">
-                                        {findings.map((finding: any) => {
-                                          const rawRelevantText = finding?.relevant_text_seen;
-                                          const relevantText = Array.isArray(rawRelevantText)
-                                            ? rawRelevantText.filter(Boolean).join(', ')
-                                            : rawRelevantText != null && rawRelevantText !== ''
-                                              ? typeof rawRelevantText === 'string'
-                                                ? rawRelevantText
-                                                : JSON.stringify(rawRelevantText)
-                                              : '';
-                                          const findingType = String(finding?.finding_type || 'visual finding');
-                                          const findingMeta = [
-                                            finding?.page != null ? `page ${String(finding.page)}` : '',
-                                            finding?.confidence != null
-                                              ? `confidence ${String(finding.confidence)}`
-                                              : '',
-                                            String(finding?.legibility || '').trim()
-                                              ? `legibility ${String(finding.legibility)}`
-                                              : '',
-                                          ]
-                                            .filter(Boolean)
-                                            .join('  ');
-
-                                          return (
-                                            <Box
-                                              key={String(finding?.id || finding?.finding_seqno || finding?.summary)}
-                                              pb="6px"
-                                              _first={{ pt: 0 }}
-                                              _last={{ pb: 0 }}
-                                            >
-                                              <Flex align="baseline" justify="space-between" gap="16px">
-                                                <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
-                                                  Visual findings - {findingType}
-                                                </Text>
-                                                {findingMeta && (
-                                                  <Text fontSize="sm" opacity={0.7} noOfLines={1} textAlign="right">
-                                                    {findingMeta}
-                                                  </Text>
-                                                )}
-                                              </Flex>
-                                              <Box
-                                                display="grid"
-                                                gridTemplateColumns="160px minmax(0, 1fr)"
-                                                columnGap="8px"
-                                                rowGap="2px"
-                                                alignItems="baseline"
-                                                mt="2px"
-                                                pl="12px"
-                                              >
-                                                <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                  summary
-                                                </Text>
-                                                <Text fontSize="sm" noOfLines={2}>
-                                                  {String(finding?.summary || '')}
-                                                </Text>
-                                              </Box>
-                                              {relevantText && (
-                                                <Box
-                                                  display="grid"
-                                                  gridTemplateColumns="160px minmax(0, 1fr)"
-                                                  columnGap="8px"
-                                                  rowGap="2px"
-                                                  alignItems="baseline"
-                                                  mt="2px"
-                                                  pl="12px"
-                                                >
-                                                  <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                    text seen
-                                                  </Text>
-                                                  <Text fontSize="sm" noOfLines={2}>
-                                                    {relevantText}
-                                                  </Text>
-                                                </Box>
-                                              )}
-                                            </Box>
-                                          );
-                                        })}
-                                      </Box>
-                                    )}
+                                            )}
+                                          </Box>
+                                        </React.Fragment>
+                                      );
+                                    })}
                                   </Box>
-                                </AccordionPanel>
-                              </AccordionItem>
-                            );
-                          })}
-                        </Accordion>
-                      </AccordionPanel>
-                    </AccordionItem>
-                  ))
+                                </Box>
+                              )}
+                            </Box>
+                          </AccordionPanel>
+                        </AccordionItem>
+                      );
+                    }),
+                  )
                 )}
+
+                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                  <h2>
+                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                      <Box flex="1" textAlign="left">
+                        <Text size="sm" fontWeight="bold">
+                          Possible Supporting Documents
+                        </Text>
+                      </Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel px="0" pt="3px">
+                    {supportingDocumentTypeGroups.length === 0 ? (
+                      <Text fontSize="sm" opacity={0.7}>
+                        No supporting-document type mappings are configured for the detected upgrade types.
+                      </Text>
+                    ) : (
+                      <Box display="flex" flexDirection="column" gap="6px">
+                        {supportingDocumentTypeGroups.map((group: any) => {
+                          const types = Array.isArray(group?.supporting_document_types)
+                            ? group.supporting_document_types
+                            : [];
+                          const title = String(
+                            group?.upgrade_type_description ||
+                              getInvoiceUpgradeTypeMeta(String(group?.upgrade_type_key || 'common')).label,
+                          );
+
+                          return (
+                            <Box
+                              key={String(group?.invoice_upgrade_type_id || group?.upgrade_type_key || 'group')}
+                              borderRadius="md"
+                              px="10px"
+                              py="2px"
+                            >
+                              <Flex align="center" gap="8px" mb="2px" wrap="wrap">
+                                <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                                  {title}
+                                </Text>
+                                <InvoiceUpgradeTypeTile
+                                  upgradeTypeKey={String(group?.upgrade_type_key || 'common')}
+                                  description={group?.upgrade_type_description}
+                                  size={24}
+                                />
+                              </Flex>
+
+                              {types.length === 0 ? (
+                                <Text fontSize="sm" opacity={0.7}>
+                                  No supporting document types mapped to this upgrade type.
+                                </Text>
+                              ) : (
+                                <Box pl="12px">
+                                  {types.map((typeRow: any) => (
+                                    <Text
+                                      key={String(typeRow?.supporting_document_type_id || typeRow?.type_key || 'type')}
+                                      fontSize="sm"
+                                      noOfLines={1}
+                                    >
+                                      {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
+                                    </Text>
+                                  ))}
+                                </Box>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </AccordionPanel>
+                </AccordionItem>
 
                 {classifierDisplayFields.length > 0 && (
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">
@@ -1473,7 +1532,8 @@ export default function ContractorInvoiceReviewScreen() {
                           return (
                             <FieldRow
                               key={row.id}
-                              label={row.field_key || 'field'}
+                              label={displayLocatedFieldLabel(row)}
+                              labelHint={locatedFieldKeyHint(row)}
                               value={[displayLocatedFieldValue(row), confidence].filter(Boolean).join('  ')}
                               active={activeHighlightKey === highlightKey}
                               disabled={!clickable}
@@ -1500,24 +1560,6 @@ export default function ContractorInvoiceReviewScreen() {
                     </AccordionPanel>
                   </AccordionItem>
                 )}
-
-                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                  <h2>
-                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                      <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
-                          Contractor Advice
-                        </Text>
-                      </Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel px="0" pt="8px">
-                    <Box px="10px" py="3px">
-                      <ContractorAdviceMarkdown value={readData?.contractor_advice} />
-                    </Box>
-                  </AccordionPanel>
-                </AccordionItem>
 
                 {ahriProduct && (
                   <ProductMatchAccordion
@@ -1658,161 +1700,6 @@ export default function ContractorInvoiceReviewScreen() {
                     ]}
                   />
                 )}
-
-                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                  <h2>
-                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                      <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
-                          Details We Found
-                        </Text>
-                      </Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel px="0" pt="8px">
-                    {genAiError && (
-                      <Text fontSize="xs" color="red.500" mb="8px">
-                        {genAiError}
-                      </Text>
-                    )}
-                    {!genAiError && detailsGroups.length === 0 ? (
-                      <Text fontSize="sm" opacity={0.7}>
-                        No extracted details found.
-                      </Text>
-                    ) : (
-                      <Box display="flex" flexDirection="column" gap="14px">
-                        {detailsGroups.map((group) => {
-                          const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
-
-                          return (
-                            <Box key={group.upgradeTypeKey}>
-                              <Flex align="center" gap="8px" mb="6px">
-                                <Text fontSize="sm" fontWeight="bold">
-                                  {meta.label}
-                                </Text>
-                                <InvoiceUpgradeTypeTile
-                                  upgradeTypeKey={group.upgradeTypeKey}
-                                  description={group.description}
-                                  size={24}
-                                />
-                              </Flex>
-                              <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
-                                {group.fields.map((row: any) => {
-                                  const highlightKey = `found_${row.source_engine || 'field'}_${row.id}`;
-                                  const clickable = row.page != null;
-                                  return (
-                                    <FieldRow
-                                      key={`${group.upgradeTypeKey}-${row.id ?? row.field_key}`}
-                                      label={displayLocatedFieldLabel(row)}
-                                      value={displayLocatedFieldValue(row)}
-                                      active={activeHighlightKey === highlightKey}
-                                      disabled={!clickable}
-                                      inline
-                                      onClick={
-                                        clickable
-                                          ? () => {
-                                              const sourceEngine = String(row.source_engine || '').toLowerCase();
-                                              setActiveHighlight({
-                                                source:
-                                                  sourceEngine === 'classifier'
-                                                    ? 'classifier'
-                                                    : sourceEngine === 'code'
-                                                      ? 'code'
-                                                      : 'genai',
-                                                genaiId: Number(row.id),
-                                                pageNumber: Number(row.page),
-                                                polygon: row.polygon ?? null,
-                                              });
-                                              setActiveHighlightKey(highlightKey);
-                                              setShowPdf(true);
-                                            }
-                                          : undefined
-                                      }
-                                    />
-                                  );
-                                })}
-                              </Box>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    )}
-                  </AccordionPanel>
-                </AccordionItem>
-
-                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                  <h2>
-                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                      <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
-                          Possible Supporting Documents
-                        </Text>
-                      </Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel px="0" pt="3px">
-                    {supportingDocumentTypeGroups.length === 0 ? (
-                      <Text fontSize="sm" opacity={0.7}>
-                        No supporting-document type mappings are configured for the detected upgrade types.
-                      </Text>
-                    ) : (
-                      <Box display="flex" flexDirection="column" gap="6px">
-                        {supportingDocumentTypeGroups.map((group: any) => {
-                          const types = Array.isArray(group?.supporting_document_types)
-                            ? group.supporting_document_types
-                            : [];
-                          const title = String(
-                            group?.upgrade_type_description ||
-                              getInvoiceUpgradeTypeMeta(String(group?.upgrade_type_key || 'common')).label,
-                          );
-
-                          return (
-                            <Box
-                              key={String(group?.invoice_upgrade_type_id || group?.upgrade_type_key || 'group')}
-                              borderRadius="md"
-                              px="10px"
-                              py="2px"
-                            >
-                              <Flex align="center" gap="8px" mb="2px" wrap="wrap">
-                                <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
-                                  {title}
-                                </Text>
-                                <InvoiceUpgradeTypeTile
-                                  upgradeTypeKey={String(group?.upgrade_type_key || 'common')}
-                                  description={group?.upgrade_type_description}
-                                  size={24}
-                                />
-                                <Text fontSize="sm" opacity={0.7}>
-                                  {types.length} configured
-                                </Text>
-                              </Flex>
-
-                              {types.length === 0 ? (
-                                <Text fontSize="sm" opacity={0.7}>
-                                  No supporting document types mapped to this upgrade type.
-                                </Text>
-                              ) : (
-                                <Box pl="12px">
-                                  {types.map((typeRow: any) => (
-                                    <Text
-                                      key={String(typeRow?.supporting_document_type_id || typeRow?.type_key || 'type')}
-                                      fontSize="sm"
-                                      noOfLines={1}
-                                    >
-                                      {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
-                                    </Text>
-                                  ))}
-                                </Box>
-                              )}
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    )}
-                  </AccordionPanel>
-                </AccordionItem>
               </Accordion>
             </Box>
 
@@ -2088,58 +1975,57 @@ export default function ContractorInvoiceReviewScreen() {
       <Modal isOpen={isSubmitWarningOpen} onClose={onSubmitWarningClose} size="2xl" isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Submit with failed checks?</ModalHeader>
+          <ModalHeader>
+            {blockingRulechecks.length > 0 ? 'Submission blocked by failed checks' : 'Submit with outstanding checks?'}
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <Flex direction="column" gap={4}>
               <Text fontSize="sm">
-                This invoice still has red failed checks. You can submit it to admin review, but admins will likely ask
-                for corrections or supporting details, which can slow down payment. If you believe the invoice is
-                correct as-is, you can still submit it. If a failed check is explainable, close this warning and use
-                Messages & Requested Changes before submitting.
+                {blockingRulechecks.length > 0
+                  ? 'This invoice has one or more failed checks configured to block submission. Correct those items or provide the required supporting information, then rerun the review before submitting.'
+                  : 'This invoice has contractor-visible warnings or errors. You can submit it to admin review, but admins may ask for corrections or supporting details. If an item is explainable, you can also use Messages & Requested Changes before submitting.'}
               </Text>
               <Flex gap={3} flexWrap="wrap">
                 <Button variant="outline" onClick={onSubmitWarningClose}>
                   Keep reviewing
                 </Button>
-                <Button colorScheme="red" onClick={submitToAdminDespiteFailures} isLoading={submitLoading}>
-                  Submit Anyway
-                </Button>
+                {blockingRulechecks.length === 0 && (
+                  <Button colorScheme="orange" onClick={submitToAdminAfterReview} isLoading={submitLoading}>
+                    Submit Anyway
+                  </Button>
+                )}
               </Flex>
 
-              <Box borderWidth="1px" borderRadius="md" p={4} bg="red.50" borderColor="red.100">
+              <Box
+                borderWidth="1px"
+                borderRadius="md"
+                p={4}
+                bg={blockingRulechecks.length > 0 ? 'red.50' : 'orange.50'}
+                borderColor={blockingRulechecks.length > 0 ? 'red.100' : 'orange.100'}
+              >
                 <Text fontSize="sm" fontWeight="bold" mb={3}>
-                  Failed checks found
+                  Outstanding checks
                 </Text>
                 <Flex direction="column" gap={3}>
-                  {failingRulechecks.slice(0, 6).map((row: any) => {
-                    const name = String(row.rule_key || 'invoice_review_check');
-                    const groupName = String(row.upgrade_type_description || row.upgrade_type_key || 'Invoice');
-                    const reason = row.reason_and_likely_causes || row.observed_text || row.evidence_text || '';
+                  {contractorActionableRulechecks.slice(0, 6).map((row: any) => {
+                    const name = String(row.contractor_display_name || row.rule_key || 'Invoice review check');
 
                     return (
                       <Box key={row.id ?? row.rule_key} bg="white" borderRadius="md" p={3}>
-                        <Flex align="center" gap={2} mb={1}>
-                          <StatusDot result="fail" />
+                        <Flex align="center" gap={2}>
+                          <StatusDot result={row.rule_result} />
                           <Text fontSize="sm" fontWeight="semibold">
                             {name}
                           </Text>
                         </Flex>
-                        <Text fontSize="xs" opacity={0.7} mb={reason ? 1 : 0}>
-                          {groupName}
-                        </Text>
-                        {reason ? (
-                          <Text fontSize="xs" whiteSpace="pre-wrap">
-                            {String(reason)}
-                          </Text>
-                        ) : null}
                       </Box>
                     );
                   })}
                 </Flex>
-                {failingRulechecks.length > 6 ? (
+                {contractorActionableRulechecks.length > 6 ? (
                   <Text fontSize="xs" mt={3} opacity={0.75}>
-                    Plus {failingRulechecks.length - 6} more failed check(s) on this invoice.
+                    Plus {contractorActionableRulechecks.length - 6} more outstanding check(s) on this invoice.
                   </Text>
                 ) : null}
               </Box>
@@ -2147,36 +2033,6 @@ export default function ContractorInvoiceReviewScreen() {
           </ModalBody>
         </ModalContent>
       </Modal>
-
-      <Drawer isOpen={isHelpOpen} placement="left" onClose={onHelpClose} size="xl">
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerHeader>PDF Viewer Help</DrawerHeader>
-          <DrawerBody>
-            <Flex direction="column" gap={4}>
-              <Box>
-                <Heading size="sm" mb={2}>
-                  What This Screen Shows
-                </Heading>
-                <Text fontSize="sm">
-                  This screen shows invoice OCR fields, local information on record, review advice, line items, and the
-                  PDF evidence used for review.
-                </Text>
-              </Box>
-              <Box>
-                <Heading size="sm" mb={2}>
-                  Contractor Actions
-                </Heading>
-                <Text fontSize="sm">
-                  Submit to Admin sends the invoice to the program team for first-level review. It is available after
-                  the pre-check finishes, or when the program team has requested a revision.
-                </Text>
-              </Box>
-            </Flex>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
     </Flex>
   );
 }

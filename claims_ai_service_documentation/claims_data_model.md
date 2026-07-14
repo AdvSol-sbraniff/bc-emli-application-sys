@@ -741,6 +741,7 @@ The GenAI case-facts builder uses this mapping to prepare an upgrade-specific su
 `claims.supporting_document_type_located_fields` defines the facts the system should try to extract from a supporting document of a given type. Each row belongs to one supporting-document type and has:
 
 - A stable `field_key`.
+- A required `contractor_display_name` used by contractor and admin review screens.
 - A `prompt_text` used to instruct extraction.
 - A `field_number` for ordering.
 - An `enabled` flag.
@@ -934,7 +935,7 @@ Because the current code persistence does not set an explicit `invoice_upgrade_t
 
 ### 6.4 GenAI located fields
 
-`claims.genai_located_fields` is the admin-visible registry for GenAI invoice-field definitions. Each row has a stable `genai_field_key`, prompt text, and enabled flag.
+`claims.genai_located_fields` is the admin-visible registry for GenAI invoice-field definitions. Each row has a stable `genai_field_key`, a required `contractor_display_name`, prompt text, and an enabled flag.
 
 Examples include:
 
@@ -979,7 +980,7 @@ The value storage rule is:
 
 GenAI persistence replaces existing GenAI rows for the same invoice version, upgrade type, and source engine before inserting the latest response. Code persistence replaces existing code rows for the invoice version before inserting the latest database snapshot.
 
-The invoice review APIs serialize GenAI fields and code fields separately as `located_fields` and `code_located_fields`, while preserving the same row shape for the UI.
+The invoice review APIs serialize GenAI fields and code fields separately as `located_fields` and `code_located_fields`, while preserving the same row shape for the UI. They resolve `contractor_display_name` dynamically from the matching definition registry, so label edits apply to existing runtime evidence without reprocessing the invoice. The technical `field_key` remains available to the UI for troubleshooting tooltips.
 
 ### 6.6 `claims.code_located_fields`
 
@@ -988,6 +989,7 @@ The invoice review APIs serialize GenAI fields and code fields separately as `lo
 Important columns are:
 
 - `code_field_key`: stable key used by code.
+- `contractor_display_name`: required contractor-friendly label used in review screens.
 - `description`: admin-facing explanation of what the field carries.
 - `enabled`: controls whether the case-facts builder includes and persists the field.
 
@@ -1002,6 +1004,7 @@ Unlike GenAI located fields, code located fields are not mapped per upgrade type
 Important columns are:
 
 - `genai_field_key`: stable key the model should return in `located_fields`.
+- `contractor_display_name`: required contractor-friendly label used in review screens.
 - `prompt_text`: instruction telling GenAI what to locate and how to represent it.
 - `enabled`: controls whether the field is compiled into GenAI prompts.
 
@@ -2227,6 +2230,7 @@ Important columns are:
 
 - `source_id`: id of the `claims.code_located_fields` row.
 - `code_field_key`: copied field key.
+- `contractor_display_name`: copied contractor-friendly label.
 - `description`: copied description.
 - `enabled`: copied enabled flag.
 - `source_created_at` and `source_updated_at`: source timestamps before the change.
@@ -2271,6 +2275,7 @@ Important columns are:
 
 - `source_id`: id of the `claims.genai_located_fields` row.
 - `genai_field_key`: copied field key.
+- `contractor_display_name`: copied contractor-friendly label.
 - `prompt_text`: copied field-location prompt.
 - `enabled`: copied enabled flag.
 - `source_created_at` and `source_updated_at`: source timestamps before the change.
@@ -2515,7 +2520,7 @@ Category: history.
 
 Parent/child shape: snapshot of `claims.code_located_fields`; no runtime child rows.
 
-Key columns: `source_id`, `code_field_key`, `description`, `enabled`, source timestamps, `history_created_at`.
+Key columns: `source_id`, `code_field_key`, `contractor_display_name`, `description`, `enabled`, source timestamps, `history_created_at`.
 
 Lifecycle notes: preserves the previous code-located-field definition before edits. Runtime values remain in `claims.invoice_version_located_fields`.
 
@@ -2525,7 +2530,7 @@ Category: registry.
 
 Parent/child shape: read by the case-facts builder; history is stored in `claims.code_located_field_history`.
 
-Key columns: `code_field_key`, `description`, `enabled`.
+Key columns: `code_field_key`, `contractor_display_name`, `description`, `enabled`.
 
 Lifecycle notes: defines database/code facts that may be snapshotted into invoice-version located fields with `source_engine = 'code'`, such as eligibility-code and participant facts.
 
@@ -2575,7 +2580,7 @@ Category: history.
 
 Parent/child shape: snapshot of `claims.genai_located_fields`.
 
-Key columns: `source_id`, `genai_field_key`, `prompt_text`, `enabled`, source timestamps, `history_created_at`.
+Key columns: `source_id`, `genai_field_key`, `contractor_display_name`, `prompt_text`, `enabled`, source timestamps, `history_created_at`.
 
 Lifecycle notes: preserves previous GenAI located-field prompt wording before edits.
 
@@ -2605,7 +2610,7 @@ Category: registry.
 
 Parent/child shape: parent of `claims.genai_located_field_upgrade_types`; history parent for `claims.genai_located_field_history`.
 
-Key columns: `genai_field_key`, `prompt_text`, `enabled`.
+Key columns: `genai_field_key`, `contractor_display_name`, `prompt_text`, `enabled`.
 
 Lifecycle notes: defines reusable GenAI field-location tasks. Runtime extracted values are stored in `claims.invoice_version_located_fields`.
 
@@ -2835,7 +2840,7 @@ Category: registry.
 
 Parent/child shape: belongs to `claims.supporting_document_types`; parent definition for `claims.supporting_document_located_fields`.
 
-Key columns: `supporting_document_type_id`, `field_key`, `field_label`, `field_description`, `value_type`, `required`, `enabled`, `sort_order`.
+Key columns: `supporting_document_type_id`, `field_key`, `contractor_display_name`, `prompt_text`, `field_number`, `enabled`.
 
 Lifecycle notes: defines which facts should be extracted from each supporting-document type.
 

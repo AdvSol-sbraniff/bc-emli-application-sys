@@ -562,6 +562,12 @@ export default function ValidationRulesAlphabeticAdminScreen() {
               <VStack align="stretch" spacing={4}>
                 <Box>
                   <Text fontSize="sm" opacity={0.7}>
+                    Contractor-friendly name
+                  </Text>
+                  <Text fontWeight="bold">{selectedRow.detail?.contractor_display_name || 'n/a'}</Text>
+                </Box>
+                <Box>
+                  <Text fontSize="sm" opacity={0.7}>
                     Rule key
                   </Text>
                   <Text fontWeight="bold">{selectedRow.record_key}</Text>
@@ -573,10 +579,19 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                   <Badge colorScheme={selectedRow.enabled ? 'green' : 'gray'}>
                     {selectedRow.enabled ? 'Enabled' : 'Disabled'}
                   </Badge>
-                  <Badge colorScheme={selectedRow.detail?.contractor_visible_flag === false ? 'gray' : 'teal'}>
-                    {selectedRow.detail?.contractor_visible_flag === false
-                      ? 'Hidden from contractor advice'
-                      : 'Contractor visible'}
+                  <Badge colorScheme={selectedRow.detail?.contractor_visibility === 'hidden' ? 'gray' : 'teal'}>
+                    {selectedRow.detail?.contractor_visibility === 'warn_and_fail'
+                      ? 'Warnings and errors visible'
+                      : selectedRow.detail?.contractor_visibility === 'fail_only'
+                        ? 'Errors visible'
+                        : 'Hidden from contractors'}
+                  </Badge>
+                  <Badge
+                    colorScheme={selectedRow.detail?.contractor_blocking_policy === 'block_on_fail' ? 'red' : 'gray'}
+                  >
+                    {selectedRow.detail?.contractor_blocking_policy === 'block_on_fail'
+                      ? 'Errors block submission'
+                      : 'Non-blocking'}
                   </Badge>
                 </HStack>
                 <Box>

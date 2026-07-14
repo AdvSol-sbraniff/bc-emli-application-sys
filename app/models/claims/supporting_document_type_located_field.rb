@@ -13,6 +13,7 @@ module Claims
              dependent: :nullify
 
     validates :field_key, presence: true
+    validates :contractor_display_name, presence: true
     validates :prompt_text, presence: true
     validates :field_number,
               numericality: {

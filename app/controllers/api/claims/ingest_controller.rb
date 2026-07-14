@@ -241,9 +241,7 @@ module Api
               ActiveModel::Type::Boolean.new.cast(
                 params[:clone_all_current_supporting_documents]
               ),
-            files: files,
-            file_roles:
-              Array(params[:"file_roles[]"]) + Array(params[:file_roles])
+            files: files
           )
 
         render json: result.to_h,

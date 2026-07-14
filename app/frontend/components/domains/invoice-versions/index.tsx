@@ -76,6 +76,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 
 type FieldRowProps = {
   label: string;
+  labelHint?: string;
   value: any;
   hint?: string;
   active?: boolean;
@@ -84,7 +85,7 @@ type FieldRowProps = {
   inline?: boolean;
 };
 
-const FieldRow = ({ label, value, hint, active, disabled, onClick, inline }: FieldRowProps) => {
+const FieldRow = ({ label, labelHint, value, hint, active, disabled, onClick, inline }: FieldRowProps) => {
   const valueText = String(value);
   const valueNode = (
     <Text
@@ -125,9 +126,17 @@ const FieldRow = ({ label, value, hint, active, disabled, onClick, inline }: Fie
       justifyContent={inline ? 'space-between' : undefined}
       gap={inline ? '6px' : '2px'}
     >
-      <Text fontSize="sm" opacity={0.7} flexShrink={0}>
-        {label}
-      </Text>
+      {labelHint ? (
+        <Tooltip label={labelHint} hasArrow placement="top">
+          <Text fontSize="sm" opacity={0.7} flexShrink={0} cursor="help">
+            {label}
+          </Text>
+        </Tooltip>
+      ) : (
+        <Text fontSize="sm" opacity={0.7} flexShrink={0}>
+          {label}
+        </Text>
+      )}
       {hint ? (
         <Tooltip label={hint} hasArrow placement="top">
           {valueNode}
@@ -140,6 +149,9 @@ const FieldRow = ({ label, value, hint, active, disabled, onClick, inline }: Fie
 };
 
 const ruleDisplayTitle = (rulecheck: any) => {
+  const contractorDisplayName = String(rulecheck.contractor_display_name ?? '').trim();
+  if (contractorDisplayName) return contractorDisplayName;
+
   const ruleKey = String(rulecheck.rule_key ?? '').trim();
   if (ruleKey) return ruleKey;
 
@@ -201,7 +213,8 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
         },
         'li:last-child': { marginBottom: 0 },
         em: { fontStyle: 'italic', color: 'var(--chakra-colors-gray-800)' },
-        strong: { color: 'var(--chakra-colors-orange-700)' },
+        a: { color: 'var(--chakra-colors-orange-700)', cursor: 'help', textDecoration: 'none' },
+        strong: { color: 'inherit' },
       }}
     >
       <ReactMarkdown
@@ -226,6 +239,13 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
             <Text as="strong" fontWeight="bold">
               {children}
             </Text>
+          ),
+          a: ({ children, title }: any) => (
+            <Tooltip label={title} hasArrow placement="top">
+              <Text as="span" color="orange.700" cursor="help">
+                {children}
+              </Text>
+            </Tooltip>
           ),
         }}
       >
@@ -304,6 +324,19 @@ const displayLocatedFieldValue = (row: any): string => {
   if (row?.value_text != null && row.value_text !== '') return String(row.value_text);
   if (row?.value_json != null) return JSON.stringify(row.value_json);
   return '-';
+};
+
+const displayLocatedFieldLabel = (row: any): string =>
+  String(row?.contractor_display_name || row?.field_key || 'Field').trim();
+
+const locatedFieldKeyHint = (row: any): string => `Field key: ${String(row?.field_key || 'unknown')}`;
+
+const displayVisualFindingLabel = (value: unknown): string => {
+  const label = String(value || 'visual finding')
+    .trim()
+    .replace(/before_after/g, 'before/after')
+    .replace(/_/g, ' ');
+  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : 'Visual finding';
 };
 
 const isClassifierEligibilityField = (row: any) =>
@@ -1925,7 +1958,7 @@ export const InvoiceVersionShowScreen = () => {
 
                         <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                           {classifierDisplayFields.map((r: any) => {
-                            const label = r.field_key || 'field';
+                            const label = displayLocatedFieldLabel(r);
                             const value = displayLocatedFieldValue(r);
                             const confidence =
                               r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
@@ -1963,9 +1996,11 @@ export const InvoiceVersionShowScreen = () => {
                                     : undefined
                                 }
                               >
-                                <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1}>
-                                  {label}
-                                </Text>
+                                <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
+                                  <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1} cursor="help">
+                                    {label}
+                                  </Text>
+                                </Tooltip>
                                 {confidence ? (
                                   <Tooltip label={confidence} hasArrow placement="top">
                                     <Text fontSize="sm" noOfLines={2} textAlign="right" cursor="help">
@@ -2108,262 +2143,197 @@ export const InvoiceVersionShowScreen = () => {
                       </AccordionPanel>
                     </AccordionItem>
                   ) : (
-                    supportingDocumentEvidenceSections.map((section) => {
-                      return (
-                        <AccordionItem key={section.key} borderTopWidth="1px" borderColor="gray.200">
-                          <h2>
-                            <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                              <Box flex="1" textAlign="left" minW={0}>
-                                <Flex align="center" gap="8px" wrap="wrap">
+                    supportingDocumentEvidenceSections.flatMap((section) =>
+                      section.documents.map((doc: any) => {
+                        const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
+                        const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
+                        const filename = String(doc?.original_filename || 'Unnamed file');
+                        const showFilename = section.documents.length > 1;
+
+                        return (
+                          <AccordionItem
+                            key={String(doc?.id || doc?.storage_key || 'supporting-doc')}
+                            borderTopWidth="1px"
+                            borderColor="gray.200"
+                          >
+                            <h2>
+                              <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                                <Box flex="1" textAlign="left" minW={0}>
                                   <Text size="sm" fontWeight="bold" noOfLines={1}>
-                                    Supporting document - {section.title}
+                                    {`Supporting document - ${section.title}${showFilename ? ` - ${filename}` : ''}`}
                                   </Text>
+                                </Box>
+                                <AccordionIcon />
+                              </AccordionButton>
+                            </h2>
+                            <AccordionPanel px="0" pt="8px">
+                              <Box px="10px" py="3px">
+                                <Flex justify="flex-end" gap="8px" mb="6px">
+                                  <Tooltip label={`Show ${filename} in application`}>
+                                    <IconButton
+                                      aria-label={`Show ${filename} in application`}
+                                      icon={<FrameCorners size={24} weight="bold" />}
+                                      size="lg"
+                                      variant="outline"
+                                      colorScheme="green"
+                                      onClick={() => showSupportingDocumentInViewer(doc)}
+                                    />
+                                  </Tooltip>
+                                  <Tooltip label={`Open ${filename} in browser`}>
+                                    <IconButton
+                                      aria-label={`Open ${filename} in browser`}
+                                      icon={<ArrowSquareOut size={24} weight="bold" />}
+                                      size="lg"
+                                      variant="outline"
+                                      colorScheme="blue"
+                                      onClick={() => openSupportingDocumentFile(doc)}
+                                    />
+                                  </Tooltip>
                                 </Flex>
-                              </Box>
-                              <AccordionIcon />
-                            </AccordionButton>
-                          </h2>
 
-                          <AccordionPanel px="0" pt="8px">
-                            <Accordion
-                              allowMultiple
-                              defaultIndex={[0, 1]}
-                              sx={{
-                                '& .chakra-accordion__button': {
-                                  pl: '10px',
-                                  pr: '8px',
-                                },
-                                '& .chakra-accordion__panel': {
-                                  ml: '8px',
-                                  pl: '10px',
-                                },
-                              }}
-                            >
-                              {section.documents.map((doc: any) => {
-                                const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
-                                const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
-                                const filename = String(doc?.original_filename || 'Unnamed file');
+                                <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
+                                  File details
+                                </Text>
+                                <Box
+                                  display="grid"
+                                  gridTemplateColumns="160px minmax(0, 1fr)"
+                                  columnGap="8px"
+                                  rowGap="2px"
+                                  alignItems="baseline"
+                                  pl="12px"
+                                  mt="2px"
+                                >
+                                  <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                    details
+                                  </Text>
+                                  <Text fontSize="sm" noOfLines={1}>
+                                    {[
+                                      `size ${fmtBytes(doc?.byte_size)}`,
+                                      doc?.classification_confidence != null
+                                        ? `confidence ${String(doc.classification_confidence)}`
+                                        : '',
+                                      String(doc?.supporting_document_routing_quality || '').trim()
+                                        ? `routing ${String(doc.supporting_document_routing_quality)}`
+                                        : '',
+                                    ]
+                                      .filter(Boolean)
+                                      .join('  ')}
+                                  </Text>
+                                </Box>
 
-                                return (
-                                  <AccordionItem
-                                    key={String(doc?.id || doc?.storage_key || 'supporting-doc')}
-                                    borderTopWidth="1px"
-                                    borderColor="gray.200"
+                                {fields.length > 0 && (
+                                  <Box
+                                    mt="3px"
+                                    display="grid"
+                                    gridTemplateColumns="160px minmax(0, 1fr)"
+                                    columnGap="8px"
+                                    rowGap="2px"
+                                    alignItems="baseline"
+                                    pl="12px"
                                   >
-                                    <h3>
-                                      <AccordionButton py="6px" _hover={{ bg: 'transparent' }}>
-                                        <Box flex="1" textAlign="left" minW={0}>
-                                          <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
-                                            Uploaded file - {filename}
-                                          </Text>
-                                        </Box>
-                                        <AccordionIcon />
-                                      </AccordionButton>
-                                    </h3>
-                                    <AccordionPanel px="0" pt="6px">
-                                      <Box px="10px" py="3px">
-                                        <Flex justify="flex-end" gap="8px" mb="6px">
-                                          <Tooltip label={`Show ${filename} in application`}>
-                                            <IconButton
-                                              aria-label={`Show ${filename} in application`}
-                                              icon={<FrameCorners size={24} weight="bold" />}
-                                              size="lg"
-                                              variant="outline"
-                                              colorScheme="green"
-                                              onClick={() => showSupportingDocumentInViewer(doc)}
-                                            />
-                                          </Tooltip>
-                                          <Tooltip label={`Open ${filename} in browser`}>
-                                            <IconButton
-                                              aria-label={`Open ${filename} in browser`}
-                                              icon={<ArrowSquareOut size={24} weight="bold" />}
-                                              size="lg"
-                                              variant="outline"
-                                              colorScheme="blue"
-                                              onClick={() => openSupportingDocumentFile(doc)}
-                                            />
-                                          </Tooltip>
-                                        </Flex>
+                                    {fields.map((field: any) => {
+                                      const clickable = field?.page != null && field?.polygon != null;
+                                      const isActive =
+                                        activeHighlight?.source === 'supporting_document' &&
+                                        activeHighlight?.supportingDocumentId === String(doc?.id) &&
+                                        activeHighlight?.key ===
+                                          `supporting_field_${String(field?.id || field?.field_key || 'unknown')}`;
+                                      const fieldValue =
+                                        field?.value_text != null
+                                          ? String(field.value_text)
+                                          : field?.value_json != null
+                                            ? JSON.stringify(field.value_json)
+                                            : 'not found';
+                                      const handleClick = clickable
+                                        ? () => showSupportingDocumentInViewer(doc, field)
+                                        : undefined;
 
-                                        <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
-                                          File details
-                                        </Text>
-                                        <Box
-                                          display="grid"
-                                          gridTemplateColumns="160px minmax(0, 1fr)"
-                                          columnGap="8px"
-                                          rowGap="2px"
-                                          alignItems="baseline"
-                                          pl="12px"
-                                          mt="2px"
-                                        >
-                                          <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                            details
-                                          </Text>
-                                          <Text fontSize="sm" noOfLines={1}>
-                                            {[
-                                              `size ${fmtBytes(doc?.byte_size)}`,
-                                              doc?.classification_confidence != null
-                                                ? `confidence ${String(doc.classification_confidence)}`
-                                                : '',
-                                              String(doc?.supporting_document_routing_quality || '').trim()
-                                                ? `routing ${String(doc.supporting_document_routing_quality)}`
-                                                : '',
-                                            ]
-                                              .filter(Boolean)
-                                              .join('  ')}
-                                          </Text>
-                                        </Box>
-
-                                        {fields.length > 0 && (
-                                          <Box
-                                            mt="3px"
-                                            display="grid"
-                                            gridTemplateColumns="160px minmax(0, 1fr)"
-                                            columnGap="8px"
-                                            rowGap="2px"
-                                            alignItems="baseline"
-                                            pl="12px"
+                                      return (
+                                        <React.Fragment key={String(field?.id || field?.field_key)}>
+                                          <Tooltip label={locatedFieldKeyHint(field)} hasArrow placement="top">
+                                            <Text
+                                              fontSize="sm"
+                                              opacity={0.7}
+                                              noOfLines={1}
+                                              cursor="help"
+                                              bg={isActive ? 'red.50' : 'transparent'}
+                                              borderRadius="sm"
+                                              onClick={handleClick}
+                                            >
+                                              {displayLocatedFieldLabel(field)}
+                                            </Text>
+                                          </Tooltip>
+                                          <Text
+                                            fontSize="sm"
+                                            noOfLines={1}
+                                            cursor={clickable ? 'pointer' : 'default'}
+                                            bg={isActive ? 'red.50' : 'transparent'}
+                                            borderRadius="sm"
+                                            onClick={handleClick}
+                                            _hover={clickable ? { bg: 'gray.50' } : undefined}
                                           >
-                                            {fields.map((field: any) => {
-                                              const clickable = field?.page != null && field?.polygon != null;
-                                              const isActive =
-                                                activeHighlight?.source === 'supporting_document' &&
-                                                activeHighlight?.supportingDocumentId === String(doc?.id) &&
-                                                activeHighlight?.key ===
-                                                  `supporting_field_${String(field?.id || field?.field_key || 'unknown')}`;
-                                              const fieldValue =
-                                                field?.value_text != null
-                                                  ? String(field.value_text)
-                                                  : field?.value_json != null
-                                                    ? JSON.stringify(field.value_json)
-                                                    : 'not found';
-                                              const handleClick = clickable
-                                                ? () => showSupportingDocumentInViewer(doc, field)
-                                                : undefined;
+                                            {fieldValue}
+                                          </Text>
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </Box>
+                                )}
 
-                                              return (
-                                                <React.Fragment key={String(field?.id || field?.field_key)}>
-                                                  <Text
-                                                    fontSize="sm"
-                                                    opacity={0.7}
-                                                    noOfLines={1}
-                                                    cursor={clickable ? 'pointer' : 'default'}
-                                                    bg={isActive ? 'red.50' : 'transparent'}
-                                                    borderRadius="sm"
-                                                    onClick={handleClick}
-                                                  >
-                                                    {String(field?.field_key || 'field')}
-                                                  </Text>
-                                                  <Text
-                                                    fontSize="sm"
-                                                    noOfLines={1}
-                                                    cursor={clickable ? 'pointer' : 'default'}
-                                                    bg={isActive ? 'red.50' : 'transparent'}
-                                                    borderRadius="sm"
-                                                    onClick={handleClick}
-                                                    _hover={clickable ? { bg: 'gray.50' } : undefined}
-                                                  >
-                                                    {fieldValue}
-                                                  </Text>
-                                                </React.Fragment>
-                                              );
-                                            })}
-                                          </Box>
-                                        )}
+                                {findings.length > 0 && (
+                                  <Box mt="10px">
+                                    <Text fontSize="sm" fontWeight="bold" opacity={0.78}>
+                                      Visual findings
+                                    </Text>
+                                    <Box
+                                      mt="4px"
+                                      display="grid"
+                                      gridTemplateColumns="160px minmax(0, 1fr)"
+                                      columnGap="8px"
+                                      rowGap="6px"
+                                      alignItems="start"
+                                      pl="12px"
+                                    >
+                                      {findings.map((finding: any) => {
+                                        const findingMeta = [
+                                          finding?.page != null ? `page ${String(finding.page)}` : '',
+                                          finding?.confidence != null ? `confidence ${String(finding.confidence)}` : '',
+                                          String(finding?.legibility || '').trim()
+                                            ? `legibility ${String(finding.legibility)}`
+                                            : '',
+                                        ]
+                                          .filter(Boolean)
+                                          .join('  ');
 
-                                        {findings.length > 0 && (
-                                          <Box mt="10px" display="flex" flexDirection="column" gap="6px">
-                                            {findings.map((finding: any) => {
-                                              const rawRelevantText = finding?.relevant_text_seen;
-                                              const relevantText = Array.isArray(rawRelevantText)
-                                                ? rawRelevantText.filter(Boolean).join(', ')
-                                                : rawRelevantText != null && rawRelevantText !== ''
-                                                  ? typeof rawRelevantText === 'string'
-                                                    ? rawRelevantText
-                                                    : JSON.stringify(rawRelevantText)
-                                                  : '';
-                                              const findingType = String(finding?.finding_type || 'visual finding');
-                                              const findingMeta = [
-                                                finding?.page != null ? `page ${String(finding.page)}` : '',
-                                                finding?.confidence != null
-                                                  ? `confidence ${String(finding.confidence)}`
-                                                  : '',
-                                                String(finding?.legibility || '').trim()
-                                                  ? `legibility ${String(finding.legibility)}`
-                                                  : '',
-                                              ]
-                                                .filter(Boolean)
-                                                .join('  ');
-
-                                              return (
-                                                <Box
-                                                  key={String(
-                                                    finding?.id || finding?.finding_seqno || finding?.summary,
-                                                  )}
-                                                  pb="6px"
-                                                  _first={{ pt: 0 }}
-                                                  _last={{ pb: 0 }}
-                                                >
-                                                  <Flex align="baseline" justify="space-between" gap="16px">
-                                                    <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
-                                                      Visual findings - {findingType}
-                                                    </Text>
-                                                    {findingMeta && (
-                                                      <Text fontSize="sm" opacity={0.7} noOfLines={1} textAlign="right">
-                                                        {findingMeta}
-                                                      </Text>
-                                                    )}
-                                                  </Flex>
-                                                  <Box
-                                                    display="grid"
-                                                    gridTemplateColumns="160px minmax(0, 1fr)"
-                                                    columnGap="8px"
-                                                    rowGap="2px"
-                                                    alignItems="baseline"
-                                                    mt="2px"
-                                                    pl="12px"
-                                                  >
-                                                    <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                      summary
-                                                    </Text>
-                                                    <Text fontSize="sm" noOfLines={2}>
-                                                      {String(finding?.summary || '')}
-                                                    </Text>
-                                                  </Box>
-                                                  {relevantText && (
-                                                    <Box
-                                                      display="grid"
-                                                      gridTemplateColumns="160px minmax(0, 1fr)"
-                                                      columnGap="8px"
-                                                      rowGap="2px"
-                                                      alignItems="baseline"
-                                                      mt="2px"
-                                                      pl="12px"
-                                                    >
-                                                      <Text fontSize="sm" opacity={0.7} noOfLines={1}>
-                                                        text seen
-                                                      </Text>
-                                                      <Text fontSize="sm" noOfLines={2}>
-                                                        {relevantText}
-                                                      </Text>
-                                                    </Box>
-                                                  )}
-                                                </Box>
-                                              );
-                                            })}
-                                          </Box>
-                                        )}
-                                      </Box>
-                                    </AccordionPanel>
-                                  </AccordionItem>
-                                );
-                              })}
-                            </Accordion>
-                          </AccordionPanel>
-                        </AccordionItem>
-                      );
-                    })
+                                        return (
+                                          <React.Fragment
+                                            key={String(finding?.id || finding?.finding_seqno || finding?.summary)}
+                                          >
+                                            <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                              {displayVisualFindingLabel(finding?.finding_type)}
+                                            </Text>
+                                            <Box>
+                                              <Text fontSize="sm" noOfLines={2}>
+                                                {String(finding?.summary || '')}
+                                              </Text>
+                                              {findingMeta && (
+                                                <Text fontSize="xs" opacity={0.65} noOfLines={1} mt="1px">
+                                                  {findingMeta}
+                                                </Text>
+                                              )}
+                                            </Box>
+                                          </React.Fragment>
+                                        );
+                                      })}
+                                    </Box>
+                                  </Box>
+                                )}
+                              </Box>
+                            </AccordionPanel>
+                          </AccordionItem>
+                        );
+                      }),
+                    )
                   )}
 
                   {hervProduct && (
@@ -2984,10 +2954,19 @@ export const InvoiceVersionShowScreen = () => {
                       ) : (
                         <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                           {codeFields.map((r: any) => {
-                            const label = r.field_key || 'field';
+                            const label = displayLocatedFieldLabel(r);
                             const value = displayLocatedFieldValue(r);
 
-                            return <FieldRow key={r.id} label={label} value={value} disabled inline />;
+                            return (
+                              <FieldRow
+                                key={r.id}
+                                label={label}
+                                labelHint={locatedFieldKeyHint(r)}
+                                value={value}
+                                disabled
+                                inline
+                              />
+                            );
                           })}
                         </Box>
                       )}
@@ -3065,7 +3044,7 @@ export const InvoiceVersionShowScreen = () => {
                                     ) : (
                                       <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                                         {group.fields.map((r: any) => {
-                                          const label = r.field_key || 'field';
+                                          const label = displayLocatedFieldLabel(r);
                                           const value = displayLocatedFieldValue(r);
                                           const sourceEngine = String(r?.source_engine ?? 'genai').toLowerCase();
                                           const highlightSource =
@@ -3081,6 +3060,7 @@ export const InvoiceVersionShowScreen = () => {
                                             <FieldRow
                                               key={r.id}
                                               label={label}
+                                              labelHint={locatedFieldKeyHint(r)}
                                               value={value}
                                               hint={confidence}
                                               active={activeHighlightKey === highlightKey}
@@ -3168,9 +3148,16 @@ export const InvoiceVersionShowScreen = () => {
                                                     }}
                                                   />
                                                 </Tooltip>
-                                                <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                                                  {title}
-                                                </Text>
+                                                <Tooltip
+                                                  label={`Rule key: ${String(r.rule_key || '')}`}
+                                                  isDisabled={!String(r.rule_key || '').trim()}
+                                                  hasArrow
+                                                  placement="top"
+                                                >
+                                                  <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
+                                                    {title}
+                                                  </Text>
+                                                </Tooltip>
                                               </Box>
 
                                               {reason && (
@@ -3351,7 +3338,7 @@ export const InvoiceVersionShowScreen = () => {
           ============================================================ */}
                           <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                             {genAiFields.map((r: any) => {
-                              const label = r.field_key || 'field';
+                              const label = displayLocatedFieldLabel(r);
                               const value = displayLocatedFieldValue(r);
 
                               const confidence =
@@ -3392,9 +3379,11 @@ export const InvoiceVersionShowScreen = () => {
                                     setShowPdf(true);
                                   }}
                                 >
-                                  <Text fontSize="xs" opacity={0.7}>
-                                    {label}
-                                  </Text>
+                                  <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
+                                    <Text fontSize="xs" opacity={0.7} cursor="help">
+                                      {label}
+                                    </Text>
+                                  </Tooltip>
                                   {confidence ? (
                                     <Tooltip label={confidence} hasArrow placement="top">
                                       <Text fontSize="sm" noOfLines={3} cursor="help">
@@ -3438,7 +3427,7 @@ export const InvoiceVersionShowScreen = () => {
 
                           <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                             {classifierFields.map((r: any) => {
-                              const label = r.field_key || 'field';
+                              const label = displayLocatedFieldLabel(r);
                               const value = displayLocatedFieldValue(r);
                               const confidence =
                                 r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
@@ -3481,9 +3470,11 @@ export const InvoiceVersionShowScreen = () => {
                                       : undefined
                                   }
                                 >
-                                  <Text fontSize="xs" opacity={0.7}>
-                                    {label}
-                                  </Text>
+                                  <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
+                                    <Text fontSize="xs" opacity={0.7} cursor="help">
+                                      {label}
+                                    </Text>
+                                  </Tooltip>
                                   {confidence ? (
                                     <Tooltip label={confidence} hasArrow placement="top">
                                       <Text fontSize="sm" noOfLines={3} cursor="help">
@@ -3530,7 +3521,7 @@ export const InvoiceVersionShowScreen = () => {
                           <Box display="grid" gridTemplateColumns="1fr 1fr" gap="8px">
                             {/* list */}
                             {codeFields.map((r: any) => {
-                              const label = r.field_key || 'field';
+                              const label = displayLocatedFieldLabel(r);
                               const value = displayLocatedFieldValue(r);
 
                               const confidence =
@@ -3567,9 +3558,11 @@ export const InvoiceVersionShowScreen = () => {
                                     setShowPdf(true);
                                   }}
                                 >
-                                  <Text fontSize="xs" opacity={0.7}>
-                                    {label}
-                                  </Text>
+                                  <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
+                                    <Text fontSize="xs" opacity={0.7} cursor="help">
+                                      {label}
+                                    </Text>
+                                  </Tooltip>
                                   {confidence ? (
                                     <Tooltip label={confidence} hasArrow placement="top">
                                       <Text fontSize="sm" noOfLines={3} cursor="help">
@@ -3675,9 +3668,16 @@ export const InvoiceVersionShowScreen = () => {
                                       }}
                                     />
                                   </Tooltip>
-                                  <Text fontSize="xs" opacity={0.7}>
-                                    {title}
-                                  </Text>
+                                  <Tooltip
+                                    label={`Rule key: ${String(r.rule_key || '')}`}
+                                    isDisabled={!String(r.rule_key || '').trim()}
+                                    hasArrow
+                                    placement="top"
+                                  >
+                                    <Text fontSize="xs" opacity={0.7}>
+                                      {title}
+                                    </Text>
+                                  </Tooltip>
                                 </Flex>
 
                                 {reason && (
@@ -3742,9 +3742,6 @@ export const InvoiceVersionShowScreen = () => {
                                     description={group?.upgrade_type_description}
                                     size={24}
                                   />
-                                  <Text fontSize="sm" opacity={0.7}>
-                                    {types.length} configured
-                                  </Text>
                                 </Flex>
 
                                 {types.length === 0 ? (
@@ -4111,9 +4108,16 @@ export const InvoiceVersionShowScreen = () => {
             <Flex direction="column" gap="4px" pr="32px">
               <Flex align="center" gap="8px" wrap="wrap">
                 <StatusDot result={ruleDetailsDrawerRulecheck?.rule_result} />
-                <Text fontSize="md" fontWeight="bold" noOfLines={2}>
-                  {ruleDetailsDrawerRulecheck ? ruleDisplayTitle(ruleDetailsDrawerRulecheck) : 'Rule details'}
-                </Text>
+                <Tooltip
+                  label={`Rule key: ${String(ruleDetailsDrawerRulecheck?.rule_key || '')}`}
+                  isDisabled={!String(ruleDetailsDrawerRulecheck?.rule_key || '').trim()}
+                  hasArrow
+                  placement="top"
+                >
+                  <Text fontSize="md" fontWeight="bold" noOfLines={2}>
+                    {ruleDetailsDrawerRulecheck ? ruleDisplayTitle(ruleDetailsDrawerRulecheck) : 'Rule details'}
+                  </Text>
+                </Tooltip>
               </Flex>
               {ruleDetailsDrawerRulecheck?.upgrade_type_description && (
                 <Text fontSize="sm" opacity={0.7}>
@@ -4140,9 +4144,15 @@ export const InvoiceVersionShowScreen = () => {
                 <>
                   <SourceQuoteMarkdown value={ruleDetailsDrawerRulecheck?.source_quote} />
                   <Text fontSize="xs" opacity={0.65} mt="4px">
-                    {ruleDetailsDrawerRulecheck?.contractor_visible_flag !== false
-                      ? 'Contractor visible'
-                      : 'Hidden from contractor advice'}
+                    {ruleDetailsDrawerRulecheck?.contractor_visibility === 'warn_and_fail'
+                      ? 'Visible to contractors for warnings and errors'
+                      : ruleDetailsDrawerRulecheck?.contractor_visibility === 'fail_only'
+                        ? 'Visible to contractors for errors only'
+                        : 'Hidden from contractors'}
+                    {' · '}
+                    {ruleDetailsDrawerRulecheck?.contractor_blocking_policy === 'block_on_fail'
+                      ? 'Errors block submission'
+                      : 'Does not block submission'}
                   </Text>
                 </>
               ) : (

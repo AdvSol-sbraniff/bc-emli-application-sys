@@ -142,10 +142,31 @@ WITH field_seed (
   ('before_after_photo_set', 'visible_condition_summary', 3, 'For this single uploaded file, summarize the visible condition or work state shown in the image.', true),
   ('before_after_photo_set', 'image_quality_or_legibility', 4, 'For this single uploaded file, summarize whether the image is clear enough for review and whether any visible text is legible.', true),
   ('before_after_photo_set', 'visible_text_or_label_values', 5, 'For this single uploaded file, locate any visible text, captions, labels, or label values in the image.', true)
+),
+field_seed_with_names AS (
+  SELECT
+    seed.*,
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+      upper(left(replace(field_key, '_', ' '), 1)) || lower(substr(replace(field_key, '_', ' '), 2)),
+      'ahri', 'AHRI'),
+      'btu', 'BTU'),
+      'cfm', 'CFM'),
+      'hspf', 'HSPF'),
+      'nrcan', 'NRCan'),
+      'seer', 'SEER'),
+      'before after', 'before/after'),
+      'r value', 'R-value'),
+      'Ahri', 'AHRI'),
+      'Nrcan', 'NRCan'),
+      'Wett', 'WETT'),
+      'Energy star', 'ENERGY STAR'
+    ) AS contractor_display_name
+  FROM field_seed seed
 )
 INSERT INTO claims.supporting_document_type_located_fields (
   supporting_document_type_id,
   field_key,
+  contractor_display_name,
   field_number,
   prompt_text,
   enabled,
@@ -155,15 +176,17 @@ INSERT INTO claims.supporting_document_type_located_fields (
 SELECT
   sdt.id,
   seed.field_key,
+  seed.contractor_display_name,
   seed.field_number,
   seed.prompt_text,
   seed.enabled,
   NOW(),
   NOW()
-FROM field_seed seed
+FROM field_seed_with_names seed
 JOIN claims.supporting_document_types sdt
   ON sdt.type_key = seed.supporting_document_type_key
 ON CONFLICT (supporting_document_type_id, field_key) DO UPDATE SET
+  contractor_display_name = EXCLUDED.contractor_display_name,
   field_number = EXCLUDED.field_number,
   prompt_text = EXCLUDED.prompt_text,
   enabled = EXCLUDED.enabled,

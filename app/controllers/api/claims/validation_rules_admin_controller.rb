@@ -194,7 +194,7 @@ module Api
         if like
           scope =
             scope.where(
-              "claims.code_rules.code_rule_key ILIKE :like OR claims.code_rules.description ILIKE :like OR claims.code_rules.admin_notes ILIKE :like",
+              "claims.code_rules.code_rule_key ILIKE :like OR claims.code_rules.contractor_display_name ILIKE :like OR claims.code_rules.description ILIKE :like OR claims.code_rules.admin_notes ILIKE :like",
               like: like
             )
         end
@@ -214,7 +214,7 @@ module Api
         if like
           scope =
             scope.where(
-              "claims.code_located_fields.code_field_key ILIKE :like OR claims.code_located_fields.description ILIKE :like",
+              "claims.code_located_fields.code_field_key ILIKE :like OR claims.code_located_fields.contractor_display_name ILIKE :like OR claims.code_located_fields.description ILIKE :like",
               like: like
             )
         end
@@ -245,7 +245,7 @@ module Api
         if like
           scope =
             scope.where(
-              "claims.genai_rules.genai_rule_key ILIKE :like OR claims.genai_rules.prompt_text ILIKE :like",
+              "claims.genai_rules.genai_rule_key ILIKE :like OR claims.genai_rules.contractor_display_name ILIKE :like OR claims.genai_rules.prompt_text ILIKE :like",
               like: like
             )
         end
@@ -283,7 +283,7 @@ module Api
         if like
           scope =
             scope.where(
-              "claims.genai_located_fields.genai_field_key ILIKE :like OR claims.genai_located_fields.prompt_text ILIKE :like",
+              "claims.genai_located_fields.genai_field_key ILIKE :like OR claims.genai_located_fields.contractor_display_name ILIKE :like OR claims.genai_located_fields.prompt_text ILIKE :like",
               like: like
             )
         end
@@ -484,6 +484,7 @@ module Api
       def code_rule_params
         params.permit(
           :code_rule_key,
+          :contractor_display_name,
           :description,
           :enabled,
           :pass_admin_message,
@@ -492,26 +493,39 @@ module Api
           :info_admin_message,
           :admin_notes,
           :source_quote,
-          :contractor_visible_flag
+          :contractor_visibility,
+          :contractor_blocking_policy
         )
       end
 
       def code_located_field_params
-        params.permit(:code_field_key, :description, :enabled)
+        params.permit(
+          :code_field_key,
+          :contractor_display_name,
+          :description,
+          :enabled
+        )
       end
 
       def genai_rule_params
         params.permit(
           :genai_rule_key,
+          :contractor_display_name,
           :prompt_text,
           :enabled,
           :source_quote,
-          :contractor_visible_flag
+          :contractor_visibility,
+          :contractor_blocking_policy
         )
       end
 
       def genai_located_field_params
-        params.permit(:genai_field_key, :prompt_text, :enabled)
+        params.permit(
+          :genai_field_key,
+          :contractor_display_name,
+          :prompt_text,
+          :enabled
+        )
       end
 
       def serialize_upgrade_types(upgrade_types)
@@ -538,6 +552,7 @@ module Api
             created_at: row.created_at,
             upgrade_types: serialize_upgrade_types(row.invoice_upgrade_types),
             detail: {
+              contractor_display_name: row.contractor_display_name,
               description: row.description,
               pass_admin_message: row.pass_admin_message,
               warn_admin_message: row.warn_admin_message,
@@ -545,7 +560,8 @@ module Api
               info_admin_message: row.info_admin_message,
               admin_notes: row.admin_notes,
               source_quote: row.source_quote,
-              contractor_visible_flag: row.contractor_visible_flag
+              contractor_visibility: row.contractor_visibility,
+              contractor_blocking_policy: row.contractor_blocking_policy
             },
             mappings:
               row.code_rule_upgrade_types.map do |mapping|
@@ -565,6 +581,7 @@ module Api
             created_at: row.created_at,
             upgrade_types: [],
             detail: {
+              contractor_display_name: row.contractor_display_name,
               description: row.description,
               global_scope: true
             },
@@ -580,9 +597,11 @@ module Api
             created_at: row.created_at,
             upgrade_types: serialize_upgrade_types(row.invoice_upgrade_types),
             detail: {
+              contractor_display_name: row.contractor_display_name,
               prompt_text: row.prompt_text,
               source_quote: row.source_quote,
-              contractor_visible_flag: row.contractor_visible_flag
+              contractor_visibility: row.contractor_visibility,
+              contractor_blocking_policy: row.contractor_blocking_policy
             },
             mappings:
               row.genai_rule_upgrade_types.map do |mapping|
@@ -602,6 +621,7 @@ module Api
             created_at: row.created_at,
             upgrade_types: serialize_upgrade_types(row.invoice_upgrade_types),
             detail: {
+              contractor_display_name: row.contractor_display_name,
               prompt_text: row.prompt_text
             },
             mappings:

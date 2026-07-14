@@ -15,7 +15,7 @@ module Claims
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
       end
-      step_type = classifier_step_type_for(document, requested_step_type)
+      step_type = classifier_step_type_for(requested_step_type)
 
       step =
         claim_step!(
@@ -35,7 +35,7 @@ module Claims
           document: document,
           step_type: step_type
         )
-      attachments = build_attachments(document: document, step_type: step_type)
+      attachments = build_attachments(document: document)
       triage_payload =
         call_node_genai!(
           contextwindowjson: contextwindowjson,
@@ -139,16 +139,11 @@ module Claims
 
     def build_classifier_contextwindowjson(document:, step_type:)
       config = ::Claims::ValidationgenaiConfig.order(:created_at).first
-      sys =
-        classifier_system_record(
-          config: config,
-          step_type: step_type,
-          document: document
-        )
+      sys = config&.document_triage_system_record.to_s
       user0 = config&.user_record0.to_s
 
       if sys.strip.empty?
-        raise "validationgenai_config.#{classifier_config_field(document)} is empty"
+        raise "validationgenai_config.document_triage_system_record is empty"
       end
 
       messages = [
@@ -174,7 +169,7 @@ module Claims
               #{document.di_read_raw_json.to_json}
 
               Actual ask:
-              #{classifier_actual_ask(document)}
+              #{classifier_actual_ask}
               Reply must be strict JSON using the classifier schema from the system record.
             TEXT
       }
@@ -182,7 +177,7 @@ module Claims
       messages
     end
 
-    def build_attachments(document:, step_type:)
+    def build_attachments(document:)
       return [] if document.storage_key.blank?
 
       [
@@ -234,7 +229,7 @@ module Claims
       }.compact
     end
 
-    def classifier_step_type_for(document, requested_step_type)
+    def classifier_step_type_for(requested_step_type)
       requested = requested_step_type.to_s
       if %w[classifier_files fix_classifier_files].include?(requested)
         return requested
@@ -243,49 +238,16 @@ module Claims
       "classifier_files"
     end
 
-    def image_document?(document)
-      content_type = document.content_type.to_s.downcase
-      return true if content_type.start_with?("image/")
-
-      filename = document.original_filename.to_s.downcase
-      filename.end_with?(".jpg", ".jpeg", ".png")
-    end
-
-    def classifier_config_field(document)
-      if image_document?(document)
-        :classifier_image_system_record
-      else
-        :classifier_pdf_system_record
-      end
-    end
-
-    def classifier_system_record(config:, step_type:, document:)
-      return "" if config.nil?
-
-      field = classifier_config_field(document)
-      value = config.respond_to?(field) ? config.public_send(field).to_s : ""
-      value.presence || config.classifier_system_record.to_s
-    end
-
-    def classifier_actual_ask(document)
-      return <<~TEXT.squish if image_document?(document)
-          Classify this image file. Use the attached image as primary evidence.
-          Treat filename, MIME type, and DI-read JSON as weak hints only.
-          If it is a supporting document, classify the supporting document type
-          and assess routing quality. Do not return official visual_findings or
-          supporting-document located fields in this call; those are extracted in
-          separate downstream calls after routing.
-        TEXT
-
+    def classifier_actual_ask
       <<~TEXT.squish
-        Classify this PDF/document using both the attached file and DI-read JSON.
-        Treat DI-read text as the primary structured source for text values, and
-        use the attached file as visual/context backup when useful. If it is an
-        invoice, detect upgrade types, eligibility code, and product references.
-        If it is a supporting document, classify the supporting document type and
-        assess routing quality. Do not extract supporting-document located fields
-        in this call; those are extracted in separate downstream calls after
-        routing.
+        Classify this supplied file using both the attached file and DI-read JSON.
+        Do not infer document kind from the file extension. Treat DI-read text as
+        the authoritative source for textual evidence and polygons, and use the
+        attached file for visual and document context. If it is an invoice, detect
+        upgrade types and the eligibility code. If it is a supporting document,
+        classify its type and routing quality. Do not extract official supporting-
+        document evidence in this call; that happens in the downstream supporting-
+        document extraction step.
       TEXT
     end
 

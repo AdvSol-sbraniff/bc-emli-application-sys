@@ -1294,6 +1294,7 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   code_rule_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   description text NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
 
@@ -1303,7 +1304,8 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
   info_admin_message text NULL,
   admin_notes text NULL,
   source_quote text NOT NULL,
-  contractor_visible_flag boolean NOT NULL DEFAULT true,
+  contractor_visibility text NOT NULL DEFAULT 'fail_only',
+  contractor_blocking_policy text NOT NULL DEFAULT 'non_blocking',
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1311,7 +1313,13 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
   CONSTRAINT code_rules_pkey PRIMARY KEY (id),
   CONSTRAINT code_rules_key_uniq UNIQUE (code_rule_key),
   CONSTRAINT code_rules_source_quote_present_chk
-    CHECK (btrim(source_quote) <> '')
+    CHECK (btrim(source_quote) <> ''),
+  CONSTRAINT code_rules_contractor_visibility_chk
+    CHECK (contractor_visibility IN ('hidden','fail_only','warn_and_fail')),
+  CONSTRAINT code_rules_contractor_blocking_policy_chk
+    CHECK (contractor_blocking_policy IN ('non_blocking','block_on_fail')),
+  CONSTRAINT code_rules_visible_blocker_chk
+    CHECK (contractor_blocking_policy <> 'block_on_fail' OR contractor_visibility <> 'hidden')
 );
 
 CREATE INDEX IF NOT EXISTS idx_code_rules_enabled
@@ -1369,6 +1377,7 @@ CREATE TABLE IF NOT EXISTS claims.code_located_fields (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   code_field_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   description text NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
 
@@ -1396,10 +1405,12 @@ CREATE TABLE IF NOT EXISTS claims.genai_rules (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   genai_rule_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   prompt_text text NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
   source_quote text NOT NULL,
-  contractor_visible_flag boolean NOT NULL DEFAULT true,
+  contractor_visibility text NOT NULL DEFAULT 'fail_only',
+  contractor_blocking_policy text NOT NULL DEFAULT 'non_blocking',
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1407,7 +1418,13 @@ CREATE TABLE IF NOT EXISTS claims.genai_rules (
   CONSTRAINT genai_rules_pkey PRIMARY KEY (id),
   CONSTRAINT genai_rules_key_uniq UNIQUE (genai_rule_key),
   CONSTRAINT genai_rules_source_quote_present_chk
-    CHECK (btrim(source_quote) <> '')
+    CHECK (btrim(source_quote) <> ''),
+  CONSTRAINT genai_rules_contractor_visibility_chk
+    CHECK (contractor_visibility IN ('hidden','fail_only','warn_and_fail')),
+  CONSTRAINT genai_rules_contractor_blocking_policy_chk
+    CHECK (contractor_blocking_policy IN ('non_blocking','block_on_fail')),
+  CONSTRAINT genai_rules_visible_blocker_chk
+    CHECK (contractor_blocking_policy <> 'block_on_fail' OR contractor_visibility <> 'hidden')
 );
 
 CREATE INDEX IF NOT EXISTS idx_genai_rules_enabled
@@ -1464,6 +1481,7 @@ CREATE TABLE IF NOT EXISTS claims.genai_located_fields (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   genai_field_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   prompt_text text NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
 
@@ -1613,6 +1631,7 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   source_engine text NOT NULL,   -- 'code' | 'genai'
 
   rule_key text NOT NULL,
+  contractor_display_name text NOT NULL,
 
   rule_result text NOT NULL DEFAULT 'fail',
   confidence smallint NOT NULL DEFAULT 0,  -- 0..100
@@ -1662,6 +1681,41 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_i
 
 CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
   ON claims.invoice_version_rulechecks (rule_key);
+
+CREATE OR REPLACE FUNCTION claims.set_invoice_version_rulecheck_contractor_display_name()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.contractor_display_name IS NULL OR btrim(NEW.contractor_display_name) = '' THEN
+    IF NEW.source_engine = 'code' THEN
+      SELECT cr.contractor_display_name
+        INTO NEW.contractor_display_name
+        FROM claims.code_rules cr
+       WHERE cr.code_rule_key = NEW.rule_key;
+    ELSIF NEW.source_engine = 'genai' THEN
+      SELECT gr.contractor_display_name
+        INTO NEW.contractor_display_name
+        FROM claims.genai_rules gr
+       WHERE gr.genai_rule_key = NEW.rule_key;
+    END IF;
+  END IF;
+
+  IF NEW.contractor_display_name IS NULL OR btrim(NEW.contractor_display_name) = '' THEN
+    NEW.contractor_display_name := initcap(replace(NEW.rule_key, '_', ' '));
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_ivrc_contractor_display_name
+  ON claims.invoice_version_rulechecks;
+
+CREATE TRIGGER trg_ivrc_contractor_display_name
+BEFORE INSERT OR UPDATE OF source_engine, rule_key, contractor_display_name
+ON claims.invoice_version_rulechecks
+FOR EACH ROW
+EXECUTE FUNCTION claims.set_invoice_version_rulecheck_contractor_display_name();
 
 
   -- 
@@ -1842,6 +1896,7 @@ CREATE TABLE IF NOT EXISTS claims.supporting_document_type_located_fields (
   supporting_document_type_id uuid NOT NULL,
 
   field_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   prompt_text text NOT NULL,
   field_number integer NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
@@ -1964,7 +2019,6 @@ CREATE TABLE IF NOT EXISTS claims.supporting_document_visual_findings (
   page integer NULL,
   summary text NOT NULL,
   legibility text NOT NULL DEFAULT 'not_applicable',
-  relevant_text_seen jsonb NULL,
   confidence smallint NOT NULL DEFAULT 0,
   raw_json jsonb NULL,
 
@@ -2096,9 +2150,7 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   system_record character varying NULL,
-  classifier_system_record character varying NULL,
-  classifier_pdf_system_record character varying NULL,
-  classifier_image_system_record character varying NULL,
+  document_triage_system_record character varying NULL,
   supporting_document_extraction_system_record character varying NULL,
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
@@ -2122,6 +2174,7 @@ CREATE TABLE IF NOT EXISTS claims.code_rule_history (
   source_id uuid NULL,
 
   code_rule_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   description text NOT NULL,
   enabled boolean NOT NULL,
 
@@ -2131,7 +2184,8 @@ CREATE TABLE IF NOT EXISTS claims.code_rule_history (
   info_admin_message text NULL,
   admin_notes text NULL,
   source_quote text NULL,
-  contractor_visible_flag boolean NULL,
+  contractor_visibility text NOT NULL,
+  contractor_blocking_policy text NOT NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -2196,6 +2250,7 @@ CREATE TABLE IF NOT EXISTS claims.code_located_field_history (
   source_id uuid NULL,
 
   code_field_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   description text NOT NULL,
   enabled boolean NOT NULL,
 
@@ -2228,10 +2283,12 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_history (
   source_id uuid NULL,
 
   genai_rule_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   prompt_text text NOT NULL,
   enabled boolean NOT NULL,
   source_quote text NULL,
-  contractor_visible_flag boolean NULL,
+  contractor_visibility text NOT NULL,
+  contractor_blocking_policy text NOT NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -2296,6 +2353,7 @@ CREATE TABLE IF NOT EXISTS claims.genai_located_field_history (
   source_id uuid NULL,
 
   genai_field_key text NOT NULL,
+  contractor_display_name text NOT NULL,
   prompt_text text NOT NULL,
   enabled boolean NOT NULL,
 

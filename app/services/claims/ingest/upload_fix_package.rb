@@ -41,16 +41,18 @@ module Claims
         clone_supporting_document_ids: [],
         clone_all_current_supporting_documents: false,
         files: [],
-        file_roles: []
+        file_roles: nil
       )
+        # file_roles is accepted temporarily for compatibility with clients
+        # deployed before fix-package classification became fully classifier-owned.
+        # It is intentionally ignored.
         new(
           invoice_id: invoice_id,
           clone_invoice_version_id: clone_invoice_version_id,
           clone_supporting_document_ids: clone_supporting_document_ids,
           clone_all_current_supporting_documents:
             clone_all_current_supporting_documents,
-          files: files,
-          file_roles: file_roles
+          files: files
         ).call
       end
 
@@ -59,8 +61,7 @@ module Claims
         clone_invoice_version_id:,
         clone_supporting_document_ids:,
         clone_all_current_supporting_documents:,
-        files:,
-        file_roles:
+        files:
       )
         @invoice_id = invoice_id.to_s.strip
         @clone_invoice_version_id = clone_invoice_version_id.to_s.strip.presence
@@ -69,7 +70,6 @@ module Claims
         @clone_all_current_supporting_documents =
           !!clone_all_current_supporting_documents
         @files = Array(files).flatten.compact
-        @file_roles = Array(file_roles).flatten.map { |role| role.to_s.strip }
       end
 
       def call
@@ -77,13 +77,6 @@ module Claims
 
         invoice = ::Claims::Invoice.find(@invoice_id)
         source_invoice_version = source_invoice_version_for(invoice)
-        invoice_sources = invoice_source_count
-        if invoice_sources != 1
-          raise(
-            "The proposed fix package must contain exactly one invoice. " \
-              "Detected #{invoice_sources} invoice source(s)."
-          )
-        end
 
         now = Time.current
         ingest_run = nil
@@ -173,10 +166,7 @@ module Claims
           )
         end
 
-        upload_new_files!(
-          new_file_documents: new_file_documents,
-          new_invoice_version: new_invoice_version
-        )
+        upload_new_files!(new_file_documents: new_file_documents)
 
         stage_step.update!(status: "succeeded", updated_at: Time.current)
         enqueue_new_file_ocr!(new_file_documents)
@@ -259,11 +249,6 @@ module Claims
           .first
       end
 
-      def invoice_source_count
-        clone_count = @clone_invoice_version_id.present? ? 1 : 0
-        clone_count + new_invoice_files.size
-      end
-
       def total_file_count(source_invoice_version)
         (@clone_invoice_version_id.present? ? 1 : 0) +
           clone_supporting_document_ids_for(source_invoice_version).size +
@@ -281,12 +266,6 @@ module Claims
           .order(:created_at, :id)
           .pluck(:id)
           .map(&:to_s)
-      end
-
-      def new_invoice_files
-        @files.each_with_index.select do |_file, index|
-          @file_roles[index].to_s == "invoice"
-        end
       end
 
       def next_invoice_versionno(invoice_id)
@@ -328,19 +307,6 @@ module Claims
       end
 
       def create_pending_invoice_version!(invoice:, next_versionno:, now:)
-        invoice_file, index = new_invoice_files.first
-        name =
-          ::Claims::Ingest::EvidenceFile.original_filename(
-            invoice_file,
-            fallback: "invoice.pdf"
-          )
-        ctype =
-          ::Claims::Ingest::EvidenceFile.content_type(
-            invoice_file,
-            fallback: "application/pdf"
-          )
-        size = ::Claims::Ingest::EvidenceFile.byte_size(invoice_file)
-
         ::Claims::InvoiceVersion.create!(
           invoice_id: invoice.id,
           invoice_versionno: next_versionno,
@@ -349,12 +315,12 @@ module Claims
             pending_invoice_storage_key(
               invoice: invoice,
               next_versionno: next_versionno,
-              filename: name,
-              content_type: ctype
+              filename: "pending-invoice.pdf",
+              content_type: "application/pdf"
             ),
-          original_filename: name,
-          content_type: ctype,
-          byte_size: size,
+          original_filename: nil,
+          content_type: nil,
+          byte_size: nil,
           created_at: now,
           updated_at: now
         )
@@ -602,7 +568,7 @@ module Claims
         new_invoice_version:,
         now:
       )
-        @files.each_with_index.map do |file, index|
+        @files.map do |file|
           name =
             ::Claims::Ingest::EvidenceFile.original_filename(
               file,
@@ -642,25 +608,18 @@ module Claims
               updated_at: now
             )
 
-          { file: file, role: @file_roles[index], document: document }
+          { file: file, document: document }
         end
       end
 
-      def upload_new_files!(new_file_documents:, new_invoice_version:)
+      def upload_new_files!(new_file_documents:)
         new_file_documents.each do |row|
           file = row.fetch(:file)
           document = row.fetch(:document)
           node_resp =
             ::Claims::Ingest::UploadEvidenceFileToNode.call(
               session_id: document.session_id,
-              upload_scope_id:
-                (
-                  if row[:role].to_s == "invoice"
-                    new_invoice_version.id
-                  else
-                    document.id
-                  end
-                ),
+              upload_scope_id: document.id,
               ingest_document_id: document.id,
               file: file
             )
@@ -680,17 +639,6 @@ module Claims
                 end
               ),
             sha256: node_resp["sha256"],
-            updated_at: Time.current
-          )
-
-          next unless row[:role].to_s == "invoice"
-
-          new_invoice_version.update!(
-            storage_key: final_storage_key,
-            original_filename: document.original_filename,
-            content_type: document.content_type,
-            byte_size: document.byte_size,
-            sha256: document.sha256,
             updated_at: Time.current
           )
         end
@@ -761,17 +709,6 @@ module Claims
 
       def upload_fix_failure_status_and_subtype(error)
         message = error.message.to_s.downcase
-        if message.include?(
-             "the proposed fix package must contain exactly one invoice"
-           )
-          subtype =
-            if message.include?("detected 0")
-              "package_missing_required_fix_file"
-            else
-              "package_replacement_multiple_files"
-            end
-          return "package_needs_correction", subtype
-        end
         if message.include?("evidence files are supported")
           return "package_needs_correction", "package_unsupported_file_type"
         end

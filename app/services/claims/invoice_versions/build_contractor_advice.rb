@@ -15,7 +15,13 @@ module Claims
 
       def call
         bullets =
-          failed_visible_quotes.map { |quote| markdown_quote_bullet(quote) }
+          contractor_actionable_rules.map do |rule|
+            markdown_quote_bullet(
+              rule.fetch(:source_quote),
+              contractor_display_name: rule.fetch(:contractor_display_name),
+              rule_key: rule.fetch(:rule_key)
+            )
+          end
 
         return nil if bullets.empty?
 
@@ -28,7 +34,7 @@ module Claims
 
       private
 
-      def failed_visible_quotes
+      def contractor_actionable_rules
         rows =
           Claims::InvoiceVersionRulecheck
             .joins(<<~SQL.squish)
@@ -39,18 +45,31 @@ module Claims
                 ON claims.invoice_version_rulechecks.source_engine = 'code'
                AND cr.code_rule_key = claims.invoice_version_rulechecks.rule_key
             SQL
-            .where(invoice_version_id: @invoice_version_id, rule_result: "fail")
-            .where(
-              "COALESCE(gr.contractor_visible_flag, cr.contractor_visible_flag, false) = true"
-            )
+            .where(invoice_version_id: @invoice_version_id)
+            .contractor_actionable
             .select(
+              "claims.invoice_version_rulechecks.rule_key AS rule_key",
+              "claims.invoice_version_rulechecks.contractor_display_name AS contractor_display_name",
               "COALESCE(gr.source_quote, cr.source_quote) AS source_quote"
             )
             .order(:rule_key, :created_at)
 
         rows
-          .map { |row| normalize_quote(row.read_attribute("source_quote")) }
-          .compact_blank
+          .filter_map do |row|
+            source_quote = normalize_quote(row.read_attribute("source_quote"))
+            next if source_quote.blank?
+
+            {
+              rule_key: row.rule_key.to_s,
+              contractor_display_name:
+                row
+                  .read_attribute("contractor_display_name")
+                  .to_s
+                  .strip
+                  .presence || row.rule_key.to_s.humanize,
+              source_quote: source_quote
+            }
+          end
           .uniq
       end
 
@@ -63,16 +82,15 @@ module Claims
         lines.join("\n").presence
       end
 
-      def markdown_quote_bullet(quote)
+      def markdown_quote_bullet(quote, contractor_display_name:, rule_key:)
         lines = quote.to_s.lines.map(&:rstrip)
         lines.shift while lines.first.to_s.strip.blank?
         lines.pop while lines.last.to_s.strip.blank?
         return nil if lines.empty?
 
-        first, *rest = lines
         (
-          ["- #{first.strip}"] +
-            rest.map { |line| line.strip.blank? ? "  " : "  #{line}" }
+          ["- [**#{contractor_display_name}**](# \"Rule key: #{rule_key}\")"] +
+            lines.map { |line| line.strip.blank? ? "  " : "  #{line}" }
         ).compact.join("\n")
       end
     end

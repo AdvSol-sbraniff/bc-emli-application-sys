@@ -42,6 +42,7 @@ type UpgradeTypeRow = {
 type CodeRuleRow = {
   id: string;
   code_rule_key: string;
+  contractor_display_name: string;
   description: string;
   enabled: boolean;
   pass_admin_message?: string | null;
@@ -50,7 +51,8 @@ type CodeRuleRow = {
   info_admin_message?: string | null;
   admin_notes?: string | null;
   source_quote?: string | null;
-  contractor_visible_flag?: boolean | null;
+  contractor_visibility?: string | null;
+  contractor_blocking_policy?: string | null;
   updated_at?: string | null;
   upgrade_types?: UpgradeTypeRow[];
 };
@@ -84,6 +86,7 @@ export default function CodeRulesetsAdminScreen() {
   const [error, setError] = useState('');
 
   const [form, setForm] = useState({
+    contractor_display_name: '',
     description: '',
     enabled: true,
     pass_admin_message: '',
@@ -92,7 +95,8 @@ export default function CodeRulesetsAdminScreen() {
     info_admin_message: '',
     admin_notes: '',
     source_quote: '',
-    contractor_visible_flag: true,
+    contractor_visibility: 'fail_only',
+    contractor_blocking_policy: 'non_blocking',
   });
 
   const fetchUpgradeTypes = useCallback(async () => {
@@ -148,6 +152,7 @@ export default function CodeRulesetsAdminScreen() {
   const openEdit = (row: CodeRuleRow) => {
     setSelected(row);
     setForm({
+      contractor_display_name: row.contractor_display_name || '',
       description: row.description || '',
       enabled: Boolean(row.enabled),
       pass_admin_message: row.pass_admin_message || '',
@@ -156,7 +161,8 @@ export default function CodeRulesetsAdminScreen() {
       info_admin_message: row.info_admin_message || '',
       admin_notes: row.admin_notes || '',
       source_quote: row.source_quote || '',
-      contractor_visible_flag: row.contractor_visible_flag !== false,
+      contractor_visibility: row.contractor_visibility || 'fail_only',
+      contractor_blocking_policy: row.contractor_blocking_policy || 'non_blocking',
     });
     onOpen();
   };
@@ -220,7 +226,7 @@ export default function CodeRulesetsAdminScreen() {
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
             <Box flex="1" minW="280px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
-                Search key, description, or notes
+                Search name, key, description, or notes
               </Text>
               <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Example: ahri or efficiency" />
             </Box>
@@ -313,8 +319,13 @@ export default function CodeRulesetsAdminScreen() {
                 ) : (
                   rows.map((row) => (
                     <Tr key={row.id}>
-                      <Td fontFamily="mono" fontSize="xs" fontWeight="semibold">
-                        {row.code_rule_key}
+                      <Td>
+                        <Text fontSize="sm" fontWeight="semibold">
+                          {row.contractor_display_name}
+                        </Text>
+                        <Text fontFamily="mono" fontSize="xs" opacity={0.7}>
+                          {row.code_rule_key}
+                        </Text>
                       </Td>
                       <Td w="260px" minW="260px">
                         <Flex gap={2} wrap="nowrap">
@@ -410,6 +421,16 @@ export default function CodeRulesetsAdminScreen() {
 
                 <Box>
                   <Text fontSize="xs" opacity={0.7} mb={1}>
+                    contractor-friendly name
+                  </Text>
+                  <Input
+                    value={form.contractor_display_name}
+                    onChange={(e) => setForm((prev) => ({ ...prev, contractor_display_name: e.target.value }))}
+                  />
+                </Box>
+
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
                     description
                   </Text>
                   <Textarea
@@ -432,12 +453,37 @@ export default function CodeRulesetsAdminScreen() {
 
                 <Box>
                   <Text fontSize="xs" opacity={0.7} mb={1}>
-                    contractor_visible_flag
+                    Contractor visibility
                   </Text>
-                  <Switch
-                    isChecked={form.contractor_visible_flag}
-                    onChange={(e) => setForm((prev) => ({ ...prev, contractor_visible_flag: e.target.checked }))}
-                  />
+                  <Select
+                    value={form.contractor_visibility}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        contractor_visibility: e.target.value,
+                        contractor_blocking_policy:
+                          e.target.value === 'hidden' ? 'non_blocking' : prev.contractor_blocking_policy,
+                      }))
+                    }
+                  >
+                    <option value="hidden">Hidden / non-impacting</option>
+                    <option value="fail_only">Visible for errors only</option>
+                    <option value="warn_and_fail">Visible for warnings and errors</option>
+                  </Select>
+                </Box>
+
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    Submission blocking
+                  </Text>
+                  <Select
+                    value={form.contractor_blocking_policy}
+                    isDisabled={form.contractor_visibility === 'hidden'}
+                    onChange={(e) => setForm((prev) => ({ ...prev, contractor_blocking_policy: e.target.value }))}
+                  >
+                    <option value="non_blocking">Does not block submission</option>
+                    <option value="block_on_fail">Blocks submission on error</option>
+                  </Select>
                 </Box>
 
                 {[
