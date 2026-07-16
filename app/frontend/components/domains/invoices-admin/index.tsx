@@ -581,7 +581,7 @@ export function InvoicesAdminScreen() {
     if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
     if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined)
       params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
-    const url = `/revision-requests-admin?${params.toString()}`;
+    const url = `/conversation-messages-admin?${params.toString()}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -784,7 +784,7 @@ export function InvoicesAdminScreen() {
               {loading && <Spinner size="sm" />}
             </Flex>
 
-            <Table size="sm" w="100%" tableLayout="fixed">
+            <Table size="sm" w="100%" sx={{ tableLayout: 'fixed' }}>
               <Thead
                 sx={{
                   th: {

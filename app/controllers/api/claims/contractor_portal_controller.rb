@@ -5,9 +5,11 @@ module Api
                         only: %i[
                           index
                           upload_batch
-                          revision_requests
-                          create_revision_request
-                          update_revision_request
+                          revision_issues
+                          conversation_messages
+                          create_conversation_message
+                          update_conversation_message
+                          save_revision_issue_comment
                           submit_to_admin
                           ingest_run_show
                           ingest_run_invoices
@@ -16,8 +18,9 @@ module Api
       skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[
                                 upload_batch
-                                create_revision_request
-                                update_revision_request
+                                create_conversation_message
+                                update_conversation_message
+                                save_revision_issue_comment
                                 submit_to_admin
                               ]
 
@@ -149,14 +152,32 @@ module Api
                status: :unprocessable_entity
       end
 
-      # GET /api/claims/contractor/invoices/:invoice_id/revision_requests
-      def revision_requests
+      # GET /api/claims/contractor/invoices/:invoice_id/revision_issues
+      def revision_issues
         invoice = contractor_invoice!
 
+        render json:
+                 ::Claims::RevisionIssues::SerializeTracker.call(
+                   invoice: invoice,
+                   role: :contractor
+                 ),
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue => e
+        Rails.logger.error(
+          "[claims][contractor_portal][revision_issues] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # GET /api/claims/contractor/invoices/:invoice_id/conversation_messages
+      def conversation_messages
+        invoice = contractor_invoice!
         rows =
-          ::Claims::RevisionRequestGrid.where(invoice_id: invoice.id).order(
+          ::Claims::ConversationMessageGrid.where(invoice_id: invoice.id).order(
             Arel.sql(
-              "claims.v_revision_request_grid.invoice_versionno DESC NULLS LAST, claims.v_revision_request_grid.revision_request_seqno ASC"
+              "claims.v_conversation_message_grid.invoice_versionno DESC NULLS LAST, claims.v_conversation_message_grid.conversation_message_seqno ASC"
             )
           )
 
@@ -164,14 +185,14 @@ module Api
                  rows:
                    rows.map do |row|
                      {
-                       id: row.revision_request_id,
+                       id: row.conversation_message_id,
                        invoice_version_id: row.invoice_version_id,
                        invoice_versionno: row.invoice_versionno,
-                       revreq_seqno: row.revision_request_seqno,
-                       message_type: row.revision_request_message_type,
-                       request_text: row.revision_request_text,
-                       created_at: row.revision_request_created_at,
-                       updated_at: row.revision_request_updated_at
+                       revreq_seqno: row.conversation_message_seqno,
+                       message_type: row.conversation_message_type,
+                       request_text: row.conversation_message_text,
+                       created_at: row.conversation_message_created_at,
+                       updated_at: row.conversation_message_updated_at
                      }
                    end
                },
@@ -180,13 +201,13 @@ module Api
         render json: { error: "Invoice not found" }, status: :not_found
       rescue => e
         Rails.logger.error(
-          "[claims][contractor_portal][revision_requests] ERROR: #{e.class}: #{e.message}"
+          "[claims][contractor_portal][conversation_messages] ERROR: #{e.class}: #{e.message}"
         )
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
-      # POST /api/claims/contractor/invoices/:invoice_id/revision_requests
-      def create_revision_request
+      # POST /api/claims/contractor/invoices/:invoice_id/conversation_messages
+      def create_conversation_message
         invoice = contractor_invoice!
         invoice_version = latest_invoice_version!(invoice)
         text = params[:request_text].to_s.strip
@@ -200,7 +221,7 @@ module Api
         end
 
         record =
-          ::Claims::AdminRevisionRequest.create!(
+          ::Claims::ConversationMessage.create!(
             invoice_id: invoice.id,
             invoice_version_id: invoice_version.id,
             requester_id: current_user.id,
@@ -208,7 +229,7 @@ module Api
             request_text: text
           )
 
-        render json: serialize_revision_request(record), status: :created
+        render json: serialize_conversation_message(record), status: :created
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Invoice not found" }, status: :not_found
       rescue ActiveRecord::RecordInvalid => e
@@ -218,16 +239,16 @@ module Api
                status: :unprocessable_entity
       rescue => e
         Rails.logger.error(
-          "[claims][contractor_portal][create_revision_request] ERROR: #{e.class}: #{e.message}"
+          "[claims][contractor_portal][create_conversation_message] ERROR: #{e.class}: #{e.message}"
         )
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
-      # PATCH /api/claims/contractor/invoices/:invoice_id/revision_requests/:id
-      def update_revision_request
+      # PATCH /api/claims/contractor/invoices/:invoice_id/conversation_messages/:id
+      def update_conversation_message
         invoice = contractor_invoice!
         record =
-          ::Claims::AdminRevisionRequest
+          ::Claims::ConversationMessage
             .includes(:invoice)
             .where(
               id: params[:id].to_s,
@@ -250,7 +271,7 @@ module Api
 
         record.update!(request_text: text)
 
-        render json: serialize_revision_request(record), status: :ok
+        render json: serialize_conversation_message(record), status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Message not found" }, status: :not_found
       rescue ActiveRecord::RecordInvalid => e
@@ -260,9 +281,36 @@ module Api
                status: :unprocessable_entity
       rescue => e
         Rails.logger.error(
-          "[claims][contractor_portal][update_revision_request] ERROR: #{e.class}: #{e.message}"
+          "[claims][contractor_portal][update_conversation_message] ERROR: #{e.class}: #{e.message}"
         )
         render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # PATCH /api/claims/contractor/invoices/:invoice_id/revision_issues/:issue_id/comment
+      def save_revision_issue_comment
+        invoice = contractor_invoice!
+        issue = invoice.revision_issues.find(params[:issue_id])
+        round = invoice.revision_rounds.newest_first.first!
+        ::Claims::RevisionIssues::SaveContractorComment.call(
+          issue: issue,
+          round: round,
+          attributes: revision_comment_params
+        )
+        render json:
+                 ::Claims::RevisionIssues::SerializeTracker.call(
+                   invoice: invoice.reload,
+                   role: :contractor
+                 ),
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Revision issue not found" }, status: :not_found
+      rescue ActiveRecord::ReadOnlyRecord => e
+        render json: { error: e.message }, status: :conflict
+      rescue ActiveRecord::RecordInvalid => e
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
       end
 
       # POST /api/claims/contractor/invoices/:invoice_id/submit_to_admin
@@ -280,8 +328,22 @@ module Api
           return
         end
 
+        invoice_version = latest_invoice_version!(invoice)
+        sent_revision_round =
+          invoice.revision_rounds.newest_first.find(&:waiting_for_contractor?)
+
+        if sent_revision_round
+          ::Claims::RevisionIssues::SubmitRound.call(
+            invoice: invoice,
+            actor_user_id: current_user.id,
+            invoice_version: invoice_version
+          )
+          invoice.reload
+          return render_submission_success(invoice)
+        end
+
         blocking_rulechecks =
-          latest_invoice_version!(invoice)
+          invoice_version
             .rulechecks
             .contractor_blocking
             .order(:rule_key, :created_at)
@@ -308,10 +370,37 @@ module Api
 
         invoice.set_workflow_status!(
           "admin_review_inbox",
+          actor_user_id: current_user.id,
+          invoice_version_id: invoice_version.id,
           submitter_id: invoice.submitter_id || current_user.id,
           submitted_at: invoice.submitted_at || Time.current
         )
 
+        render_submission_success(invoice)
+      rescue ::Claims::RevisionIssues::SubmitRound::DocumentUploadRequired => e
+        render json: {
+                 error: e.message,
+                 error_code: "revision_document_upload_required",
+                 issue_ids: e.issue_ids
+               },
+               status: :unprocessable_entity
+      rescue ::Claims::RevisionIssues::SubmitRound::Incomplete => e
+        render json: {
+                 error: e.message,
+                 error_code: "revision_response_incomplete",
+                 issue_ids: e.issue_ids
+               },
+               status: :unprocessable_entity
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue => e
+        Rails.logger.error(
+          "[claims][contractor_portal][submit_to_admin] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      def render_submission_success(invoice)
         render json: {
                  ok: true,
                  invoice:
@@ -328,13 +417,6 @@ module Api
                    )
                },
                status: :ok
-      rescue ActiveRecord::RecordNotFound
-        render json: { error: "Invoice not found" }, status: :not_found
-      rescue => e
-        Rails.logger.error(
-          "[claims][contractor_portal][submit_to_admin] ERROR: #{e.class}: #{e.message}"
-        )
-        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       # GET /api/claims/contractor/ingest/runs/:ingest_run_id
@@ -666,7 +748,7 @@ module Api
         []
       end
 
-      def serialize_revision_request(record)
+      def serialize_conversation_message(record)
         {
           id: record.id,
           invoice_id: record.invoice_id,
@@ -678,6 +760,14 @@ module Api
           created_at: record.created_at,
           updated_at: record.updated_at
         }
+      end
+
+      def revision_comment_params
+        params.permit(
+          :contractor_response_method,
+          :comment_text,
+          :contractor_asserted_value
+        )
       end
 
       def latest_invoice_version!(invoice)

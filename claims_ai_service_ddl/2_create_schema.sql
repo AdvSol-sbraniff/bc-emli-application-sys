@@ -1261,6 +1261,54 @@ CREATE INDEX IF NOT EXISTS index_invoice_versions_on_participant_user_id
   ON claims.invoice_versions (participant_user_id);
 
 
+-- ============================================================
+-- invoice_status_transitions
+-- PURPOSE: Append-only history of every real invoice workflow
+-- status/subtype change, including initial and repeat submissions.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.invoice_status_transitions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_id uuid NOT NULL,
+  invoice_version_id uuid NULL,
+  actor_user_id uuid NULL,
+
+  from_status text NULL,
+  from_status_subtype text NULL,
+  to_status text NOT NULL,
+  to_status_subtype text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT invoice_status_transitions_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_invoice_status_transitions_invoice
+    FOREIGN KEY (invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_invoice_status_transitions_invoice_version
+    FOREIGN KEY (invoice_version_id)
+    REFERENCES claims.invoice_versions(id)
+    ON DELETE SET NULL,
+
+  CONSTRAINT fk_invoice_status_transitions_actor
+    FOREIGN KEY (actor_user_id)
+    REFERENCES public.users(id)
+    ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_status_transitions_invoice
+  ON claims.invoice_status_transitions (invoice_id, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_status_transitions_version
+  ON claims.invoice_status_transitions (invoice_version_id);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_status_transitions_to_status
+  ON claims.invoice_status_transitions (to_status, created_at DESC);
+
+
 --
 -- invoice_upgrade_types
 -- Catalogue of AI invoice upgrade domains.
@@ -1306,6 +1354,7 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
   source_quote text NOT NULL,
   contractor_visibility text NOT NULL DEFAULT 'fail_only',
   contractor_blocking_policy text NOT NULL DEFAULT 'non_blocking',
+  admin_workflow_policy text NOT NULL DEFAULT 'fail_only',
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1318,6 +1367,8 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
     CHECK (contractor_visibility IN ('hidden','fail_only','warn_and_fail')),
   CONSTRAINT code_rules_contractor_blocking_policy_chk
     CHECK (contractor_blocking_policy IN ('non_blocking','block_on_fail')),
+  CONSTRAINT code_rules_admin_workflow_policy_chk
+    CHECK (admin_workflow_policy IN ('not_managed','fail_only','warn_and_fail')),
   CONSTRAINT code_rules_visible_blocker_chk
     CHECK (contractor_blocking_policy <> 'block_on_fail' OR contractor_visibility <> 'hidden')
 );
@@ -1411,6 +1462,7 @@ CREATE TABLE IF NOT EXISTS claims.genai_rules (
   source_quote text NOT NULL,
   contractor_visibility text NOT NULL DEFAULT 'fail_only',
   contractor_blocking_policy text NOT NULL DEFAULT 'non_blocking',
+  admin_workflow_policy text NOT NULL DEFAULT 'fail_only',
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1423,6 +1475,8 @@ CREATE TABLE IF NOT EXISTS claims.genai_rules (
     CHECK (contractor_visibility IN ('hidden','fail_only','warn_and_fail')),
   CONSTRAINT genai_rules_contractor_blocking_policy_chk
     CHECK (contractor_blocking_policy IN ('non_blocking','block_on_fail')),
+  CONSTRAINT genai_rules_admin_workflow_policy_chk
+    CHECK (admin_workflow_policy IN ('not_managed','fail_only','warn_and_fail')),
   CONSTRAINT genai_rules_visible_blocker_chk
     CHECK (contractor_blocking_policy <> 'block_on_fail' OR contractor_visibility <> 'hidden')
 );
@@ -2055,6 +2109,286 @@ CREATE INDEX IF NOT EXISTS idx_sdvf_lookup
   ON claims.supporting_document_visual_findings (supporting_document_id, finding_type);
 
 
+-- ============================================================
+-- revision_rounds
+-- PURPOSE: One lightweight admin-to-contractor exchange. The
+-- greatest round_number is the current/latest round.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.revision_rounds (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_id uuid NOT NULL,
+  invoice_version_id uuid NOT NULL,
+  round_number integer NOT NULL,
+
+  admin_sent_at timestamp(6) without time zone NULL,
+  contractor_response_submitted_at timestamp(6) without time zone NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT revision_rounds_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_revision_rounds_invoice
+    FOREIGN KEY (invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_revision_rounds_invoice_version
+    FOREIGN KEY (invoice_version_id, invoice_id)
+    REFERENCES claims.invoice_versions(id, invoice_id),
+
+  CONSTRAINT revision_rounds_number_chk
+    CHECK (round_number >= 1),
+
+  CONSTRAINT revision_rounds_invoice_number_uniq
+    UNIQUE (invoice_id, round_number),
+
+  CONSTRAINT revision_rounds_timestamp_chk
+    CHECK (
+      contractor_response_submitted_at IS NULL
+      OR (
+        admin_sent_at IS NOT NULL
+        AND contractor_response_submitted_at >= admin_sent_at
+      )
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_revision_rounds_invoice
+  ON claims.revision_rounds (invoice_id, round_number DESC);
+
+
+-- ============================================================
+-- revision_issues
+-- PURPOSE: One durable workflow problem that survives across
+-- revision rounds. Status records only whether/how it closed.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.revision_issues (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  invoice_id uuid NOT NULL,
+  issue_type text NOT NULL,
+
+  opened_from_invoice_version_rulecheck_id uuid NULL,
+  opened_from_invoice_version_located_field_id uuid NULL,
+  opened_from_supporting_document_located_field_id uuid NULL,
+  opened_from_di_invoice_version_id uuid NULL,
+  opened_from_di_field_key text NULL,
+
+  status text NOT NULL DEFAULT 'open',
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT revision_issues_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_revision_issues_invoice
+    FOREIGN KEY (invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_revision_issues_rulecheck
+    FOREIGN KEY (opened_from_invoice_version_rulecheck_id)
+    REFERENCES claims.invoice_version_rulechecks(id),
+
+  CONSTRAINT fk_revision_issues_invoice_field
+    FOREIGN KEY (opened_from_invoice_version_located_field_id)
+    REFERENCES claims.invoice_version_located_fields(id),
+
+  CONSTRAINT fk_revision_issues_supporting_field
+    FOREIGN KEY (opened_from_supporting_document_located_field_id)
+    REFERENCES claims.supporting_document_located_fields(id),
+
+  CONSTRAINT fk_revision_issues_di_version
+    FOREIGN KEY (opened_from_di_invoice_version_id, invoice_id)
+    REFERENCES claims.invoice_versions(id, invoice_id),
+
+  CONSTRAINT revision_issues_type_chk
+    CHECK (
+      issue_type IN (
+        'rule',
+        'invoice_field',
+        'supporting_document_field',
+        'di_field'
+      )
+    ),
+
+  CONSTRAINT revision_issues_status_chk
+    CHECK (
+      status IN (
+        'open',
+        'closed_via_corrected_documentation',
+        'closed_via_attestation',
+        'closed_via_exception',
+        'closed_as_withdrawn'
+      )
+    ),
+
+  CONSTRAINT revision_issues_source_chk
+    CHECK (
+      (
+        issue_type = 'rule'
+        AND opened_from_invoice_version_rulecheck_id IS NOT NULL
+        AND opened_from_invoice_version_located_field_id IS NULL
+        AND opened_from_supporting_document_located_field_id IS NULL
+        AND opened_from_di_invoice_version_id IS NULL
+        AND opened_from_di_field_key IS NULL
+      )
+      OR
+      (
+        issue_type = 'invoice_field'
+        AND opened_from_invoice_version_rulecheck_id IS NULL
+        AND opened_from_invoice_version_located_field_id IS NOT NULL
+        AND opened_from_supporting_document_located_field_id IS NULL
+        AND opened_from_di_invoice_version_id IS NULL
+        AND opened_from_di_field_key IS NULL
+      )
+      OR
+      (
+        issue_type = 'supporting_document_field'
+        AND opened_from_invoice_version_rulecheck_id IS NULL
+        AND opened_from_invoice_version_located_field_id IS NULL
+        AND opened_from_supporting_document_located_field_id IS NOT NULL
+        AND opened_from_di_invoice_version_id IS NULL
+        AND opened_from_di_field_key IS NULL
+      )
+      OR
+      (
+        issue_type = 'di_field'
+        AND opened_from_invoice_version_rulecheck_id IS NULL
+        AND opened_from_invoice_version_located_field_id IS NULL
+        AND opened_from_supporting_document_located_field_id IS NULL
+        AND opened_from_di_invoice_version_id IS NOT NULL
+        AND length(btrim(opened_from_di_field_key)) > 0
+      )
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_revision_issues_invoice
+  ON claims.revision_issues (invoice_id, status, created_at, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_rule_source
+  ON claims.revision_issues (
+    invoice_id,
+    opened_from_invoice_version_rulecheck_id
+  )
+  WHERE issue_type = 'rule';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_invoice_field_source
+  ON claims.revision_issues (
+    invoice_id,
+    opened_from_invoice_version_located_field_id
+  )
+  WHERE issue_type = 'invoice_field';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_supporting_field_source
+  ON claims.revision_issues (
+    invoice_id,
+    opened_from_supporting_document_located_field_id
+  )
+  WHERE issue_type = 'supporting_document_field';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_di_field_source
+  ON claims.revision_issues (invoice_id, opened_from_di_field_key)
+  WHERE issue_type = 'di_field';
+
+
+-- ============================================================
+-- revision_issue_comments
+-- PURPOSE: Ordered admin/contractor comments for one issue. Each
+-- comment belongs to the round in which it occurred.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS claims.revision_issue_comments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  revision_issue_id uuid NOT NULL,
+  revision_round_id uuid NOT NULL,
+
+  author_type text NOT NULL,
+  admin_recommended_remedy text NULL,
+  contractor_response_method text NULL,
+  comment_text text NOT NULL,
+  contractor_asserted_value text NULL,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT revision_issue_comments_pkey PRIMARY KEY (id),
+
+  CONSTRAINT fk_revision_issue_comments_issue
+    FOREIGN KEY (revision_issue_id)
+    REFERENCES claims.revision_issues(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_revision_issue_comments_round
+    FOREIGN KEY (revision_round_id)
+    REFERENCES claims.revision_rounds(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT revision_issue_comments_author_chk
+    CHECK (author_type IN ('admin', 'contractor')),
+
+  CONSTRAINT revision_issue_comments_text_chk
+    CHECK (length(btrim(comment_text)) > 0),
+
+  CONSTRAINT revision_issue_comments_admin_remedy_chk
+    CHECK (
+      admin_recommended_remedy IS NULL
+      OR admin_recommended_remedy IN (
+        'correct_and_reupload_invoice',
+        'upload_supporting_document',
+        'provide_attestation',
+        'provide_explanation'
+      )
+    ),
+
+  CONSTRAINT revision_issue_comments_contractor_method_chk
+    CHECK (
+      contractor_response_method IS NULL
+      OR contractor_response_method IN (
+        'corrected_invoice_uploaded',
+        'supporting_document_uploaded',
+        'attestation_provided',
+        'explanation_provided',
+        'unable_to_resolve'
+      )
+    ),
+
+  CONSTRAINT revision_issue_comments_author_fields_chk
+    CHECK (
+      (
+        author_type = 'admin'
+        AND contractor_response_method IS NULL
+        AND contractor_asserted_value IS NULL
+      )
+      OR
+      (
+        author_type = 'contractor'
+        AND admin_recommended_remedy IS NULL
+        AND contractor_response_method IS NOT NULL
+      )
+    ),
+
+  CONSTRAINT revision_issue_comments_asserted_value_chk
+    CHECK (
+      contractor_asserted_value IS NULL
+      OR (
+        author_type = 'contractor'
+        AND contractor_response_method = 'attestation_provided'
+      )
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_revision_issue_comments_issue
+  ON claims.revision_issue_comments (revision_issue_id, created_at, id);
+
+CREATE INDEX IF NOT EXISTS idx_revision_issue_comments_round
+  ON claims.revision_issue_comments (revision_round_id, created_at, id);
+
+
 --
 -- internal_notes
 --
@@ -2089,9 +2423,11 @@ CREATE INDEX IF NOT EXISTS index_claims_internal_notes_on_admin_user_id
 
 
 -- 
--- revision_requests
+-- conversation_messages
+-- Ordinary admin/contractor back-and-forth. Formal revision
+-- workflow is stored in revision_issues, revision_rounds, and their comments.
 --
-CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
+CREATE TABLE IF NOT EXISTS claims.conversation_messages (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
   invoice_id uuid NOT NULL,
@@ -2099,52 +2435,52 @@ CREATE TABLE IF NOT EXISTS claims.admin_revision_requests (
   revreq_seqno       integer NOT NULL,
 
   requester_id uuid NOT NULL,   -- message author (public.users.id)
-  message_type text NOT NULL DEFAULT 'admin_revision_request',
+  message_type text NOT NULL DEFAULT 'admin_message',
 
   request_text  text NOT NULL,  -- single message body for both admin requests and contractor notes
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
-  CONSTRAINT revision_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT conversation_messages_pkey PRIMARY KEY (id),
 
-  CONSTRAINT fk_revision_requests_invoice
+  CONSTRAINT fk_conversation_messages_invoice
     FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
 
-  CONSTRAINT fk_revision_requests_invoice_version
+  CONSTRAINT fk_conversation_messages_invoice_version
     FOREIGN KEY (invoice_version_id) REFERENCES claims.invoice_versions(id),
 
-  CONSTRAINT fk_revision_requests_requester
+  CONSTRAINT fk_conversation_messages_requester
     FOREIGN KEY (requester_id) REFERENCES public.users(id),
 
-  CONSTRAINT revision_requests_message_type_chk
-    CHECK (message_type IN ('admin_revision_request', 'contractor_note')),
+  CONSTRAINT conversation_messages_message_type_chk
+    CHECK (message_type IN ('admin_message', 'contractor_note')),
 
-  CONSTRAINT revision_requests_seqno_chk
+  CONSTRAINT conversation_messages_seqno_chk
     CHECK (revreq_seqno >= 1),
 
-  CONSTRAINT revision_requests_invoice_seqno_uniq
+  CONSTRAINT conversation_messages_invoice_seqno_uniq
     UNIQUE (invoice_id, revreq_seqno)
 );
 
-CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_invoice_id
-  ON claims.admin_revision_requests (invoice_id);
+CREATE INDEX IF NOT EXISTS index_claims_conversation_messages_on_invoice_id
+  ON claims.conversation_messages (invoice_id);
 
-CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_invoice_version_id
-  ON claims.admin_revision_requests (invoice_version_id);
+CREATE INDEX IF NOT EXISTS index_claims_conversation_messages_on_invoice_version_id
+  ON claims.conversation_messages (invoice_version_id);
 
-CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_requester_id
-  ON claims.admin_revision_requests (requester_id);
+CREATE INDEX IF NOT EXISTS index_claims_conversation_messages_on_requester_id
+  ON claims.conversation_messages (requester_id);
 
-CREATE INDEX IF NOT EXISTS index_claims_revision_requests_on_message_type
-  ON claims.admin_revision_requests (message_type);
+CREATE INDEX IF NOT EXISTS index_claims_conversation_messages_on_message_type
+  ON claims.conversation_messages (message_type);
 
 
 
 
 --
 -- Validationgenai_config
--- Singleton-style editable GenAI config, like env/config in table form for system admins.
+-- Singleton-style editable prompt and advice config for system admins.
 --
 CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -2186,6 +2522,7 @@ CREATE TABLE IF NOT EXISTS claims.code_rule_history (
   source_quote text NULL,
   contractor_visibility text NOT NULL,
   contractor_blocking_policy text NOT NULL,
+  admin_workflow_policy text NOT NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,
@@ -2289,6 +2626,7 @@ CREATE TABLE IF NOT EXISTS claims.genai_rule_history (
   source_quote text NULL,
   contractor_visibility text NOT NULL,
   contractor_blocking_policy text NOT NULL,
+  admin_workflow_policy text NOT NULL,
 
   source_created_at timestamp(6) without time zone NULL,
   source_updated_at timestamp(6) without time zone NULL,

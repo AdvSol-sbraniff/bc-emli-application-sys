@@ -44,10 +44,13 @@ export default function ContractorInvoiceMessagesScreen() {
     setLoading(true);
     setError('');
     try {
-      const resp = await fetch(`/api/claims/contractor/invoices/${encodeURIComponent(invoiceId)}/revision_requests`, {
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-      });
+      const resp = await fetch(
+        `/api/claims/contractor/invoices/${encodeURIComponent(invoiceId)}/conversation_messages`,
+        {
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+        },
+      );
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(json?.error || `Could not load messages (${resp.status}).`);
       setRows(Array.isArray(json?.rows) ? json.rows : []);
@@ -75,12 +78,15 @@ export default function ContractorInvoiceMessagesScreen() {
     setSaving(true);
     setError('');
     try {
-      const resp = await fetch(`/api/claims/contractor/invoices/${encodeURIComponent(invoiceId)}/revision_requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ request_text: text }),
-      });
+      const resp = await fetch(
+        `/api/claims/contractor/invoices/${encodeURIComponent(invoiceId)}/conversation_messages`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ request_text: text }),
+        },
+      );
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(json?.error || `Could not send message (${resp.status}).`);
       setMessageText('');

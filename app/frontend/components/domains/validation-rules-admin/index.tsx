@@ -99,6 +99,7 @@ type CodeRuleEditorState = BaseEditorState & {
   sourceQuote: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
+  adminWorkflowPolicy: string;
   passAdminMessage: string;
   warnAdminMessage: string;
   failAdminMessage: string;
@@ -119,6 +120,7 @@ type GenaiRuleEditorState = BaseEditorState & {
   sourceQuote: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
+  adminWorkflowPolicy: string;
 };
 
 type GenaiLocatedFieldEditorState = BaseEditorState & {
@@ -326,6 +328,7 @@ export default function ValidationRulesAdminScreen() {
             sourceQuote: '',
             contractorVisibility: 'fail_only',
             contractorBlockingPolicy: 'non_blocking',
+            adminWorkflowPolicy: 'fail_only',
             passAdminMessage: '',
             warnAdminMessage: '',
             failAdminMessage: '',
@@ -352,6 +355,7 @@ export default function ValidationRulesAdminScreen() {
             sourceQuote: '',
             contractorVisibility: 'fail_only',
             contractorBlockingPolicy: 'non_blocking',
+            adminWorkflowPolicy: 'fail_only',
             mappings,
           };
         case 'genai_located_field':
@@ -424,6 +428,7 @@ export default function ValidationRulesAdminScreen() {
           sourceQuote: row.detail?.source_quote || '',
           contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
           contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
+          adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
           passAdminMessage: row.detail?.pass_admin_message || '',
           warnAdminMessage: row.detail?.warn_admin_message || '',
           failAdminMessage: row.detail?.fail_admin_message || '',
@@ -454,6 +459,7 @@ export default function ValidationRulesAdminScreen() {
           sourceQuote: row.detail?.source_quote || '',
           contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
           contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
+          adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
           mappings,
         });
         break;
@@ -551,6 +557,7 @@ export default function ValidationRulesAdminScreen() {
             sourceQuote: row.detail?.source_quote || '',
             contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
             contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
+            adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
             passAdminMessage: row.detail?.pass_admin_message || '',
             warnAdminMessage: row.detail?.warn_admin_message || '',
             failAdminMessage: row.detail?.fail_admin_message || '',
@@ -581,6 +588,7 @@ export default function ValidationRulesAdminScreen() {
             sourceQuote: row.detail?.source_quote || '',
             contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
             contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
+            adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
             mappings,
           });
           break;
@@ -644,6 +652,7 @@ export default function ValidationRulesAdminScreen() {
         body.source_quote = editor.sourceQuote;
         body.contractor_visibility = editor.contractorVisibility;
         body.contractor_blocking_policy = editor.contractorBlockingPolicy;
+        body.admin_workflow_policy = editor.adminWorkflowPolicy;
         body.pass_admin_message = editor.passAdminMessage;
         body.warn_admin_message = editor.warnAdminMessage;
         body.fail_admin_message = editor.failAdminMessage;
@@ -661,6 +670,7 @@ export default function ValidationRulesAdminScreen() {
         body.source_quote = editor.sourceQuote;
         body.contractor_visibility = editor.contractorVisibility;
         body.contractor_blocking_policy = editor.contractorBlockingPolicy;
+        body.admin_workflow_policy = editor.adminWorkflowPolicy;
         body.mappings = mappings;
       } else if (editor.recordType === 'genai_located_field') {
         body.genai_field_key = editor.recordKey;
@@ -789,6 +799,7 @@ export default function ValidationRulesAdminScreen() {
                   sourceQuote={editor.sourceQuote}
                   contractorVisibility={editor.contractorVisibility}
                   contractorBlockingPolicy={editor.contractorBlockingPolicy}
+                  adminWorkflowPolicy={editor.adminWorkflowPolicy}
                   passAdminMessage={editor.passAdminMessage}
                   warnAdminMessage={editor.warnAdminMessage}
                   failAdminMessage={editor.failAdminMessage}
@@ -825,6 +836,11 @@ export default function ValidationRulesAdminScreen() {
                   onContractorBlockingPolicyChange={(next) =>
                     setEditorField((current) =>
                       isCodeRuleEditor(current) ? { ...current, contractorBlockingPolicy: next } : current,
+                    )
+                  }
+                  onAdminWorkflowPolicyChange={(next) =>
+                    setEditorField((current) =>
+                      isCodeRuleEditor(current) ? { ...current, adminWorkflowPolicy: next } : current,
                     )
                   }
                   onPassAdminMessageChange={(next) =>
@@ -903,6 +919,7 @@ export default function ValidationRulesAdminScreen() {
                   sourceQuote={editor.sourceQuote}
                   contractorVisibility={editor.contractorVisibility}
                   contractorBlockingPolicy={editor.contractorBlockingPolicy}
+                  adminWorkflowPolicy={editor.adminWorkflowPolicy}
                   mappings={editor.mappings}
                   selectedUpgradeTypeId={selectedUpgradeTypeId}
                   onEnabledChange={(next) =>
@@ -936,6 +953,11 @@ export default function ValidationRulesAdminScreen() {
                   onContractorBlockingPolicyChange={(next) =>
                     setEditorField((current) =>
                       isGenaiRuleEditor(current) ? { ...current, contractorBlockingPolicy: next } : current,
+                    )
+                  }
+                  onAdminWorkflowPolicyChange={(next) =>
+                    setEditorField((current) =>
+                      isGenaiRuleEditor(current) ? { ...current, adminWorkflowPolicy: next } : current,
                     )
                   }
                   onMappingCheckedChange={(invoiceUpgradeTypeId, checked) =>

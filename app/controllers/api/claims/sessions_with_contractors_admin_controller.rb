@@ -88,7 +88,10 @@ module Api
           invoices: 0,
           invoice_versions: 0,
           lineitems: 0,
-          revision_requests: 0,
+          revision_rounds: 0,
+          revision_issues: 0,
+          revision_issue_comments: 0,
+          conversation_messages: 0,
           supporting_documents: 0,
           ingest_runs: 0,
           ingest_step_runs: 0
@@ -104,14 +107,31 @@ module Api
               []
             end
 
+          if invoice_ids.any?
+            deleted[
+              :conversation_messages
+            ] = ::Claims::ConversationMessage.where(
+              invoice_id: invoice_ids
+            ).delete_all
+          end
+
+          if invoice_ids.any?
+            deleted[:revision_issue_comments] = ::Claims::RevisionIssueComment
+              .joins(:revision_issue)
+              .where("claims.revision_issues" => { invoice_id: invoice_ids })
+              .delete_all
+            deleted[:revision_issues] = ::Claims::RevisionIssue.where(
+              invoice_id: invoice_ids
+            ).delete_all
+            deleted[:revision_rounds] = ::Claims::RevisionRound.where(
+              invoice_id: invoice_ids
+            ).delete_all
+          end
+
           if invoice_version_ids.any?
             deleted[:lineitems] = ::Claims::Lineitem.where(
               invoice_version_id: invoice_version_ids
             ).delete_all
-            deleted[:revision_requests] = ::Claims::AdminRevisionRequest.where(
-              invoice_version_id: invoice_version_ids
-            ).delete_all
-
             # These also cascade from invoice_versions, but explicit deletes keep counts accurate.
             ::Claims::InvoiceVersionLocatedField.where(
               invoice_version_id: invoice_version_ids

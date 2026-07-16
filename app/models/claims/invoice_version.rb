@@ -54,6 +54,7 @@ module Claims
     has_many :rulechecks,
              class_name: "Claims::InvoiceVersionRulecheck",
              foreign_key: :invoice_version_id,
+             inverse_of: :invoice_version,
              dependent: :destroy
 
     has_many :supporting_documents,
@@ -61,6 +62,12 @@ module Claims
              foreign_key: :invoice_version_id,
              inverse_of: :invoice_version,
              dependent: :destroy
+
+    has_many :revision_rounds,
+             class_name: "Claims::RevisionRound",
+             foreign_key: :invoice_version_id,
+             inverse_of: :invoice_version,
+             dependent: :restrict_with_exception
 
     has_many :upload_runs,
              class_name: "Claims::UploadRun",

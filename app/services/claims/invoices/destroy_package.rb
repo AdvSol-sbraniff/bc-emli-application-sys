@@ -44,9 +44,19 @@ module Claims
             end
 
           deleted[:lineitems] = delete_lineitems(invoice_version_ids)
-          deleted[:revision_requests] = delete_revision_requests(
-            invoice_version_ids
+          deleted[:conversation_messages] = delete_conversation_messages(
+            invoice.id
           )
+          deleted[:revision_issue_comments] = ::Claims::RevisionIssueComment
+            .joins(:revision_issue)
+            .where("claims.revision_issues" => { invoice_id: invoice.id })
+            .delete_all
+          deleted[:revision_issues] = ::Claims::RevisionIssue.where(
+            invoice_id: invoice.id
+          ).delete_all
+          deleted[:revision_rounds] = ::Claims::RevisionRound.where(
+            invoice_id: invoice.id
+          ).delete_all
           deleted[:ingest_step_runs] += delete_version_step_runs(
             invoice_version_ids
           )
@@ -90,7 +100,10 @@ module Claims
           invoice_id: invoice_id,
           invoice_versions: 0,
           lineitems: 0,
-          revision_requests: 0,
+          revision_rounds: 0,
+          revision_issues: 0,
+          revision_issue_comments: 0,
+          conversation_messages: 0,
           supporting_documents: 0,
           ingest_documents: 0,
           ingest_runs: 0,
@@ -139,12 +152,8 @@ module Claims
         ).delete_all
       end
 
-      def delete_revision_requests(invoice_version_ids)
-        return 0 if invoice_version_ids.empty?
-
-        ::Claims::AdminRevisionRequest.where(
-          invoice_version_id: invoice_version_ids
-        ).delete_all
+      def delete_conversation_messages(invoice_id)
+        ::Claims::ConversationMessage.where(invoice_id: invoice_id).delete_all
       end
 
       def delete_version_step_runs(invoice_version_ids)

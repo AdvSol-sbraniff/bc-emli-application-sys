@@ -20,7 +20,7 @@ import { useLocation } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { useMst } from '../../../setup/root';
 
-type RevisionRequestGridRow = {
+type ConversationMessageGridRow = {
   session_created_at?: string | null;
   invoice_id?: string | null;
   invoice_status?: string | null;
@@ -29,16 +29,16 @@ type RevisionRequestGridRow = {
   invoice_version_created_at?: string | null;
   invoice_versionno?: number | null;
   di_ocr_invoice_id?: string | null;
-  revision_request_id?: string | null;
-  revision_request_seqno?: number | null;
-  revision_request_message_type?: string | null;
-  revision_request_text?: string | null;
-  revision_request_created_at?: string | null;
-  revision_request_updated_at?: string | null;
+  conversation_message_id?: string | null;
+  conversation_message_seqno?: number | null;
+  conversation_message_type?: string | null;
+  conversation_message_text?: string | null;
+  conversation_message_created_at?: string | null;
+  conversation_message_updated_at?: string | null;
 };
 
-type RevisionRequestGridResponse = {
-  rows: RevisionRequestGridRow[];
+type ConversationMessageGridResponse = {
+  rows: ConversationMessageGridRow[];
   meta?: { total?: number; page?: number; per?: number; sort?: string; filters?: any };
 };
 
@@ -82,7 +82,7 @@ function messageAuthor(type?: string | null) {
   return isAdminMessage(type) ? 'Admin' : 'Contractor';
 }
 
-export default function RevisionRequestsAdminScreen() {
+export default function ConversationMessagesAdminScreen() {
   const location = useLocation();
   const toast = useToast();
   const { userStore } = useMst();
@@ -97,7 +97,7 @@ export default function RevisionRequestsAdminScreen() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [gridError, setGridError] = useState('');
   const [notesError, setNotesError] = useState('');
-  const [rows, setRows] = useState<RevisionRequestGridRow[]>([]);
+  const [rows, setRows] = useState<ConversationMessageGridRow[]>([]);
   const [internalNotes, setInternalNotes] = useState<InternalNoteRow[]>([]);
   const [latestInvoiceVersionId, setLatestInvoiceVersionId] = useState<string>(latestInvoiceVersionIdFromUrl);
   const [messageText, setMessageText] = useState('');
@@ -112,17 +112,17 @@ export default function RevisionRequestsAdminScreen() {
     try {
       const params = new URLSearchParams();
       if (invoiceId.trim()) params.set('invoice_id', invoiceId.trim());
-      params.set('sort', 'revision_request_updated_at:desc');
+      params.set('sort', 'conversation_message_updated_at:desc');
       params.set('page', '1');
       params.set('per', '100');
 
-      const res = await fetch(`/api/claims/admin/revision_requests?${params.toString()}`, {
+      const res = await fetch(`/api/claims/admin/conversation_messages?${params.toString()}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         credentials: 'include',
       });
 
-      const data: RevisionRequestGridResponse = await res.json().catch(() => ({ rows: [] }));
+      const data: ConversationMessageGridResponse = await res.json().catch(() => ({ rows: [] }));
       if (!res.ok) throw new Error((data as any)?.error || (data as any)?.message || `HTTP ${res.status}`);
       setRows(Array.isArray(data?.rows) ? data.rows : []);
     } catch (e: any) {
@@ -217,8 +217,8 @@ export default function RevisionRequestsAdminScreen() {
   const chatRows = useMemo(
     () =>
       [...rows].sort((a, b) =>
-        String(a.revision_request_created_at || a.revision_request_updated_at || '').localeCompare(
-          String(b.revision_request_created_at || b.revision_request_updated_at || ''),
+        String(a.conversation_message_created_at || a.conversation_message_updated_at || '').localeCompare(
+          String(b.conversation_message_created_at || b.conversation_message_updated_at || ''),
         ),
       ),
     [rows],
@@ -235,7 +235,7 @@ export default function RevisionRequestsAdminScreen() {
     setSavingMessage(true);
     setGridError('');
     try {
-      const res = await fetch('/api/claims/admin/revision_requests', {
+      const res = await fetch('/api/claims/admin/conversation_messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         credentials: 'include',
@@ -243,7 +243,7 @@ export default function RevisionRequestsAdminScreen() {
           invoice_id: invoiceId.trim(),
           invoice_version_id: latestInvoiceVersionId,
           requester_id: currentUserId,
-          message_type: 'admin_revision_request',
+          message_type: 'admin_message',
           request_text: text,
         }),
       });
@@ -391,16 +391,16 @@ export default function RevisionRequestsAdminScreen() {
                     overflowY="auto"
                   >
                     {chatRows.map((row, index) => {
-                      const adminMessage = isAdminMessage(row.revision_request_message_type);
+                      const adminMessage = isAdminMessage(row.conversation_message_type);
                       return (
                         <Flex
-                          key={row.revision_request_id || `${row.revision_request_seqno || 'msg'}-${index}`}
+                          key={row.conversation_message_id || `${row.conversation_message_seqno || 'msg'}-${index}`}
                           direction="column"
                           align={adminMessage ? 'flex-end' : 'flex-start'}
                         >
                           <Text fontSize="xs" color="gray.500" mb={1} px={1}>
-                            {messageAuthor(row.revision_request_message_type)} | Version {row.invoice_versionno ?? '-'}{' '}
-                            | {fmtDate(row.revision_request_updated_at || row.revision_request_created_at)}
+                            {messageAuthor(row.conversation_message_type)} | Version {row.invoice_versionno ?? '-'} |{' '}
+                            {fmtDate(row.conversation_message_updated_at || row.conversation_message_created_at)}
                           </Text>
                           <Box
                             maxW={{ base: '92%', md: '72%' }}
@@ -416,7 +416,7 @@ export default function RevisionRequestsAdminScreen() {
                             boxShadow="sm"
                           >
                             <Text whiteSpace="pre-wrap" fontSize="sm">
-                              {row.revision_request_text || 'No message text provided.'}
+                              {row.conversation_message_text || 'No message text provided.'}
                             </Text>
                           </Box>
                         </Flex>

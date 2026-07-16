@@ -69,12 +69,8 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
-    const invoiceIdForRevisionRequests = searchParams.get('invoice_id') || '';
     const validationRulesUpgradeTypeId = searchParams.get('invoice_upgrade_type_id') || '';
     const validationRulesMode = searchParams.get('mode') || '';
-    const revisionRequestsHref = invoiceIdForRevisionRequests
-      ? `/revision-requests-admin?invoice_id=${encodeURIComponent(invoiceIdForRevisionRequests)}`
-      : '/revision-requests-admin';
 
     const isInvoicePdfViewerPath =
       /^\/contractor\/sessions\/[^/]+\/invoices\/[^/]+\/messages$/.test(path) ||
@@ -135,9 +131,9 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/eligibilitycodes-admin': [{ href: '/eligibilitycodes-admin', title: 'Create Test Eligibility Codes' }],
       '/users-admin': [{ href: '/users-admin', title: 'Create Test Users' }],
-      '/revision-requests-admin': [
+      '/conversation-messages-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/revision-requests-admin', title: 'Invoice Messages & Notes' },
+        { href: '/conversation-messages-admin', title: 'Invoice Messages & Notes' },
       ],
       '/invoice-versions-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },

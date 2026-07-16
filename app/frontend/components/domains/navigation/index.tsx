@@ -115,8 +115,8 @@ const UserEditorScreen = lazy(() => import('../user-editor').then((module) => ({
 const EligibilitycodeEditorScreen = lazy(() =>
   import('../eligibilitycode-editor').then((module) => ({ default: module.default })),
 );
-const RevisionRequestsAdminScreen = lazy(() =>
-  import('../revision-requests-admin').then((module) => ({ default: module.default })),
+const ConversationMessagesAdminScreen = lazy(() =>
+  import('../conversation-messages-admin').then((module) => ({ default: module.default })),
 );
 const ReportsVolumeValueScreen = lazy(() =>
   import('../reports-volume-value').then((module) => ({ default: module.default })),
@@ -503,7 +503,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/requirement-templates': 'Requirement Templates',
   '/requirement-templates/new-template': 'New Requirement Template',
   '/requirements-library': 'Requirements Library',
-  '/revision-requests-admin': 'Revision Requests Admin',
+  '/conversation-messages-admin': 'Invoice Messages & Notes',
   '/submission-inbox': 'Submission Inbox',
   '/submission-simulator-admin': 'New Invoice Simulator',
   '/supported-applications': 'Supported Applications',
@@ -1019,7 +1019,7 @@ const AppRoutes = observer(() => {
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
-          <Route path="/revision-requests-admin" element={<RevisionRequestsAdminScreen />} />
+          <Route path="/conversation-messages-admin" element={<ConversationMessagesAdminScreen />} />
           <Route path="/reports-volume-value" element={<ReportsVolumeValueScreen />} />
         </Route>
         {/* end sbra20260130 */}

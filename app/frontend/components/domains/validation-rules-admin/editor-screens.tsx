@@ -45,6 +45,7 @@ type CodeRuleEditorProps = SharedProps & {
   sourceQuote: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
+  adminWorkflowPolicy: string;
   passAdminMessage: string;
   warnAdminMessage: string;
   failAdminMessage: string;
@@ -55,6 +56,7 @@ type CodeRuleEditorProps = SharedProps & {
   onSourceQuoteChange: (next: string) => void;
   onContractorVisibilityChange: (next: string) => void;
   onContractorBlockingPolicyChange: (next: string) => void;
+  onAdminWorkflowPolicyChange: (next: string) => void;
   onPassAdminMessageChange: (next: string) => void;
   onWarnAdminMessageChange: (next: string) => void;
   onFailAdminMessageChange: (next: string) => void;
@@ -80,9 +82,11 @@ type GenaiRuleEditorProps = GenaiEditorProps & {
   sourceQuote: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
+  adminWorkflowPolicy: string;
   onSourceQuoteChange: (next: string) => void;
   onContractorVisibilityChange: (next: string) => void;
   onContractorBlockingPolicyChange: (next: string) => void;
+  onAdminWorkflowPolicyChange: (next: string) => void;
 };
 
 function MappingSection({
@@ -172,16 +176,20 @@ function RuleSourceFields({
   sourceQuote,
   contractorVisibility,
   contractorBlockingPolicy,
+  adminWorkflowPolicy,
   onSourceQuoteChange,
   onContractorVisibilityChange,
   onContractorBlockingPolicyChange,
+  onAdminWorkflowPolicyChange,
 }: {
   sourceQuote: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
+  adminWorkflowPolicy: string;
   onSourceQuoteChange: (next: string) => void;
   onContractorVisibilityChange: (next: string) => void;
   onContractorBlockingPolicyChange: (next: string) => void;
+  onAdminWorkflowPolicyChange: (next: string) => void;
 }) {
   return (
     <>
@@ -190,7 +198,7 @@ function RuleSourceFields({
         <Textarea value={sourceQuote} onChange={(e) => onSourceQuoteChange(e.target.value)} minH="110px" />
       </FormControl>
 
-      <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={4}>
+      <Grid templateColumns={{ base: '1fr', xl: 'repeat(3, minmax(0, 1fr))' }} gap={4}>
         <FormControl>
           <FormLabel>Contractor visibility</FormLabel>
           <Select
@@ -222,6 +230,18 @@ function RuleSourceFields({
           </Select>
           <Text fontSize="xs" opacity={0.7} mt={1}>
             Warnings never block. A blocking error must be corrected before submission.
+          </Text>
+        </FormControl>
+
+        <FormControl>
+          <FormLabel>Admin workflow management</FormLabel>
+          <Select value={adminWorkflowPolicy} onChange={(e) => onAdminWorkflowPolicyChange(e.target.value)}>
+            <option value="not_managed">Not workflow-managed</option>
+            <option value="warn_and_fail">Workflow-managed for warnings and errors</option>
+            <option value="fail_only">Workflow-managed for errors only</option>
+          </Select>
+          <Text fontSize="xs" opacity={0.7} mt={1}>
+            Controls which results require an admin review decision before sending a revision or approving.
           </Text>
         </FormControl>
       </Grid>
@@ -270,9 +290,11 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
                 sourceQuote={props.sourceQuote}
                 contractorVisibility={props.contractorVisibility}
                 contractorBlockingPolicy={props.contractorBlockingPolicy}
+                adminWorkflowPolicy={props.adminWorkflowPolicy}
                 onSourceQuoteChange={props.onSourceQuoteChange}
                 onContractorVisibilityChange={props.onContractorVisibilityChange}
                 onContractorBlockingPolicyChange={props.onContractorBlockingPolicyChange}
+                onAdminWorkflowPolicyChange={props.onAdminWorkflowPolicyChange}
               />
             </VStack>
           </TabPanel>
@@ -404,9 +426,11 @@ export function GenaiRuleEditorScreen(props: GenaiRuleEditorProps) {
                 sourceQuote={props.sourceQuote}
                 contractorVisibility={props.contractorVisibility}
                 contractorBlockingPolicy={props.contractorBlockingPolicy}
+                adminWorkflowPolicy={props.adminWorkflowPolicy}
                 onSourceQuoteChange={props.onSourceQuoteChange}
                 onContractorVisibilityChange={props.onContractorVisibilityChange}
                 onContractorBlockingPolicyChange={props.onContractorBlockingPolicyChange}
+                onAdminWorkflowPolicyChange={props.onAdminWorkflowPolicyChange}
               />
             </VStack>
           </TabPanel>

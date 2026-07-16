@@ -45,6 +45,12 @@ module Claims
             ingest_document_id: ingest_document_ids
           ).delete_all
 
+          ::Claims::RevisionIssueComment
+            .joins(:revision_issue)
+            .where("claims.revision_issues" => { invoice_id: invoice_ids })
+            .delete_all
+          ::Claims::RevisionIssue.where(invoice_id: invoice_ids).delete_all
+          ::Claims::RevisionRound.where(invoice_id: invoice_ids).delete_all
           ::Claims::InvoiceVersionLocatedField.where(
             invoice_version_id: invoice_version_ids
           ).delete_all
@@ -71,7 +77,7 @@ module Claims
           ::Claims::IngestDocument.where(id: ingest_document_ids).delete_all
           ::Claims::InvoiceVersion.where(id: invoice_version_ids).delete_all
           ::Claims::InternalNote.where(invoice_id: invoice_ids).delete_all
-          ::Claims::AdminRevisionRequest.where(
+          ::Claims::ConversationMessage.where(
             invoice_id: invoice_ids
           ).delete_all
           ::Claims::Invoice.where(id: invoice_ids).delete_all

@@ -6,6 +6,7 @@ module Claims
 
     CONTRACTOR_VISIBILITIES = %w[hidden fail_only warn_and_fail].freeze
     CONTRACTOR_BLOCKING_POLICIES = %w[non_blocking block_on_fail].freeze
+    ADMIN_WORKFLOW_POLICIES = %w[not_managed fail_only warn_and_fail].freeze
 
     before_update :snapshot_history!
 
@@ -26,6 +27,7 @@ module Claims
               inclusion: {
                 in: CONTRACTOR_BLOCKING_POLICIES
               }
+    validates :admin_workflow_policy, inclusion: { in: ADMIN_WORKFLOW_POLICIES }
     validate :contractor_blocker_must_be_visible
 
     private
@@ -47,6 +49,7 @@ module Claims
         contractor_visibility: attribute_in_database("contractor_visibility"),
         contractor_blocking_policy:
           attribute_in_database("contractor_blocking_policy"),
+        admin_workflow_policy: attribute_in_database("admin_workflow_policy"),
         source_created_at: attribute_in_database("created_at"),
         source_updated_at: attribute_in_database("updated_at")
       )

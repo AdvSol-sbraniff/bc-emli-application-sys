@@ -3,6 +3,7 @@
 
 DROP VIEW IF EXISTS claims.v_reporting_invoice_business;
 DROP VIEW IF EXISTS claims.v_revision_request_grid;
+DROP VIEW IF EXISTS claims.v_conversation_message_grid;
 DROP VIEW IF EXISTS claims.v_invoice_grid;
 DROP VIEW IF EXISTS claims.v_current_invoice_versions;
 
@@ -489,7 +490,7 @@ LEFT JOIN claims.users_eligibilitycodes uec
 
 
 
-CREATE OR REPLACE VIEW claims.v_revision_request_grid AS
+CREATE OR REPLACE VIEW claims.v_conversation_message_grid AS
 SELECT
   -- =========================================================
   -- session
@@ -582,25 +583,25 @@ SELECT
   iv.updated_at                   AS invoice_version_updated_at,
 
   -- =========================================================
-  -- admin revision request (LEFT JOIN)
+  -- conversation message
   -- =========================================================
-  rr.id            AS revision_request_id,
-  rr.invoice_id    AS revision_request_invoice_id,
-  rr.invoice_version_id AS revision_request_invoice_version_id,
-  rr.revreq_seqno  AS revision_request_seqno,
-  rr.requester_id  AS revision_request_requester_id,
-  rr.message_type  AS revision_request_message_type,
-  rr.request_text  AS revision_request_text,
-  rr.created_at    AS revision_request_created_at,
-  rr.updated_at    AS revision_request_updated_at
+  cm.id            AS conversation_message_id,
+  cm.invoice_id    AS conversation_message_invoice_id,
+  cm.invoice_version_id AS conversation_message_invoice_version_id,
+  cm.revreq_seqno  AS conversation_message_seqno,
+  cm.requester_id  AS conversation_message_requester_id,
+  cm.message_type  AS conversation_message_type,
+  cm.request_text  AS conversation_message_text,
+  cm.created_at    AS conversation_message_created_at,
+  cm.updated_at    AS conversation_message_updated_at
 
-FROM claims.admin_revision_requests rr
+FROM claims.conversation_messages cm
 JOIN claims.invoices i
-  ON i.id = rr.invoice_id
+  ON i.id = cm.invoice_id
 JOIN claims.sessions s
   ON s.id = i.session_id
 LEFT JOIN claims.invoice_versions iv
-  ON iv.id = rr.invoice_version_id;
+  ON iv.id = cm.invoice_version_id;
 
 -- Reporting read models and supporting indexes
 

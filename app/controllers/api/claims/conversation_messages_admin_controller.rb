@@ -2,7 +2,7 @@
 
 module Api
   module Claims
-    class RevisionRequestsAdminController < ApplicationController
+    class ConversationMessagesAdminController < ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
 
       skip_before_action :authenticate_user!,
@@ -14,7 +14,7 @@ module Api
       skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[index show create update destroy]
 
-      # GET /api/claims/admin/revision_requests
+      # GET /api/claims/admin/conversation_messages
       def index
         per = clamp_int(params[:per], 25, 1, 200)
         page = clamp_int(params[:page], 1, 1, 10_000)
@@ -23,10 +23,12 @@ module Api
         invoice_id = params[:invoice_id].to_s.strip
         sort =
           params[:sort].to_s.strip.presence ||
-            "revision_request_updated_at:desc"
+            "conversation_message_updated_at:desc"
 
         scope =
-          ::Claims::RevisionRequestGrid.where.not(revision_request_id: nil)
+          ::Claims::ConversationMessageGrid.where.not(
+            conversation_message_id: nil
+          )
 
         scope = scope.where(session_id: session_id) if session_id.present?
         scope = scope.where(invoice_id: invoice_id) if invoice_id.present?
@@ -34,12 +36,12 @@ module Api
         if q.present?
           like = "%#{sanitize_sql_like(q)}%"
           scope = scope.where(<<~SQL.squish, like: like)
-              CAST(claims.v_revision_request_grid.session_id AS text) ILIKE :like
-              OR CAST(claims.v_revision_request_grid.invoice_id AS text) ILIKE :like
-              OR CAST(claims.v_revision_request_grid.invoice_version_id AS text) ILIKE :like
-              OR CAST(claims.v_revision_request_grid.revision_request_id AS text) ILIKE :like
-              OR claims.v_revision_request_grid.revision_request_message_type ILIKE :like
-              OR claims.v_revision_request_grid.revision_request_text ILIKE :like
+              CAST(claims.v_conversation_message_grid.session_id AS text) ILIKE :like
+              OR CAST(claims.v_conversation_message_grid.invoice_id AS text) ILIKE :like
+              OR CAST(claims.v_conversation_message_grid.invoice_version_id AS text) ILIKE :like
+              OR CAST(claims.v_conversation_message_grid.conversation_message_id AS text) ILIKE :like
+              OR claims.v_conversation_message_grid.conversation_message_type ILIKE :like
+              OR claims.v_conversation_message_grid.conversation_message_text ILIKE :like
             SQL
         end
 
@@ -81,20 +83,20 @@ module Api
                status: :ok
       rescue => e
         Rails.logger.error(
-          "[CLAIMS][REVISION_REQUEST_GRID] ERROR: #{e.class}: #{e.message}"
+          "[CLAIMS][CONVERSATION_MESSAGE_GRID] ERROR: #{e.class}: #{e.message}"
         )
         Rails.logger.error(e.backtrace.join("\n"))
         render json: { error: e.message }, status: :internal_server_error
       end
 
-      # GET /api/claims/admin/revision_requests/:id
+      # GET /api/claims/admin/conversation_messages/:id
       def show
-        record = ::Claims::AdminRevisionRequest.find(params[:id])
+        record = ::Claims::ConversationMessage.find(params[:id])
         context = context_from_grid(record)
         render json: serialize_record(record).merge(context), status: :ok
       end
 
-      # POST /api/claims/admin/revision_requests
+      # POST /api/claims/admin/conversation_messages
       def create
         attrs = create_params.to_h
         if attrs["invoice_id"].blank? && attrs["invoice_version_id"].present?
@@ -108,7 +110,7 @@ module Api
         attempts = 0
 
         begin
-          record = ::Claims::AdminRevisionRequest.new(attrs)
+          record = ::Claims::ConversationMessage.new(attrs)
           record.save!
         rescue ActiveRecord::RecordNotUnique => e
           attempts += 1
@@ -128,9 +130,9 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
-      # PATCH /api/claims/admin/revision_requests/:id
+      # PATCH /api/claims/admin/conversation_messages/:id
       def update
-        record = ::Claims::AdminRevisionRequest.find(params[:id])
+        record = ::Claims::ConversationMessage.find(params[:id])
         record.update!(update_params)
 
         render json: serialize_record(record), status: :ok
@@ -141,9 +143,9 @@ module Api
                status: :unprocessable_entity
       end
 
-      # DELETE /api/claims/admin/revision_requests/:id
+      # DELETE /api/claims/admin/conversation_messages/:id
       def destroy
-        record = ::Claims::AdminRevisionRequest.find(params[:id])
+        record = ::Claims::ConversationMessage.find(params[:id])
         record.destroy!
 
         render json: { id: record.id, deleted: true }, status: :ok
@@ -181,9 +183,9 @@ module Api
 
       def context_from_grid(record)
         row =
-          ::Claims::RevisionRequestGrid
-            .where(revision_request_id: record.id)
-            .order(Arel.sql("revision_request_updated_at DESC NULLS LAST"))
+          ::Claims::ConversationMessageGrid
+            .where(conversation_message_id: record.id)
+            .order(Arel.sql("conversation_message_updated_at DESC NULLS LAST"))
             .first
 
         return {} unless row
@@ -232,18 +234,18 @@ module Api
 
         column =
           case key
-          when "revision_request_updated_at"
-            "claims.v_revision_request_grid.revision_request_updated_at"
-          when "revision_request_created_at"
-            "claims.v_revision_request_grid.revision_request_created_at"
+          when "conversation_message_updated_at"
+            "claims.v_conversation_message_grid.conversation_message_updated_at"
+          when "conversation_message_created_at"
+            "claims.v_conversation_message_grid.conversation_message_created_at"
           when "session_created_at"
-            "claims.v_revision_request_grid.session_created_at"
+            "claims.v_conversation_message_grid.session_created_at"
           when "invoice_version_updated_at"
-            "claims.v_revision_request_grid.invoice_version_updated_at"
+            "claims.v_conversation_message_grid.invoice_version_updated_at"
           when "invoice_versionno"
-            "claims.v_revision_request_grid.invoice_versionno"
+            "claims.v_conversation_message_grid.invoice_versionno"
           else
-            "claims.v_revision_request_grid.revision_request_updated_at"
+            "claims.v_conversation_message_grid.conversation_message_updated_at"
           end
 
         Arel.sql("#{column} #{dir} NULLS LAST")

@@ -17,7 +17,6 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerOverlay,
-  Switch,
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
@@ -36,10 +35,11 @@ import {
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
 import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
+import { ViewerPanelMode, ViewerPanelModeSelector } from '../../shared/claims/viewer-panel-mode-selector';
+import { RevisionTracker, RevisionTrackerData } from '../../shared/claims/revision-tracker';
 import {
   ArrowClockwise,
   ArrowSquareOut,
-  ArrowUUpLeft,
   CaretLeft,
   CaretRight,
   ChatDots,
@@ -50,6 +50,7 @@ import {
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
   PaperPlaneTilt,
+  PlusCircle,
   XCircle,
 } from '@phosphor-icons/react';
 
@@ -58,7 +59,7 @@ import {
 // PURPOSE: Invoice read screen with left fields + PDF viewer + DI polygon highlight
 // ============================================================
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -83,9 +84,71 @@ type FieldRowProps = {
   disabled?: boolean;
   onClick?: () => void;
   inline?: boolean;
+  revisionChecked?: boolean;
+  onAddToRevision?: () => void;
+  revisionAddDisabledReason?: string;
 };
 
-const FieldRow = ({ label, labelHint, value, hint, active, disabled, onClick, inline }: FieldRowProps) => {
+type RevisionAddIconButtonProps = {
+  label: string;
+  included?: boolean;
+  onAdd?: () => void;
+  disabledReason?: string;
+};
+
+const RevisionAddIconButton = ({ label, included = false, onAdd, disabledReason }: RevisionAddIconButtonProps) => {
+  if (!included && !onAdd && !disabledReason) return null;
+
+  const actionLabel = included ? `${label} already has a revision issue` : disabledReason || `Add ${label} to revision`;
+  const disabled = included || !!disabledReason;
+
+  return (
+    <Box as="span" display="inline-flex" title={actionLabel}>
+      <IconButton
+        aria-label={actionLabel}
+        aria-pressed={included}
+        icon={included ? <CheckCircle size={19} weight="fill" /> : <PlusCircle size={19} weight="bold" />}
+        size="xs"
+        minW="26px"
+        h="26px"
+        borderRadius="full"
+        colorScheme={included ? 'green' : 'blue'}
+        variant={included ? 'ghost' : 'solid'}
+        color={included ? 'green.600' : 'white'}
+        bg={included ? 'green.50' : 'blue.600'}
+        boxShadow={included ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.35)'}
+        isDisabled={disabled}
+        opacity={1}
+        _hover={disabled ? undefined : { bg: 'blue.700', transform: 'translateY(-1px)' }}
+        _disabled={{
+          opacity: 1,
+          color: included ? 'green.600' : 'gray.500',
+          bg: included ? 'green.50' : 'gray.100',
+          cursor: 'not-allowed',
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAdd?.();
+        }}
+      />
+    </Box>
+  );
+};
+
+const FieldRow = ({
+  label,
+  labelHint,
+  value,
+  hint,
+  active,
+  disabled,
+  onClick,
+  inline,
+  revisionChecked,
+  onAddToRevision,
+  revisionAddDisabledReason,
+}: FieldRowProps) => {
   const valueText = String(value);
   const valueNode = (
     <Text
@@ -125,7 +188,19 @@ const FieldRow = ({ label, labelHint, value, hint, active, disabled, onClick, in
       alignItems={inline ? 'baseline' : undefined}
       justifyContent={inline ? 'space-between' : undefined}
       gap={inline ? '6px' : '2px'}
+      position="relative"
+      pr={onAddToRevision || revisionChecked || revisionAddDisabledReason ? '38px' : '10px'}
     >
+      {onAddToRevision || revisionChecked || revisionAddDisabledReason ? (
+        <Box position="absolute" right="6px" top={inline ? '1px' : '6px'}>
+          <RevisionAddIconButton
+            label={label}
+            included={!!revisionChecked}
+            onAdd={onAddToRevision}
+            disabledReason={revisionAddDisabledReason}
+          />
+        </Box>
+      ) : null}
       {labelHint ? (
         <Tooltip label={labelHint} hasArrow placement="top">
           <Text fontSize="sm" opacity={0.7} flexShrink={0} cursor="help">
@@ -431,9 +506,18 @@ const ruleMatchesResultFilter = (rulecheck: any, filters: RuleResultFilter[]) =>
   return normalized != null && filters.includes(normalized);
 };
 
-type InvoiceStatusTransition = 'screen_in' | 'request_revision' | 'approve_pending' | 'mark_ineligible';
+type InvoiceStatusTransition = 'screen_in' | 'approve_pending' | 'mark_ineligible';
 
-const invoiceStatusLabel = (status: unknown): string => invoiceStatusCopy(status).label;
+const invoiceStatusLabel = (status: unknown): string => invoiceStatusCopy(String(status ?? '')).label;
+
+const invoiceStatusColorScheme = (status: unknown): string => {
+  const value = String(status ?? '').trim();
+  if (['upload_failed', 'ocr_failed', 'genai_failed', 'technical_failure', 'ineligible'].includes(value)) return 'red';
+  if (['package_needs_correction', 'contractor_revision_inbox'].includes(value)) return 'orange';
+  if (['approved_pending', 'approved_paid'].includes(value)) return 'green';
+  if (value === 'in_review') return 'purple';
+  return 'blue';
+};
 
 const INVOICE_STATUS_ACTIONS: Array<{
   key: InvoiceStatusTransition;
@@ -451,15 +535,6 @@ const INVOICE_STATUS_ACTIONS: Array<{
     colorScheme: 'blue',
     tooltip:
       'First approval level. Regular admins use this after reviewing an invoice in admin_review_inbox. Moves status to in_review for supervisor approval.',
-  },
-  {
-    key: 'request_revision',
-    label: 'Send to Contractor for Revision',
-    validFrom: ['admin_review_inbox', 'in_review'],
-    targetStatus: 'contractor_revision_inbox',
-    colorScheme: 'orange',
-    tooltip:
-      'Use when an invoice in admin_review_inbox or in_review needs contractor fixes or supporting information. Moves status to contractor_revision_inbox. The actual message to the contractor is handled as a separate revision request record.',
   },
   {
     key: 'approve_pending',
@@ -482,7 +557,6 @@ const INVOICE_STATUS_ACTIONS: Array<{
 
 const invoiceStatusActionIcon = (key: InvoiceStatusTransition) => {
   if (key === 'screen_in') return <PaperPlaneTilt size={25} weight="bold" />;
-  if (key === 'request_revision') return <ArrowUUpLeft size={25} weight="bold" />;
   if (key === 'approve_pending') return <CheckCircle size={25} weight="bold" />;
   return <XCircle size={25} weight="bold" />;
 };
@@ -661,7 +735,7 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
 
   const [bannerHidden, setBannerHidden] = useState<boolean>(false);
-  const [showPdf, setShowPdf] = useState<boolean>(false);
+  const [rightPanelMode, setRightPanelMode] = useState<ViewerPanelMode>('revision');
 
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
   const [readData, setReadData] = useState<any>(null);
@@ -776,6 +850,92 @@ export const InvoiceVersionShowScreen = () => {
   const [lineitemsError] = useState<string | null>(null);
   const [statusActionLoading, setStatusActionLoading] = useState<InvoiceStatusTransition | null>(null);
   const [statusActionError, setStatusActionError] = useState<string | null>(null);
+  const [revisionRefreshToken, setRevisionRefreshToken] = useState(0);
+  const [revisionTrackerData, setRevisionTrackerData] = useState<RevisionTrackerData | null>(null);
+
+  const activeRevisionReferenceTokens = useMemo(() => {
+    const tokens = new Set<string>();
+    revisionTrackerData?.issues.forEach((issue) => {
+      const reference = issue.source_reference || {};
+      if (reference.invoice_version_rulecheck_id) tokens.add(`rule:${reference.invoice_version_rulecheck_id}`);
+      if (reference.invoice_version_located_field_id)
+        tokens.add(`invoice_field:${reference.invoice_version_located_field_id}`);
+      if (reference.supporting_document_located_field_id)
+        tokens.add(`supporting_document_field:${reference.supporting_document_located_field_id}`);
+      if (reference.di_field_key) tokens.add(`di_field:${reference.di_field_key}`);
+    });
+    return tokens;
+  }, [revisionTrackerData]);
+
+  const canAddRevisionIssue = !!revisionTrackerData?.capabilities?.can_add_issue;
+  const revisionAddDisabledReason = !revisionTrackerData
+    ? 'The revision tracker is still loading.'
+    : !canAddRevisionIssue
+      ? 'Revision issues can be added while the invoice is in the first-level admin inbox.'
+      : undefined;
+
+  const handleRevisionTrackerChange = useCallback((next: RevisionTrackerData) => {
+    setRevisionTrackerData(next);
+    setReadData((current: any) =>
+      current
+        ? {
+            ...current,
+            invoice_status: next.invoice_status ?? current.invoice_status,
+            invoice_status_subtype: next.invoice_status_subtype ?? current.invoice_status_subtype,
+          }
+        : current,
+    );
+  }, []);
+
+  const addToRevision = async (entryType: string, sourceAttribute: string, sourceValue: string) => {
+    const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
+    if (!canRunWorkflowActions || !invoiceRecordId || !sourceValue) return;
+
+    try {
+      const response = await fetch(
+        `/api/claims/admin/invoices/${encodeURIComponent(invoiceRecordId)}/revision_issues`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ issue_type: entryType, [sourceAttribute]: sourceValue }),
+        },
+      );
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json?.error || `Could not add revision item (${response.status}).`);
+      setRevisionTrackerData(json as RevisionTrackerData);
+      setRevisionRefreshToken((value) => value + 1);
+      toast({ title: 'Revision issue added', status: 'success', duration: 2500 });
+    } catch (reason: any) {
+      toast({
+        title: 'Could not add revision item',
+        description: reason?.message || 'Please try again.',
+        status: 'error',
+        duration: 5000,
+      });
+    }
+  };
+
+  const invoiceFieldRevisionProps = (row: any) => {
+    const sourceId = String(row?.id || '').trim();
+    return {
+      revisionChecked: !!sourceId && activeRevisionReferenceTokens.has(`invoice_field:${sourceId}`),
+      onAddToRevision:
+        canRunWorkflowActions && canAddRevisionIssue && sourceId
+          ? () => addToRevision('invoice_field', 'invoice_version_located_field_id', sourceId)
+          : undefined,
+      revisionAddDisabledReason: canRunWorkflowActions && sourceId ? revisionAddDisabledReason : undefined,
+    };
+  };
+
+  const diFieldRevisionProps = (fieldKey: string) => ({
+    revisionChecked: activeRevisionReferenceTokens.has(`di_field:${fieldKey}`),
+    onAddToRevision:
+      canRunWorkflowActions && canAddRevisionIssue
+        ? () => addToRevision('di_field', 'di_field_key', fieldKey)
+        : undefined,
+    revisionAddDisabledReason: canRunWorkflowActions ? revisionAddDisabledReason : undefined,
+  });
 
   useEffect(() => {
     if (bannerHidden) {
@@ -1021,7 +1181,7 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
   useEffect(() => {
     // If PDF is hidden, do nothing (and importantly: detach any prior observer).
-    if (!showPdf) return;
+    if (rightPanelMode !== 'document') return;
 
     const el = pdfWrapRef.current;
     if (!el) return;
@@ -1049,7 +1209,7 @@ export const InvoiceVersionShowScreen = () => {
     }
 
     return () => ro.disconnect();
-  }, [showPdf]);
+  }, [rightPanelMode]);
 
   const openRevisionMessages = () => {
     const params = new URLSearchParams();
@@ -1070,7 +1230,7 @@ export const InvoiceVersionShowScreen = () => {
     if (readData?.invoice_versionno !== null && readData?.invoice_versionno !== undefined) {
       params.set('latest_invoice_versionno', String(readData.invoice_versionno));
     }
-    window.open(`/revision-requests-admin?${params.toString()}`, '_blank', 'noopener,noreferrer');
+    window.open(`/conversation-messages-admin?${params.toString()}`, '_blank', 'noopener,noreferrer');
   };
 
   const openSupportingDocumentFile = async (doc: any) => {
@@ -1143,7 +1303,7 @@ export const InvoiceVersionShowScreen = () => {
 
     if (viewerFile?.source === 'supporting_document' && viewerFile.documentId === docId && viewerFile.url) {
       setSupportingDocumentHighlight();
-      setShowPdf(true);
+      setRightPanelMode('document');
       return;
     }
 
@@ -1169,7 +1329,7 @@ export const InvoiceVersionShowScreen = () => {
       });
 
       setSupportingDocumentHighlight();
-      setShowPdf(true);
+      setRightPanelMode('document');
     } catch (e: any) {
       toast({
         title: 'Could not show supporting document',
@@ -1194,14 +1354,10 @@ export const InvoiceVersionShowScreen = () => {
       return;
     }
 
-    const revisionReminder =
-      transition === 'request_revision'
-        ? '\n\nReminder: this status move sends the invoice back to the contractor workflow, but the message itself is a separate revision request step. Use the revision request record to tell the contractor what needs to change or what supporting information is needed.'
-        : '';
     const confirmed = window.confirm(
       `${action.label}?\n\nCurrent status: ${invoiceStatusLabel(currentStatus)}\nNew status: ${invoiceStatusLabel(
         action.targetStatus,
-      )}${revisionReminder}`,
+      )}`,
     );
     if (!confirmed) return;
 
@@ -1236,10 +1392,6 @@ export const InvoiceVersionShowScreen = () => {
         duration: 4000,
         isClosable: true,
       });
-
-      if (transition === 'request_revision') {
-        openRevisionMessages();
-      }
     } catch (e: any) {
       const message = e?.message || 'Failed to update invoice status.';
       setStatusActionError(message);
@@ -1617,12 +1769,29 @@ export const InvoiceVersionShowScreen = () => {
         ============================================================ */}
             <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap" px="0" py="2px">
               {isVersionSnapshotRoute && <Badge colorScheme="purple">Fixed version bookmark</Badge>}
-              <Flex align="center" gap="7px" px="0" py="0">
-                <Text fontSize="xs" fontWeight="semibold">
-                  Image
+              <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} />
+
+              {readData ? (
+                <Tooltip
+                  label={`${invoiceStatusCopy(currentInvoiceStatus, currentInvoiceStatusSubtype).hint} Technical status: ${currentInvoiceStatus || 'unknown'}.`}
+                  hasArrow
+                >
+                  <Badge
+                    colorScheme={invoiceStatusColorScheme(currentInvoiceStatus)}
+                    px={2}
+                    py={1}
+                    borderRadius="md"
+                    textTransform="none"
+                  >
+                    Status: {invoiceStatusCopy(currentInvoiceStatus, currentInvoiceStatusSubtype).label}
+                  </Badge>
+                </Tooltip>
+              ) : null}
+              {invoiceVersionLabel ? (
+                <Text fontSize="xs" fontWeight="semibold" color="gray.600" whiteSpace="nowrap">
+                  {invoiceVersionLabel}
                 </Text>
-                <Switch size="sm" isChecked={showPdf} onChange={(event) => setShowPdf(event.target.checked)} />
-              </Flex>
+              ) : null}
 
               {canRunWorkflowActions ? (
                 INVOICE_STATUS_ACTIONS.map((action) => {
@@ -1714,7 +1883,7 @@ export const InvoiceVersionShowScreen = () => {
                 }}
                 minW="480px"
                 maxW="100%"
-                w={showPdf ? 'auto' : '100%'}
+                w="auto"
                 flex="1 1 auto"
               >
                 {/* ============================================================
@@ -1771,24 +1940,6 @@ export const InvoiceVersionShowScreen = () => {
                     </h2>
 
                     <AccordionPanel px="0" pt="3px">
-                      <Flex gap="18px" align="center" wrap="wrap" mb="8px">
-                        {(() => {
-                          const statusCopy = invoiceStatusCopy(currentInvoiceStatus, currentInvoiceStatusSubtype);
-                          const technicalStatus = String(currentInvoiceStatus || '').trim() || 'unknown';
-                          return (
-                            <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`} hasArrow>
-                              <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
-                                Status: {statusCopy.label}
-                              </Text>
-                            </Tooltip>
-                          );
-                        })()}
-                        {invoiceVersionLabel && (
-                          <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
-                            {invoiceVersionLabel}
-                          </Text>
-                        )}
-                      </Flex>
                       <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                         {DI_FIELDS.map((f) => {
                           const raw = readData?.[f.valueKey];
@@ -1805,10 +1956,11 @@ export const InvoiceVersionShowScreen = () => {
                               active={activeHighlightKey === f.key}
                               disabled={!clickable}
                               inline
+                              {...diFieldRevisionProps(f.key)}
                               onClick={
                                 clickable
                                   ? () => {
-                                      setShowPdf(true);
+                                      setRightPanelMode('document');
                                       setActiveHighlightKey(f.key);
                                     }
                                   : undefined
@@ -1899,7 +2051,7 @@ export const InvoiceVersionShowScreen = () => {
                                           pageNumber: Number(li.ocr_description_page),
                                           polygon: li.ocr_description_polygon,
                                         });
-                                        setShowPdf(true);
+                                        setRightPanelMode('document');
                                         setActiveHighlightKey(highlightKey);
                                       }
                                     : undefined
@@ -1976,6 +2128,8 @@ export const InvoiceVersionShowScreen = () => {
                                 alignItems="baseline"
                                 justifyContent="space-between"
                                 gap="6px"
+                                position="relative"
+                                pr="38px"
                                 bg={
                                   activeHighlight?.source === 'classifier' && activeHighlight?.genaiId === Number(r.id)
                                     ? 'blue.50'
@@ -1991,11 +2145,28 @@ export const InvoiceVersionShowScreen = () => {
                                           pageNumber: Number(r.page),
                                           polygon: r.polygon ?? null,
                                         });
-                                        setShowPdf(true);
+                                        setRightPanelMode('document');
                                       }
                                     : undefined
                                 }
                               >
+                                <Box position="absolute" right="6px" top="1px">
+                                  <RevisionAddIconButton
+                                    label={label}
+                                    included={activeRevisionReferenceTokens.has(`invoice_field:${String(r.id)}`)}
+                                    onAdd={
+                                      canRunWorkflowActions && canAddRevisionIssue
+                                        ? () =>
+                                            void addToRevision(
+                                              'invoice_field',
+                                              'invoice_version_located_field_id',
+                                              String(r.id),
+                                            )
+                                        : undefined
+                                    }
+                                    disabledReason={canRunWorkflowActions ? revisionAddDisabledReason : undefined}
+                                  />
+                                </Box>
                                 <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
                                   <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1} cursor="help">
                                     {label}
@@ -2069,7 +2240,7 @@ export const InvoiceVersionShowScreen = () => {
                                           pageNumber: Number(r.page),
                                           polygon: r.polygon ?? null,
                                         });
-                                        setShowPdf(true);
+                                        setRightPanelMode('document');
                                       }
                                     : undefined
                                 }
@@ -2225,7 +2396,7 @@ export const InvoiceVersionShowScreen = () => {
                                   <Box
                                     mt="3px"
                                     display="grid"
-                                    gridTemplateColumns="160px minmax(0, 1fr)"
+                                    gridTemplateColumns="160px minmax(0, 1fr) 26px"
                                     columnGap="8px"
                                     rowGap="2px"
                                     alignItems="baseline"
@@ -2274,6 +2445,25 @@ export const InvoiceVersionShowScreen = () => {
                                           >
                                             {fieldValue}
                                           </Text>
+                                          <RevisionAddIconButton
+                                            label={displayLocatedFieldLabel(field)}
+                                            included={activeRevisionReferenceTokens.has(
+                                              `supporting_document_field:${String(field?.id)}`,
+                                            )}
+                                            onAdd={
+                                              canRunWorkflowActions && canAddRevisionIssue
+                                                ? () =>
+                                                    void addToRevision(
+                                                      'supporting_document_field',
+                                                      'supporting_document_located_field_id',
+                                                      String(field?.id),
+                                                    )
+                                                : undefined
+                                            }
+                                            disabledReason={
+                                              canRunWorkflowActions ? revisionAddDisabledReason : undefined
+                                            }
+                                          />
                                         </React.Fragment>
                                       );
                                     })}
@@ -2965,6 +3155,7 @@ export const InvoiceVersionShowScreen = () => {
                                 value={value}
                                 disabled
                                 inline
+                                {...invoiceFieldRevisionProps(r)}
                               />
                             );
                           })}
@@ -3066,6 +3257,7 @@ export const InvoiceVersionShowScreen = () => {
                                               active={activeHighlightKey === highlightKey}
                                               disabled={!clickable}
                                               inline
+                                              {...invoiceFieldRevisionProps(r)}
                                               onClick={
                                                 clickable
                                                   ? () => {
@@ -3075,7 +3267,7 @@ export const InvoiceVersionShowScreen = () => {
                                                         pageNumber: Number(r.page),
                                                         polygon: r.polygon ?? null,
                                                       });
-                                                      setShowPdf(true);
+                                                      setRightPanelMode('document');
                                                       setActiveHighlightKey(highlightKey);
                                                     }
                                                   : undefined
@@ -3118,9 +3310,7 @@ export const InvoiceVersionShowScreen = () => {
                                       <Box display="flex" flexDirection="column" gap="6px">
                                         {visibleRulechecks.map((r: any) => {
                                           const title = ruleDisplayTitle(r);
-                                          const sourceLabel = ruleSourceLabel(r);
                                           const reason = r.reason_and_likely_causes ?? '';
-                                          const confidence = ruleConfidenceLabel(r);
 
                                           return (
                                             <Box
@@ -3131,7 +3321,7 @@ export const InvoiceVersionShowScreen = () => {
                                             >
                                               <Box
                                                 display="grid"
-                                                gridTemplateColumns="18px 28px minmax(180px, 1fr)"
+                                                gridTemplateColumns="18px 28px minmax(180px, 1fr) 26px"
                                                 gap="8px"
                                                 alignItems="center"
                                               >
@@ -3158,6 +3348,23 @@ export const InvoiceVersionShowScreen = () => {
                                                     {title}
                                                   </Text>
                                                 </Tooltip>
+                                                <RevisionAddIconButton
+                                                  label={title}
+                                                  included={activeRevisionReferenceTokens.has(`rule:${String(r.id)}`)}
+                                                  onAdd={
+                                                    canRunWorkflowActions && canAddRevisionIssue
+                                                      ? () =>
+                                                          void addToRevision(
+                                                            'rule',
+                                                            'invoice_version_rulecheck_id',
+                                                            String(r.id),
+                                                          )
+                                                      : undefined
+                                                  }
+                                                  disabledReason={
+                                                    canRunWorkflowActions ? revisionAddDisabledReason : undefined
+                                                  }
+                                                />
                                               </Box>
 
                                               {reason && (
@@ -3248,7 +3455,7 @@ export const InvoiceVersionShowScreen = () => {
                                               pageNumber: Number(opts.page),
                                               polygon: opts.polygon,
                                             });
-                                            setShowPdf(true);
+                                            setRightPanelMode('document');
                                             setActiveHighlightKey(`lineitem_${seq}_${opts.subKey}`);
                                           }
                                         : undefined
@@ -3376,7 +3583,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
-                                    setShowPdf(true);
+                                    setRightPanelMode('document');
                                   }}
                                 >
                                   <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
@@ -3465,7 +3672,7 @@ export const InvoiceVersionShowScreen = () => {
                                             pageNumber: Number(r.page),
                                             polygon: r.polygon ?? null,
                                           });
-                                          setShowPdf(true);
+                                          setRightPanelMode('document');
                                         }
                                       : undefined
                                   }
@@ -3555,7 +3762,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
-                                    setShowPdf(true);
+                                    setRightPanelMode('document');
                                   }}
                                 >
                                   <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
@@ -3778,7 +3985,7 @@ export const InvoiceVersionShowScreen = () => {
         PURPOSE: PDF viewer + overlay highlight + toolbar
         ============================================================ */}
 
-              {showPdf ? (
+              {rightPanelMode === 'document' ? (
                 <Box
                   ref={pdfWrapRef}
                   flex="0 0 640px"
@@ -4085,6 +4292,21 @@ export const InvoiceVersionShowScreen = () => {
                     </Text>
                   </Box>{' '}
                   {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
+                </Box>
+              ) : rightPanelMode === 'revision' && canRunWorkflowActions && readData?.invoice_id ? (
+                <Box flex="0 0 640px" w="640px" maxW="640px" minW="640px" alignSelf="flex-start" overflow="hidden">
+                  <RevisionTracker
+                    invoiceId={String(readData.invoice_id)}
+                    viewerRole="admin"
+                    refreshToken={revisionRefreshToken}
+                    onTrackerChange={handleRevisionTrackerChange}
+                  />
+                </Box>
+              ) : rightPanelMode === 'revision' ? (
+                <Box flex="0 0 640px" w="640px" p={6} borderWidth="1px" borderRadius="md" bg="gray.50">
+                  <Text fontSize="sm" color="gray.600">
+                    Revision tracking is available from the current invoice review bookmark.
+                  </Text>
                 </Box>
               ) : null}
             </Box>{' '}

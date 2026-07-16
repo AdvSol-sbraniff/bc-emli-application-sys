@@ -642,6 +642,7 @@ INSERT INTO claims.genai_rules (
   source_quote,
   contractor_visibility,
   contractor_blocking_policy,
+  admin_workflow_policy,
   created_at,
   updated_at
 )
@@ -661,6 +662,7 @@ SELECT
     ELSE 'hidden'
   END AS contractor_visibility,
   'non_blocking' AS contractor_blocking_policy,
+  'fail_only' AS admin_workflow_policy,
   created_at,
   updated_at
 FROM genai_rules_seed
@@ -674,6 +676,7 @@ ON CONFLICT (genai_rule_key) DO UPDATE SET
   source_quote = EXCLUDED.source_quote,
   contractor_visibility = EXCLUDED.contractor_visibility,
   contractor_blocking_policy = EXCLUDED.contractor_blocking_policy,
+  admin_workflow_policy = EXCLUDED.admin_workflow_policy,
   updated_at = NOW();
 
 WITH genai_rule_upgrade_types_seed (

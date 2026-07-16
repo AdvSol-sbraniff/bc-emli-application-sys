@@ -593,6 +593,13 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                       ? 'Errors block submission'
                       : 'Non-blocking'}
                   </Badge>
+                  <Badge colorScheme={selectedRow.detail?.admin_workflow_policy === 'not_managed' ? 'gray' : 'purple'}>
+                    {selectedRow.detail?.admin_workflow_policy === 'warn_and_fail'
+                      ? 'Workflow-managed for warnings and errors'
+                      : selectedRow.detail?.admin_workflow_policy === 'not_managed'
+                        ? 'Not workflow-managed'
+                        : 'Workflow-managed for errors only'}
+                  </Badge>
                 </HStack>
                 <Box>
                   <Text fontSize="sm" opacity={0.7} mb={1}>

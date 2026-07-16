@@ -16,7 +16,6 @@ import {
   ModalHeader,
   ModalOverlay,
   Spinner,
-  Switch,
   Text,
   Tooltip,
   useDisclosure,
@@ -43,6 +42,8 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
+import { ContractorDraftState, RevisionTracker, RevisionTrackerData } from '../../shared/claims/revision-tracker';
+import { ViewerPanelMode, ViewerPanelModeSelector } from '../../shared/claims/viewer-panel-mode-selector';
 import {
   getInvoiceUpgradeTypeMeta,
   INVOICE_UPGRADE_TYPE_FILTER_ORDER,
@@ -401,7 +402,7 @@ export default function ContractorInvoiceReviewScreen() {
   const pdfWrapRef = useRef<HTMLDivElement | null>(null);
   const { isOpen: isSubmitWarningOpen, onOpen: onSubmitWarningOpen, onClose: onSubmitWarningClose } = useDisclosure();
 
-  const [showPdf, setShowPdf] = useState<boolean>(true);
+  const [rightPanelMode, setRightPanelMode] = useState<ViewerPanelMode>('document');
   const [readData, setReadData] = useState<any>(null);
   const [genAiFields, setGenAiFields] = useState<any[]>([]);
   const [classifierFields, setClassifierFields] = useState<any[]>([]);
@@ -438,12 +439,33 @@ export default function ContractorInvoiceReviewScreen() {
   const [rotate, setRotate] = useState<number>(0);
   const [pageInput, setPageInput] = useState<string>('1');
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [revisionRefreshToken, setRevisionRefreshToken] = useState(0);
+  const [revisionAttentionIssueIds, setRevisionAttentionIssueIds] = useState<string[]>([]);
+  const [revisionTrackerData, setRevisionTrackerData] = useState<RevisionTrackerData | null>(null);
+  const [contractorDraftState, setContractorDraftState] = useState<ContractorDraftState | null>(null);
 
   const currentStatus = String(readData?.invoice_status || '').trim();
   const currentStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
   const currentInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
-  const canSubmit = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
+  const savedRevisionResponsesComplete = revisionTrackerData?.capabilities?.can_submit_response === true;
+  const documentUploadRequiredIssueIds = revisionTrackerData?.capabilities?.document_upload_required_issue_ids || [];
+  const visibleRevisionDraftsComplete =
+    contractorDraftState == null ||
+    (contractorDraftState.allEditableDraftsComplete && !contractorDraftState.hasUnsavedChanges);
+  const revisionResponsesComplete = savedRevisionResponsesComplete && visibleRevisionDraftsComplete;
+  const canSubmit =
+    currentStatus === 'genai_complete' || (currentStatus === 'contractor_revision_inbox' && revisionResponsesComplete);
   const canUploadFix = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
+  const submitTooltip =
+    currentStatus === 'contractor_revision_inbox' && contractorDraftState?.hasUnsavedChanges
+      ? 'Save every changed revision response before sending it to the program team.'
+      : currentStatus === 'contractor_revision_inbox' && documentUploadRequiredIssueIds.length > 0
+        ? 'Upload and process the corrected documentation before sending it to the program team.'
+        : currentStatus === 'contractor_revision_inbox' && !revisionResponsesComplete
+          ? 'Complete and save a response for every open revision issue before sending it to the program team.'
+          : canSubmit
+            ? 'Send this invoice to the program team for first-level review.'
+            : 'Submission is available after the pre-check finishes, or when the program team has requested a revision.';
   const currentStatusCopy = invoiceStatusCopy(currentStatus, currentStatusSubtype);
   const contractorActionableRulechecks = useMemo(
     () =>
@@ -539,8 +561,43 @@ export default function ContractorInvoiceReviewScreen() {
     void loadReviewData();
   }, [loadReviewData]);
 
+  const adoptRevisionTrackerData = useCallback((next: RevisionTrackerData) => {
+    setRevisionTrackerData(next);
+    setRevisionAttentionIssueIds(next.capabilities?.document_upload_required_issue_ids || []);
+  }, []);
+
   useEffect(() => {
-    if (!showPdf) return;
+    let cancelled = false;
+    if (!currentInvoiceId || currentStatus !== 'contractor_revision_inbox') {
+      setRevisionTrackerData(null);
+      setContractorDraftState(null);
+      setRevisionAttentionIssueIds([]);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/claims/contractor/invoices/${encodeURIComponent(currentInvoiceId)}/revision_issues`,
+          { credentials: 'include', headers: { Accept: 'application/json' } },
+        );
+        const json = await response.json().catch(() => ({}));
+        if (!cancelled) {
+          if (response.ok) adoptRevisionTrackerData(json as RevisionTrackerData);
+          else setRevisionTrackerData(null);
+        }
+      } catch {
+        if (!cancelled) setRevisionTrackerData(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [adoptRevisionTrackerData, currentInvoiceId, currentStatus, revisionRefreshToken]);
+
+  useEffect(() => {
+    if (rightPanelMode !== 'document') return;
     const el = pdfWrapRef.current;
     if (!el) return;
 
@@ -557,7 +614,7 @@ export default function ContractorInvoiceReviewScreen() {
     }
 
     return () => ro.disconnect();
-  }, [showPdf]);
+  }, [rightPanelMode]);
 
   const activeField = useMemo(
     () => DI_FIELDS.find((field) => field.key === activeHighlightKey) ?? null,
@@ -852,7 +909,7 @@ export default function ContractorInvoiceReviewScreen() {
 
     if (viewerFile?.source === 'supporting_document' && viewerFile.documentId === docId && viewerFile.url) {
       setSupportingDocumentHighlight();
-      setShowPdf(true);
+      setRightPanelMode('document');
       return;
     }
 
@@ -874,7 +931,7 @@ export default function ContractorInvoiceReviewScreen() {
         documentId: docId,
       });
       setSupportingDocumentHighlight();
-      setShowPdf(true);
+      setRightPanelMode('document');
     } catch (e: any) {
       toast({
         title: 'Could not show supporting document',
@@ -899,7 +956,26 @@ export default function ContractorInvoiceReviewScreen() {
         },
       );
       const json = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(json?.error || `Submit failed (${resp.status}).`);
+      if (!resp.ok) {
+        const incompleteEntryIds = Array.isArray(json?.issue_ids)
+          ? json.issue_ids.map((id: unknown) => String(id)).filter(Boolean)
+          : [];
+        const revisionResponseError =
+          json?.error_code === 'revision_response_incomplete' ||
+          json?.error_code === 'revision_document_upload_required';
+        if (revisionResponseError && incompleteEntryIds.length) {
+          setRevisionAttentionIssueIds(incompleteEntryIds);
+          setRightPanelMode('revision');
+        }
+        const suffix =
+          json?.error_code === 'revision_document_upload_required'
+            ? ' Upload the corrected documentation and wait for processing to finish.'
+            : incompleteEntryIds.length
+              ? ' Complete the highlighted revision response and save it.'
+              : '';
+        throw new Error(`${json?.error || `Submit failed (${resp.status}).`}${suffix}`);
+      }
+      setRevisionAttentionIssueIds([]);
       setReadData((prev: any) =>
         prev
           ? {
@@ -917,6 +993,7 @@ export default function ContractorInvoiceReviewScreen() {
         duration: 5000,
         isClosable: true,
       });
+      setRevisionRefreshToken((value) => value + 1);
     } catch (e: any) {
       toast({
         title: 'Submit failed',
@@ -932,6 +1009,10 @@ export default function ContractorInvoiceReviewScreen() {
 
   const requestSubmitToAdmin = () => {
     if (!canSubmit) return;
+    if (currentStatus === 'contractor_revision_inbox') {
+      void submitToAdmin();
+      return;
+    }
     if (contractorActionableRulechecks.length > 0) {
       onSubmitWarningOpen();
       return;
@@ -977,7 +1058,7 @@ export default function ContractorInvoiceReviewScreen() {
                   polygon: row.polygon ?? null,
                 });
                 setActiveHighlightKey(highlightKey);
-                setShowPdf(true);
+                setRightPanelMode('document');
               }
             : undefined
         }
@@ -991,20 +1072,8 @@ export default function ContractorInvoiceReviewScreen() {
       <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
         <Box display="flex" flexDirection="column" height="100%">
           <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap">
-            <Flex align="center" gap="7px" px="0" py="0">
-              <Text fontSize="xs" fontWeight="semibold">
-                Image
-              </Text>
-              <Switch size="sm" isChecked={showPdf} onChange={(event) => setShowPdf(event.target.checked)} />
-            </Flex>
-            <Tooltip
-              label={
-                canSubmit
-                  ? 'Send this invoice to the program team for first-level review.'
-                  : 'Submission is available after the pre-check finishes, or when the program team has requested a revision.'
-              }
-              hasArrow
-            >
+            <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} />
+            <Tooltip label={submitTooltip} hasArrow>
               <IconButton
                 aria-label="Submit to admin"
                 icon={<PaperPlaneTilt size={25} weight="bold" />}
@@ -1064,7 +1133,7 @@ export default function ContractorInvoiceReviewScreen() {
               sx={{ resize: 'horizontal', overflow: 'auto' }}
               minW="480px"
               maxW="100%"
-              w={showPdf ? 'auto' : '100%'}
+              w="auto"
               flex="1 1 auto"
             >
               <Accordion
@@ -1549,7 +1618,7 @@ export default function ContractorInvoiceReviewScreen() {
                                         polygon: row.polygon ?? null,
                                       });
                                       setActiveHighlightKey(highlightKey);
-                                      setShowPdf(true);
+                                      setRightPanelMode('document');
                                     }
                                   : undefined
                               }
@@ -1703,7 +1772,7 @@ export default function ContractorInvoiceReviewScreen() {
               </Accordion>
             </Box>
 
-            {showPdf ? (
+            {rightPanelMode === 'document' ? (
               <Box
                 ref={pdfWrapRef}
                 flex="0 0 640px"
@@ -1966,6 +2035,17 @@ export default function ContractorInvoiceReviewScreen() {
                     {activePageMeta?.unit ?? '-'}
                   </Text>
                 </Box>
+              </Box>
+            ) : rightPanelMode === 'revision' && currentInvoiceId ? (
+              <Box flex="0 0 640px" w="640px" maxW="640px" minW="640px" alignSelf="flex-start" overflow="hidden">
+                <RevisionTracker
+                  invoiceId={currentInvoiceId}
+                  viewerRole="contractor"
+                  refreshToken={revisionRefreshToken}
+                  onTrackerChange={adoptRevisionTrackerData}
+                  onContractorDraftStateChange={setContractorDraftState}
+                  attentionIssueIds={revisionAttentionIssueIds}
+                />
               </Box>
             ) : null}
           </Box>

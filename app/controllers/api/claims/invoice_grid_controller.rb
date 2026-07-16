@@ -170,7 +170,7 @@ module Api
       end
 
       # POST /api/claims/admin/invoices/:id/status_transition
-      # Body: { transition: "screen_in|request_revision|approve_pending|mark_ineligible|mark_paid" }
+      # Body: { transition: "screen_in|approve_pending|mark_ineligible|mark_paid" }
       def status_transition
         transition_key = params[:transition].to_s.strip
         spec = status_transition_spec(transition_key)
@@ -204,7 +204,31 @@ module Api
             raise ActiveRecord::Rollback
           end
 
-          invoice.set_workflow_status!(spec.fetch(:to))
+          if transition_key.in?(%w[screen_in approve_pending])
+            gate = ::Claims::RevisionIssues::ApprovalGate.call(invoice: invoice)
+            unless gate.allowed
+              render json: {
+                       error: gate.error,
+                       error_code: "revision_review_incomplete",
+                       issue_ids: gate.issue_ids,
+                       missing_rulecheck_ids: gate.missing_rulecheck_ids
+                     },
+                     status: :unprocessable_entity
+              raise ActiveRecord::Rollback
+            end
+          end
+
+          latest_version_id =
+            invoice
+              .invoice_versions
+              .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+              .limit(1)
+              .pick(:id)
+          invoice.set_workflow_status!(
+            spec.fetch(:to),
+            actor_user_id: current_user&.id,
+            invoice_version_id: latest_version_id
+          )
         end
 
         return if performed?
@@ -262,10 +286,6 @@ module Api
           "screen_in" => {
             from: %w[admin_review_inbox],
             to: "in_review"
-          },
-          "request_revision" => {
-            from: %w[admin_review_inbox in_review],
-            to: "contractor_revision_inbox"
           },
           "approve_pending" => {
             from: %w[in_review],

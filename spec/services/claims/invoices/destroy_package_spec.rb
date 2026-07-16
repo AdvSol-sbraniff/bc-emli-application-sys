@@ -25,6 +25,14 @@ RSpec.describe Claims::Invoices::DestroyPackage do
           created_at: now,
           updated_at: now
         )
+      status_transition =
+        Claims::InvoiceStatusTransition.create!(
+          invoice_id: invoice.id,
+          invoice_version_id: invoice_version.id,
+          from_status: "genai_in_progress",
+          to_status: "genai_complete",
+          created_at: now
+        )
       package_run =
         Claims::IngestRun.create!(
           session_id: session.id,
@@ -100,6 +108,9 @@ RSpec.describe Claims::Invoices::DestroyPackage do
       expect(deleted[:ingest_step_runs]).to eq(2)
       expect(deleted[:sessions]).to eq(1)
       expect(Claims::Invoice.exists?(invoice.id)).to be(false)
+      expect(
+        Claims::InvoiceStatusTransition.exists?(status_transition.id)
+      ).to be(false)
       expect(Claims::Session.exists?(session.id)).to be(false)
       expect(Claims::IngestRun.where(session_id: session.id)).to be_empty
       expect(Claims::IngestDocument.where(session_id: session.id)).to be_empty

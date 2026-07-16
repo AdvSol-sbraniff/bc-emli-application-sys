@@ -1,6 +1,8 @@
+# frozen_string_literal: true
+
 module Claims
-  class AdminRevisionRequest < ApplicationRecord
-    self.table_name = "claims.admin_revision_requests"
+  class ConversationMessage < ApplicationRecord
+    self.table_name = "claims.conversation_messages"
 
     belongs_to :invoice, class_name: "Claims::Invoice", foreign_key: :invoice_id
 
@@ -10,19 +12,15 @@ module Claims
                optional: true
 
     before_validation :assign_invoice_id
-    before_validation :assign_revreq_seqno, on: :create
+    before_validation :assign_seqno, on: :create
     before_validation :assign_default_message_type
 
-    validates :invoice_id, presence: true
-    validates :requester_id, presence: true
+    validates :invoice_id, :requester_id, :request_text, presence: true
     validates :message_type,
-              presence: true,
               inclusion: {
-                in: %w[admin_revision_request contractor_note]
+                in: %w[admin_message contractor_note]
               }
-    validates :request_text, presence: true
     validates :revreq_seqno,
-              presence: true,
               numericality: {
                 only_integer: true,
                 greater_than_or_equal_to: 1
@@ -31,7 +29,7 @@ module Claims
     private
 
     def assign_default_message_type
-      self.message_type = "admin_revision_request" if message_type.blank?
+      self.message_type = "admin_message" if message_type.blank?
     end
 
     def assign_invoice_id
@@ -41,9 +39,8 @@ module Claims
         Claims::InvoiceVersion.where(id: invoice_version_id).pick(:invoice_id)
     end
 
-    def assign_revreq_seqno
-      return if revreq_seqno.present?
-      return if invoice_id.blank?
+    def assign_seqno
+      return if revreq_seqno.present? || invoice_id.blank?
 
       self.revreq_seqno =
         self.class.where(invoice_id: invoice_id).maximum(:revreq_seqno).to_i + 1

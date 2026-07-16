@@ -149,8 +149,8 @@ export default function RulesetConfigEditorScreen() {
           <Box>
             <Heading size="md">System Config</Heading>
             <Text fontSize="sm" opacity={0.75} mt={1}>
-              Shared validation prompt, PDF/image routing classifier prompts, support-document extraction prompts, and
-              admin advice framing.
+              Shared validation prompt, PDF/image routing classifier prompts, support-document extraction prompts, admin
+              advice framing.
             </Text>
           </Box>
 
@@ -164,9 +164,9 @@ export default function RulesetConfigEditorScreen() {
                 isDisabled={isLoading || isSaving}
               />
             </Tooltip>
-            <Tooltip label="Save AI system config">
+            <Tooltip label="Save system config">
               <IconButton
-                aria-label="Save AI system config"
+                aria-label="Save system config"
                 icon={<FloppyDiskBack size={18} />}
                 colorScheme="blue"
                 onClick={save}

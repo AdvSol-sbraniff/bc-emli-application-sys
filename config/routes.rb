@@ -59,14 +59,18 @@ Rails.application.routes.draw do
       get "contractor/invoices", to: "contractor_portal#index"
       post "contractor/invoices/upload_batch",
            to: "contractor_portal#upload_batch"
-      get "contractor/invoices/:invoice_id/revision_requests",
-          to: "contractor_portal#revision_requests"
-      post "contractor/invoices/:invoice_id/revision_requests",
-           to: "contractor_portal#create_revision_request"
-      patch "contractor/invoices/:invoice_id/revision_requests/:id",
-            to: "contractor_portal#update_revision_request"
+      get "contractor/invoices/:invoice_id/revision_issues",
+          to: "contractor_portal#revision_issues"
+      get "contractor/invoices/:invoice_id/conversation_messages",
+          to: "contractor_portal#conversation_messages"
+      post "contractor/invoices/:invoice_id/conversation_messages",
+           to: "contractor_portal#create_conversation_message"
+      patch "contractor/invoices/:invoice_id/conversation_messages/:id",
+            to: "contractor_portal#update_conversation_message"
       post "contractor/invoices/:invoice_id/submit_to_admin",
            to: "contractor_portal#submit_to_admin"
+      patch "contractor/invoices/:invoice_id/revision_issues/:issue_id/comment",
+            to: "contractor_portal#save_revision_issue_comment"
       get "contractor/ingest/runs/:ingest_run_id",
           to: "contractor_portal#ingest_run_show"
       get "contractor/ingest/runs/:ingest_run_id/invoices",
@@ -269,12 +273,31 @@ Rails.application.routes.draw do
            to: "user_eligibilitycodes_admin#create"
       patch "admin/users_eligibilitycodes/:id",
             to: "user_eligibilitycodes_admin#update"
-      get "admin/revision_requests", to: "revision_requests_admin#index"
-      get "admin/revision_requests/:id", to: "revision_requests_admin#show"
-      post "admin/revision_requests", to: "revision_requests_admin#create"
-      patch "admin/revision_requests/:id", to: "revision_requests_admin#update"
-      delete "admin/revision_requests/:id",
-             to: "revision_requests_admin#destroy"
+      get "admin/conversation_messages", to: "conversation_messages_admin#index"
+      get "admin/conversation_messages/:id",
+          to: "conversation_messages_admin#show"
+      post "admin/conversation_messages",
+           to: "conversation_messages_admin#create"
+      patch "admin/conversation_messages/:id",
+            to: "conversation_messages_admin#update"
+      delete "admin/conversation_messages/:id",
+             to: "conversation_messages_admin#destroy"
+      get "admin/invoices/:invoice_id/revision_issues",
+          to: "invoice_revision_issues_admin#index"
+      post "admin/invoices/:invoice_id/revision_issues",
+           to: "invoice_revision_issues_admin#create_issue"
+      post "admin/invoices/:invoice_id/revision_issues/send",
+           to: "invoice_revision_issues_admin#send_issues"
+      post "admin/invoices/:invoice_id/revision_issues/:issue_id/comment",
+           to: "invoice_revision_issues_admin#save_admin_comment"
+      delete "admin/invoices/:invoice_id/revision_issues/:issue_id",
+             to: "invoice_revision_issues_admin#destroy_issue"
+      patch "admin/invoices/:invoice_id/revision_issue_comments/:comment_id",
+            to: "invoice_revision_issues_admin#update_comment"
+      post "admin/invoices/:invoice_id/revision_issue_comments/:comment_id/reset",
+           to: "invoice_revision_issues_admin#reset_comment"
+      post "admin/invoices/:invoice_id/revision_issues/:issue_id/close",
+           to: "invoice_revision_issues_admin#close_issue"
       get "admin/internal_notes", to: "internal_notes_admin#index"
       post "admin/internal_notes", to: "internal_notes_admin#create"
     end
