@@ -24,6 +24,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as ReactRouterLink } from 'react-router-dom';
 import { useMst, useServerAPI } from '../../../setup/root';
+import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
 import { getRuntimeBooleanMetaValue } from '../../../utils/utility-functions';
 import { PerPageSelect } from '../../shared/base/inputs/per-page-select';
 import { Paginator } from '../../shared/base/inputs/paginator';
@@ -37,6 +38,7 @@ import { ContractorProgramResourcesScreen } from '../contractor-management/contr
 
 type ContractorPortalRow = {
   invoiceId: string;
+  referenceNumber: number | string;
   sessionId: string;
   status: string;
   statusSubtype?: string | null;
@@ -55,6 +57,8 @@ type ContractorPortalRow = {
   latestDiOcrInvoiceTotal?: number | string | null;
   latestDiOcrVendorName?: string | null;
   latestDiOcrCustomerName?: string | null;
+  latestDiOcrCustomerAddress?: string | null;
+  submitterName?: string | null;
   latestDetectedUpgradeTypeKeys?: string[] | null;
 };
 
@@ -145,13 +149,13 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
         return String(left.invoiceCreatedAt || '').localeCompare(String(right.invoiceCreatedAt || ''));
       case 'created_at:desc':
         return String(right.invoiceCreatedAt || '').localeCompare(String(left.invoiceCreatedAt || ''));
-      case 'filename:asc':
-        return String(left.latestOriginalFilename || left.invoiceId).localeCompare(
-          String(right.latestOriginalFilename || right.invoiceId),
+      case 'address:asc':
+        return String(left.latestDiOcrCustomerAddress || left.invoiceId).localeCompare(
+          String(right.latestDiOcrCustomerAddress || right.invoiceId),
         );
-      case 'filename:desc':
-        return String(right.latestOriginalFilename || right.invoiceId).localeCompare(
-          String(left.latestOriginalFilename || left.invoiceId),
+      case 'address:desc':
+        return String(right.latestDiOcrCustomerAddress || right.invoiceId).localeCompare(
+          String(left.latestDiOcrCustomerAddress || left.invoiceId),
         );
       case 'status:asc':
         return contractorStatusLabel(left.status, left.statusSubtype).localeCompare(
@@ -173,7 +177,7 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
 }
 
 function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
-  const title = row.latestOriginalFilename || `Invoice ${row.invoiceId.slice(0, 8)}`;
+  const title = row.latestDiOcrCustomerAddress || 'Service address unavailable';
   const statusCopy = invoiceStatusCopy(row.status, row.statusSubtype);
   const statusHint = `${statusCopy.hint} Technical status: ${row.status || 'unknown'}.`;
   const ocrFacts = [
@@ -257,6 +261,21 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
                   </Text>
                 </>
               ) : null}
+              {row.submitterName ? (
+                <>
+                  <Show below="sm">
+                    <Spacer />
+                  </Show>
+                  <Text>
+                    Submitted by:
+                    <Text as="span"> </Text>
+                    <Show below="md">
+                      <br />
+                    </Show>
+                    {row.submitterName}
+                  </Text>
+                </>
+              ) : null}
             </Flex>
 
             {row.systemHelpNotes ? (
@@ -268,6 +287,13 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
         </Flex>
 
         <Flex direction="column" align={{ base: 'flex-start', md: 'flex-end' }} gap={4} flexShrink={0}>
+          <Box>
+            <Text align={{ base: 'left', md: 'right' }} variant="tiny_uppercase">
+              Reference #
+            </Text>
+            <Text align={{ base: 'left', md: 'right' }}>{formatClaimsReferenceNumber(row.referenceNumber)}</Text>
+          </Box>
+
           <Tooltip label={statusHint}>
             <Text fontSize="sm" fontWeight="semibold" color="gray.700">
               {contractorStatusLabel(row.status, row.statusSubtype)}
@@ -353,7 +379,10 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
       if (!normalizedQuery) return true;
 
       const haystack = [
-        row.latestOriginalFilename,
+        row.referenceNumber,
+        formatClaimsReferenceNumber(row.referenceNumber),
+        row.latestDiOcrCustomerAddress,
+        row.submitterName,
         row.invoiceId,
         row.sessionId,
         row.status,
@@ -458,7 +487,7 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                     }
                     isDisabled={isSubmitInvoiceDisabled}
                   >
-                    Upload invoice(s)
+                    Upload invoice
                   </RouterLinkButton>
 
                   <Flex
@@ -498,8 +527,8 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                           <option value="updated_at:asc">updated asc</option>
                           <option value="created_at:desc">created desc</option>
                           <option value="created_at:asc">created asc</option>
-                          <option value="filename:asc">filename A-Z</option>
-                          <option value="filename:desc">filename Z-A</option>
+                          <option value="address:asc">address A-Z</option>
+                          <option value="address:desc">address Z-A</option>
                           <option value="status:asc">status A-Z</option>
                           <option value="status:desc">status Z-A</option>
                         </Select>

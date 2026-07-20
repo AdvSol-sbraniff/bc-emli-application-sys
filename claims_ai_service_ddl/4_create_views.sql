@@ -327,6 +327,7 @@ SELECT
   -- invoice (base)
   -- -------------------------
   i.id                AS invoice_id,
+  i.reference_number  AS reference_number,
   s.id                AS session_id,
   i.status            AS invoice_status,
   i.status_subtype    AS invoice_status_subtype,

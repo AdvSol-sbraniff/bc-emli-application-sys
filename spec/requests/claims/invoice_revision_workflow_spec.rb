@@ -68,6 +68,17 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     )
   end
 
+  def select_recommendation(invoice_id, issue, remedy: "provide_explanation")
+    comment = issue.fetch("comments").first
+    patch "/api/claims/admin/invoices/#{invoice_id}/revision_issue_comments/#{comment.fetch("id")}",
+          params: {
+            admin_recommended_remedy: remedy,
+            comment_text: comment.fetch("comment_text")
+          },
+          as: :json
+    expect(response).to have_http_status(:ok)
+  end
+
   before do
     host! "localhost"
     version
@@ -109,6 +120,8 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     expect(issue.fetch("comments").length).to eq(1)
 
     admin_comment = issue.fetch("comments").first
+    expect(admin_comment.fetch("admin_recommended_remedy")).to be_nil
+    expect(json_response.dig("capabilities", "can_send_issues")).to be(false)
     patch "/api/claims/admin/invoices/#{invoice.id}/revision_issue_comments/#{admin_comment.fetch("id")}",
           params: {
             admin_recommended_remedy: "provide_explanation",
@@ -116,6 +129,7 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
           },
           as: :json
     expect(response).to have_http_status(:ok)
+    expect(json_response.dig("capabilities", "can_send_issues")).to be(true)
 
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/send",
          as: :json
@@ -151,13 +165,14 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
 
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/#{issue.fetch("id")}/close",
          params: {
-           status: "closed_via_exception",
-           comment_text: "Explanation accepted as a program exception."
+           status: "closed_via_attestation",
+           comment_text:
+             "The administrator accepted the explanation as an attestation."
          },
          as: :json
     expect(response).to have_http_status(:ok)
     closed = json_response.fetch("issues").first
-    expect(closed.fetch("status")).to eq("closed_via_exception")
+    expect(closed.fetch("status")).to eq("closed_via_attestation")
     expect(
       closed.fetch("comments").map { |comment| comment.fetch("author_type") }
     ).to eq(%w[admin contractor admin])
@@ -170,7 +185,9 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
            invoice_version_rulecheck_id: rule.id
          },
          as: :json
-    issue_id = json_response.fetch("issues").first.fetch("id")
+    issue = json_response.fetch("issues").first
+    issue_id = issue.fetch("id")
+    select_recommendation(invoice.id, issue)
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/send",
          as: :json
 
@@ -190,7 +207,9 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
            invoice_version_rulecheck_id: rule.id
          },
          as: :json
-    issue_id = json_response.fetch("issues").first.fetch("id")
+    issue = json_response.fetch("issues").first
+    issue_id = issue.fetch("id")
+    select_recommendation(invoice.id, issue)
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/send",
          as: :json
     patch "/api/claims/contractor/invoices/#{invoice.id}/revision_issues/#{issue_id}/comment",
@@ -227,7 +246,13 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
            invoice_version_rulecheck_id: rule.id
          },
          as: :json
-    issue_id = json_response.fetch("issues").first.fetch("id")
+    issue = json_response.fetch("issues").first
+    issue_id = issue.fetch("id")
+    select_recommendation(
+      invoice.id,
+      issue,
+      remedy: "correct_and_reupload_invoice"
+    )
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/send",
          as: :json
     patch "/api/claims/contractor/invoices/#{invoice.id}/revision_issues/#{issue_id}/comment",

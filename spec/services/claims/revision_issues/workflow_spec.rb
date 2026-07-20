@@ -99,6 +99,17 @@ RSpec.describe "Claims durable revision issue workflow" do
     )
   end
 
+  def select_recommendation(issue, remedy: "provide_explanation")
+    comment = issue.comments.order(:created_at, :id).last
+    Claims::RevisionIssues::UpdateAdminComment.call(
+      comment: comment,
+      attributes: {
+        admin_recommended_remedy: remedy,
+        comment_text: comment.comment_text
+      }
+    )
+  end
+
   it "creates the hidden draft exchange when an issue is added" do
     invoice, _version, rule, = build_package
     issue = create_issue(invoice, "rule", rule.id)
@@ -107,11 +118,38 @@ RSpec.describe "Claims durable revision issue workflow" do
     expect(invoice.revision_rounds.count).to eq(1)
     expect(invoice.revision_rounds.first).to be_draft
     expect(issue.comments.count).to eq(1)
+    expect(issue.comments.first.admin_recommended_remedy).to be_nil
+    expect(issue.comments.first.comment_text).to be_present
+  end
+
+  it "requires an admin to select a recommendation before sending" do
+    invoice, _version, rule, = build_package
+    issue = create_issue(invoice, "rule", rule.id)
+    round = invoice.revision_rounds.newest_first.first
+
+    expect do
+      Claims::RevisionIssues::SendRound.call(
+        revision_round: round,
+        actor_user_id: nil
+      )
+    end.to raise_error(
+      Claims::RevisionIssues::SendRound::Incomplete,
+      /recommendation and comment/
+    )
+
+    select_recommendation(issue)
+    expect do
+      Claims::RevisionIssues::SendRound.call(
+        revision_round: round,
+        actor_user_id: nil
+      )
+    end.to change { invoice.reload.status }.to("contractor_revision_inbox")
   end
 
   it "preserves one issue and ordered comments through multiple rounds" do
     invoice, version, rule, = build_package
     issue = create_issue(invoice, "rule", rule.id)
+    select_recommendation(issue)
     first_round = invoice.revision_rounds.newest_first.first
     Claims::RevisionIssues::SendRound.call(
       revision_round: first_round,
@@ -211,6 +249,7 @@ RSpec.describe "Claims durable revision issue workflow" do
       status: "closed_via_exception",
       comment_text: "The program granted an exception."
     )
+    select_recommendation(requested_issue)
 
     Claims::RevisionIssues::SendRound.call(
       revision_round: round,
@@ -240,6 +279,7 @@ RSpec.describe "Claims durable revision issue workflow" do
   it "requires newly processed documentation for a corrected-document response" do
     invoice, version, rule, = build_package
     issue = create_issue(invoice, "rule", rule.id)
+    select_recommendation(issue, remedy: "correct_and_reupload_invoice")
     round = invoice.revision_rounds.newest_first.first
     Claims::RevisionIssues::SendRound.call(
       revision_round: round,
@@ -304,6 +344,7 @@ RSpec.describe "Claims durable revision issue workflow" do
   it "continues the same open issue when the admin saves another comment" do
     invoice, version, rule, = build_package
     issue = create_issue(invoice, "rule", rule.id)
+    select_recommendation(issue)
     first_round = invoice.revision_rounds.newest_first.first
     Claims::RevisionIssues::SendRound.call(
       revision_round: first_round,
@@ -348,6 +389,8 @@ RSpec.describe "Claims durable revision issue workflow" do
     invoice, version, rule, field = build_package
     continued_issue = create_issue(invoice, "rule", rule.id)
     closed_issue = create_issue(invoice, "invoice_field", field.id)
+    select_recommendation(continued_issue)
+    select_recommendation(closed_issue)
     response_round = invoice.revision_rounds.newest_first.first
     Claims::RevisionIssues::SendRound.call(
       revision_round: response_round,
@@ -411,6 +454,7 @@ RSpec.describe "Claims durable revision issue workflow" do
   it "refuses to send if an open issue has no admin follow-up" do
     invoice, version, rule, = build_package
     issue = create_issue(invoice, "rule", rule.id)
+    select_recommendation(issue)
     first_round = invoice.revision_rounds.newest_first.first
     Claims::RevisionIssues::SendRound.call(
       revision_round: first_round,

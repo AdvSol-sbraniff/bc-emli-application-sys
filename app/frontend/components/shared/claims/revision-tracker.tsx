@@ -4,6 +4,12 @@ import {
   AccordionIcon,
   AccordionItem,
   AccordionPanel,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
   Badge,
   Box,
   Button,
@@ -24,7 +30,7 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { ArrowCounterClockwise, CheckCircle, FloppyDiskBack, Info, PaperPlaneTilt, Trash } from '@phosphor-icons/react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 export type RevisionSource = {
   source_key?: string | null;
@@ -125,6 +131,14 @@ type Props = {
 type AdminDraft = { remedy: string; text: string };
 type ContractorDraft = { method: string; text: string; assertedValue: string };
 type CloseDraft = { status: string; text: string };
+type ContractorResponseState = {
+  label: string;
+  colorScheme: string;
+};
+type AdminIssueState = {
+  label: string;
+  colorScheme: string;
+};
 
 export type ContractorDraftState = {
   allEditableDraftsComplete: boolean;
@@ -164,6 +178,35 @@ const sourceValue = (value: unknown): string => {
 const issueStatusColour = (status: RevisionIssue['status']): string =>
   status === 'open' ? 'orange' : status === 'closed_via_exception' ? 'purple' : 'green';
 
+const contractorDraftComplete = (issue: RevisionIssue, draft: ContractorDraft): boolean => {
+  if (!draft.method || !draft.text.trim()) return false;
+  return !(draft.method === 'attestation_provided' && issue.issue_type !== 'rule' && !draft.assertedValue.trim());
+};
+
+const contractorDraftDiffers = (draft: ContractorDraft, saved: RevisionIssueComment | undefined): boolean =>
+  draft.method !== (saved?.contractor_response_method || '') ||
+  draft.text !== (saved?.comment_text || '') ||
+  draft.assertedValue !== (saved?.contractor_asserted_value || '');
+
+const adminDraftDiffers = (draft: AdminDraft, baseline: AdminDraft): boolean =>
+  draft.remedy !== baseline.remedy || draft.text !== baseline.text;
+
+const dispositionMismatchNotice = (status: string, response: RevisionIssueComment | undefined): string => {
+  const responseLabel = response?.contractor_response_method
+    ? pretty(response.contractor_response_method)
+    : 'No contractor response is recorded';
+  if (status === 'closed_via_attestation' && response?.contractor_response_method !== 'attestation_provided') {
+    return `${responseLabel}. You selected attestation accepted; this will not prevent closing the issue.`;
+  }
+  if (
+    status === 'closed_via_corrected_documentation' &&
+    !['corrected_invoice_uploaded', 'supporting_document_uploaded'].includes(response?.contractor_response_method || '')
+  ) {
+    return `${responseLabel}. You selected corrected documentation accepted; this will not prevent closing the issue.`;
+  }
+  return '';
+};
+
 export const RevisionTracker = ({
   invoiceId,
   viewerRole,
@@ -182,6 +225,8 @@ export const RevisionTracker = ({
   const [contractorDrafts, setContractorDrafts] = useState<Record<string, ContractorDraft>>({});
   const [closeDrafts, setCloseDrafts] = useState<Record<string, CloseDraft>>({});
   const [historyIssueId, setHistoryIssueId] = useState<string | null>(null);
+  const [closeValidationOpen, setCloseValidationOpen] = useState(false);
+  const closeValidationButtonRef = useRef<HTMLButtonElement>(null);
 
   const endpoint = `/api/claims/${viewerRole === 'admin' ? 'admin' : 'contractor'}/invoices/${encodeURIComponent(
     invoiceId,
@@ -196,7 +241,7 @@ export const RevisionTracker = ({
       const nextContractor: Record<string, ContractorDraft> = {};
       next.issues.forEach((issue) => {
         const editableAdminComment = issue.comments.find(
-          (comment) => comment.author_type === 'admin' && comment.can_edit && comment.admin_recommended_remedy,
+          (comment) => comment.author_type === 'admin' && comment.can_edit,
         );
         if (editableAdminComment) {
           nextAdmin[issue.id] = {
@@ -280,12 +325,7 @@ export const RevisionTracker = ({
     (issue: RevisionIssue, author: 'admin' | 'contractor') =>
       [...issue.comments]
         .reverse()
-        .find(
-          (comment) =>
-            comment.revision_round_id === latestRound?.id &&
-            comment.author_type === author &&
-            (author === 'contractor' || !!comment.admin_recommended_remedy),
-        ),
+        .find((comment) => comment.revision_round_id === latestRound?.id && comment.author_type === author),
     [latestRound?.id],
   );
 
@@ -295,17 +335,12 @@ export const RevisionTracker = ({
     const editableIssues = data.issues.filter((issue) => issue.can_contractor_respond);
     const allEditableDraftsComplete = editableIssues.every((issue) => {
       const draft = contractorDrafts[issue.id] || { method: '', text: '', assertedValue: '' };
-      if (!draft.method || !draft.text.trim()) return false;
-      return !(draft.method === 'attestation_provided' && issue.issue_type !== 'rule' && !draft.assertedValue.trim());
+      return contractorDraftComplete(issue, draft);
     });
     const hasUnsavedChanges = editableIssues.some((issue) => {
       const draft = contractorDrafts[issue.id] || { method: '', text: '', assertedValue: '' };
       const saved = currentRoundComment(issue, 'contractor');
-      return (
-        draft.method !== (saved?.contractor_response_method || '') ||
-        draft.text !== (saved?.comment_text || '') ||
-        draft.assertedValue !== (saved?.contractor_asserted_value || '')
-      );
+      return contractorDraftDiffers(draft, saved);
     });
 
     onContractorDraftStateChange({ allEditableDraftsComplete, hasUnsavedChanges });
@@ -366,7 +401,9 @@ export const RevisionTracker = ({
   const closeIssue = (issue: RevisionIssue) => {
     const draft = closeDrafts[issue.id] || { status: '', text: '' };
     if (!draft.status || !draft.text.trim()) {
-      setError('Choose how the issue was closed and enter a final admin comment.');
+      setError('');
+      setErrorDetails([]);
+      setCloseValidationOpen(true);
       return;
     }
     void mutate(
@@ -391,7 +428,49 @@ export const RevisionTracker = ({
     ? ''
     : 'Add or save an admin recommendation for every open issue before sending.';
   const historyIssue = data?.issues.find((issue) => issue.id === historyIssueId);
+  const contractorInvoiceWithProgram =
+    !isAdmin && data?.invoice_status === 'admin_review_inbox' && latestRound?.state === 'response_submitted';
+  const adminInvoiceWithContractor =
+    isAdmin && data?.invoice_status === 'contractor_revision_inbox' && latestRound?.state === 'awaiting_contractor';
+  const contractorResponseStateFor = (issue: RevisionIssue): ContractorResponseState | null => {
+    if (isAdmin || issue.status !== 'open' || data?.invoice_status !== 'contractor_revision_inbox') return null;
 
+    const draft = contractorDrafts[issue.id] || { method: '', text: '', assertedValue: '' };
+    const saved = currentRoundComment(issue, 'contractor');
+    if (contractorDraftDiffers(draft, saved)) {
+      return { label: 'Unsaved changes', colorScheme: 'yellow' };
+    }
+    if (data?.capabilities?.document_upload_required_issue_ids?.includes(issue.id)) {
+      return { label: 'Document upload required', colorScheme: 'red' };
+    }
+    if (saved && contractorDraftComplete(issue, draft)) {
+      return { label: 'Response saved - submit invoice', colorScheme: 'blue' };
+    }
+    return { label: 'Action required', colorScheme: 'orange' };
+  };
+  const adminIssueStateFor = (issue: RevisionIssue): AdminIssueState | null => {
+    if (!isAdmin || issue.status !== 'open' || data?.invoice_status !== 'admin_review_inbox') return null;
+
+    const currentAdminComment = currentRoundComment(issue, 'admin');
+    const editableAdminComment = currentAdminComment?.can_edit ? currentAdminComment : undefined;
+    const baseline = editableAdminComment
+      ? {
+          remedy: editableAdminComment.admin_recommended_remedy || '',
+          text: editableAdminComment.comment_text || '',
+        }
+      : {
+          remedy: issue.suggested_admin_comment?.admin_recommended_remedy || '',
+          text: issue.suggested_admin_comment?.comment_text || '',
+        };
+    const draft = adminDrafts[issue.id] || baseline;
+    if (adminDraftDiffers(draft, baseline)) {
+      return { label: 'Unsaved changes', colorScheme: 'yellow' };
+    }
+    if (editableAdminComment && draft.remedy && draft.text.trim()) {
+      return { label: 'Ready to send', colorScheme: 'blue' };
+    }
+    return { label: 'Recommendation required', colorScheme: 'orange' };
+  };
   return (
     <>
       <Box bg="blue.50" borderWidth="1px" borderColor="blue.200" borderRadius="md" p="12px">
@@ -426,6 +505,28 @@ export const RevisionTracker = ({
           </Box>
         ) : null}
 
+        {contractorInvoiceWithProgram ? (
+          <Box bg="blue.100" borderWidth="1px" borderColor="blue.200" borderRadius="md" p="8px" mb="10px">
+            <Text color="blue.800" fontSize="sm" fontWeight="600">
+              Responses submitted - the invoice is with the program team.
+            </Text>
+            <Text color="blue.800" fontSize="xs">
+              Revision responses are read-only while the program team reviews the invoice.
+            </Text>
+          </Box>
+        ) : null}
+
+        {adminInvoiceWithContractor ? (
+          <Box bg="orange.50" borderWidth="1px" borderColor="orange.200" borderRadius="md" p="8px" mb="10px">
+            <Text color="orange.800" fontSize="sm" fontWeight="600">
+              Revision issues are with the contractor.
+            </Text>
+            <Text color="orange.800" fontSize="xs">
+              Admin controls are read-only until the contractor returns the invoice.
+            </Text>
+          </Box>
+        ) : null}
+
         {!data?.issues.length ? (
           <Text fontSize="sm" color="gray.600" py="12px">
             {isAdmin
@@ -433,7 +534,7 @@ export const RevisionTracker = ({
               : 'No revision issues have been sent to you.'}
           </Text>
         ) : (
-          <Accordion allowMultiple defaultIndex={attentionIssueIds.length ? [] : [0]}>
+          <Accordion allowMultiple defaultIndex={[]}>
             {data.issues.map((issue) => {
               const adminComment = currentRoundComment(issue, 'admin');
               const contractorComment = currentRoundComment(issue, 'contractor');
@@ -442,6 +543,15 @@ export const RevisionTracker = ({
                 ? issue.comments.filter((comment) => comment.id !== editableComment.id)
                 : issue.comments;
               const contractorDraft = contractorDrafts[issue.id] || { method: '', text: '', assertedValue: '' };
+              const contractorResponseState = contractorResponseStateFor(issue);
+              const adminIssueState = adminIssueStateFor(issue);
+              const latestContractorResponse = [...issue.comments]
+                .reverse()
+                .find((comment) => comment.author_type === 'contractor');
+              const dispositionNotice = dispositionMismatchNotice(
+                closeDrafts[issue.id]?.status || '',
+                latestContractorResponse,
+              );
               const highlighted = attentionIssueIds.includes(issue.id);
               return (
                 <AccordionItem
@@ -460,6 +570,14 @@ export const RevisionTracker = ({
                             {issue.source.friendly_label || pretty(issue.issue_type)}
                           </Text>
                           <Badge colorScheme={issueStatusColour(issue.status)}>{pretty(issue.status)}</Badge>
+                          {contractorResponseState ? (
+                            <Badge colorScheme={contractorResponseState.colorScheme}>
+                              {contractorResponseState.label}
+                            </Badge>
+                          ) : null}
+                          {adminIssueState ? (
+                            <Badge colorScheme={adminIssueState.colorScheme}>{adminIssueState.label}</Badge>
+                          ) : null}
                         </Flex>
                       </Box>
                       <AccordionIcon />
@@ -722,6 +840,20 @@ export const RevisionTracker = ({
                             </Select>
                           </Flex>
                         </FormControl>
+                        {dispositionNotice ? (
+                          <Box
+                            bg="yellow.50"
+                            borderWidth="1px"
+                            borderColor="yellow.200"
+                            borderRadius="md"
+                            p="7px"
+                            mb="7px"
+                          >
+                            <Text color="yellow.900" fontSize="xs">
+                              {dispositionNotice}
+                            </Text>
+                          </Box>
+                        ) : null}
                         <Textarea
                           minH="85px"
                           size="sm"
@@ -751,6 +883,26 @@ export const RevisionTracker = ({
           </Accordion>
         )}
       </Box>
+      <AlertDialog
+        isOpen={closeValidationOpen}
+        leastDestructiveRef={closeValidationButtonRef}
+        onClose={() => setCloseValidationOpen(false)}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="700">
+              Cannot close issue
+            </AlertDialogHeader>
+            <AlertDialogBody>Choose how the issue was closed and enter a final admin comment.</AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={closeValidationButtonRef} onClick={() => setCloseValidationOpen(false)}>
+                OK
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
       <Drawer isOpen={!!historyIssue} placement="right" size="md" onClose={() => setHistoryIssueId(null)}>
         <DrawerOverlay />
         <DrawerContent>

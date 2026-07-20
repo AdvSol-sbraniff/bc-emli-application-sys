@@ -29,14 +29,6 @@ module Claims
         parts.join("\n\n")
       end
 
-      def self.default_remedy(issue:)
-        if issue.issue_type == "supporting_document_field"
-          "upload_supporting_document"
-        else
-          "correct_and_reupload_invoice"
-        end
-      end
-
       def self.display_value(value)
         value.is_a?(Hash) || value.is_a?(Array) ? value.to_json : value.to_s
       end

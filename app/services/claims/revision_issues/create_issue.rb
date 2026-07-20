@@ -53,14 +53,13 @@ module Claims
                .where(revision_round_id: round.id, author_type: "admin")
                .exists?
             raise AlreadyInRound,
-                  "This issue already has an admin recommendation ready to send"
+                  "This issue already has an admin recommendation draft"
           end
 
           issue.comments.create!(
             revision_round: round,
             author_type: "admin",
-            admin_recommended_remedy:
-              BuildAdminCommentDraft.default_remedy(issue: issue),
+            admin_recommended_remedy: nil,
             comment_text: BuildAdminCommentDraft.call(issue: issue)
           )
         end

@@ -100,15 +100,14 @@ module Claims
         editable_admin_comment =
           comments.reverse.find do |comment|
             admin? && comment.admin? && latest_round&.draft? &&
-              comment.revision_round_id == latest_round.id &&
-              comment.admin_recommended_remedy.present?
+              comment.revision_round_id == latest_round.id
           end
         can_admin_comment =
           admin? && issue.open? && @invoice.status == "admin_review_inbox" &&
             !latest_round&.waiting_for_contractor?
         suggested =
           if can_admin_comment && editable_admin_comment.nil?
-            suggested_admin_comment(issue, comments)
+            suggested_admin_comment
           end
         {
           id: issue.id,
@@ -212,17 +211,8 @@ module Claims
         open_ids - complete_ids
       end
 
-      def suggested_admin_comment(issue, comments)
-        previous =
-          comments.reverse.find do |comment|
-            comment.admin? && comment.admin_recommended_remedy.present?
-          end
-        {
-          admin_recommended_remedy:
-            previous&.admin_recommended_remedy ||
-              BuildAdminCommentDraft.default_remedy(issue: issue),
-          comment_text: ""
-        }
+      def suggested_admin_comment
+        { admin_recommended_remedy: nil, comment_text: "" }
       end
 
       def round_state(round)

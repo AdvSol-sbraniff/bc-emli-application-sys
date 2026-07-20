@@ -5,7 +5,6 @@ import {
   Container,
   Flex,
   HStack,
-  IconButton,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -83,7 +82,6 @@ export default function ContractorUploadInvoicesScreen() {
   const navigate = useNavigate();
   const runIdFromUrl = getParam(location.search, 'ingest_run_id');
 
-  const [contractorName, setContractorName] = useState('');
   const [contractorError, setContractorError] = useState('');
   const [runId, setRunId] = useState(runIdFromUrl);
   const [uploadModalOpen, setUploadModalOpen] = useState(!!runIdFromUrl);
@@ -115,9 +113,7 @@ export default function ContractorUploadInvoicesScreen() {
         });
         const data: ContractorPortalResponse = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-        if (!cancelled) {
-          setContractorName(data?.contractor?.business_name || data?.contractor?.number || 'your company');
-        }
+        if (!cancelled) setContractorError('');
       } catch (error: any) {
         if (!cancelled) setContractorError(error?.message || 'Unable to load contractor account.');
       }
@@ -380,7 +376,7 @@ export default function ContractorUploadInvoicesScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Upload Invoice Package" />
+      <BlueTitleBar title="Upload Invoice" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -399,10 +395,7 @@ export default function ContractorUploadInvoicesScreen() {
               <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
                 <Box>
                   <Text fontSize="lg" fontWeight="bold">
-                    Step 1: Upload invoice package
-                  </Text>
-                  <Text fontSize="sm" opacity={0.75}>
-                    Upload one invoice plus any supporting documents for {contractorName || 'your company'}.
+                    Step 1: Upload Invoice and Supporting Documents
                   </Text>
                   {contractorError ? (
                     <Text fontSize="sm" color="red.700" mt={2}>
@@ -414,16 +407,14 @@ export default function ContractorUploadInvoicesScreen() {
                   <Button variant="outline" onClick={() => fileInputRef.current?.click()} isDisabled={filesLocked}>
                     Add files
                   </Button>
-                  <Tooltip label="Clear selected files">
-                    <IconButton
-                      aria-label="Clear selected files"
-                      icon={<XCircle size={18} />}
-                      variant="ghost"
-                      colorScheme="red"
-                      onClick={() => setSelectedFiles([])}
-                      isDisabled={!selectedFiles.length || filesLocked}
-                    />
-                  </Tooltip>
+                  <Button
+                    variant="outline"
+                    colorScheme="red"
+                    onClick={() => setSelectedFiles([])}
+                    isDisabled={!selectedFiles.length || filesLocked}
+                  >
+                    Remove all files
+                  </Button>
                 </HStack>
               </Flex>
 
@@ -501,7 +492,7 @@ export default function ContractorUploadInvoicesScreen() {
                   loadingText="Uploading..."
                   isDisabled={!selectedFiles.length || !!contractorError || filesLocked}
                 >
-                  Upload package
+                  Upload
                 </Button>
               </Flex>
             </Box>
@@ -523,10 +514,7 @@ export default function ContractorUploadInvoicesScreen() {
                   bg="linear-gradient(135deg, rgba(239,248,255,0.98), rgba(255,255,255,0.98))"
                 >
                   <Text fontSize="lg" fontWeight="800">
-                    Upload Invoice Package
-                  </Text>
-                  <Text mt={1} fontSize="sm" color="gray.600" fontWeight="500">
-                    We are preparing the package for AI Advice.
+                    Upload Invoice
                   </Text>
                 </ModalHeader>
                 {!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue ? (
@@ -575,10 +563,10 @@ export default function ContractorUploadInvoicesScreen() {
                       </Box>
                       <Box>
                         <Text fontSize="2xl" fontWeight="800" color="gray.800">
-                          AI Advice is ready
+                          Advice is ready
                         </Text>
                         <Text mt={2} fontSize="sm" color="gray.600" maxW="460px">
-                          Your package has been processed. Continue to pre-check the invoice before submitting it.
+                          Continue to pre-check the invoice before submitting it.
                         </Text>
                       </Box>
                     </Flex>

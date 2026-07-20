@@ -161,7 +161,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/contractor/upload-invoices': [
         { href: '/ai-contractor-dashboard', title: 'AI contractor portal' },
-        { href: '/contractor/upload-invoices', title: 'Upload Invoice(s)' },
+        { href: '/contractor/upload-invoices', title: 'Upload Invoice' },
       ],
       '/eligibilitycode-editor': [
         { href: '/eligibilitycodes-admin', title: 'Create Test Eligibility Codes' },

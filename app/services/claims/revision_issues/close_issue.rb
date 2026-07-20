@@ -52,8 +52,6 @@ module Claims
             raise ActiveRecord::ReadOnlyRecord,
                   "Wait for the contractor response before closing this issue"
           end
-          validate_response_basis!(issue, response)
-
           remove_unsent_follow_up!(issue, basis_round: round)
 
           issue.comments.create!(
@@ -93,31 +91,8 @@ module Claims
         issue
           .comments
           .where(revision_round: draft, author_type: "admin")
-          .where.not(admin_recommended_remedy: nil)
           .destroy_all
         draft.destroy! if draft != basis_round && !draft.comments.exists?
-      end
-
-      def validate_response_basis!(_issue, response)
-        return if @status.in?(%w[closed_via_exception closed_as_withdrawn])
-
-        unless response&.revision_round&.responded?
-          raise ActiveRecord::ReadOnlyRecord,
-                "A contractor response is required for this closing status"
-        end
-
-        if @status == "closed_via_attestation" &&
-             response.contractor_response_method != "attestation_provided"
-          raise ActiveRecord::ReadOnlyRecord,
-                "This issue does not have a contractor attestation"
-        end
-        if @status == "closed_via_corrected_documentation" &&
-             !response.contractor_response_method.in?(
-               %w[corrected_invoice_uploaded supporting_document_uploaded]
-             )
-          raise ActiveRecord::ReadOnlyRecord,
-                "This issue does not have corrected documentation"
-        end
       end
     end
   end

@@ -138,38 +138,34 @@ module Claims
         return nil unless enabled_common_rule?("submission_within_six_months")
 
         invoice_date = invoice_version.di_ocr_invoice_date
-        submitted_at = invoice.submitted_at
+        program_received_at = invoice.created_at
 
-        missing = []
-        missing << "invoice date" if invoice_date.blank?
-        missing << "invoice submitted_at" if submitted_at.blank?
-
-        if missing.any?
+        if invoice_date.blank?
           return(
             warn_row(
               rule_key: "submission_within_six_months",
-              expected_text:
-                "invoices.submitted_at <= invoice_date + 6 months.",
-              detail_text: "Missing #{missing.join(" and ")}."
+              expected_text: "invoices.created_at <= invoice_date + 6 months.",
+              detail_text:
+                "Missing invoice date, so the six-month program receipt deadline cannot be calculated."
             )
           )
         end
 
         deadline = invoice_date.advance(months: 6)
-        submitted_date = submitted_at.to_date
-        pass = submitted_date <= deadline
+        program_received_date = program_received_at.to_date
+        pass = program_received_date <= deadline
 
         row(
           rule_key: "submission_within_six_months",
           rule_result: pass ? "pass" : "fail",
           confidence: 100,
-          expected_text: "invoices.submitted_at <= invoice_date + 6 months.",
+          expected_text: "invoices.created_at <= invoice_date + 6 months.",
           detail_text:
-            "invoice_date=#{invoice_date.iso8601}; invoices.submitted_at=#{submitted_date.iso8601}.",
+            "invoice_date=#{invoice_date.iso8601}; program_received_date=#{program_received_date.iso8601}.",
           calculation:
-            "#{invoice_date.iso8601} + 6 months = #{deadline.iso8601}; #{submitted_date.iso8601} <= #{deadline.iso8601} => #{pass}",
+            "#{invoice_date.iso8601} + 6 months = #{deadline.iso8601}; #{program_received_date.iso8601} <= #{deadline.iso8601} => #{pass}",
           evidence_text:
-            "invoice_versions.di_ocr_invoice_date + claims.invoices.submitted_at"
+            "invoice_versions.di_ocr_invoice_date + claims.invoices.created_at"
         )
       end
 

@@ -277,15 +277,14 @@ Set rule_result="warn" when the expected utility document is missing, not clearl
 Set rule_result="fail" only when the supplied evidence clearly contradicts the requirement, such as a document showing a utility provider other than BC Hydro or FortisBC, an unusable/wrong attached document that is clearly presented as the utility evidence, or invoice/supporting-document evidence showing the work was only a panel/sub-panel/contractor connection with no utility service/new-wire upgrade.
 In calculation, explain the document path or missing-document situation, utility_provider if visible, service-upgrade/new-wire evidence, service address/date if visible, supporting_document_routing_quality when available, and esu_utility_reference when used.
 In evidence_text, cite the exact named-field wording that supports the decision.', true, 'The electric service (new wire) must be upgraded by the participants electrical utility (BC Hydro or FortisBC).', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('homeowner_identity_matches_eligibility_record', 'Check whether the homeowner/customer name visible on the invoice appears to match the participant/homeowner associated with the eligibility code on record.
-Use users.participant_name, users_eligibilitycodes.eligibility_code, and classifier.eligibility_code from the supplied database values.
-Use invoice_homeowner_name and eligibility_code from the OCR/DI JSON.
+  ('homeowner_identity_matches_eligibility_record', 'Check whether the homeowner/customer name visible on the invoice appears to match the participant/homeowner associated with the classifier-located eligibility code.
+Use invoice_homeowner_name from the supplied invoice located fields and users.participant_name from the supplied database values.
+The eligibility code is only the lookup key used to select the participant record. Do not compare classifier.eligibility_code with users_eligibilitycodes.eligibility_code. The deterministic eligibility_code_found_in_database rule owns whether the code resolves to a database record.
 Set rule_result="pass" when the invoice-visible homeowner/customer name clearly matches users.participant_name, including common first-name/last-name ordering, initials, spouse/household formatting, accents, middle names, or minor OCR spelling differences.
 Set rule_result="info" when the name likely matches but the invoice uses a harmless alternate format worth surfacing, such as first initial plus last name, spouse/household wording, or a minor OCR typo. This is context only, not a requested fix.
-Set rule_result="warn" when the invoice homeowner/customer name is missing or ambiguous, when users.participant_name is missing, or when the eligibility-code lookup is missing and admin should verify the applicant/homeowner identity from the application record.
+Set rule_result="warn" when the invoice homeowner/customer name is missing or ambiguous, or when users.participant_name is missing.
 Set rule_result="fail" when both names are clear and the invoice visibly appears to be for a different homeowner/customer than the participant associated with the eligibility code.
-If the visible invoice eligibility code conflicts with users_eligibilitycodes.eligibility_code or classifier.eligibility_code, mention that conflict here only as identity context; the eligibility-code date/window code rule owns final eligibility-code timing.
-In evidence_text, include the visible invoice homeowner/customer name, visible invoice eligibility code if present, database participant name, and database eligibility code.
+In evidence_text, include the visible invoice homeowner/customer name and database participant name. The eligibility code may be included only to identify which participant record was selected; do not present it as another value being compared by this rule.
 In reason_and_likely_causes, explain whether this is a clear match, harmless formatting variation, missing/ambiguous evidence, or likely wrong-homeowner invoice.', true, 'Participants must pre-register and confirm eligibility prior to installing upgrades. Following pre-registration, eligible participants will receive an eligibility code.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('hp_fossil_backup_not_fossil_primary', 'Check whether the backup heating system for this fossil-fuel-to-heat-pump upgrade is electric or wood, with only the allowed exception for a retained natural-gas/propane fireplace that is clearly secondary.
 
@@ -566,7 +565,7 @@ contractor_display_name_metadata (
   ('esu_not_panel_only_or_connection_only', 'Complete electrical service upgrade'),
   ('esu_service_size_present', 'Electrical service size'),
   ('esu_utility_upgrade_supporting_document_attached', 'Utility electrical upgrade documents'),
-  ('homeowner_identity_matches_eligibility_record', 'Homeowner and installation address match'),
+  ('homeowner_identity_matches_eligibility_record', 'Invoice homeowner matches participant'),
   ('hp_fossil_backup_not_fossil_primary', 'Fossil-fuel fireplace is secondary only'),
   ('hp_no_existing_or_secondary_heat_pump_flag', 'No existing heat pump at the home'),
   ('hpwh_fossil_removal_supporting_document_attached', 'Proof of gas water heater removal'),
@@ -613,7 +612,7 @@ source_quote_metadata (
   ('esu_not_panel_only_or_connection_only', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice shows a utility service/new-wire upgrade, not only a panel/sub-panel upgrade or heat-pump panel connection. Upload a corrected invoice if needed.$$),
   ('esu_service_size_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or utility evidence shows the new service size is 100, 200, or 400 amps. Upload clearer evidence if needed.$$),
   ('esu_utility_upgrade_supporting_document_attached', $$ELECTRICAL SERVICE UPGRADE$$, $$Upload evidence showing the electric service/new wire was upgraded by BC Hydro or FortisBC.$$),
-  ('homeowner_identity_matches_eligibility_record', $$General Eligibility Requirements$$, $$Check that the homeowner name and installation address on the invoice match the participant/application information. Upload a corrected invoice or contact program staff for assistance if needed.$$),
+  ('homeowner_identity_matches_eligibility_record', $$General Eligibility Requirements$$, $$Check that the homeowner or customer name on the invoice matches the participant registered for this application. Upload a corrected invoice or contact program staff if the invoice belongs to a different person.$$),
   ('hp_fossil_backup_not_fossil_primary', $$AIR SOURCE HEAT PUMP fossil-fuel conversion$$, $$Check that backup heating is electric or wood, and that any retained gas or propane fireplace is only secondary. Upload clearer evidence if needed.$$),
   ('hp_no_existing_or_secondary_heat_pump_flag', $$General Heat Pump Requirements$$, $$Check that the invoice does not describe replacing, adding to, or adding a secondary heat pump to a home with an existing heat pump. Upload a corrected invoice if needed.$$),
   ('hpwh_fossil_removal_supporting_document_attached', $$HEAT PUMP WATER HEATER$$, $$Upload one accepted gas water-heater removal proof document and make sure it clearly shows the required date, address, and work-completed details when fossil-fuel water heating was replaced.$$),

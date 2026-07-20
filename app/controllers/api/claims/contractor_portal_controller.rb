@@ -51,16 +51,24 @@ module Api
             end
             .compact
 
-        customer_by_version =
+        card_facts_by_version =
           ::Claims::InvoiceVersion
             .where(id: latest_version_ids)
-            .pluck(:id, :di_ocr_customer_name)
-            .to_h
+            .pluck(:id, :di_ocr_customer_name, :di_ocr_customer_address)
+            .each_with_object(
+              {}
+            ) do |(id, customer_name, customer_address), facts|
+              facts[id] = {
+                customer_name: customer_name,
+                customer_address: customer_address
+              }
+            end
 
         rows =
           invoices.map do |invoice|
             {
               invoice_id: invoice.invoice_id,
+              reference_number: invoice.reference_number,
               session_id: invoice.session_id,
               status: invoice.invoice_status,
               status_subtype:
@@ -94,7 +102,16 @@ module Api
               latest_di_ocr_invoice_total: invoice.latest_di_ocr_invoice_total,
               latest_di_ocr_vendor_name: invoice.latest_di_ocr_vendor_name,
               latest_di_ocr_customer_name:
-                customer_by_version[invoice.latest_invoice_version_id],
+                card_facts_by_version.dig(
+                  invoice.latest_invoice_version_id,
+                  :customer_name
+                ),
+              latest_di_ocr_customer_address:
+                card_facts_by_version.dig(
+                  invoice.latest_invoice_version_id,
+                  :customer_address
+                ),
+              submitter_name: invoice.submitter_name,
               latest_detected_upgrade_type_keys:
                 (
                   if invoice.respond_to?(:latest_detected_upgrade_type_keys)

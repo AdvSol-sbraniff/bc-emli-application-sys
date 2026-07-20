@@ -339,30 +339,30 @@ if rule submission_within_six_months is not enabled for common:
   do not run
 
 invoice_date = invoice_versions.di_ocr_invoice_date
-submitted_at = claims.invoices.submitted_at
+program_received_at = claims.invoices.created_at
 
-if invoice_date is missing or submitted_at is missing:
+if invoice_date is missing:
   rule_result = warn
-  expected = "invoices.submitted_at <= invoice_date + 6 months"
-  reason = say exactly which date is missing
+  expected = "program received date <= invoice date + 6 months"
+  reason = "The invoice date is missing, so the six-month program receipt deadline cannot be calculated."
 
 deadline = invoice_date + 6 months
-submitted_date = submitted_at.to_date
+program_received_date = program_received_at.to_date
 
-if submitted_date <= deadline:
+if program_received_date <= deadline:
   rule_result = pass
 else:
   rule_result = fail
 
 calculation =
   invoice_date + 6 months = deadline;
-  submitted_date <= deadline => true/false',
+  program_received_date <= deadline => true/false',
     true,
-    'No follow-up is required when the submission date clearly falls within six months of the invoice date.',
-    'Confirm the invoice date or submitted date before deciding whether the six-month deadline was met.',
-    'The invoice appears to have been submitted after the six-month deadline and needs correction or program review.',
-    'This timing check passed with context worth surfacing to the reviewer.',
-    'This is a core program deadline check using stored invoice and submission dates.',
+    'No follow-up is required when the initial program receipt date falls within six months of the invoice date.',
+    'Confirm the invoice date before deciding whether the six-month program receipt deadline was met.',
+    'The initial program receipt date appears to fall after the six-month deadline. Admin should review the timing and decide the appropriate outcome or exception.',
+    'This program receipt timing check passed with context worth surfacing to the reviewer.',
+    'For this rule, submitted in the published requirement means the date the program first received a valid, non-corrupt invoice upload. claims.invoices.created_at is the system proxy for initial program receipt; the later contractor action that sends the invoice for admin review does not determine this deadline.',
     'The rebate application and supporting documentation must be submitted by the Registered Contractor within six (6) months of the invoice date.',
     true,
     TIMESTAMP '2026-05-25 00:00:00',
@@ -700,7 +700,7 @@ contractor_display_name_metadata (
   ('hydronic_awhp_product_validation', 'Air-to-water heat pump product eligibility'),
   ('ashp_oil_ohpa_product_validation', 'Oil-conversion heat pump product eligibility'),
   ('first_class_invoice_fields_present', 'Required invoice information'),
-  ('submission_within_six_months', 'Application submitted within six months'),
+  ('submission_within_six_months', 'Application received within six months'),
   ('eligibility_code_valid_for_invoice_date', 'Eligibility code valid on the invoice date'),
   ('eligibility_code_found_in_database', 'Eligibility code recognized'),
   ('prior_same_upgrade_type_rebate_payment_found', 'Previous rebate for the same upgrade'),
@@ -745,7 +745,7 @@ source_quote_metadata (
   ('hydronic_awhp_product_validation', $$AIR-TO-WATER AND COMBINED HEAT PUMP$$, $$Check the hydronic heat pump product reference on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
   ('income_level_1_or_2_required', $$applicable Income Level 1 or 2 limited upgrade section$$, $$Contact program staff for assistance if the participant should qualify as Income Level 1 or 2 for this upgrade.$$),
   ('prior_same_upgrade_type_rebate_payment_found', $$General Eligibility Requirements$$, $$Contact program staff for assistance if this participant has not already received the same primary space-heating rebate.$$),
-  ('submission_within_six_months', $$General Eligibility Requirements$$, $$Check the invoice date and submission timing. If the dates are not clear, upload clearer date evidence or contact program staff for assistance.$$),
+  ('submission_within_six_months', $$General Eligibility Requirements$$, $$Check that the invoice date is clear. The program compares it with the date the invoice was first received through the portal. Upload a clearer invoice if the date cannot be read, or contact program staff if the six-month timing requires review.$$),
   ('vent_fan_capacity_meets_minimum', $$VENTILATION$$, $$Check that the fan product evidence clearly shows at least 85 cfm at the required static pressure. Upload clearer product evidence if needed.$$),
   ('vent_fan_energy_star_product_validation', $$VENTILATION$$, $$Check the bathroom fan model on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
   ('vent_herv_nrcan_product_validation', $$VENTILATION$$, $$Check the HRV/ERV model on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),

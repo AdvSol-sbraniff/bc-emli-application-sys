@@ -71,6 +71,98 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
   end
 
   describe ".call" do
+    describe "submission_within_six_months" do
+      def create_submission_deadline_version(
+        program_received_at:,
+        invoice_date:,
+        submitted_at: nil
+      )
+        participant = create(:user)
+        contractor =
+          Contractor.create!(business_name: "Deadline Test Contractor")
+        invoice =
+          Claims::Invoice.create!(
+            session_id:
+              Claims::Session.create!(
+                created_at: program_received_at,
+                updated_at: program_received_at
+              ).id,
+            contractor_id: contractor.id,
+            status: "genai_in_progress",
+            submitted_at: submitted_at,
+            created_at: program_received_at,
+            updated_at: program_received_at
+          )
+        invoice_version =
+          create_invoice_version(
+            participant: participant,
+            contractor: contractor,
+            invoice: invoice
+          )
+        invoice_version.update!(di_ocr_invoice_date: invoice_date)
+        invoice_version
+      end
+
+      def submission_deadline_rulecheck(invoice_version)
+        described_class.call(invoice_version_id: invoice_version.id)
+        Claims::InvoiceVersionRulecheck.find_by!(
+          invoice_version_id: invoice_version.id,
+          rule_key: "submission_within_six_months"
+        )
+      end
+
+      before { enable_common_code_rule("submission_within_six_months") }
+
+      it "passes using initial program receipt even when submitted_at is later" do
+        invoice_version =
+          create_submission_deadline_version(
+            program_received_at: Time.zone.parse("2026-06-30 23:50:00"),
+            invoice_date: Date.new(2026, 1, 1),
+            submitted_at: Time.zone.parse("2027-04-01 09:00:00")
+          )
+
+        rulecheck = submission_deadline_rulecheck(invoice_version)
+
+        expect(rulecheck.rule_result).to eq("pass")
+        expect(rulecheck.calculation).to eq(
+          "2026-01-01 + 6 months = 2026-07-01; 2026-06-30 <= 2026-07-01 => true"
+        )
+        expect(rulecheck.evidence_text).to eq(
+          "invoice_versions.di_ocr_invoice_date + claims.invoices.created_at"
+        )
+      end
+
+      it "fails when initial program receipt is after six months" do
+        invoice_version =
+          create_submission_deadline_version(
+            program_received_at: Time.zone.parse("2026-07-02 00:01:00"),
+            invoice_date: Date.new(2026, 1, 1)
+          )
+
+        rulecheck = submission_deadline_rulecheck(invoice_version)
+
+        expect(rulecheck.rule_result).to eq("fail")
+        expect(rulecheck.calculation).to eq(
+          "2026-01-01 + 6 months = 2026-07-01; 2026-07-02 <= 2026-07-01 => false"
+        )
+      end
+
+      it "warns when the invoice date is missing" do
+        invoice_version =
+          create_submission_deadline_version(
+            program_received_at: Time.zone.parse("2026-06-30 23:50:00"),
+            invoice_date: nil
+          )
+
+        rulecheck = submission_deadline_rulecheck(invoice_version)
+
+        expect(rulecheck.rule_result).to eq("warn")
+        expect(rulecheck.evidence_text).to eq(
+          "Missing invoice date, so the six-month program receipt deadline cannot be calculated."
+        )
+      end
+    end
+
     it "uses approval date plus six months instead of the stored eligibility expiry date" do
       enable_common_code_rule("eligibility_code_valid_for_invoice_date")
 

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS claims.sessions (
 
 CREATE TABLE IF NOT EXISTS claims.invoices (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
+  reference_number bigint GENERATED ALWAYS AS IDENTITY,
   session_id     uuid NOT NULL,
   contractor_id  uuid NOT NULL,
   submitter_id   uuid NULL,
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
   updated_at timestamp(6) without time zone NOT NULL,
 
   CONSTRAINT invoices_pkey PRIMARY KEY (id),
+  CONSTRAINT invoices_reference_number_key UNIQUE (reference_number),
 
 CONSTRAINT invoices_status_chk
 CHECK (status IN (

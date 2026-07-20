@@ -7,10 +7,7 @@ module Claims
         UpdateAdminComment.call(
           comment: comment,
           attributes: {
-            admin_recommended_remedy:
-              BuildAdminCommentDraft.default_remedy(
-                issue: comment.revision_issue
-              ),
+            admin_recommended_remedy: nil,
             comment_text:
               BuildAdminCommentDraft.call(issue: comment.revision_issue)
           }
