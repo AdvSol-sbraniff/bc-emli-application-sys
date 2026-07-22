@@ -7,7 +7,7 @@ module Claims
         Struct.new(
           :complete,
           :missing_rulechecks,
-          :open_issues,
+          :unresolved_issues,
           keyword_init: true
         )
 
@@ -31,20 +31,19 @@ module Claims
             end
           )
         issues = ::Claims::RevisionIssue.where(invoice_id: invoice.id).to_a
-        identities =
-          issues.map { |issue| SourceIdentity.for_issue(issue) }.to_set
+        identities = issues.to_set { |issue| SourceIdentity.for_issue(issue) }
         missing =
           required.reject do |row|
             identities.include?(
               SourceIdentity.for_source(issue_type: "rule", source: row)
             )
           end
-        open_issues = issues.select(&:open?)
+        unresolved_issues = issues.select(&:unresolved?)
 
         Result.new(
-          complete: missing.empty? && open_issues.empty?,
+          complete: missing.empty? && unresolved_issues.empty?,
           missing_rulechecks: missing,
-          open_issues: open_issues
+          unresolved_issues: unresolved_issues
         )
       end
     end

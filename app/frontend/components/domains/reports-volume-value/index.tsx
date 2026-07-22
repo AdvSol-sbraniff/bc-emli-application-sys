@@ -301,6 +301,7 @@ export default function ReportsVolumeValueScreen() {
                 <option value="approved_pending">approved_pending</option>
                 <option value="approved_paid">approved_paid</option>
                 <option value="ineligible">ineligible</option>
+                <option value="contractor_withdrawn">contractor_withdrawn</option>
               </Select>
             </Box>
 

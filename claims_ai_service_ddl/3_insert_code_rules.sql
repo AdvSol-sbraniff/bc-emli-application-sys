@@ -416,7 +416,7 @@ else:
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53207'::uuid,
     'prior_same_upgrade_type_rebate_payment_found',
-    'Checks whether the matched participant already has a non-ineligible current invoice for the same one-rebate-limited upgrade area.
+    'Checks whether the matched participant already has a current invoice that is neither ineligible nor contractor-withdrawn for the same one-rebate-limited upgrade area.
 
 Pseudo-code:
 primary_space_heating_upgrade_types = [
@@ -444,9 +444,9 @@ fail if current has windows_doors and prior has windows_doors
 fail if current has electrical_service_upgrade and prior has electrical_service_upgrade
 otherwise pass',
     true,
-    'No prior non-ineligible current invoice was found for the same participant and same one-rebate-limited upgrade area.',
+    'No prior current invoice that is neither ineligible nor contractor-withdrawn was found for the same participant and same one-rebate-limited upgrade area.',
     'Could not check prior rebate history because the invoice eligibility code did not match a participant eligibility record in the database. Confirm the eligibility code record, then rerun validation before approving.',
-    'A current non-ineligible invoice for this participant already contains the same one-rebate-limited upgrade area. Review the prior invoice before approving another payment.',
+    'A current invoice that is neither ineligible nor contractor-withdrawn already contains the same one-rebate-limited upgrade area for this participant. Review the prior invoice before approving another payment.',
     NULL,
     'Uses invoice_versions.participant_user_id, current invoice versions for other invoice parents, claims.invoice_version_upgrade_types, and claims.invoices.status. Primary space heating is checked as one grouped area; heat pump water heater, insulation, windows/doors, and electrical service upgrade are exact upgrade-type checks. The rule warns when participant matching is missing, fails only when a same-area prior rebate is actually found, and otherwise passes.',
     'Participants may only receive one rebate payment for a primary heating system (a central ducted heat pump, ductless mini-split heat pump, ductless multi-split heat pump, dual fuel ducted heat pump, air-to-water heat pump, combined air-to-water heat pump, natural gas furnace, boiler or combination space heating and hot water system), one rebate payment for a heat pump water heater, one rebate payment for an insulation upgrade, and one rebate for a windows and doors upgrade',

@@ -16,7 +16,7 @@ module Claims
         comment = nil
         ::Claims::RevisionIssue.transaction do
           issue = ::Claims::RevisionIssue.lock.find(@issue.id)
-          if issue.closed?
+          unless issue.unresolved?
             raise ActiveRecord::ReadOnlyRecord, "Closed issues are immutable"
           end
 

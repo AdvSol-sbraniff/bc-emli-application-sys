@@ -12,12 +12,19 @@ module Claims
     ].freeze
 
     STATUSES = %w[
+      pending_admin_review
       open
+      closed_no_contractor_action_required
       closed_via_corrected_documentation
       closed_via_attestation
       closed_via_exception
       closed_as_withdrawn
     ].freeze
+    UNRESOLVED_STATUSES = %w[pending_admin_review open].freeze
+    CONTRACTOR_VISIBLE_STATUSES =
+      (
+        STATUSES - %w[pending_admin_review closed_no_contractor_action_required]
+      ).freeze
 
     belongs_to :invoice,
                class_name: "Claims::Invoice",
@@ -44,6 +51,16 @@ module Claims
                foreign_key: :opened_from_di_invoice_version_id,
                optional: true
 
+    belongs_to :opened_from_rule_upgrade_type,
+               class_name: "Claims::InvoiceUpgradeType",
+               foreign_key: :opened_from_rule_upgrade_type_id,
+               optional: true
+
+    belongs_to :opened_from_invoice_field_upgrade_type,
+               class_name: "Claims::InvoiceUpgradeType",
+               foreign_key: :opened_from_invoice_field_upgrade_type_id,
+               optional: true
+
     has_many :comments,
              -> { order(created_at: :asc, id: :asc) },
              class_name: "Claims::RevisionIssueComment",
@@ -53,21 +70,33 @@ module Claims
 
     has_many :revision_rounds, through: :comments
 
+    scope :unresolved_issues, -> { where(status: UNRESOLVED_STATUSES) }
     scope :open_issues, -> { where(status: "open") }
-    scope :closed_issues, -> { where.not(status: "open") }
+    scope :closed_issues, -> { where.not(status: UNRESOLVED_STATUSES) }
+    scope :contractor_visible, -> { where(status: CONTRACTOR_VISIBLE_STATUSES) }
 
     validates :issue_type, inclusion: { in: ISSUE_TYPES }
     validates :status, inclusion: { in: STATUSES }
     validate :one_matching_source
+    validate :stable_identity_matches_source
     validate :source_belongs_to_invoice
+    validate :disposition_comment_matches_status
     validate :closed_issue_is_immutable, on: :update
+
+    def pending_admin_review?
+      status == "pending_admin_review"
+    end
 
     def open?
       status == "open"
     end
 
+    def unresolved?
+      status.in?(UNRESOLVED_STATUSES)
+    end
+
     def closed?
-      !open?
+      !unresolved?
     end
 
     def field_issue?
@@ -75,10 +104,7 @@ module Claims
     end
 
     def contractor_visible?
-      comments
-        .joins(:revision_round)
-        .where.not("claims.revision_rounds.admin_sent_at" => nil)
-        .exists?
+      status.in?(CONTRACTOR_VISIBLE_STATUSES)
     end
 
     def source_reference
@@ -88,7 +114,14 @@ module Claims
           opened_from_invoice_version_located_field_id,
         supporting_document_located_field_id:
           opened_from_supporting_document_located_field_id,
-        di_field_key: opened_from_di_field_key
+        di_field_key: opened_from_di_field_key,
+        rule_key: opened_from_rule_key,
+        rule_upgrade_type_id: opened_from_rule_upgrade_type_id,
+        invoice_field_key: opened_from_invoice_field_key,
+        invoice_field_upgrade_type_id:
+          opened_from_invoice_field_upgrade_type_id,
+        supporting_document_type_key: opened_from_supporting_document_type_key,
+        supporting_field_key: opened_from_supporting_field_key
       }.compact
     end
 
@@ -147,6 +180,44 @@ module Claims
       errors.add(:base, "source must belong to the invoice")
     end
 
+    def stable_identity_matches_source
+      expected =
+        case issue_type
+        when "rule"
+          opened_from_rule_key.present? &&
+            opened_from_rule_upgrade_type_id.present?
+        when "invoice_field"
+          opened_from_invoice_field_key.present? &&
+            opened_from_invoice_field_upgrade_type_id.present?
+        when "supporting_document_field"
+          opened_from_supporting_document_type_key.present? &&
+            opened_from_supporting_field_key.present?
+        when "di_field"
+          opened_from_di_field_key.present?
+        else
+          false
+        end
+      return if expected
+
+      errors.add(:base, "must include its stable source identity")
+    end
+
+    def disposition_comment_matches_status
+      if closed?
+        if disposition_comment.to_s.strip.blank?
+          errors.add(
+            :disposition_comment,
+            "is required when an issue is closed"
+          )
+        end
+      elsif disposition_comment.present?
+        errors.add(
+          :disposition_comment,
+          "must be blank while an issue is unresolved"
+        )
+      end
+    end
+
     def invoice_id_for_version(version_id)
       return if version_id.blank?
 
@@ -154,7 +225,7 @@ module Claims
     end
 
     def closed_issue_is_immutable
-      return unless status_was.present? && status_was != "open"
+      return if status_was.blank? || status_was.in?(UNRESOLVED_STATUSES)
       return unless changes.except("updated_at").any?
 
       errors.add(:base, "closed issues are immutable")

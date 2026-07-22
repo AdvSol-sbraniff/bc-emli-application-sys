@@ -8,21 +8,27 @@ module Api
                           revision_issues
                           conversation_messages
                           create_conversation_message
+                          mark_conversation_messages_read
                           update_conversation_message
                           save_revision_issue_comment
                           submit_to_admin
+                          withdraw
                           ingest_run_show
                           ingest_run_invoices
                           ingest_invoice_steps
                         ]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[
-                                upload_batch
-                                create_conversation_message
-                                update_conversation_message
-                                save_revision_issue_comment
-                                submit_to_admin
-                              ]
+      skip_forgery_protection(
+        only: %i[
+          upload_batch
+          create_conversation_message
+          mark_conversation_messages_read
+          update_conversation_message
+          save_revision_issue_comment
+          submit_to_admin
+          withdraw
+        ]
+      )
 
       # GET /api/claims/contractor/invoices
       def index
@@ -191,6 +197,18 @@ module Api
       # GET /api/claims/contractor/invoices/:invoice_id/conversation_messages
       def conversation_messages
         invoice = contractor_invoice!
+        message_scope =
+          ::Claims::ConversationMessage.where(invoice_id: invoice.id)
+        latest_admin_seqno =
+          message_scope
+            .where(message_type: "admin_message")
+            .maximum(:revreq_seqno)
+            .to_i
+        unread_count =
+          message_scope.where(
+            message_type: "admin_message",
+            recipient_read_at: nil
+          ).count
         rows =
           ::Claims::ConversationMessageGrid.where(invoice_id: invoice.id).order(
             Arel.sql(
@@ -199,6 +217,8 @@ module Api
           )
 
         render json: {
+                 unread_count: unread_count,
+                 latest_admin_seqno: latest_admin_seqno,
                  rows:
                    rows.map do |row|
                      {
@@ -219,6 +239,55 @@ module Api
       rescue => e
         Rails.logger.error(
           "[claims][contractor_portal][conversation_messages] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/claims/contractor/invoices/:invoice_id/conversation_messages/read
+      def mark_conversation_messages_read
+        invoice = contractor_invoice!
+        requested_seqno = Integer(params[:through_seqno], exception: false)
+        if requested_seqno.nil? || requested_seqno.negative?
+          render json: {
+                   error: "A non-negative through_seqno is required."
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
+        message_scope =
+          ::Claims::ConversationMessage.where(invoice_id: invoice.id)
+        latest_admin_seqno =
+          message_scope
+            .where(message_type: "admin_message")
+            .maximum(:revreq_seqno)
+            .to_i
+        through_seqno = [requested_seqno, latest_admin_seqno].min
+        message_scope
+          .where(message_type: "admin_message", recipient_read_at: nil)
+          .where("revreq_seqno <= ?", through_seqno)
+          .update_all(recipient_read_at: Time.current)
+        unread_count =
+          message_scope.where(
+            message_type: "admin_message",
+            recipient_read_at: nil
+          ).count
+
+        render json: {
+                 unread_count: unread_count,
+                 latest_admin_seqno: latest_admin_seqno
+               },
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue ActiveRecord::RecordInvalid => e
+        render json: {
+                 error: e.record.errors.full_messages.join(", ")
+               },
+               status: :unprocessable_entity
+      rescue => e
+        Rails.logger.error(
+          "[claims][contractor_portal][mark_conversation_messages_read] ERROR: #{e.class}: #{e.message}"
         )
         render json: { error: e.message }, status: :unprocessable_entity
       end
@@ -434,6 +503,48 @@ module Api
                    )
                },
                status: :ok
+      end
+
+      # POST /api/claims/contractor/invoices/:invoice_id/withdraw
+      def withdraw
+        invoice = contractor_invoice!
+        withdrawn =
+          ::Claims::Invoices::Withdraw.call(
+            invoice: invoice,
+            actor_user_id: current_user.id
+          )
+
+        render json: {
+                 ok: true,
+                 invoice:
+                   withdrawn.as_json(
+                     only: %i[
+                       id
+                       session_id
+                       status
+                       status_subtype
+                       submitted_at
+                       status_updated_at
+                       updated_at
+                     ]
+                   )
+               },
+               status: :ok
+      rescue ::Claims::Invoices::Withdraw::NotAllowed => e
+        render json: {
+                 error: e.message,
+                 status: e.invoice_status,
+                 expected_statuses:
+                   ::Claims::Invoices::Withdraw::WITHDRAWABLE_STATUSES
+               },
+               status: :unprocessable_entity
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue StandardError => e
+        Rails.logger.error(
+          "[claims][contractor_portal][withdraw] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       # GET /api/claims/contractor/ingest/runs/:ingest_run_id

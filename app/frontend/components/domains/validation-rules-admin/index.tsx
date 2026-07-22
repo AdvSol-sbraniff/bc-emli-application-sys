@@ -792,6 +792,7 @@ export default function ValidationRulesAdminScreen() {
             {editor ? (
               isCodeRuleEditor(editor) ? (
                 <CodeRuleEditorScreen
+                  recordKeyReadOnly={Boolean(editor.recordId)}
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
                   contractorDisplayName={editor.contractorDisplayName}
@@ -877,6 +878,7 @@ export default function ValidationRulesAdminScreen() {
                 />
               ) : isCodeLocatedFieldEditor(editor) ? (
                 <CodeLocatedFieldEditorScreen
+                  recordKeyReadOnly={Boolean(editor.recordId)}
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
                   contractorDisplayName={editor.contractorDisplayName}
@@ -912,6 +914,7 @@ export default function ValidationRulesAdminScreen() {
                 />
               ) : isGenaiRuleEditor(editor) ? (
                 <GenaiRuleEditorScreen
+                  recordKeyReadOnly={Boolean(editor.recordId)}
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
                   contractorDisplayName={editor.contractorDisplayName}
@@ -969,6 +972,7 @@ export default function ValidationRulesAdminScreen() {
                 />
               ) : (
                 <GenaiLocatedFieldEditorScreen
+                  recordKeyReadOnly={Boolean(editor.recordId)}
                   recordKey={editor.recordKey}
                   enabled={editor.enabled}
                   contractorDisplayName={editor.contractorDisplayName}

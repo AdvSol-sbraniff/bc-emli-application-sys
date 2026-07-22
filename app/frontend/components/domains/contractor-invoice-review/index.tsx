@@ -4,8 +4,10 @@ import {
   AccordionIcon,
   AccordionItem,
   AccordionPanel,
+  Badge,
   Box,
   Button,
+  CloseButton,
   Container,
   Flex,
   IconButton,
@@ -26,13 +28,10 @@ import {
   ArrowSquareOut,
   CaretLeft,
   CaretRight,
-  ChatDots,
   CornersOut,
   FrameCorners,
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
-  PaperPlaneTilt,
-  UploadSimple,
 } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -41,8 +40,20 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
+import { ContractorConversationPanel } from '../../shared/claims/contractor-conversation-panel';
+import {
+  contractorRevisionPresentationState,
+  ContractorInlineRevisionIssueCard,
+  ContractorInlineRevisionStatus,
+  useContractorInlineRevisionWorkspace,
+} from '../../shared/claims/contractor-inline-revision-issues';
 import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
-import { ContractorDraftState, RevisionTracker, RevisionTrackerData } from '../../shared/claims/revision-tracker';
+import {
+  ContractorDraftState,
+  RevisionIssue,
+  RevisionSourceIdentity,
+  RevisionTrackerData,
+} from '../../shared/claims/revision-tracker';
 import { ViewerPanelMode, ViewerPanelModeSelector } from '../../shared/claims/viewer-panel-mode-selector';
 import {
   getInvoiceUpgradeTypeMeta,
@@ -65,6 +76,18 @@ type FieldRowProps = {
 
 type RuleResult = 'pass' | 'info' | 'warn' | 'fail' | null | undefined;
 type FitMode = 'width' | 'page';
+
+const CONTRACTOR_WITHDRAWABLE_INVOICE_STATUSES = new Set([
+  'upload_failed',
+  'ocr_failed',
+  'genai_failed',
+  'genai_complete',
+  'package_needs_correction',
+  'technical_failure',
+  'admin_review_inbox',
+  'contractor_revision_inbox',
+  'in_review',
+]);
 
 const FieldRow = ({ label, labelHint, value, active, disabled, onClick, inline }: FieldRowProps) => (
   <Box
@@ -173,44 +196,13 @@ const normalizeResult = (result: unknown): RuleResult => {
   return value === 'pass' || value === 'info' || value === 'warn' || value === 'fail' ? value : null;
 };
 
-const resultDotColor = (result: unknown): string => {
-  const normalized = normalizeResult(result);
-  if (normalized === 'pass') return 'green.400';
-  if (normalized === 'info') return 'blue.400';
-  if (normalized === 'warn') return 'yellow.400';
-  if (normalized === 'fail') return 'red.400';
-  return 'gray.400';
-};
-
-const resultTooltip = (result: unknown): string => {
-  const normalized = normalizeResult(result);
-  if (normalized === 'pass') return 'pass: no requested action.';
-  if (normalized === 'info') return 'info: helpful context, not a requested fix.';
-  if (normalized === 'warn') return 'warn: verification may be needed.';
-  if (normalized === 'fail') return 'fail: correction or follow-up is needed.';
-  return 'unknown: advice result was not recognized.';
-};
-
-const StatusDot = ({ result }: { result: unknown }) => (
-  <Tooltip label={resultTooltip(result)} hasArrow placement="top">
-    <Box
-      as="span"
-      w="10px"
-      h="10px"
-      borderRadius="full"
-      display="inline-block"
-      bg={resultDotColor(result)}
-      flexShrink={0}
-    />
-  </Tooltip>
-);
-
-const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
+const ContractorAdviceMarkdown = ({ value, tone = 'advice' }: { value?: unknown; tone?: 'advice' | 'context' }) => {
   const text = String(value ?? '').trim();
+  const contextual = tone === 'context';
   if (!text) {
     return (
       <Text fontSize="sm" opacity={0.7}>
-        No contractor advice found for this invoice version.
+        No program requirement found for this invoice version.
       </Text>
     );
   }
@@ -218,11 +210,11 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
   return (
     <Box
       fontSize="sm"
-      bg="orange.50"
+      bg={contextual ? 'gray.50' : 'orange.50'}
       borderWidth="1px"
-      borderColor="orange.200"
-      borderLeftWidth="5px"
-      borderLeftColor="orange.400"
+      borderColor={contextual ? 'gray.200' : 'orange.200'}
+      borderLeftWidth={contextual ? '1px' : '5px'}
+      borderLeftColor={contextual ? 'gray.200' : 'orange.400'}
       borderRadius="lg"
       px="4"
       py="3"
@@ -236,12 +228,16 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
           padding: '0.85rem',
           borderRadius: '0.75rem',
           background: 'white',
-          border: '1px solid var(--chakra-colors-orange-100)',
+          border: `1px solid var(--chakra-colors-${contextual ? 'gray-200' : 'orange-100'})`,
           boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
         },
         'li:last-child': { marginBottom: 0 },
         em: { fontStyle: 'italic', color: 'var(--chakra-colors-gray-800)' },
-        a: { color: 'var(--chakra-colors-orange-700)', cursor: 'help', textDecoration: 'none' },
+        a: {
+          color: `var(--chakra-colors-${contextual ? 'blue-700' : 'orange-700'})`,
+          cursor: 'help',
+          textDecoration: 'none',
+        },
         strong: { color: 'inherit' },
       }}
     >
@@ -270,7 +266,7 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
           ),
           a: ({ children, title }: any) => (
             <Tooltip label={title} hasArrow placement="top">
-              <Text as="span" color="orange.700" cursor="help">
+              <Text as="span" color={contextual ? 'blue.700' : 'orange.700'} cursor="help">
                 {children}
               </Text>
             </Tooltip>
@@ -281,6 +277,13 @@ const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
       </ReactMarkdown>
     </Box>
   );
+};
+
+const programRequirementWithoutPrecheckAction = (value: unknown): string => {
+  const text = String(value ?? '').trim();
+  const actionMarker = /\n+\*\*Action:\*\*/i;
+  const markerIndex = text.search(actionMarker);
+  return markerIndex >= 0 ? text.slice(0, markerIndex).trim() : text;
 };
 
 const DI_FIELDS = [
@@ -395,12 +398,42 @@ const upgradeTypeDescriptionFor = (row: any) => {
   return row?.upgrade_type_description || getInvoiceUpgradeTypeMeta(upgradeTypeKey).label;
 };
 
+const revisionSourceIdentityKey = (identity: RevisionSourceIdentity | undefined): string => {
+  if (!identity?.kind) return '';
+  if (identity.kind === 'rule') {
+    return `rule:${String(identity.rule_key || '')}:${String(identity.invoice_upgrade_type_id || '')}`;
+  }
+  if (identity.kind === 'invoice_field') {
+    return `invoice_field:${String(identity.field_key || '')}:${String(identity.invoice_upgrade_type_id || '')}`;
+  }
+  if (identity.kind === 'supporting_document_field') {
+    return `supporting_document_field:${String(identity.supporting_document_type_key || '')}:${String(
+      identity.field_key || '',
+    )}`;
+  }
+  return `di_field:${String(identity.field_key || '')}`;
+};
+
+const revisionIssueIdentityKey = (issue: RevisionIssue): string => revisionSourceIdentityKey(issue.source_identity);
+
+const rulecheckIdentityKey = (row: any): string =>
+  `rule:${String(row?.rule_key || '')}:${String(row?.invoice_upgrade_type_id || '')}`;
+
+const locatedFieldIdentityKey = (row: any): string =>
+  `invoice_field:${String(row?.field_key || '')}:${String(row?.invoice_upgrade_type_id || '')}`;
+
+const supportingFieldIdentityKey = (typeKey: unknown, fieldKey: unknown): string =>
+  `supporting_document_field:${String(typeKey || '')}:${String(fieldKey || '')}`;
+
+const diFieldIdentityKey = (fieldKey: unknown): string => `di_field:${String(fieldKey || '')}`;
+
 export default function ContractorInvoiceReviewScreen() {
   const { sessionId, invoiceId } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const pdfWrapRef = useRef<HTMLDivElement | null>(null);
   const { isOpen: isSubmitWarningOpen, onOpen: onSubmitWarningOpen, onClose: onSubmitWarningClose } = useDisclosure();
+  const { isOpen: isWithdrawOpen, onOpen: onWithdrawOpen, onClose: onWithdrawClose } = useDisclosure();
 
   const [rightPanelMode, setRightPanelMode] = useState<ViewerPanelMode>('document');
   const [readData, setReadData] = useState<any>(null);
@@ -439,14 +472,36 @@ export default function ContractorInvoiceReviewScreen() {
   const [rotate, setRotate] = useState<number>(0);
   const [pageInput, setPageInput] = useState<string>('1');
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [finishLaterLoading, setFinishLaterLoading] = useState(false);
+  const [withdrawalLoading, setWithdrawalLoading] = useState(false);
   const [revisionRefreshToken, setRevisionRefreshToken] = useState(0);
   const [revisionAttentionIssueIds, setRevisionAttentionIssueIds] = useState<string[]>([]);
-  const [revisionTrackerData, setRevisionTrackerData] = useState<RevisionTrackerData | null>(null);
   const [contractorDraftState, setContractorDraftState] = useState<ContractorDraftState | null>(null);
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!chatPanelOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setChatPanelOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [chatPanelOpen]);
 
   const currentStatus = String(readData?.invoice_status || '').trim();
   const currentStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
   const currentInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
+  const adoptRevisionTrackerData = useCallback((next: RevisionTrackerData) => {
+    setRevisionAttentionIssueIds(next.capabilities?.document_upload_required_issue_ids || []);
+  }, []);
+  const revisionWorkspace = useContractorInlineRevisionWorkspace({
+    invoiceId: currentInvoiceId,
+    refreshToken: revisionRefreshToken,
+    onTrackerChange: adoptRevisionTrackerData,
+    onDraftStateChange: setContractorDraftState,
+  });
+  const revisionTrackerData = revisionWorkspace.data;
   const savedRevisionResponsesComplete = revisionTrackerData?.capabilities?.can_submit_response === true;
   const documentUploadRequiredIssueIds = revisionTrackerData?.capabilities?.document_upload_required_issue_ids || [];
   const visibleRevisionDraftsComplete =
@@ -456,6 +511,7 @@ export default function ContractorInvoiceReviewScreen() {
   const canSubmit =
     currentStatus === 'genai_complete' || (currentStatus === 'contractor_revision_inbox' && revisionResponsesComplete);
   const canUploadFix = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
+  const canWithdraw = CONTRACTOR_WITHDRAWABLE_INVOICE_STATUSES.has(currentStatus);
   const submitTooltip =
     currentStatus === 'contractor_revision_inbox' && contractorDraftState?.hasUnsavedChanges
       ? 'Save every changed revision response before sending it to the program team.'
@@ -560,41 +616,6 @@ export default function ContractorInvoiceReviewScreen() {
   useEffect(() => {
     void loadReviewData();
   }, [loadReviewData]);
-
-  const adoptRevisionTrackerData = useCallback((next: RevisionTrackerData) => {
-    setRevisionTrackerData(next);
-    setRevisionAttentionIssueIds(next.capabilities?.document_upload_required_issue_ids || []);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!currentInvoiceId || currentStatus !== 'contractor_revision_inbox') {
-      setRevisionTrackerData(null);
-      setContractorDraftState(null);
-      setRevisionAttentionIssueIds([]);
-      return;
-    }
-
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/claims/contractor/invoices/${encodeURIComponent(currentInvoiceId)}/revision_issues`,
-          { credentials: 'include', headers: { Accept: 'application/json' } },
-        );
-        const json = await response.json().catch(() => ({}));
-        if (!cancelled) {
-          if (response.ok) adoptRevisionTrackerData(json as RevisionTrackerData);
-          else setRevisionTrackerData(null);
-        }
-      } catch {
-        if (!cancelled) setRevisionTrackerData(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [adoptRevisionTrackerData, currentInvoiceId, currentStatus, revisionRefreshToken]);
 
   useEffect(() => {
     if (rightPanelMode !== 'document') return;
@@ -828,6 +849,88 @@ export default function ContractorInvoiceReviewScreen() {
 
     return Array.from(sectionMap.values()).sort((a, b) => a.title.localeCompare(b.title));
   }, [uploadedSupportingDocuments]);
+  const visibleRevisionIssues = useMemo(
+    () => revisionWorkspace.issues.filter((issue) => issue.status !== 'closed_no_contractor_action_required'),
+    [revisionWorkspace.issues],
+  );
+  const revisionIssueByIdentity = useMemo(() => {
+    const index = new Map<string, RevisionIssue>();
+    visibleRevisionIssues.forEach((issue) => {
+      const key = revisionIssueIdentityKey(issue);
+      if (key) index.set(key, issue);
+    });
+    return index;
+  }, [visibleRevisionIssues]);
+  const suppressedRuleIdentityKeys = useMemo(
+    () =>
+      new Set(
+        (revisionWorkspace.data?.suppressed_source_identities || [])
+          .filter((identity) => identity.kind === 'rule')
+          .map(revisionSourceIdentityKey)
+          .filter(Boolean),
+      ),
+    [revisionWorkspace.data?.suppressed_source_identities],
+  );
+  const supportingFieldIdentityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    uploadedSupportingDocuments.forEach((doc: any) => {
+      const typeKey = String(doc?.supporting_document_type_key || '');
+      const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
+      fields.forEach((field: any) => {
+        const key = supportingFieldIdentityKey(typeKey, field?.field_key);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [uploadedSupportingDocuments]);
+  const programRequirementRulechecks = useMemo(() => {
+    const rows = genAiRulechecks.filter(
+      (row: any) =>
+        !suppressedRuleIdentityKeys.has(rulecheckIdentityKey(row)) &&
+        (contractorActionableRulechecks.includes(row) || revisionIssueByIdentity.has(rulecheckIdentityKey(row))),
+    );
+    const seen = new Set<string>();
+    return rows.filter((row: any) => {
+      const key = rulecheckIdentityKey(row);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [contractorActionableRulechecks, genAiRulechecks, revisionIssueByIdentity, suppressedRuleIdentityKeys]);
+  const renderedRevisionIdentityKeys = useMemo(() => {
+    const keys = new Set<string>();
+    programRequirementRulechecks.forEach((row: any) => keys.add(rulecheckIdentityKey(row)));
+    DI_FIELDS.forEach((field) => keys.add(diFieldIdentityKey(field.key)));
+    [...genAiFields, ...classifierFields]
+      .filter(hasLocatedFieldValue)
+      .forEach((row: any) => keys.add(locatedFieldIdentityKey(row)));
+    supportingFieldIdentityCounts.forEach((count, key) => {
+      if (count === 1) keys.add(key);
+    });
+    return keys;
+  }, [classifierFields, genAiFields, programRequirementRulechecks, supportingFieldIdentityCounts]);
+  const unmatchedRevisionIssues = useMemo(
+    () =>
+      visibleRevisionIssues.filter((issue) => {
+        const key = revisionIssueIdentityKey(issue);
+        return !key || !renderedRevisionIdentityKeys.has(key);
+      }),
+    [renderedRevisionIdentityKeys, visibleRevisionIssues],
+  );
+
+  const revisionIssueForRulecheck = (row: any) => revisionIssueByIdentity.get(rulecheckIdentityKey(row));
+  const revisionIssueForLocatedField = (row: any) => revisionIssueByIdentity.get(locatedFieldIdentityKey(row));
+  const revisionIssueForDiField = (fieldKey: string) => revisionIssueByIdentity.get(diFieldIdentityKey(fieldKey));
+  const revisionIssueForSupportingField = (typeKey: unknown, fieldKey: unknown) => {
+    const key = supportingFieldIdentityKey(typeKey, fieldKey);
+    return supportingFieldIdentityCounts.get(key) === 1 ? revisionIssueByIdentity.get(key) : undefined;
+  };
+  const programRequirementDefaultIndices = programRequirementRulechecks.flatMap((row: any, index: number) => {
+    const issue = revisionIssueForRulecheck(row);
+    if (!issue) return [];
+    const state = contractorRevisionPresentationState(issue, revisionWorkspace.data);
+    return state.key === 'action_required' || state.key === 'upload_required' ? [index] : [];
+  });
 
   const supportingDocumentUrl = (docId: string) =>
     `/api/claims/sessions/${encodeURIComponent(String(sessionId || ''))}/invoices/${encodeURIComponent(
@@ -965,7 +1068,7 @@ export default function ContractorInvoiceReviewScreen() {
           json?.error_code === 'revision_document_upload_required';
         if (revisionResponseError && incompleteEntryIds.length) {
           setRevisionAttentionIssueIds(incompleteEntryIds);
-          setRightPanelMode('revision');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         const suffix =
           json?.error_code === 'revision_document_upload_required'
@@ -1025,6 +1128,55 @@ export default function ContractorInvoiceReviewScreen() {
     void submitToAdmin();
   };
 
+  const saveAndFinishLater = async () => {
+    if (finishLaterLoading) return;
+    setFinishLaterLoading(true);
+    try {
+      const saved = await revisionWorkspace.saveAll();
+      if (!saved) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      navigate('/ai-contractor-dashboard');
+    } finally {
+      setFinishLaterLoading(false);
+    }
+  };
+
+  const withdrawInvoice = async () => {
+    if (!currentInvoiceId || !canWithdraw || withdrawalLoading) return;
+    setWithdrawalLoading(true);
+    try {
+      const response = await fetch(`/api/claims/contractor/invoices/${encodeURIComponent(currentInvoiceId)}/withdraw`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json?.error || 'Could not withdraw this invoice.');
+
+      onWithdrawClose();
+      toast({
+        title: 'Invoice withdrawn',
+        description: 'The invoice has been withdrawn and will not continue through review.',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+      navigate('/ai-contractor-dashboard');
+    } catch (reason: any) {
+      toast({
+        title: 'Invoice not withdrawn',
+        description: reason?.message || 'Please try again.',
+        status: 'error',
+        duration: 6000,
+        isClosable: true,
+      });
+    } finally {
+      setWithdrawalLoading(false);
+    }
+  };
+
   const openFixUpload = () => {
     if (!sessionId || !currentInvoiceId) return;
     window.open(
@@ -1037,73 +1189,88 @@ export default function ContractorInvoiceReviewScreen() {
   const renderLocatedFieldRow = (row: any, key: React.Key) => {
     const highlightKey = `found_${row.source_engine || 'field'}_${row.id}`;
     const clickable = row.page != null;
+    const issue = revisionIssueForLocatedField(row);
 
     return (
-      <FieldRow
-        key={key}
-        label={displayLocatedFieldLabel(row)}
-        labelHint={locatedFieldKeyHint(row)}
-        value={displayLocatedFieldValue(row)}
-        active={activeHighlightKey === highlightKey}
-        disabled={!clickable}
-        inline
-        onClick={
-          clickable
-            ? () => {
-                const sourceEngine = String(row.source_engine || '').toLowerCase();
-                setActiveHighlight({
-                  source: sourceEngine === 'classifier' ? 'classifier' : sourceEngine === 'code' ? 'code' : 'genai',
-                  genaiId: Number(row.id),
-                  pageNumber: Number(row.page),
-                  polygon: row.polygon ?? null,
-                });
-                setActiveHighlightKey(highlightKey);
-                setRightPanelMode('document');
-              }
-            : undefined
-        }
-      />
+      <Box key={key} minW={0} gridColumn={issue ? '1 / -1' : undefined}>
+        <FieldRow
+          label={displayLocatedFieldLabel(row)}
+          labelHint={locatedFieldKeyHint(row)}
+          value={displayLocatedFieldValue(row)}
+          active={activeHighlightKey === highlightKey}
+          disabled={!clickable}
+          inline
+          onClick={
+            clickable
+              ? () => {
+                  const sourceEngine = String(row.source_engine || '').toLowerCase();
+                  setActiveHighlight({
+                    source: sourceEngine === 'classifier' ? 'classifier' : sourceEngine === 'code' ? 'code' : 'genai',
+                    genaiId: Number(row.id),
+                    pageNumber: Number(row.page),
+                    polygon: row.polygon ?? null,
+                  });
+                  setActiveHighlightKey(highlightKey);
+                  setRightPanelMode('document');
+                }
+              : undefined
+          }
+        />
+        {issue ? (
+          <ContractorInlineRevisionIssueCard
+            issue={issue}
+            workspace={revisionWorkspace}
+            compactHeading
+            attention={revisionAttentionIssueIds.includes(issue.id)}
+          />
+        ) : null}
+      </Box>
     );
   };
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Contractor Invoice Review" />
-      <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
-        <Box display="flex" flexDirection="column" height="100%">
-          <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap">
-            <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} />
-            <Tooltip label={submitTooltip} hasArrow>
-              <IconButton
-                aria-label="Submit to admin"
-                icon={<PaperPlaneTilt size={25} weight="bold" />}
+      <ThinBlueTitleBar
+        title="Contractor Invoice Review"
+        position="sticky"
+        top={0}
+        zIndex="sticky"
+        boxShadow="0 4px 12px rgba(0, 0, 0, 0.16)"
+        rightElement={
+          <Flex align="center" gap="10px">
+            <Button
+              size="md"
+              variant="outline"
+              color="white"
+              borderColor="whiteAlpha.800"
+              borderRadius="md"
+              px={6}
+              _hover={{ bg: 'whiteAlpha.200' }}
+              _active={{ bg: 'whiteAlpha.300' }}
+              isDisabled={revisionWorkspace.loading || submitLoading}
+              isLoading={finishLaterLoading}
+              loadingText="Saving"
+              onClick={() => void saveAndFinishLater()}
+            >
+              Save and finish later
+            </Button>
+            <Tooltip label={submitTooltip} hasArrow shouldWrapChildren>
+              <Button
                 size="md"
-                colorScheme="blue"
-                variant={canSubmit ? 'solid' : 'outline'}
-                borderRadius="full"
-                boxShadow={canSubmit ? '0 8px 18px rgba(49, 130, 206, 0.18)' : 'none'}
+                bg="#FFFFFF"
+                color="blue.800"
+                borderRadius="md"
+                px={7}
+                boxShadow={canSubmit ? '0 6px 16px rgba(0, 0, 0, 0.2)' : 'none'}
+                _hover={{ bg: 'gray.100' }}
+                _active={{ bg: 'gray.200' }}
+                _disabled={{ bg: '#FFFFFF', color: 'blue.800', opacity: 0.55, cursor: 'not-allowed' }}
                 isDisabled={!canSubmit}
                 isLoading={submitLoading}
                 onClick={requestSubmitToAdmin}
-              />
-            </Tooltip>
-            <Tooltip label="View admin requested changes and send messages about this invoice." hasArrow>
-              <IconButton
-                aria-label="Messages and requested changes"
-                icon={<ChatDots size={25} weight="bold" />}
-                size="md"
-                colorScheme="orange"
-                variant={!sessionId || !currentInvoiceId ? 'outline' : 'solid'}
-                borderRadius="full"
-                boxShadow={!sessionId || !currentInvoiceId ? 'none' : '0 8px 18px rgba(221, 107, 32, 0.18)'}
-                isDisabled={!sessionId || !currentInvoiceId}
-                onClick={() => {
-                  if (!sessionId || !currentInvoiceId) return;
-                  navigate(
-                    `/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(currentInvoiceId)}/messages`,
-                  );
-                }}
-              />
+              >
+                Submit
+              </Button>
             </Tooltip>
             <Tooltip
               label={
@@ -1112,19 +1279,142 @@ export default function ContractorInvoiceReviewScreen() {
                   : 'Fix upload is available after the pre-check finishes, or when the program team has requested a revision.'
               }
               hasArrow
+              shouldWrapChildren
             >
-              <IconButton
-                aria-label="Open fix upload"
-                icon={<UploadSimple size={25} weight="bold" />}
+              <Button
                 size="md"
                 colorScheme="orange"
                 variant={canUploadFix ? 'solid' : 'outline'}
-                borderRadius="full"
+                borderRadius="md"
                 boxShadow={canUploadFix ? '0 8px 18px rgba(221, 107, 32, 0.18)' : 'none'}
                 isDisabled={!canUploadFix || !sessionId || !currentInvoiceId}
                 onClick={openFixUpload}
-              />
+              >
+                Upload
+              </Button>
             </Tooltip>
+            <Tooltip
+              label={
+                canWithdraw ? 'Withdraw this invoice from the program.' : 'This invoice can no longer be withdrawn.'
+              }
+              hasArrow
+              shouldWrapChildren
+            >
+              <Button
+                size="md"
+                colorScheme="red"
+                variant="solid"
+                borderRadius="md"
+                isDisabled={!canWithdraw || submitLoading || finishLaterLoading}
+                isLoading={withdrawalLoading}
+                onClick={onWithdrawOpen}
+              >
+                Withdraw
+              </Button>
+            </Tooltip>
+          </Flex>
+        }
+      />
+      <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
+        <Box display="flex" flexDirection="column" height="100%">
+          <Box w="full" mb="16px" pb="14px" borderBottomWidth="1px" borderBottomColor="gray.200">
+            <Text fontSize="sm" fontWeight="bold" color="blue.800" mb="8px">
+              Attention Required
+            </Text>
+            <ContractorInlineRevisionStatus workspace={revisionWorkspace} />
+            {revisionWorkspace.loading ? null : programRequirementRulechecks.length > 0 ? (
+              <Accordion allowMultiple defaultIndex={programRequirementDefaultIndices}>
+                {programRequirementRulechecks.map((row: any) => {
+                  const issue = revisionIssueForRulecheck(row);
+                  const title = String(row?.contractor_display_name || row?.rule_key || 'Program requirement');
+                  const revisionStatus = issue
+                    ? contractorRevisionPresentationState(issue, revisionWorkspace.data)
+                    : null;
+
+                  return (
+                    <AccordionItem key={rulecheckIdentityKey(row)} borderColor="gray.200">
+                      <h2>
+                        <AccordionButton px="10px" py="8px">
+                          <Flex flex="1" minW={0} align="center" gap="8px" wrap="wrap" textAlign="left">
+                            <Text fontSize="sm" fontWeight="bold" noOfLines={2}>
+                              {title}
+                            </Text>
+                            {revisionStatus ? (
+                              <Badge colorScheme={revisionStatus.colorScheme} flexShrink={0}>
+                                {revisionStatus.label}
+                              </Badge>
+                            ) : null}
+                          </Flex>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+                      <AccordionPanel px="10px" pt="8px" pb="12px">
+                        {issue ? (
+                          <>
+                            <ContractorInlineRevisionIssueCard
+                              issue={issue}
+                              workspace={revisionWorkspace}
+                              compactHeading
+                              attention={revisionAttentionIssueIds.includes(issue.id)}
+                            />
+                            <Accordion allowToggle mt={3}>
+                              <AccordionItem border="0" borderTopWidth="1px" borderColor="gray.200">
+                                <h3>
+                                  <AccordionButton px={0} py={3} _hover={{ bg: 'transparent' }}>
+                                    <Text
+                                      flex="1"
+                                      textAlign="left"
+                                      fontSize="xs"
+                                      fontWeight="semibold"
+                                      color="gray.700"
+                                    >
+                                      Program requirements — why this was flagged
+                                    </Text>
+                                    <AccordionIcon />
+                                  </AccordionButton>
+                                </h3>
+                                <AccordionPanel px={0} pt={0} pb={0}>
+                                  <ContractorAdviceMarkdown
+                                    value={programRequirementWithoutPrecheckAction(row?.source_quote)}
+                                    tone="context"
+                                  />
+                                </AccordionPanel>
+                              </AccordionItem>
+                            </Accordion>
+                          </>
+                        ) : (
+                          <>
+                            <Text fontSize="xs" fontWeight="bold" color="blue.800" mb="6px">
+                              Program Requirements
+                            </Text>
+                            <ContractorAdviceMarkdown value={row?.source_quote} />
+                          </>
+                        )}
+                      </AccordionPanel>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            ) : (
+              <Box px="10px" py="3px">
+                {genAiError && readData?.contractor_advice ? (
+                  <>
+                    <Text fontSize="xs" fontWeight="bold" color="blue.800" mb="6px">
+                      Program Requirements
+                    </Text>
+                    <ContractorAdviceMarkdown value={readData.contractor_advice} />
+                  </>
+                ) : (
+                  <Text fontSize="sm" opacity={0.7}>
+                    No program requirements currently require action.
+                  </Text>
+                )}
+              </Box>
+            )}
+          </Box>
+
+          <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap">
+            <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} includeRevision={false} />
           </Box>
 
           <Box display="flex" gap="16px" flex="1" minH={0}>
@@ -1171,24 +1461,6 @@ export default function ContractorInvoiceReviewScreen() {
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text size="sm" fontWeight="bold">
-                          Contractor Advice
-                        </Text>
-                      </Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel px="0" pt="8px">
-                    <Box px="10px" py="3px">
-                      <ContractorAdviceMarkdown value={readData?.contractor_advice} />
-                    </Box>
-                  </AccordionPanel>
-                </AccordionItem>
-
-                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                  <h2>
-                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                      <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
                           Invoice
                         </Text>
                       </Box>
@@ -1216,16 +1488,26 @@ export default function ContractorInvoiceReviewScreen() {
                         const raw = readData?.[field.valueKey];
                         const display = field.formatter ? field.formatter(raw) : String(raw ?? '-');
                         const clickable = !!field.pageKey && !!field.polygonKey;
+                        const issue = revisionIssueForDiField(field.key);
                         return (
-                          <FieldRow
-                            key={field.key}
-                            label={field.label}
-                            value={display}
-                            active={activeHighlightKey === field.key}
-                            disabled={!clickable}
-                            inline
-                            onClick={clickable ? () => setActiveHighlightKey(field.key) : undefined}
-                          />
+                          <Box key={field.key} minW={0} gridColumn={issue ? '1 / -1' : undefined}>
+                            <FieldRow
+                              label={field.label}
+                              value={display}
+                              active={activeHighlightKey === field.key}
+                              disabled={!clickable}
+                              inline
+                              onClick={clickable ? () => setActiveHighlightKey(field.key) : undefined}
+                            />
+                            {issue ? (
+                              <ContractorInlineRevisionIssueCard
+                                issue={issue}
+                                workspace={revisionWorkspace}
+                                compactHeading
+                                attention={revisionAttentionIssueIds.includes(issue.id)}
+                              />
+                            ) : null}
+                          </Box>
                         );
                       })}
                     </Box>
@@ -1420,6 +1702,10 @@ export default function ContractorInvoiceReviewScreen() {
                                     const handleClick = clickable
                                       ? () => void showSupportingDocumentInViewer(doc, field)
                                       : undefined;
+                                    const issue = revisionIssueForSupportingField(
+                                      doc?.supporting_document_type_key,
+                                      field?.field_key,
+                                    );
 
                                     return (
                                       <React.Fragment key={String(field?.id || field?.field_key)}>
@@ -1447,6 +1733,16 @@ export default function ContractorInvoiceReviewScreen() {
                                         >
                                           {fieldValue}
                                         </Text>
+                                        {issue ? (
+                                          <Box gridColumn="1 / -1" mb="6px">
+                                            <ContractorInlineRevisionIssueCard
+                                              issue={issue}
+                                              workspace={revisionWorkspace}
+                                              compactHeading
+                                              attention={revisionAttentionIssueIds.includes(issue.id)}
+                                            />
+                                          </Box>
+                                        ) : null}
                                       </React.Fragment>
                                     );
                                   })}
@@ -1598,31 +1894,41 @@ export default function ContractorInvoiceReviewScreen() {
                           const confidence =
                             row.confidence != null ? `confidence ${Number(row.confidence).toFixed(2)}` : '';
                           const clickable = row.page != null;
+                          const issue = revisionIssueForLocatedField(row);
                           return (
-                            <FieldRow
-                              key={row.id}
-                              label={displayLocatedFieldLabel(row)}
-                              labelHint={locatedFieldKeyHint(row)}
-                              value={[displayLocatedFieldValue(row), confidence].filter(Boolean).join('  ')}
-                              active={activeHighlightKey === highlightKey}
-                              disabled={!clickable}
-                              inline
-                              onClick={
-                                clickable
-                                  ? () => {
-                                      setActiveHighlight({
-                                        source: 'classifier',
-                                        key: highlightKey,
-                                        genaiId: Number(row.id),
-                                        pageNumber: Number(row.page),
-                                        polygon: row.polygon ?? null,
-                                      });
-                                      setActiveHighlightKey(highlightKey);
-                                      setRightPanelMode('document');
-                                    }
-                                  : undefined
-                              }
-                            />
+                            <Box key={row.id} minW={0} gridColumn={issue ? '1 / -1' : undefined}>
+                              <FieldRow
+                                label={displayLocatedFieldLabel(row)}
+                                labelHint={locatedFieldKeyHint(row)}
+                                value={[displayLocatedFieldValue(row), confidence].filter(Boolean).join('  ')}
+                                active={activeHighlightKey === highlightKey}
+                                disabled={!clickable}
+                                inline
+                                onClick={
+                                  clickable
+                                    ? () => {
+                                        setActiveHighlight({
+                                          source: 'classifier',
+                                          key: highlightKey,
+                                          genaiId: Number(row.id),
+                                          pageNumber: Number(row.page),
+                                          polygon: row.polygon ?? null,
+                                        });
+                                        setActiveHighlightKey(highlightKey);
+                                        setRightPanelMode('document');
+                                      }
+                                    : undefined
+                                }
+                              />
+                              {issue ? (
+                                <ContractorInlineRevisionIssueCard
+                                  issue={issue}
+                                  workspace={revisionWorkspace}
+                                  compactHeading
+                                  attention={revisionAttentionIssueIds.includes(issue.id)}
+                                />
+                              ) : null}
+                            </Box>
                           );
                         })}
                       </Box>
@@ -1768,6 +2074,61 @@ export default function ContractorInvoiceReviewScreen() {
                       ['Most Efficient criteria', ventFanProduct.meets_most_efficient_criteria],
                     ]}
                   />
+                )}
+
+                {unmatchedRevisionIssues.filter((issue) => ['pending_admin_review', 'open'].includes(issue.status))
+                  .length > 0 && (
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Other outstanding requested changes
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+                    <AccordionPanel px="0" pt="8px">
+                      {unmatchedRevisionIssues
+                        .filter((issue) => ['pending_admin_review', 'open'].includes(issue.status))
+                        .map((issue) => (
+                          <ContractorInlineRevisionIssueCard
+                            key={issue.id}
+                            issue={issue}
+                            workspace={revisionWorkspace}
+                            attention={revisionAttentionIssueIds.includes(issue.id)}
+                          />
+                        ))}
+                    </AccordionPanel>
+                  </AccordionItem>
+                )}
+
+                {unmatchedRevisionIssues.filter((issue) => !['pending_admin_review', 'open'].includes(issue.status))
+                  .length > 0 && (
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Other resolved requested changes
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+                    <AccordionPanel px="0" pt="8px">
+                      {unmatchedRevisionIssues
+                        .filter((issue) => !['pending_admin_review', 'open'].includes(issue.status))
+                        .map((issue) => (
+                          <ContractorInlineRevisionIssueCard
+                            key={issue.id}
+                            issue={issue}
+                            workspace={revisionWorkspace}
+                          />
+                        ))}
+                    </AccordionPanel>
+                  </AccordionItem>
                 )}
               </Accordion>
             </Box>
@@ -2036,21 +2397,109 @@ export default function ContractorInvoiceReviewScreen() {
                   </Text>
                 </Box>
               </Box>
-            ) : rightPanelMode === 'revision' && currentInvoiceId ? (
-              <Box flex="0 0 640px" w="640px" maxW="640px" minW="640px" alignSelf="flex-start" overflow="hidden">
-                <RevisionTracker
-                  invoiceId={currentInvoiceId}
-                  viewerRole="contractor"
-                  refreshToken={revisionRefreshToken}
-                  onTrackerChange={adoptRevisionTrackerData}
-                  onContractorDraftStateChange={setContractorDraftState}
-                  attentionIssueIds={revisionAttentionIssueIds}
-                />
-              </Box>
             ) : null}
           </Box>
         </Box>
       </Container>
+
+      <Box
+        id="contractor-admin-chat-dialog"
+        role="dialog"
+        aria-modal="false"
+        aria-label="Chat with Admin"
+        display={chatPanelOpen ? 'flex' : 'none'}
+        position="fixed"
+        right={{ base: '12px', md: '24px' }}
+        bottom={{ base: '76px', md: '88px' }}
+        zIndex={1500}
+        w={{ base: 'calc(100vw - 24px)', md: '430px' }}
+        maxW="430px"
+        maxH="calc(100vh - 112px)"
+        flexDirection="column"
+        bg="white"
+        borderWidth="1px"
+        borderColor="gray.200"
+        borderRadius="xl"
+        boxShadow="2xl"
+        overflow="hidden"
+      >
+        <Flex align="center" justify="space-between" px={4} py={3} borderBottomWidth="1px" borderColor="gray.200">
+          <Text fontWeight="bold" color="blue.800">
+            Chat with Admin
+          </Text>
+          <CloseButton aria-label="Close Chat with Admin" onClick={() => setChatPanelOpen(false)} />
+        </Flex>
+        <Box p={4} overflowY="auto">
+          <ContractorConversationPanel
+            invoiceId={currentInvoiceId}
+            messageListMaxHeight="280px"
+            showConversationHeading={false}
+            showGuidance={false}
+            inlineComposerSend
+            active={chatPanelOpen}
+            onUnreadCountChange={setChatUnreadCount}
+          />
+        </Box>
+      </Box>
+
+      <Box position="fixed" right={{ base: '12px', md: '24px' }} bottom={{ base: '12px', md: '24px' }} zIndex={1600}>
+        <Tooltip label="View admin requested changes and send messages about this invoice." hasArrow shouldWrapChildren>
+          <Button
+            size="md"
+            bg="theme.blueGradient"
+            color="white"
+            borderRadius="md"
+            boxShadow={currentInvoiceId ? '0 10px 24px rgba(5, 66, 119, 0.28)' : 'none'}
+            _hover={{ bg: 'theme.blueAltGradient' }}
+            _disabled={{ opacity: 0.5, cursor: 'not-allowed' }}
+            isDisabled={!currentInvoiceId}
+            aria-label={
+              chatUnreadCount > 0
+                ? `Chat with Admin, ${chatUnreadCount} unread ${chatUnreadCount === 1 ? 'message' : 'messages'}`
+                : 'Chat with Admin'
+            }
+            aria-expanded={chatPanelOpen}
+            aria-controls="contractor-admin-chat-dialog"
+            onClick={() => {
+              if (!currentInvoiceId) return;
+              setChatPanelOpen((open) => !open);
+            }}
+          >
+            Chat with Admin
+          </Button>
+        </Tooltip>
+        {chatUnreadCount > 0 ? (
+          <Flex
+            aria-hidden="true"
+            position="absolute"
+            top="-8px"
+            right="-8px"
+            w="22px"
+            h="22px"
+            align="center"
+            justify="center"
+            borderRadius="full"
+            borderWidth="2px"
+            borderColor="white"
+            bg="red.500"
+            color="white"
+            fontSize="xs"
+            fontWeight="black"
+            lineHeight="1"
+            pointerEvents="none"
+            sx={{
+              '@keyframes contractorChatUnreadPulse': {
+                '0%, 100%': { transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(229, 62, 62, 0.5)' },
+                '50%': { transform: 'scale(1.14)', boxShadow: '0 0 0 7px rgba(229, 62, 62, 0)' },
+              },
+              animation: 'contractorChatUnreadPulse 1.6s ease-in-out infinite',
+              '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+            }}
+          >
+            !
+          </Flex>
+        ) : null}
+      </Box>
 
       <Modal isOpen={isSubmitWarningOpen} onClose={onSubmitWarningClose} size="2xl" isCentered>
         <ModalOverlay />
@@ -2094,7 +2543,6 @@ export default function ContractorInvoiceReviewScreen() {
                     return (
                       <Box key={row.id ?? row.rule_key} bg="white" borderRadius="md" p={3}>
                         <Flex align="center" gap={2}>
-                          <StatusDot result={row.rule_result} />
                           <Text fontSize="sm" fontWeight="semibold">
                             {name}
                           </Text>
@@ -2109,6 +2557,36 @@ export default function ContractorInvoiceReviewScreen() {
                   </Text>
                 ) : null}
               </Box>
+            </Flex>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={isWithdrawOpen}
+        onClose={withdrawalLoading ? () => undefined : onWithdrawClose}
+        closeOnEsc={!withdrawalLoading}
+        closeOnOverlayClick={!withdrawalLoading}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Withdraw this invoice?</ModalHeader>
+          <ModalCloseButton isDisabled={withdrawalLoading} />
+          <ModalBody pb={6}>
+            <Flex direction="column" gap={5}>
+              <Text fontSize="sm">
+                This permanently withdraws the invoice from the program review process. Any unsaved contractor responses
+                will not be saved, and the invoice cannot be submitted afterward.
+              </Text>
+              <Flex gap={3} flexWrap="wrap">
+                <Button variant="outline" isDisabled={withdrawalLoading} onClick={onWithdrawClose}>
+                  Keep invoice
+                </Button>
+                <Button colorScheme="red" isLoading={withdrawalLoading} onClick={() => void withdrawInvoice()}>
+                  Withdraw invoice
+                </Button>
+              </Flex>
             </Flex>
           </ModalBody>
         </ModalContent>

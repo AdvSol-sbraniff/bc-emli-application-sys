@@ -250,6 +250,42 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
       )
     end
 
+    it "ignores a contractor-withdrawn prior invoice for rebate history" do
+      enable_common_code_rule("prior_same_upgrade_type_rebate_payment_found")
+
+      participant = create(:user)
+      contractor = Contractor.create!(business_name: "Test Contractor")
+      prior_version =
+        create_invoice_version(
+          participant: participant,
+          contractor: contractor,
+          status: "contractor_withdrawn"
+        )
+      add_upgrade_type(prior_version, "dual_fuel_ducted_heat_pump")
+      current_version =
+        create_invoice_version(
+          participant: participant,
+          contractor: contractor,
+          status: "genai_in_progress"
+        )
+      add_upgrade_type(current_version, "air_source_heat_pump_electric")
+
+      result = described_class.call(invoice_version_id: current_version.id)
+
+      expect(result[:ok]).to be(true)
+      rulecheck =
+        Claims::InvoiceVersionRulecheck.find_by!(
+          invoice_version_id: current_version.id,
+          rule_key: "prior_same_upgrade_type_rebate_payment_found"
+        )
+      expect(rulecheck.rule_result).to eq("pass")
+      expect(rulecheck.calculation).to include(
+        "prior_has_space_heating=false",
+        "failed_checks=none",
+        "result=pass"
+      )
+    end
+
     it "fails when current and prior current invoices both have electrical service upgrades" do
       enable_common_code_rule("prior_same_upgrade_type_rebate_payment_found")
 

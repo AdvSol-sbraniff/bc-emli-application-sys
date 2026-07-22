@@ -48,6 +48,7 @@ module Claims
             invoice.revision_issues.create!(
               issue_attributes(issue_type, source, round)
             )
+          snapshot_source!(issue)
           if issue
                .comments
                .where(revision_round_id: round.id, author_type: "admin")
@@ -111,7 +112,15 @@ module Claims
       end
 
       def issue_attributes(issue_type, source, round)
-        attrs = { issue_type: issue_type, status: "open" }
+        attrs = {
+          issue_type: issue_type,
+          status: "pending_admin_review"
+        }.merge(
+          SourceIdentity.attributes_for_source(
+            issue_type: issue_type,
+            source: source
+          )
+        )
         case issue_type
         when "rule"
           attrs[:opened_from_invoice_version_rulecheck_id] = source.id
@@ -126,13 +135,21 @@ module Claims
         attrs
       end
 
+      def snapshot_source!(issue)
+        return if issue.opened_from_source_snapshot.present?
+
+        issue.update!(opened_from_source_snapshot: SourcePresenter.call(issue))
+      end
+
       def find_logical_issue(invoice, identity)
         invoice
           .revision_issues
           .includes(
             :opened_from_invoice_version_rulecheck,
             :opened_from_invoice_version_located_field,
-            :opened_from_supporting_document_located_field
+            opened_from_supporting_document_located_field: {
+              supporting_document: :supporting_document_type
+            }
           )
           .detect do |candidate|
             SourceIdentity.for_issue(candidate) == identity

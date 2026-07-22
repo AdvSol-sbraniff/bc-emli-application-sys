@@ -65,10 +65,14 @@ Rails.application.routes.draw do
           to: "contractor_portal#conversation_messages"
       post "contractor/invoices/:invoice_id/conversation_messages",
            to: "contractor_portal#create_conversation_message"
+      post "contractor/invoices/:invoice_id/conversation_messages/read",
+           to: "contractor_portal#mark_conversation_messages_read"
       patch "contractor/invoices/:invoice_id/conversation_messages/:id",
             to: "contractor_portal#update_conversation_message"
       post "contractor/invoices/:invoice_id/submit_to_admin",
            to: "contractor_portal#submit_to_admin"
+      post "contractor/invoices/:invoice_id/withdraw",
+           to: "contractor_portal#withdraw"
       patch "contractor/invoices/:invoice_id/revision_issues/:issue_id/comment",
             to: "contractor_portal#save_revision_issue_comment"
       get "contractor/ingest/runs/:ingest_run_id",

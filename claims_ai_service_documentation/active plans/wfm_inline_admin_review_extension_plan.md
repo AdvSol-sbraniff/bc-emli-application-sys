@@ -2,11 +2,16 @@
 
 ## Plan Status
 
-Planned on 2026-07-20. This document describes the next extension of the implemented
+Planned on 2026-07-20. The narrow `all_results` registry policy, admin editor option, and current
+review-coverage interpretation were implemented on 2026-07-20. On 2026-07-21 the explicit
+`pending_admin_review` to `open` lifecycle, internal-only closure, parent-level disposition comment,
+and status-based contractor visibility were implemented. The remaining inline-review,
+policy-snapshot, automatic work-item, and role-specific panel changes in this document remain
+planned.
+
+This document describes the next extension of the implemented
 `revision_issues` / `revision_rounds` / `revision_issue_comments` workflow. It does not replace the
 implemented design record in `invoice_revision_workflow_plan.md`.
-
-No implementation described below has been completed merely by creating this plan.
 
 ## Goal
 
@@ -40,8 +45,9 @@ It may represent:
 - an admin exception;
 - a manually identified field problem.
 
-Every issue must have at least one `revision_issue_comment`. Services must create the issue and its
-initial comment in one transaction; a bare issue row is invalid application state.
+An unresolved issue normally has an initial admin draft comment. An issue closed during internal
+admin review may have no exchange comments because its terminal status and required explanation are
+stored atomically on the issue itself.
 
 ### Issue comments
 
@@ -50,8 +56,11 @@ Comments hold the ordered work performed on an issue:
 - the system-prepared initial admin analysis draft;
 - the admin's saved action and contractor-facing explanation;
 - contractor responses;
-- later admin follow-up;
-- the final admin closure explanation.
+- later admin follow-up.
+
+The final closing outcome and its required explanation are stored together as
+`revision_issues.status` and `revision_issues.disposition_comment`; they are rendered after the
+exchange history but are not another comment row.
 
 ### Revision rounds
 
@@ -215,15 +224,16 @@ action and save. Merely viewing the rule is not acknowledgement.
 
 ### Managed pass/info normal path
 
-The normal action is `confirmed_no_contractor_action`. Save the admin comment and close the issue in
-the same transaction using a new terminal status such as `closed_as_confirmed`. The item moves into
-the collapsed Resolved section and is never sent to the contractor.
+The normal action is `confirmed_no_contractor_action`. Close the pending work item with
+`closed_no_contractor_action_required` and its required `disposition_comment` in the same
+transaction. The item moves into the collapsed Resolved section and is never sent to the
+contractor.
 
 ### Optional unmanaged acknowledgement
 
-If an admin deliberately records `record_no_workflow_action`, create the work item/comment and close
-it using a status such as `closed_as_reviewed_no_workflow_action`. Leaving an unmanaged rule untouched
-creates no record and does not block review.
+If an admin deliberately records `record_no_workflow_action`, create the work item and close it with
+`closed_no_contractor_action_required` plus the admin's disposition explanation. Leaving an
+unmanaged rule untouched creates no record and does not block review.
 
 ### Contractor follow-up path
 
@@ -240,7 +250,7 @@ Preserve the existing final closing outcomes:
 - issue withdrawn.
 
 Every final disposition remains allowed regardless of the contractor's selected response method.
-The final admin comment is mandatory.
+The parent-level `disposition_comment` is mandatory.
 
 ## Data Model Extension
 
@@ -250,15 +260,16 @@ Retain the current source FKs and add only the audit information that cannot saf
 from mutable configuration:
 
 - `workflow_required boolean NOT NULL DEFAULT false`
-- terminal status values:
-  - existing values;
-  - `closed_as_confirmed`;
-  - `closed_as_reviewed_no_workflow_action`.
+- `disposition_comment text NULL`, required for terminal states and null for unresolved states;
+- lifecycle status values `pending_admin_review` and `open`;
+- terminal status `closed_no_contractor_action_required` plus the existing contractor-facing
+  closing outcomes.
 
 `workflow_required=true` identifies automatically policy-required rule work. Manual field issues and
 voluntary unmanaged-rule issues use `false`.
 
-Do not add a separate stage/owner status. Invoice status continues to answer who owns the work.
+Do not add a separate owner field. Invoice status continues to answer who owns the invoice;
+`revision_issues.status` distinguishes an unsent admin work item from a contractor-facing issue.
 
 ### `claims.revision_issue_comments`
 
@@ -277,8 +288,8 @@ performed the work.
 
 ### `claims.revision_rounds`
 
-No new stage or status column. Continue to use the hidden round as the grouping for comments. Allow a
-round containing only internally closed review items to remain unsent as an audit grouping.
+No new round stage or status column. Continue to use the hidden round as the grouping for exchange
+comments. Remove an empty draft round after all of its work items are closed internally.
 
 ## Rule and Field Source Identity
 
@@ -548,7 +559,8 @@ Do not rebuild Gold outside the user's normal explicit Gold rebuild request.
 - Runtime rulechecks retain their policy snapshot after registry policy changes.
 - New issue closure statuses validate.
 - Saved admin/contractor comments require the authenticated author.
-- A revision issue is never committed without at least one comment through supported services.
+- An unresolved or contractor-facing issue has exchange comments; an internally closed work item
+  may have none because its terminal explanation is stored on the issue.
 
 ### Workflow policy matrix
 

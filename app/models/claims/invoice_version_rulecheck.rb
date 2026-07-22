@@ -38,7 +38,8 @@ module Claims
           -> do
             with_current_rule_policies.where(
               "(COALESCE(contractor_policy_gr.admin_workflow_policy, contractor_policy_cr.admin_workflow_policy, 'fail_only') = 'fail_only' AND claims.invoice_version_rulechecks.rule_result = 'fail') OR " \
-                "(COALESCE(contractor_policy_gr.admin_workflow_policy, contractor_policy_cr.admin_workflow_policy, 'fail_only') = 'warn_and_fail' AND claims.invoice_version_rulechecks.rule_result IN ('warn', 'fail'))"
+                "(COALESCE(contractor_policy_gr.admin_workflow_policy, contractor_policy_cr.admin_workflow_policy, 'fail_only') = 'warn_and_fail' AND claims.invoice_version_rulechecks.rule_result IN ('warn', 'fail')) OR " \
+                "(COALESCE(contractor_policy_gr.admin_workflow_policy, contractor_policy_cr.admin_workflow_policy, 'fail_only') = 'all_results' AND claims.invoice_version_rulechecks.rule_result IN ('pass', 'info', 'warn', 'fail'))"
             )
           end
   end

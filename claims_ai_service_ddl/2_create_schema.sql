@@ -62,7 +62,8 @@ CHECK (status IN (
   'in_review',
   'approved_pending',
   'approved_paid',
-  'ineligible'
+  'ineligible',
+  'contractor_withdrawn'   -- contractor voluntarily withdrew the invoice before approval.
 )),
 
   CONSTRAINT fk_claims_invoices_session
@@ -1370,7 +1371,7 @@ CREATE TABLE IF NOT EXISTS claims.code_rules (
   CONSTRAINT code_rules_contractor_blocking_policy_chk
     CHECK (contractor_blocking_policy IN ('non_blocking','block_on_fail')),
   CONSTRAINT code_rules_admin_workflow_policy_chk
-    CHECK (admin_workflow_policy IN ('not_managed','fail_only','warn_and_fail')),
+    CHECK (admin_workflow_policy IN ('not_managed','fail_only','warn_and_fail','all_results')),
   CONSTRAINT code_rules_visible_blocker_chk
     CHECK (contractor_blocking_policy <> 'block_on_fail' OR contractor_visibility <> 'hidden')
 );
@@ -1478,7 +1479,7 @@ CREATE TABLE IF NOT EXISTS claims.genai_rules (
   CONSTRAINT genai_rules_contractor_blocking_policy_chk
     CHECK (contractor_blocking_policy IN ('non_blocking','block_on_fail')),
   CONSTRAINT genai_rules_admin_workflow_policy_chk
-    CHECK (admin_workflow_policy IN ('not_managed','fail_only','warn_and_fail')),
+    CHECK (admin_workflow_policy IN ('not_managed','fail_only','warn_and_fail','all_results')),
   CONSTRAINT genai_rules_visible_blocker_chk
     CHECK (contractor_blocking_policy <> 'block_on_fail' OR contractor_visibility <> 'hidden')
 );
@@ -2179,7 +2180,19 @@ CREATE TABLE IF NOT EXISTS claims.revision_issues (
   opened_from_di_invoice_version_id uuid NULL,
   opened_from_di_field_key text NULL,
 
-  status text NOT NULL DEFAULT 'open',
+  -- Stable logical source identity. The exact runtime UUIDs above remain
+  -- the historical pointers; these values let one durable issue follow the
+  -- same rule/field across later invoice versions.
+  opened_from_rule_key text NULL,
+  opened_from_rule_upgrade_type_id uuid NULL,
+  opened_from_invoice_field_key text NULL,
+  opened_from_invoice_field_upgrade_type_id uuid NULL,
+  opened_from_supporting_document_type_key text NULL,
+  opened_from_supporting_field_key text NULL,
+  opened_from_source_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  status text NOT NULL DEFAULT 'pending_admin_review',
+  disposition_comment text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -2207,6 +2220,14 @@ CREATE TABLE IF NOT EXISTS claims.revision_issues (
     FOREIGN KEY (opened_from_di_invoice_version_id, invoice_id)
     REFERENCES claims.invoice_versions(id, invoice_id),
 
+  CONSTRAINT fk_revision_issues_rule_upgrade_type
+    FOREIGN KEY (opened_from_rule_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
+  CONSTRAINT fk_revision_issues_invoice_field_upgrade_type
+    FOREIGN KEY (opened_from_invoice_field_upgrade_type_id)
+    REFERENCES claims.invoice_upgrade_types(id),
+
   CONSTRAINT revision_issues_type_chk
     CHECK (
       issue_type IN (
@@ -2220,11 +2241,26 @@ CREATE TABLE IF NOT EXISTS claims.revision_issues (
   CONSTRAINT revision_issues_status_chk
     CHECK (
       status IN (
+        'pending_admin_review',
         'open',
+        'closed_no_contractor_action_required',
         'closed_via_corrected_documentation',
         'closed_via_attestation',
         'closed_via_exception',
         'closed_as_withdrawn'
+      )
+    ),
+
+  CONSTRAINT revision_issues_disposition_comment_chk
+    CHECK (
+      (
+        status IN ('pending_admin_review', 'open')
+        AND disposition_comment IS NULL
+      )
+      OR
+      (
+        status NOT IN ('pending_admin_review', 'open')
+        AND length(btrim(disposition_comment)) > 0
       )
     ),
 
@@ -2265,6 +2301,49 @@ CREATE TABLE IF NOT EXISTS claims.revision_issues (
         AND opened_from_di_invoice_version_id IS NOT NULL
         AND length(btrim(opened_from_di_field_key)) > 0
       )
+    ),
+
+  CONSTRAINT revision_issues_stable_identity_chk
+    CHECK (
+      (
+        issue_type = 'rule'
+        AND length(btrim(opened_from_rule_key)) > 0
+        AND opened_from_rule_upgrade_type_id IS NOT NULL
+        AND opened_from_invoice_field_key IS NULL
+        AND opened_from_invoice_field_upgrade_type_id IS NULL
+        AND opened_from_supporting_document_type_key IS NULL
+        AND opened_from_supporting_field_key IS NULL
+      )
+      OR
+      (
+        issue_type = 'invoice_field'
+        AND opened_from_rule_key IS NULL
+        AND opened_from_rule_upgrade_type_id IS NULL
+        AND length(btrim(opened_from_invoice_field_key)) > 0
+        AND opened_from_invoice_field_upgrade_type_id IS NOT NULL
+        AND opened_from_supporting_document_type_key IS NULL
+        AND opened_from_supporting_field_key IS NULL
+      )
+      OR
+      (
+        issue_type = 'supporting_document_field'
+        AND opened_from_rule_key IS NULL
+        AND opened_from_rule_upgrade_type_id IS NULL
+        AND opened_from_invoice_field_key IS NULL
+        AND opened_from_invoice_field_upgrade_type_id IS NULL
+        AND length(btrim(opened_from_supporting_document_type_key)) > 0
+        AND length(btrim(opened_from_supporting_field_key)) > 0
+      )
+      OR
+      (
+        issue_type = 'di_field'
+        AND opened_from_rule_key IS NULL
+        AND opened_from_rule_upgrade_type_id IS NULL
+        AND opened_from_invoice_field_key IS NULL
+        AND opened_from_invoice_field_upgrade_type_id IS NULL
+        AND opened_from_supporting_document_type_key IS NULL
+        AND opened_from_supporting_field_key IS NULL
+      )
     )
 );
 
@@ -2295,6 +2374,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_supporting_field_source
 CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_di_field_source
   ON claims.revision_issues (invoice_id, opened_from_di_field_key)
   WHERE issue_type = 'di_field';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_rule_identity
+  ON claims.revision_issues (
+    invoice_id,
+    opened_from_rule_key,
+    opened_from_rule_upgrade_type_id
+  )
+  WHERE issue_type = 'rule';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_invoice_field_identity
+  ON claims.revision_issues (
+    invoice_id,
+    opened_from_invoice_field_key,
+    opened_from_invoice_field_upgrade_type_id
+  )
+  WHERE issue_type = 'invoice_field';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_revision_issues_supporting_field_identity
+  ON claims.revision_issues (
+    invoice_id,
+    opened_from_supporting_document_type_key,
+    opened_from_supporting_field_key
+  )
+  WHERE issue_type = 'supporting_document_field';
 
 
 -- ============================================================
@@ -2440,6 +2543,7 @@ CREATE TABLE IF NOT EXISTS claims.conversation_messages (
   message_type text NOT NULL DEFAULT 'admin_message',
 
   request_text  text NOT NULL,  -- single message body for both admin requests and contractor notes
+  recipient_read_at timestamp(6) without time zone NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,

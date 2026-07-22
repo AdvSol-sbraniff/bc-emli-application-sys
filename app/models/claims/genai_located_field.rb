@@ -7,6 +7,7 @@ module Claims
     before_update :snapshot_history!
 
     validates :contractor_display_name, presence: true
+    validate :field_key_is_immutable, on: :update
 
     has_many :genai_located_field_upgrade_types,
              class_name: "Claims::GenaiLocatedFieldUpgradeType",
@@ -31,6 +32,12 @@ module Claims
         source_created_at: created_at,
         source_updated_at: attribute_in_database("updated_at")
       )
+    end
+
+    def field_key_is_immutable
+      return unless will_save_change_to_genai_field_key?
+
+      errors.add(:genai_field_key, "cannot be changed after creation")
     end
   end
 end

@@ -54,12 +54,12 @@ RSpec.describe "Claims validation-rule admin workflow policy", type: :request do
     patch_rule_policy(
       record_type: "code_rule",
       rule: code_rule,
-      policy: "not_managed",
+      policy: "all_results",
       upgrade_type: upgrade_type
     )
     expect(response).to have_http_status(:ok)
     expect(json_response.dig("detail", "admin_workflow_policy")).to eq(
-      "not_managed"
+      "all_results"
     )
 
     patch_rule_policy(
@@ -73,7 +73,7 @@ RSpec.describe "Claims validation-rule admin workflow policy", type: :request do
       "warn_and_fail"
     )
 
-    expect(code_rule.reload.admin_workflow_policy).to eq("not_managed")
+    expect(code_rule.reload.admin_workflow_policy).to eq("all_results")
     expect(genai_rule.reload.admin_workflow_policy).to eq("warn_and_fail")
   end
 

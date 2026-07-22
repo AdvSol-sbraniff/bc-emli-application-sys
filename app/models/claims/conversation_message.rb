@@ -14,6 +14,7 @@ module Claims
     before_validation :assign_invoice_id
     before_validation :assign_seqno, on: :create
     before_validation :assign_default_message_type
+    before_update :reset_recipient_read_at, if: :recipient_content_changed?
 
     validates :invoice_id, :requester_id, :request_text, presence: true
     validates :message_type,
@@ -44,6 +45,14 @@ module Claims
 
       self.revreq_seqno =
         self.class.where(invoice_id: invoice_id).maximum(:revreq_seqno).to_i + 1
+    end
+
+    def recipient_content_changed?
+      will_save_change_to_request_text? || will_save_change_to_message_type?
+    end
+
+    def reset_recipient_read_at
+      self.recipient_read_at = nil
     end
   end
 end

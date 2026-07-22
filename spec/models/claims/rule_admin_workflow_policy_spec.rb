@@ -1,6 +1,13 @@
 require "rails_helper"
 
 RSpec.describe "Claims rule admin workflow policy" do
+  it "supports all result levels for both rule engines" do
+    expected = %w[not_managed fail_only warn_and_fail all_results]
+
+    expect(Claims::CodeRule::ADMIN_WORKFLOW_POLICIES).to eq(expected)
+    expect(Claims::GenaiRule::ADMIN_WORKFLOW_POLICIES).to eq(expected)
+  end
+
   def build_code_rule(policy: "fail_only")
     Claims::CodeRule.new(
       code_rule_key: "workflow_policy_code_#{SecureRandom.hex(5)}",

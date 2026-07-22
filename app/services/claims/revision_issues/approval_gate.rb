@@ -31,19 +31,19 @@ module Claims
             Result.new(
               allowed: false,
               error:
-                "Every workflow-managed failing rule needs a revision issue",
-              issue_ids: coverage.open_issues.map(&:id),
+                "Every workflow-managed rule result needs a revision issue",
+              issue_ids: coverage.unresolved_issues.map(&:id),
               missing_rulecheck_ids: coverage.missing_rulechecks.map(&:id)
             )
           )
         end
-        if coverage.open_issues.any?
+        if coverage.unresolved_issues.any?
           return(
             Result.new(
               allowed: false,
               error:
                 "Every revision issue must be closed before four-eyes review",
-              issue_ids: coverage.open_issues.map(&:id),
+              issue_ids: coverage.unresolved_issues.map(&:id),
               missing_rulecheck_ids: []
             )
           )
@@ -62,7 +62,7 @@ module Claims
           .comments
           .includes(:revision_issue)
           .map(&:revision_issue)
-          .select(&:open?)
+          .select(&:unresolved?)
           .map(&:id)
           .uniq
       end

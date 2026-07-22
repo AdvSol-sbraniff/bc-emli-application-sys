@@ -4,6 +4,7 @@ module Claims
   module RevisionIssues
     class CloseIssue
       TERMINAL_STATUSES = %w[
+        closed_no_contractor_action_required
         closed_via_corrected_documentation
         closed_via_attestation
         closed_via_exception
@@ -14,10 +15,10 @@ module Claims
         new(**args).call
       end
 
-      def initialize(issue:, status:, comment_text:)
+      def initialize(issue:, status:, disposition_comment:)
         @issue = issue
         @status = status.to_s
-        @comment_text = comment_text.to_s
+        @disposition_comment = disposition_comment.to_s
       end
 
       def call
@@ -32,8 +33,8 @@ module Claims
             issue.errors.add(:status, "is not a closing status")
             raise ActiveRecord::RecordInvalid, issue
           end
-          if @comment_text.strip.blank?
-            issue.errors.add(:base, "A final admin comment is required")
+          if @disposition_comment.strip.blank?
+            issue.errors.add(:base, "A disposition comment is required")
             raise ActiveRecord::RecordInvalid, issue
           end
           unless issue.invoice.status == "admin_review_inbox"
@@ -41,31 +42,63 @@ module Claims
                   "Issues can only be closed in the first-level admin inbox"
           end
 
-          response = latest_contractor_response(issue)
-          round = response&.revision_round || latest_round(issue)
-          if round.nil?
-            raise ActiveRecord::RecordNotFound,
-                  "Revision issue history not found"
+          if issue.pending_admin_review?
+            close_internal_issue!(issue)
+          else
+            close_contractor_issue!(issue)
           end
-
-          if round.waiting_for_contractor?
-            raise ActiveRecord::ReadOnlyRecord,
-                  "Wait for the contractor response before closing this issue"
-          end
-          remove_unsent_follow_up!(issue, basis_round: round)
-
-          issue.comments.create!(
-            revision_round: round,
-            author_type: "admin",
-            admin_recommended_remedy: nil,
-            comment_text: @comment_text
-          )
-          issue.update!(status: @status)
         end
         issue
       end
 
       private
+
+      def close_internal_issue!(issue)
+        unless @status == "closed_no_contractor_action_required"
+          issue.errors.add(
+            :status,
+            "must be no contractor action required before an issue is sent"
+          )
+          raise ActiveRecord::RecordInvalid, issue
+        end
+
+        round = latest_round(issue)
+        if round.nil? || !round.draft?
+          raise ActiveRecord::ReadOnlyRecord,
+                "Internal closure is only available before an issue is sent"
+        end
+        issue.comments.where(revision_round: round).destroy_all
+        issue.update!(
+          status: @status,
+          disposition_comment: @disposition_comment.strip
+        )
+        round.destroy! unless round.comments.exists?
+      end
+
+      def close_contractor_issue!(issue)
+        if @status == "closed_no_contractor_action_required"
+          issue.errors.add(
+            :status,
+            "is unavailable after an issue has been sent to the contractor"
+          )
+          raise ActiveRecord::RecordInvalid, issue
+        end
+
+        response = latest_contractor_response(issue)
+        round = response&.revision_round || latest_round(issue)
+        if round.nil?
+          raise ActiveRecord::RecordNotFound, "Revision issue history not found"
+        end
+        if round.waiting_for_contractor?
+          raise ActiveRecord::ReadOnlyRecord,
+                "Wait for the contractor response before closing this issue"
+        end
+        remove_unsent_follow_up!(issue, basis_round: round)
+        issue.update!(
+          status: @status,
+          disposition_comment: @disposition_comment.strip
+        )
+      end
 
       def latest_contractor_response(issue)
         issue

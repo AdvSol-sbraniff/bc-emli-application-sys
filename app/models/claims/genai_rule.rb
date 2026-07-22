@@ -6,7 +6,12 @@ module Claims
 
     CONTRACTOR_VISIBILITIES = %w[hidden fail_only warn_and_fail].freeze
     CONTRACTOR_BLOCKING_POLICIES = %w[non_blocking block_on_fail].freeze
-    ADMIN_WORKFLOW_POLICIES = %w[not_managed fail_only warn_and_fail].freeze
+    ADMIN_WORKFLOW_POLICIES = %w[
+      not_managed
+      fail_only
+      warn_and_fail
+      all_results
+    ].freeze
 
     before_update :snapshot_history!
 
@@ -29,6 +34,7 @@ module Claims
               }
     validates :admin_workflow_policy, inclusion: { in: ADMIN_WORKFLOW_POLICIES }
     validate :contractor_blocker_must_be_visible
+    validate :rule_key_is_immutable, on: :update
 
     private
 
@@ -58,6 +64,12 @@ module Claims
         :contractor_blocking_policy,
         "cannot block submission when the rule is hidden from contractors"
       )
+    end
+
+    def rule_key_is_immutable
+      return unless will_save_change_to_genai_rule_key?
+
+      errors.add(:genai_rule_key, "cannot be changed after creation")
     end
   end
 end

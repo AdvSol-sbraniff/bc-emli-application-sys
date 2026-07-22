@@ -28,6 +28,9 @@ module Claims
       }.freeze
 
       def self.call(issue)
+        snapshot = issue.opened_from_source_snapshot
+        return snapshot.deep_symbolize_keys if snapshot.present?
+
         new(issue).call
       end
 

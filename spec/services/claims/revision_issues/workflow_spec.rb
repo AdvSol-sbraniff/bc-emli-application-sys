@@ -115,6 +115,15 @@ RSpec.describe "Claims durable revision issue workflow" do
     issue = create_issue(invoice, "rule", rule.id)
 
     expect(issue).to be_persisted
+    expect(issue).to be_pending_admin_review
+    expect(issue.opened_from_rule_key).to eq(rule.rule_key)
+    expect(issue.opened_from_rule_upgrade_type_id).to eq(
+      rule.invoice_upgrade_type_id
+    )
+    expect(issue.opened_from_source_snapshot).to include(
+      "friendly_label" => "Invoice information is complete",
+      "source_quote" => "Revision workflow test rule."
+    )
     expect(invoice.revision_rounds.count).to eq(1)
     expect(invoice.revision_rounds.first).to be_draft
     expect(issue.comments.count).to eq(1)
@@ -144,6 +153,7 @@ RSpec.describe "Claims durable revision issue workflow" do
         actor_user_id: nil
       )
     end.to change { invoice.reload.status }.to("contractor_revision_inbox")
+    expect(issue.reload).to be_open
   end
 
   it "preserves one issue and ordered comments through multiple rounds" do
@@ -197,22 +207,17 @@ RSpec.describe "Claims durable revision issue workflow" do
     Claims::RevisionIssues::CloseIssue.call(
       issue: issue,
       status: "closed_via_attestation",
-      comment_text: "Attestation accepted."
+      disposition_comment: "Attestation accepted."
     )
 
     expect(invoice.revision_issues.count).to eq(1)
     expect(issue.reload.status).to eq("closed_via_attestation")
+    expect(issue.disposition_comment).to eq("Attestation accepted.")
     expect(issue.comments.pluck(:revision_round_id)).to eq(
-      [
-        first_round.id,
-        first_round.id,
-        second_round.id,
-        second_round.id,
-        second_round.id
-      ]
+      [first_round.id, first_round.id, second_round.id, second_round.id]
     )
     expect(issue.comments.pluck(:author_type)).to eq(
-      %w[admin contractor admin contractor admin]
+      %w[admin contractor admin contractor]
     )
 
     tracker =
@@ -223,7 +228,10 @@ RSpec.describe "Claims durable revision issue workflow" do
     expect(
       tracker.fetch(:rounds).map { |round| round.fetch(:round_number) }
     ).to eq([2, 1])
-    expect(tracker.fetch(:issues).first.fetch(:comments).length).to eq(5)
+    expect(tracker.fetch(:issues).first.fetch(:comments).length).to eq(4)
+    expect(tracker.fetch(:issues).first.fetch(:disposition_comment)).to eq(
+      "Attestation accepted."
+    )
   end
 
   it "keeps closed issues immutable" do
@@ -231,23 +239,91 @@ RSpec.describe "Claims durable revision issue workflow" do
     issue = create_issue(invoice, "rule", rule.id)
     Claims::RevisionIssues::CloseIssue.call(
       issue: issue,
-      status: "closed_via_exception",
-      comment_text: "Exception granted."
+      status: "closed_no_contractor_action_required",
+      disposition_comment: "No contractor action is required."
     )
     expect { issue.reload.update!(issue_type: "di_field") }.to raise_error(
       ActiveRecord::RecordInvalid
     )
   end
 
-  it "does not require contractor responses for issues closed by exception before send" do
+  it "rejects contractor-facing dispositions before an issue is sent" do
+    invoice, _version, rule, = build_package
+    issue = create_issue(invoice, "rule", rule.id)
+
+    expect do
+      Claims::RevisionIssues::CloseIssue.call(
+        issue: issue,
+        status: "closed_via_exception",
+        disposition_comment: "An exception was granted."
+      )
+    end.to raise_error(
+      ActiveRecord::RecordInvalid,
+      /must be no contractor action required/
+    )
+  end
+
+  it "requires a disposition comment when closing an issue" do
+    invoice, _version, rule, = build_package
+    issue = create_issue(invoice, "rule", rule.id)
+
+    expect do
+      Claims::RevisionIssues::CloseIssue.call(
+        issue: issue,
+        status: "closed_no_contractor_action_required",
+        disposition_comment: "  "
+      )
+    end.to raise_error(
+      ActiveRecord::RecordInvalid,
+      /disposition comment is required/i
+    )
+    expect(issue.reload).to be_pending_admin_review
+  end
+
+  it "rejects the internal-only disposition after an issue is sent" do
+    invoice, version, rule, = build_package
+    issue = create_issue(invoice, "rule", rule.id)
+    select_recommendation(issue)
+    round = invoice.revision_rounds.newest_first.first
+    Claims::RevisionIssues::SendRound.call(
+      revision_round: round,
+      actor_user_id: nil
+    )
+    Claims::RevisionIssues::SaveContractorComment.call(
+      issue: issue,
+      round: round,
+      attributes: {
+        contractor_response_method: "explanation_provided",
+        comment_text: "The requested explanation is provided."
+      }
+    )
+    Claims::RevisionIssues::SubmitRound.call(
+      invoice: invoice,
+      actor_user_id: nil,
+      invoice_version: version
+    )
+
+    expect do
+      Claims::RevisionIssues::CloseIssue.call(
+        issue: issue,
+        status: "closed_no_contractor_action_required",
+        disposition_comment: "No contractor action was required."
+      )
+    end.to raise_error(
+      ActiveRecord::RecordInvalid,
+      /unavailable after an issue has been sent/
+    )
+  end
+
+  it "keeps an internally closed work item out of the contractor tracker" do
     invoice, version, rule, field = build_package
     exception_issue = create_issue(invoice, "rule", rule.id)
     requested_issue = create_issue(invoice, "invoice_field", field.id)
     round = invoice.revision_rounds.newest_first.first
     Claims::RevisionIssues::CloseIssue.call(
       issue: exception_issue,
-      status: "closed_via_exception",
-      comment_text: "The program granted an exception."
+      status: "closed_no_contractor_action_required",
+      disposition_comment: "The result was confirmed during admin review."
     )
     select_recommendation(requested_issue)
 
@@ -255,6 +331,14 @@ RSpec.describe "Claims durable revision issue workflow" do
       revision_round: round,
       actor_user_id: nil
     )
+    contractor_tracker =
+      Claims::RevisionIssues::SerializeTracker.call(
+        invoice: invoice.reload,
+        role: :contractor
+      )
+    expect(
+      contractor_tracker.fetch(:issues).map { |row| row.fetch(:id) }
+    ).to eq([requested_issue.id])
     Claims::RevisionIssues::SaveContractorComment.call(
       issue: requested_issue,
       round: round,
@@ -312,25 +396,27 @@ RSpec.describe "Claims durable revision issue workflow" do
   end
 
   it "uses the rule-level workflow policy when enforcing coverage" do
-    invoice, version, _rule, =
-      build_package(rule_result: "warn", admin_workflow_policy: "fail_only")
-    coverage =
-      Claims::RevisionIssues::ReviewCoverage.call(
-        invoice: invoice,
-        invoice_version: version
-      )
-    expect(coverage.missing_rulechecks).to be_empty
+    required_results = {
+      "not_managed" => [],
+      "fail_only" => %w[fail],
+      "warn_and_fail" => %w[warn fail],
+      "all_results" => %w[pass info warn fail]
+    }
 
-    managed_invoice, managed_version, managed_rule, =
-      build_package(rule_result: "warn", admin_workflow_policy: "warn_and_fail")
-    managed_coverage =
-      Claims::RevisionIssues::ReviewCoverage.call(
-        invoice: managed_invoice,
-        invoice_version: managed_version
-      )
-    expect(managed_coverage.missing_rulechecks.map(&:id)).to eq(
-      [managed_rule.id]
-    )
+    required_results.each do |policy, required|
+      %w[pass info warn fail].each do |result|
+        invoice, version, rule, =
+          build_package(rule_result: result, admin_workflow_policy: policy)
+        coverage =
+          Claims::RevisionIssues::ReviewCoverage.call(
+            invoice: invoice,
+            invoice_version: version
+          )
+
+        expected = required.include?(result) ? [rule.id] : []
+        expect(coverage.missing_rulechecks.map(&:id)).to eq(expected)
+      end
+    end
   end
 
   it "removes an empty hidden draft after its only unsent issue is deleted" do
@@ -423,7 +509,7 @@ RSpec.describe "Claims durable revision issue workflow" do
     Claims::RevisionIssues::CloseIssue.call(
       issue: closed_issue,
       status: "closed_via_exception",
-      comment_text: "The explanation is accepted as an exception."
+      disposition_comment: "The explanation is accepted as an exception."
     )
 
     expect(closed_issue.reload).to be_closed
@@ -490,7 +576,7 @@ RSpec.describe "Claims durable revision issue workflow" do
       )
     end.to raise_error(
       Claims::RevisionIssues::SendRound::Incomplete,
-      /Every open issue needs an admin recommendation/
+      /Every unresolved issue needs an admin recommendation/
     )
   end
 
@@ -503,8 +589,9 @@ RSpec.describe "Claims durable revision issue workflow" do
 
     Claims::RevisionIssues::CloseIssue.call(
       issue: issue,
-      status: "closed_as_withdrawn",
-      comment_text: "The rule result was withdrawn after admin review."
+      status: "closed_no_contractor_action_required",
+      disposition_comment:
+        "The rule result requires no contractor action after admin review."
     )
     expect(
       Claims::RevisionIssues::ApprovalGate.call(invoice: invoice).allowed

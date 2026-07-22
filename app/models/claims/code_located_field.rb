@@ -7,6 +7,7 @@ module Claims
     before_update :snapshot_history!
 
     validates :contractor_display_name, presence: true
+    validate :field_key_is_immutable, on: :update
 
     private
 
@@ -21,6 +22,12 @@ module Claims
         source_created_at: created_at,
         source_updated_at: attribute_in_database("updated_at")
       )
+    end
+
+    def field_key_is_immutable
+      return unless will_save_change_to_code_field_key?
+
+      errors.add(:code_field_key, "cannot be changed after creation")
     end
   end
 end

@@ -22,5 +22,14 @@ module Claims
               }
     validates :field_key, uniqueness: { scope: :supporting_document_type_id }
     validates :field_number, uniqueness: { scope: :supporting_document_type_id }
+    validate :field_key_is_immutable, on: :update
+
+    private
+
+    def field_key_is_immutable
+      return unless will_save_change_to_field_key?
+
+      errors.add(:field_key, "cannot be changed after creation")
+    end
   end
 end

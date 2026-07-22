@@ -6,6 +6,7 @@ export type ViewerPanelMode = 'fullscreen' | 'document' | 'revision';
 type ViewerPanelModeSelectorProps = {
   value: ViewerPanelMode;
   onChange: (value: ViewerPanelMode) => void;
+  includeRevision?: boolean;
 };
 
 const OPTIONS: Array<{ value: ViewerPanelMode; label: string; hint: string }> = [
@@ -26,7 +27,7 @@ const OPTIONS: Array<{ value: ViewerPanelMode; label: string; hint: string }> = 
   },
 ];
 
-export const ViewerPanelModeSelector = ({ value, onChange }: ViewerPanelModeSelectorProps) => {
+export const ViewerPanelModeSelector = ({ value, onChange, includeRevision = true }: ViewerPanelModeSelectorProps) => {
   const [openHint, setOpenHint] = React.useState<ViewerPanelMode | null>(null);
 
   const handleChange = (nextValue: string) => {
@@ -37,7 +38,7 @@ export const ViewerPanelModeSelector = ({ value, onChange }: ViewerPanelModeSele
   return (
     <RadioGroup value={value} onChange={handleChange} aria-label="Viewer layout">
       <Flex align="center" gap={{ base: 2, md: 4 }} flexWrap="wrap">
-        {OPTIONS.map((option) => (
+        {OPTIONS.filter((option) => includeRevision || option.value !== 'revision').map((option) => (
           <Tooltip
             key={option.value}
             label={option.hint}

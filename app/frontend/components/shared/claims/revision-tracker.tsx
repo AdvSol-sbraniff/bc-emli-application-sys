@@ -79,15 +79,26 @@ export type RevisionIssueComment = {
   can_edit?: boolean;
 };
 
+export type RevisionSourceIdentity = {
+  kind?: 'rule' | 'invoice_field' | 'supporting_document_field' | 'di_field';
+  rule_key?: string | null;
+  field_key?: string | null;
+  invoice_upgrade_type_id?: string | null;
+  supporting_document_type_key?: string | null;
+};
+
 export type RevisionIssue = {
   id: string;
   issue_type: 'rule' | 'invoice_field' | 'supporting_document_field' | 'di_field';
   status:
+    | 'pending_admin_review'
     | 'open'
+    | 'closed_no_contractor_action_required'
     | 'closed_via_corrected_documentation'
     | 'closed_via_attestation'
     | 'closed_via_exception'
     | 'closed_as_withdrawn';
+  disposition_comment?: string | null;
   in_latest_round?: boolean;
   can_delete?: boolean;
   can_close?: boolean;
@@ -98,6 +109,7 @@ export type RevisionIssue = {
     comment_text?: string | null;
   } | null;
   source_reference?: Record<string, string>;
+  source_identity?: RevisionSourceIdentity;
   source: RevisionSource;
   comments: RevisionIssueComment[];
 };
@@ -109,6 +121,7 @@ export type RevisionTrackerData = {
   latest_round_id?: string | null;
   rounds: RevisionRound[];
   issues: RevisionIssue[];
+  suppressed_source_identities?: RevisionSourceIdentity[];
   capabilities?: {
     can_send_issues?: boolean;
     can_add_issue?: boolean;
@@ -158,7 +171,8 @@ const CONTRACTOR_METHODS = [
   ['explanation_provided', 'Explanation provided'],
   ['unable_to_resolve', 'Unable to resolve'],
 ];
-const CLOSE_STATUSES = [
+const INTERNAL_CLOSE_STATUSES = [['closed_no_contractor_action_required', 'Confirmed - no contractor action required']];
+const CONTRACTOR_CLOSE_STATUSES = [
   ['closed_via_corrected_documentation', 'Close: corrected documentation accepted'],
   ['closed_via_attestation', 'Close: attestation accepted'],
   ['closed_via_exception', 'Close: exception granted'],
@@ -176,7 +190,21 @@ const sourceValue = (value: unknown): string => {
 };
 
 const issueStatusColour = (status: RevisionIssue['status']): string =>
-  status === 'open' ? 'orange' : status === 'closed_via_exception' ? 'purple' : 'green';
+  status === 'pending_admin_review'
+    ? 'yellow'
+    : status === 'open'
+      ? 'orange'
+      : status === 'closed_via_exception'
+        ? 'purple'
+        : 'green';
+
+const issueStatusLabel = (status: RevisionIssue['status']): string => {
+  if (status === 'pending_admin_review') return 'Awaiting admin decision';
+  if (status === 'closed_no_contractor_action_required') return 'No contractor action required';
+  return pretty(status);
+};
+
+const issueUnresolved = (issue: RevisionIssue): boolean => ['pending_admin_review', 'open'].includes(issue.status);
 
 const contractorDraftComplete = (issue: RevisionIssue, draft: ContractorDraft): boolean => {
   if (!draft.method || !draft.text.trim()) return false;
@@ -411,7 +439,7 @@ export const RevisionTracker = ({
         issue.id,
       )}/close`,
       'POST',
-      { status: draft.status, comment_text: draft.text.trim() },
+      { status: draft.status, disposition_comment: draft.text.trim() },
     );
   };
 
@@ -426,7 +454,7 @@ export const RevisionTracker = ({
   const isAdmin = viewerRole === 'admin';
   const sendTitle = data?.capabilities?.can_send_issues
     ? ''
-    : 'Add or save an admin recommendation for every open issue before sending.';
+    : 'Add or save an admin recommendation for every unresolved issue before sending.';
   const historyIssue = data?.issues.find((issue) => issue.id === historyIssueId);
   const contractorInvoiceWithProgram =
     !isAdmin && data?.invoice_status === 'admin_review_inbox' && latestRound?.state === 'response_submitted';
@@ -449,7 +477,7 @@ export const RevisionTracker = ({
     return { label: 'Action required', colorScheme: 'orange' };
   };
   const adminIssueStateFor = (issue: RevisionIssue): AdminIssueState | null => {
-    if (!isAdmin || issue.status !== 'open' || data?.invoice_status !== 'admin_review_inbox') return null;
+    if (!isAdmin || !issueUnresolved(issue) || data?.invoice_status !== 'admin_review_inbox') return null;
 
     const currentAdminComment = currentRoundComment(issue, 'admin');
     const editableAdminComment = currentAdminComment?.can_edit ? currentAdminComment : undefined;
@@ -566,10 +594,10 @@ export const RevisionTracker = ({
                     <AccordionButton px="10px" py="8px" flex="1">
                       <Box flex="1" textAlign="left">
                         <Flex align="center" gap="7px" wrap="wrap">
-                          <Text fontWeight="700" color={issue.status === 'open' ? 'blue.700' : 'gray.600'}>
+                          <Text fontWeight="700" color={issueUnresolved(issue) ? 'blue.700' : 'gray.600'}>
                             {issue.source.friendly_label || pretty(issue.issue_type)}
                           </Text>
-                          <Badge colorScheme={issueStatusColour(issue.status)}>{pretty(issue.status)}</Badge>
+                          <Badge colorScheme={issueStatusColour(issue.status)}>{issueStatusLabel(issue.status)}</Badge>
                           {contractorResponseState ? (
                             <Badge colorScheme={contractorResponseState.colorScheme}>
                               {contractorResponseState.label}
@@ -634,6 +662,20 @@ export const RevisionTracker = ({
                             ) : null}
                           </Box>
                         ))}
+                      </Box>
+                    ) : null}
+
+                    {issue.disposition_comment ? (
+                      <Box bg="green.50" borderWidth="1px" borderColor="green.200" borderRadius="md" p="9px" mb="10px">
+                        <Flex align="center" gap="6px" mb="3px" wrap="wrap">
+                          <Badge colorScheme="green">Final disposition</Badge>
+                          <Text fontSize="xs" fontWeight="600">
+                            {issueStatusLabel(issue.status)}
+                          </Text>
+                        </Flex>
+                        <Text fontSize="sm" whiteSpace="pre-wrap">
+                          {issue.disposition_comment}
+                        </Text>
                       </Box>
                     ) : null}
 
@@ -832,7 +874,10 @@ export const RevisionTracker = ({
                               <option value="" disabled>
                                 Select closing outcome
                               </option>
-                              {CLOSE_STATUSES.map(([value, label]) => (
+                              {(issue.status === 'pending_admin_review'
+                                ? INTERNAL_CLOSE_STATUSES
+                                : CONTRACTOR_CLOSE_STATUSES
+                              ).map(([value, label]) => (
                                 <option key={value} value={value}>
                                   {label}
                                 </option>
@@ -857,7 +902,7 @@ export const RevisionTracker = ({
                         <Textarea
                           minH="85px"
                           size="sm"
-                          placeholder="Final comment visible in the issue history"
+                          placeholder="Required disposition comment"
                           value={closeDrafts[issue.id]?.text || ''}
                           onChange={(event) =>
                             setCloseDrafts((current) => ({
@@ -894,7 +939,7 @@ export const RevisionTracker = ({
             <AlertDialogHeader fontSize="lg" fontWeight="700">
               Cannot close issue
             </AlertDialogHeader>
-            <AlertDialogBody>Choose how the issue was closed and enter a final admin comment.</AlertDialogBody>
+            <AlertDialogBody>Choose how the issue was closed and enter a disposition comment.</AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={closeValidationButtonRef} onClick={() => setCloseValidationOpen(false)}>
                 OK
@@ -938,6 +983,19 @@ export const RevisionTracker = ({
                 </Box>
               );
             })}
+            {historyIssue?.disposition_comment ? (
+              <Box borderBottomWidth="1px" borderColor="gray.200" py="10px">
+                <Flex align="center" gap="6px" mb="4px" wrap="wrap">
+                  <Badge colorScheme="green">Final disposition</Badge>
+                  <Text fontSize="xs" fontWeight="600">
+                    {issueStatusLabel(historyIssue.status)}
+                  </Text>
+                </Flex>
+                <Text fontSize="sm" whiteSpace="pre-wrap">
+                  {historyIssue.disposition_comment}
+                </Text>
+              </Box>
+            ) : null}
           </DrawerBody>
         </DrawerContent>
       </Drawer>

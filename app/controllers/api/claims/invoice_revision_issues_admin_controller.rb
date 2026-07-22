@@ -124,7 +124,7 @@ module Api
         ::Claims::RevisionIssues::CloseIssue.call(
           issue: issue,
           status: params[:status],
-          comment_text: params[:comment_text]
+          disposition_comment: params[:disposition_comment]
         )
         render json: tracker(invoice.reload), status: :ok
       rescue ActiveRecord::ReadOnlyRecord => e

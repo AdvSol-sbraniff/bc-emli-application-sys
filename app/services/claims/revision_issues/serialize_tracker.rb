@@ -25,7 +25,7 @@ module Claims
         latest = rounds.first
         sorted_issues =
           issues.sort_by do |issue|
-            [issue.open? ? 0 : 1, issue.created_at, issue.id]
+            [issue.unresolved? ? 0 : 1, issue.created_at, issue.id]
           end
 
         {
@@ -42,6 +42,7 @@ module Claims
                 latest_round: latest
               )
             end,
+          suppressed_source_identities: suppressed_source_identities,
           capabilities: capabilities(latest)
         }
       end
@@ -57,10 +58,17 @@ module Claims
         scope = @invoice.revision_issues
         return scope unless contractor?
 
-        scope
-          .joins(comments: :revision_round)
-          .where.not("claims.revision_rounds.admin_sent_at" => nil)
-          .distinct
+        scope.contractor_visible
+      end
+
+      def suppressed_source_identities
+        return [] unless contractor?
+
+        @invoice
+          .revision_issues
+          .where(status: "closed_no_contractor_action_required")
+          .order(:created_at, :id)
+          .map { |issue| SourceIdentity.serialize(issue) }
       end
 
       def comment_scope(issues, rounds)
@@ -103,7 +111,8 @@ module Claims
               comment.revision_round_id == latest_round.id
           end
         can_admin_comment =
-          admin? && issue.open? && @invoice.status == "admin_review_inbox" &&
+          admin? && issue.unresolved? &&
+            @invoice.status == "admin_review_inbox" &&
             !latest_round&.waiting_for_contractor?
         suggested =
           if can_admin_comment && editable_admin_comment.nil?
@@ -113,14 +122,16 @@ module Claims
           id: issue.id,
           issue_type: issue.issue_type,
           status: issue.status,
+          disposition_comment: issue.disposition_comment,
           created_at: issue.created_at,
           updated_at: issue.updated_at,
           in_latest_round: in_latest_round,
           can_delete:
-            admin? && issue.open? && latest_round&.draft? && in_latest_round &&
-              !has_sent_history,
+            admin? && issue.pending_admin_review? && latest_round&.draft? &&
+              in_latest_round && !has_sent_history,
           can_close:
-            admin? && issue.open? && @invoice.status == "admin_review_inbox" &&
+            admin? && issue.unresolved? &&
+              @invoice.status == "admin_review_inbox" &&
               latest_round.present? && !latest_round.waiting_for_contractor?,
           can_admin_comment: can_admin_comment,
           suggested_admin_comment: suggested,
@@ -132,6 +143,7 @@ module Claims
                   comment.admin_recommended_remedy.present?
               end,
           source_reference: admin? ? issue.source_reference : nil,
+          source_identity: SourceIdentity.serialize(issue),
           source: source,
           comments:
             comments.map do |comment|
@@ -157,7 +169,7 @@ module Claims
             (
               admin? && comment.admin? && latest_round&.draft? &&
                 comment.revision_round_id == latest_round.id &&
-                comment.revision_issue.open?
+                comment.revision_issue.unresolved?
             ) ||
               (
                 contractor? && comment.contractor? &&
@@ -188,7 +200,7 @@ module Claims
         {
           can_send_issues:
             @invoice.status == "admin_review_inbox" && latest&.draft? &&
-              @invoice.revision_issues.open_issues.exists? &&
+              @invoice.revision_issues.unresolved_issues.exists? &&
               missing_admin_issue_ids.empty?,
           can_add_issue:
             @invoice.status == "admin_review_inbox" &&
@@ -198,17 +210,17 @@ module Claims
       end
 
       def missing_admin_comment_issue_ids(round)
-        open_ids = @invoice.revision_issues.open_issues.pluck(:id)
-        return open_ids unless round&.draft?
+        unresolved_ids = @invoice.revision_issues.unresolved_issues.pluck(:id)
+        return unresolved_ids unless round&.draft?
 
         complete_ids =
           round
             .comments
-            .where(author_type: "admin", revision_issue_id: open_ids)
+            .where(author_type: "admin", revision_issue_id: unresolved_ids)
             .where.not(admin_recommended_remedy: nil)
             .where.not(comment_text: [nil, ""])
             .pluck(:revision_issue_id)
-        open_ids - complete_ids
+        unresolved_ids - complete_ids
       end
 
       def suggested_admin_comment
@@ -231,9 +243,9 @@ module Claims
             opened_from_invoice_version_located_field: :invoice_version
           },
           "supporting_document_field" => {
-            opened_from_supporting_document_located_field: %i[
-              supporting_document
-              supporting_document_type_located_field
+            opened_from_supporting_document_located_field: [
+              { supporting_document: :supporting_document_type },
+              :supporting_document_type_located_field
             ]
           },
           "di_field" => :opened_from_di_invoice_version

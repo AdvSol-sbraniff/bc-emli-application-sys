@@ -20,7 +20,10 @@ module Claims
       INSULATION_UPGRADE_TYPE_KEY = "insulation"
       WINDOWS_DOORS_UPGRADE_TYPE_KEY = "windows_doors"
       ELECTRICAL_SERVICE_UPGRADE_TYPE_KEY = "electrical_service_upgrade"
-      PRIOR_REBATE_EXCLUDED_INVOICE_STATUS = "ineligible"
+      PRIOR_REBATE_EXCLUDED_INVOICE_STATUSES = %w[
+        ineligible
+        contractor_withdrawn
+      ].freeze
       COMMON_RULE_KEYS = %w[
         first_class_invoice_fields_present
         submission_within_six_months
@@ -361,7 +364,7 @@ module Claims
           rule_result: rule_result,
           confidence: 100,
           expected_text:
-            "Participant has no prior non-ineligible current invoice for the same one-rebate-limited upgrade area.",
+            "Participant has no prior current invoice that is neither ineligible nor contractor-withdrawn for the same one-rebate-limited upgrade area.",
           detail_text:
             "participant_user_id=#{invoice_version.participant_user_id}; current_upgrade_types=#{current_keys.join(",").presence || "none"}; prior_current_upgrade_types=#{prior_keys.join(",").presence || "none"}; failed_checks=#{failed_checks.join(",").presence || "none"}.",
           calculation:
@@ -431,8 +434,9 @@ module Claims
             )
             .where.not("prior_current_versions.invoice_id = ?", invoice.id)
             .where.not(
-              "prior_current_versions.invoice_status = ?",
-              PRIOR_REBATE_EXCLUDED_INVOICE_STATUS
+              prior_current_versions: {
+                invoice_status: PRIOR_REBATE_EXCLUDED_INVOICE_STATUSES
+              }
             )
             .distinct
             .order(:upgrade_type_key)
@@ -466,7 +470,7 @@ module Claims
       def prior_rebate_reason(rule_result:, failed_checks:)
         return nil unless rule_result == "fail"
 
-        "A current non-ineligible invoice for this participant already contains one of the same one-rebate-limited upgrade areas: #{failed_checks.join(", ")}."
+        "A current invoice that is neither ineligible nor contractor-withdrawn already contains one of the same one-rebate-limited upgrade areas for this participant: #{failed_checks.join(", ")}."
       end
 
       def first_field_value(fields, key)

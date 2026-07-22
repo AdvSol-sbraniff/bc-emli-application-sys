@@ -9,7 +9,7 @@ module Claims
           raise ActiveRecord::ReadOnlyRecord,
                 "Only admin comments in the latest unsent round can be edited"
         end
-        if comment.revision_issue.closed?
+        unless comment.revision_issue.unresolved?
           raise ActiveRecord::ReadOnlyRecord, "Closed issues are immutable"
         end
 

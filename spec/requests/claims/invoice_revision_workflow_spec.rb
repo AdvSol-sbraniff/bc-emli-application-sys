@@ -102,6 +102,64 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     ).and_return(contractor)
   end
 
+  it "lets the contractor withdraw during revision and closes unresolved issues" do
+    post "/api/claims/admin/invoices/#{invoice.id}/revision_issues",
+         params: {
+           issue_type: "rule",
+           invoice_version_rulecheck_id: rule.id
+         },
+         as: :json
+    issue = json_response.fetch("issues").first
+    select_recommendation(invoice.id, issue)
+    post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/send",
+         as: :json
+    expect(invoice.reload.status).to eq("contractor_revision_inbox")
+
+    expect do
+      post "/api/claims/contractor/invoices/#{invoice.id}/withdraw", as: :json
+    end.to change {
+      Claims::InvoiceStatusTransition.where(
+        invoice_id: invoice.id,
+        to_status: "contractor_withdrawn"
+      ).count
+    }.by(1)
+
+    expect(response).to have_http_status(:ok)
+    expect(json_response.dig("invoice", "status")).to eq("contractor_withdrawn")
+    expect(invoice.reload.status).to eq("contractor_withdrawn")
+    expect(invoice.status_subtype).to be_nil
+    expect(invoice.revision_issues.first.reload.status).to eq(
+      "closed_as_withdrawn"
+    )
+    expect(invoice.revision_issues.first.disposition_comment).to eq(
+      "Invoice withdrawn by contractor."
+    )
+    expect(invoice.status_transitions.first.actor_user_id).to eq(user.id)
+
+    post "/api/claims/contractor/invoices/#{invoice.id}/withdraw", as: :json
+    expect(response).to have_http_status(:ok)
+    expect(
+      Claims::InvoiceStatusTransition.where(
+        invoice_id: invoice.id,
+        to_status: "contractor_withdrawn"
+      ).count
+    ).to eq(1)
+  end
+
+  it "does not let the contractor withdraw after approval" do
+    invoice.set_workflow_status!(
+      "approved_paid",
+      actor_user_id: user.id,
+      invoice_version_id: version.id
+    )
+
+    post "/api/claims/contractor/invoices/#{invoice.id}/withdraw", as: :json
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(json_response.fetch("status")).to eq("approved_paid")
+    expect(invoice.reload.status).to eq("approved_paid")
+  end
+
   it "carries a durable issue through an admin recommendation and contractor response" do
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues",
          params: {
@@ -114,6 +172,7 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     expect(round.fetch("state")).to eq("draft")
 
     issue = json_response.fetch("issues").first
+    expect(issue.fetch("status")).to eq("pending_admin_review")
     expect(issue.dig("source", "friendly_label")).to eq(
       "Confirm installation detail"
     )
@@ -139,7 +198,13 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     get "/api/claims/contractor/invoices/#{invoice.id}/revision_issues"
     expect(response).to have_http_status(:ok)
     contractor_issue = json_response.fetch("issues").first
+    expect(contractor_issue.fetch("status")).to eq("open")
     expect(contractor_issue).not_to have_key("source_reference")
+    expect(contractor_issue.fetch("source_identity")).to eq(
+      "kind" => "rule",
+      "rule_key" => rule.rule_key,
+      "invoice_upgrade_type_id" => rule.invoice_upgrade_type_id
+    )
     expect(contractor_issue.fetch("can_contractor_respond")).to be(true)
     expect(json_response.dig("capabilities", "can_submit_response")).to be(
       false
@@ -166,16 +231,19 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/#{issue.fetch("id")}/close",
          params: {
            status: "closed_via_attestation",
-           comment_text:
+           disposition_comment:
              "The administrator accepted the explanation as an attestation."
          },
          as: :json
     expect(response).to have_http_status(:ok)
     closed = json_response.fetch("issues").first
     expect(closed.fetch("status")).to eq("closed_via_attestation")
+    expect(closed.fetch("disposition_comment")).to eq(
+      "The administrator accepted the explanation as an attestation."
+    )
     expect(
       closed.fetch("comments").map { |comment| comment.fetch("author_type") }
-    ).to eq(%w[admin contractor admin])
+    ).to eq(%w[admin contractor])
   end
 
   it "returns issue ids when the contractor tries to submit an incomplete round" do
@@ -293,5 +361,45 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
 
     expect(response).to have_http_status(:ok)
     expect(json_response.fetch("issues")).to be_empty
+  end
+
+  it "stores an internal disposition on the issue and hides it from the contractor" do
+    post "/api/claims/admin/invoices/#{invoice.id}/revision_issues",
+         params: {
+           issue_type: "rule",
+           invoice_version_rulecheck_id: rule.id
+         },
+         as: :json
+    issue = json_response.fetch("issues").first
+
+    post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/#{issue.fetch("id")}/close",
+         params: {
+           status: "closed_no_contractor_action_required",
+           disposition_comment:
+             "The administrator confirmed that no contractor action is required."
+         },
+         as: :json
+
+    expect(response).to have_http_status(:ok)
+    closed = json_response.fetch("issues").first
+    expect(closed.fetch("status")).to eq("closed_no_contractor_action_required")
+    expect(closed.fetch("disposition_comment")).to eq(
+      "The administrator confirmed that no contractor action is required."
+    )
+    expect(closed.fetch("comments")).to be_empty
+
+    get "/api/claims/contractor/invoices/#{invoice.id}/revision_issues"
+
+    expect(response).to have_http_status(:ok)
+    expect(json_response.fetch("issues")).to be_empty
+    expect(json_response.fetch("suppressed_source_identities")).to eq(
+      [
+        {
+          "kind" => "rule",
+          "rule_key" => rule.rule_key,
+          "invoice_upgrade_type_id" => rule.invoice_upgrade_type_id
+        }
+      ]
+    )
   end
 end

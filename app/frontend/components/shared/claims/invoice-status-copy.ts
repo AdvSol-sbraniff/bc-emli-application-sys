@@ -126,6 +126,10 @@ export const INVOICE_STATUS_COPY: Record<string, InvoiceStatusCopy> = {
     label: 'Ineligible',
     hint: 'The claim has been marked ineligible.',
   },
+  contractor_withdrawn: {
+    label: 'Withdrawn by Contractor',
+    hint: 'The contractor voluntarily withdrew this invoice before approval.',
+  },
 };
 
 export const INVOICE_STATUS_FILTER_OPTIONS = [
@@ -149,6 +153,7 @@ export const INVOICE_STATUS_FILTER_OPTIONS = [
   'approved_pending',
   'approved_paid',
   'ineligible',
+  'contractor_withdrawn',
 ];
 
 const humanizeStatus = (status: string) =>

@@ -28,6 +28,7 @@ export type MappingEditorRow = {
 
 type SharedProps = {
   recordKey: string;
+  recordKeyReadOnly: boolean;
   enabled: boolean;
   mappings: MappingEditorRow[];
   selectedUpgradeTypeId: string;
@@ -147,11 +148,13 @@ function EditorFooter({ onCancel, onSave, saving }: { onCancel: () => void; onSa
 
 function SharedTopFields({
   recordKey,
+  recordKeyReadOnly,
   enabled,
   onEnabledChange,
   onRecordKeyChange,
 }: {
   recordKey: string;
+  recordKeyReadOnly: boolean;
   enabled: boolean;
   onEnabledChange: (next: boolean) => void;
   onRecordKeyChange: (next: string) => void;
@@ -166,7 +169,17 @@ function SharedTopFields({
 
       <FormControl isRequired>
         <FormLabel>Key</FormLabel>
-        <Input value={recordKey} onChange={(e) => onRecordKeyChange(e.target.value)} />
+        <Input
+          value={recordKey}
+          onChange={(e) => onRecordKeyChange(e.target.value)}
+          isReadOnly={recordKeyReadOnly}
+          bg={recordKeyReadOnly ? 'gray.100' : undefined}
+        />
+        {recordKeyReadOnly ? (
+          <Text fontSize="xs" opacity={0.7} mt={1}>
+            Keys are permanent after creation because workflow history uses them as durable identities.
+          </Text>
+        ) : null}
       </FormControl>
     </>
   );
@@ -237,8 +250,9 @@ function RuleSourceFields({
           <FormLabel>Admin workflow management</FormLabel>
           <Select value={adminWorkflowPolicy} onChange={(e) => onAdminWorkflowPolicyChange(e.target.value)}>
             <option value="not_managed">Not workflow-managed</option>
-            <option value="warn_and_fail">Workflow-managed for warnings and errors</option>
             <option value="fail_only">Workflow-managed for errors only</option>
+            <option value="warn_and_fail">Workflow-managed for warnings and errors</option>
+            <option value="all_results">Workflow-managed for all results</option>
           </Select>
           <Text fontSize="xs" opacity={0.7} mt={1}>
             Controls which results require an admin review decision before sending a revision or approving.
@@ -264,6 +278,7 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
             <VStack align="stretch" spacing={5}>
               <SharedTopFields
                 recordKey={props.recordKey}
+                recordKeyReadOnly={props.recordKeyReadOnly}
                 enabled={props.enabled}
                 onEnabledChange={props.onEnabledChange}
                 onRecordKeyChange={props.onRecordKeyChange}
@@ -356,6 +371,7 @@ export function CodeLocatedFieldEditorScreen(props: CodeLocatedFieldEditorProps)
     <VStack align="stretch" spacing={5}>
       <SharedTopFields
         recordKey={props.recordKey}
+        recordKeyReadOnly={props.recordKeyReadOnly}
         enabled={props.enabled}
         onEnabledChange={props.onEnabledChange}
         onRecordKeyChange={props.onRecordKeyChange}
@@ -400,6 +416,7 @@ export function GenaiRuleEditorScreen(props: GenaiRuleEditorProps) {
             <VStack align="stretch" spacing={5}>
               <SharedTopFields
                 recordKey={props.recordKey}
+                recordKeyReadOnly={props.recordKeyReadOnly}
                 enabled={props.enabled}
                 onEnabledChange={props.onEnabledChange}
                 onRecordKeyChange={props.onRecordKeyChange}
@@ -464,6 +481,7 @@ export function GenaiLocatedFieldEditorScreen(props: GenaiEditorProps) {
             <VStack align="stretch" spacing={5}>
               <SharedTopFields
                 recordKey={props.recordKey}
+                recordKeyReadOnly={props.recordKeyReadOnly}
                 enabled={props.enabled}
                 onEnabledChange={props.onEnabledChange}
                 onRecordKeyChange={props.onRecordKeyChange}
