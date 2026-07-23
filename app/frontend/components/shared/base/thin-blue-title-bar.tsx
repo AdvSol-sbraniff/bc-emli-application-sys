@@ -1,12 +1,20 @@
-import { Box, BoxProps, Container, Flex, Heading } from '@chakra-ui/react';
+import { Box, BoxProps, Container, ContainerProps, Flex, Heading } from '@chakra-ui/react';
 import React from 'react';
 
 interface IThinBlueTitleBarProps extends BoxProps {
   title: string;
+  leftElement?: React.ReactNode;
   rightElement?: React.ReactNode;
+  contentMaxW?: ContainerProps['maxW'];
 }
 
-export const ThinBlueTitleBar = ({ title, rightElement, ...rest }: IThinBlueTitleBarProps) => {
+export const ThinBlueTitleBar = ({
+  title,
+  leftElement,
+  rightElement,
+  contentMaxW = 'container.lg',
+  ...rest
+}: IThinBlueTitleBarProps) => {
   return (
     <Box h="fit-content" bg="theme.blueGradient" {...rest}>
       <Container
@@ -15,12 +23,15 @@ export const ThinBlueTitleBar = ({ title, rightElement, ...rest }: IThinBlueTitl
         alignItems="center"
         gap={4}
         flexWrap="wrap"
-        maxW="container.lg"
+        maxW={contentMaxW}
         minHeight="96px"
       >
-        <Heading as="h1" color="greys.white" fontSize="1.75rem">
-          {title}
-        </Heading>
+        <Flex alignItems="center" gap={4}>
+          {leftElement ? <Box flexShrink={0}>{leftElement}</Box> : null}
+          <Heading as="h1" color="greys.white" fontSize="1.75rem">
+            {title}
+          </Heading>
+        </Flex>
         {rightElement ? <Box flexShrink={0}>{rightElement}</Box> : null}
       </Container>
     </Box>

@@ -493,6 +493,7 @@ module Api
           :info_admin_message,
           :admin_notes,
           :source_quote,
+          :contractor_action,
           :contractor_visibility,
           :contractor_blocking_policy,
           :admin_workflow_policy
@@ -515,6 +516,7 @@ module Api
           :prompt_text,
           :enabled,
           :source_quote,
+          :contractor_action,
           :contractor_visibility,
           :contractor_blocking_policy,
           :admin_workflow_policy
@@ -562,6 +564,7 @@ module Api
               info_admin_message: row.info_admin_message,
               admin_notes: row.admin_notes,
               source_quote: row.source_quote,
+              contractor_action: row.contractor_action,
               contractor_visibility: row.contractor_visibility,
               contractor_blocking_policy: row.contractor_blocking_policy,
               admin_workflow_policy: row.admin_workflow_policy
@@ -603,6 +606,7 @@ module Api
               contractor_display_name: row.contractor_display_name,
               prompt_text: row.prompt_text,
               source_quote: row.source_quote,
+              contractor_action: row.contractor_action,
               contractor_visibility: row.contractor_visibility,
               contractor_blocking_policy: row.contractor_blocking_policy,
               admin_workflow_policy: row.admin_workflow_policy

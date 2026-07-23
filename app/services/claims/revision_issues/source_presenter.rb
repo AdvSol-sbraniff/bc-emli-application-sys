@@ -72,6 +72,7 @@ module Claims
           expected_text: row&.expected_text,
           calculation: row&.calculation,
           source_quote: registry&.source_quote,
+          contractor_action: registry&.contractor_action,
           page: nil,
           polygon: nil,
           value: nil,

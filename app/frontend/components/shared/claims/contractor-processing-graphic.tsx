@@ -69,16 +69,6 @@ export function ContractorProcessingGraphic({ label }: { label: string }) {
         >
           <ArrowClockwise size={104} weight="duotone" />
         </Flex>
-        <Box
-          position="absolute"
-          right="22px"
-          top="30px"
-          w="16px"
-          h="16px"
-          borderRadius="full"
-          bg="linear-gradient(135deg, #ffffff, #42c7ff)"
-          boxShadow="0 0 24px rgba(66, 199, 255, 0.9)"
-        />
       </Box>
       <Text
         key={label}

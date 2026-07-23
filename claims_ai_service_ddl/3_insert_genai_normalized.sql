@@ -589,7 +589,7 @@ contractor_display_name_metadata (
 source_quote_metadata (
   genai_rule_key,
   section_name,
-  action_sentence
+  contractor_action
 ) AS (
   VALUES
   ('ashp_electric_backup_heat_electric_present', $$AIR SOURCE HEAT PUMP (CONVERT FROM ELECTRIC)$$, $$Check that the invoice or supporting documents show the backup space heating system is electric. Upload clearer evidence if needed.$$),
@@ -639,6 +639,7 @@ INSERT INTO claims.genai_rules (
   prompt_text,
   enabled,
   source_quote,
+  contractor_action,
   contractor_visibility,
   contractor_blocking_policy,
   admin_workflow_policy,
@@ -653,9 +654,9 @@ SELECT
   CASE
     WHEN source_quote_metadata.section_name IS NULL THEN source_quote
     ELSE '**From the ' || source_quote_metadata.section_name || ' section of the PDF:**' || E'\n\n' ||
-      regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g') ||
-      E'\n\n**Action:** ' || source_quote_metadata.action_sentence
+      regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g')
   END AS source_quote,
+  source_quote_metadata.contractor_action,
   CASE
     WHEN legacy_contractor_visible_flag THEN 'fail_only'
     ELSE 'hidden'
@@ -673,6 +674,7 @@ ON CONFLICT (genai_rule_key) DO UPDATE SET
   contractor_display_name = EXCLUDED.contractor_display_name,
   prompt_text = EXCLUDED.prompt_text,
   source_quote = EXCLUDED.source_quote,
+  contractor_action = EXCLUDED.contractor_action,
   contractor_visibility = EXCLUDED.contractor_visibility,
   contractor_blocking_policy = EXCLUDED.contractor_blocking_policy,
   admin_workflow_policy = EXCLUDED.admin_workflow_policy,

@@ -102,6 +102,38 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     ).and_return(contractor)
   end
 
+  it "creates managed issues when the contractor hands the analyzed package to admins" do
+    rule
+    invoice.update_columns(
+      status: "genai_complete",
+      status_updated_at: now,
+      updated_at: now
+    )
+
+    expect do
+      post "/api/claims/contractor/invoices/#{invoice.id}/submit_to_admin",
+           as: :json
+    end.to change { invoice.revision_issues.count }.from(0).to(1)
+
+    expect(response).to have_http_status(:ok)
+    expect(json_response.dig("invoice", "reference_number")).to eq(
+      invoice.reference_number
+    )
+    expect(invoice.reload.status).to eq("admin_review_inbox")
+    issue = invoice.revision_issues.first
+    expect(issue).to be_pending_admin_review
+    expect(issue.opened_from_invoice_version_rulecheck_id).to eq(rule.id)
+
+    post "/api/claims/admin/invoices/#{invoice.id}/revision_issues/ensure_managed",
+         as: :json
+    expect(response).to have_http_status(:ok)
+    expect(json_response.fetch("issues").map { |row| row.fetch("id") }).to eq(
+      [issue.id]
+    )
+    expect(invoice.revision_issues.count).to eq(1)
+    expect(invoice.revision_rounds.count).to eq(1)
+  end
+
   it "lets the contractor withdraw during revision and closes unresolved issues" do
     post "/api/claims/admin/invoices/#{invoice.id}/revision_issues",
          params: {
@@ -136,6 +168,12 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     )
     expect(invoice.status_transitions.first.actor_user_id).to eq(user.id)
 
+    get "/api/claims/contractor/invoices/#{invoice.id}/revision_issues"
+    expect(response).to have_http_status(:ok)
+    withdrawn_issue = json_response.fetch("issues").sole
+    expect(withdrawn_issue.fetch("status")).to eq("closed_as_withdrawn")
+    expect(withdrawn_issue.fetch("was_sent_to_contractor")).to be(true)
+
     post "/api/claims/contractor/invoices/#{invoice.id}/withdraw", as: :json
     expect(response).to have_http_status(:ok)
     expect(
@@ -144,6 +182,29 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
         to_status: "contractor_withdrawn"
       ).count
     ).to eq(1)
+  end
+
+  it "does not expose an unsent issue that is closed by contractor withdrawal" do
+    post "/api/claims/admin/invoices/#{invoice.id}/revision_issues",
+         params: {
+           issue_type: "rule",
+           invoice_version_rulecheck_id: rule.id
+         },
+         as: :json
+    issue_id = json_response.fetch("issues").first.fetch("id")
+
+    post "/api/claims/contractor/invoices/#{invoice.id}/withdraw", as: :json
+    expect(response).to have_http_status(:ok)
+
+    get "/api/claims/admin/invoices/#{invoice.id}/revision_issues"
+    admin_issue =
+      json_response.fetch("issues").find { |row| row.fetch("id") == issue_id }
+    expect(admin_issue.fetch("status")).to eq("closed_as_withdrawn")
+    expect(admin_issue.fetch("was_sent_to_contractor")).to be(false)
+
+    get "/api/claims/contractor/invoices/#{invoice.id}/revision_issues"
+    expect(response).to have_http_status(:ok)
+    expect(json_response.fetch("issues")).to be_empty
   end
 
   it "does not let the contractor withdraw after approval" do
@@ -173,6 +234,7 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
 
     issue = json_response.fetch("issues").first
     expect(issue.fetch("status")).to eq("pending_admin_review")
+    expect(issue.fetch("was_sent_to_contractor")).to be(false)
     expect(issue.dig("source", "friendly_label")).to eq(
       "Confirm installation detail"
     )
@@ -199,6 +261,8 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     expect(response).to have_http_status(:ok)
     contractor_issue = json_response.fetch("issues").first
     expect(contractor_issue.fetch("status")).to eq("open")
+    expect(contractor_issue.fetch("was_sent_to_contractor")).to be(true)
+    expect(contractor_issue.fetch("first_sent_to_contractor_at")).to be_present
     expect(contractor_issue).not_to have_key("source_reference")
     expect(contractor_issue.fetch("source_identity")).to eq(
       "kind" => "rule",
@@ -383,6 +447,7 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     expect(response).to have_http_status(:ok)
     closed = json_response.fetch("issues").first
     expect(closed.fetch("status")).to eq("closed_no_contractor_action_required")
+    expect(closed.fetch("was_sent_to_contractor")).to be(false)
     expect(closed.fetch("disposition_comment")).to eq(
       "The administrator confirmed that no contractor action is required."
     )

@@ -51,6 +51,7 @@ type CodeRuleRow = {
   info_admin_message?: string | null;
   admin_notes?: string | null;
   source_quote?: string | null;
+  contractor_action?: string | null;
   contractor_visibility?: string | null;
   contractor_blocking_policy?: string | null;
   updated_at?: string | null;
@@ -95,6 +96,7 @@ export default function CodeRulesetsAdminScreen() {
     info_admin_message: '',
     admin_notes: '',
     source_quote: '',
+    contractor_action: '',
     contractor_visibility: 'fail_only',
     contractor_blocking_policy: 'non_blocking',
   });
@@ -161,6 +163,7 @@ export default function CodeRulesetsAdminScreen() {
       info_admin_message: row.info_admin_message || '',
       admin_notes: row.admin_notes || '',
       source_quote: row.source_quote || '',
+      contractor_action: row.contractor_action || '',
       contractor_visibility: row.contractor_visibility || 'fail_only',
       contractor_blocking_policy: row.contractor_blocking_policy || 'non_blocking',
     });
@@ -447,6 +450,17 @@ export default function CodeRulesetsAdminScreen() {
                   <Textarea
                     value={form.source_quote}
                     onChange={(e) => setForm((prev) => ({ ...prev, source_quote: e.target.value }))}
+                    minH="90px"
+                  />
+                </Box>
+
+                <Box>
+                  <Text fontSize="xs" opacity={0.7} mb={1}>
+                    contractor_action
+                  </Text>
+                  <Textarea
+                    value={form.contractor_action}
+                    onChange={(e) => setForm((prev) => ({ ...prev, contractor_action: e.target.value }))}
                     minH="90px"
                   />
                 </Box>

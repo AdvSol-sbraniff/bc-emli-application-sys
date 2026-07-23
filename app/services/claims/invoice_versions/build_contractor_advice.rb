@@ -18,6 +18,7 @@ module Claims
           contractor_actionable_rules.map do |rule|
             markdown_quote_bullet(
               rule.fetch(:source_quote),
+              contractor_action: rule[:contractor_action],
               contractor_display_name: rule.fetch(:contractor_display_name),
               rule_key: rule.fetch(:rule_key)
             )
@@ -50,7 +51,8 @@ module Claims
             .select(
               "claims.invoice_version_rulechecks.rule_key AS rule_key",
               "claims.invoice_version_rulechecks.contractor_display_name AS contractor_display_name",
-              "COALESCE(gr.source_quote, cr.source_quote) AS source_quote"
+              "COALESCE(gr.source_quote, cr.source_quote) AS source_quote",
+              "COALESCE(gr.contractor_action, cr.contractor_action) AS contractor_action"
             )
             .order(:rule_key, :created_at)
 
@@ -67,7 +69,9 @@ module Claims
                   .to_s
                   .strip
                   .presence || row.rule_key.to_s.humanize,
-              source_quote: source_quote
+              source_quote: source_quote,
+              contractor_action:
+                normalize_quote(row.read_attribute("contractor_action"))
             }
           end
           .uniq
@@ -82,16 +86,25 @@ module Claims
         lines.join("\n").presence
       end
 
-      def markdown_quote_bullet(quote, contractor_display_name:, rule_key:)
+      def markdown_quote_bullet(
+        quote,
+        contractor_action:,
+        contractor_display_name:,
+        rule_key:
+      )
         lines = quote.to_s.lines.map(&:rstrip)
         lines.shift while lines.first.to_s.strip.blank?
         lines.pop while lines.last.to_s.strip.blank?
         return nil if lines.empty?
 
-        (
+        output =
           ["- [**#{contractor_display_name}**](# \"Rule key: #{rule_key}\")"] +
             lines.map { |line| line.strip.blank? ? "  " : "  #{line}" }
-        ).compact.join("\n")
+        if contractor_action.present?
+          output << "  "
+          output << "  **Action:** #{contractor_action}"
+        end
+        output.join("\n")
       end
     end
   end

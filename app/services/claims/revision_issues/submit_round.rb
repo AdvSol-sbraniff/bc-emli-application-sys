@@ -59,6 +59,10 @@ module Claims
             submitter_id: invoice.submitter_id || @actor_user_id,
             submitted_at: invoice.submitted_at || now
           )
+          EnsureManagedIssues.call(
+            invoice: invoice,
+            invoice_version: @invoice_version
+          )
         end
         round
       end

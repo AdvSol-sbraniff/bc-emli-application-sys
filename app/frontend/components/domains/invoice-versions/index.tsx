@@ -36,7 +36,20 @@ import {
 } from '../../shared/claims/invoice-upgrade-type-visual';
 import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 import { ViewerPanelMode, ViewerPanelModeSelector } from '../../shared/claims/viewer-panel-mode-selector';
-import { RevisionTracker, RevisionTrackerData } from '../../shared/claims/revision-tracker';
+import {
+  AdminInlineRevisionIssue,
+  AdminRevisionSnapshot,
+  AdminRevisionWorkspaceToolbar,
+  AdminUnmatchedRevisionIssues,
+  diFieldRevisionIdentityKey,
+  invoiceFieldRevisionIdentityKey,
+  revisionIssueUnresolved,
+  revisionSourceIdentityKey,
+  rulecheckRevisionIdentityKey,
+  supportingFieldRevisionIdentityKey,
+  useAdminInlineRevisionWorkspace,
+} from '../../shared/claims/admin-inline-revision-issues';
+import { RevisionIssue, RevisionTrackerData } from '../../shared/claims/revision-tracker';
 import {
   ArrowClockwise,
   ArrowSquareOut,
@@ -99,27 +112,35 @@ type RevisionAddIconButtonProps = {
 const RevisionAddIconButton = ({ label, included = false, onAdd, disabledReason }: RevisionAddIconButtonProps) => {
   if (!included && !onAdd && !disabledReason) return null;
 
-  const actionLabel = included ? `${label} already has a revision issue` : disabledReason || `Add ${label} to revision`;
-  const disabled = included || !!disabledReason;
+  const actionLabel = included
+    ? `Open the existing revision issue for ${label}`
+    : disabledReason || `Add ${label} to revision`;
+  const disabled = !included && (!!disabledReason || !onAdd);
 
   return (
     <Box as="span" display="inline-flex" title={actionLabel}>
       <IconButton
         aria-label={actionLabel}
         aria-pressed={included}
-        icon={included ? <CheckCircle size={19} weight="fill" /> : <PlusCircle size={19} weight="bold" />}
+        icon={<PlusCircle size={19} weight={included ? 'fill' : 'bold'} />}
         size="xs"
         minW="26px"
         h="26px"
         borderRadius="full"
         colorScheme={included ? 'green' : 'blue'}
-        variant={included ? 'ghost' : 'solid'}
+        variant={included ? 'outline' : 'solid'}
         color={included ? 'green.600' : 'white'}
         bg={included ? 'green.50' : 'blue.600'}
         boxShadow={included ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.35)'}
         isDisabled={disabled}
         opacity={1}
-        _hover={disabled ? undefined : { bg: 'blue.700', transform: 'translateY(-1px)' }}
+        _hover={
+          disabled
+            ? undefined
+            : included
+              ? { bg: 'green.100', transform: 'translateY(-1px)' }
+              : { bg: 'blue.700', transform: 'translateY(-1px)' }
+        }
         _disabled={{
           opacity: 1,
           color: included ? 'green.600' : 'gray.500',
@@ -459,17 +480,6 @@ const normalizeResult = (result: unknown): RuleResult => {
     .trim()
     .toLowerCase();
   return value === 'pass' || value === 'info' || value === 'warn' || value === 'fail' ? value : null;
-};
-
-const resultLabel = (result: unknown): string => normalizeResult(result)?.toUpperCase() ?? 'UNKNOWN';
-
-const resultColorScheme = (result: unknown): string => {
-  const normalized = normalizeResult(result);
-  if (normalized === 'pass') return 'green';
-  if (normalized === 'info') return 'blue';
-  if (normalized === 'warn') return 'yellow';
-  if (normalized === 'fail') return 'red';
-  return 'gray';
 };
 
 const resultDotColor = (result: unknown): string => {
@@ -850,32 +860,8 @@ export const InvoiceVersionShowScreen = () => {
   const [lineitemsError] = useState<string | null>(null);
   const [statusActionLoading, setStatusActionLoading] = useState<InvoiceStatusTransition | null>(null);
   const [statusActionError, setStatusActionError] = useState<string | null>(null);
-  const [revisionRefreshToken, setRevisionRefreshToken] = useState(0);
-  const [revisionTrackerData, setRevisionTrackerData] = useState<RevisionTrackerData | null>(null);
-
-  const activeRevisionReferenceTokens = useMemo(() => {
-    const tokens = new Set<string>();
-    revisionTrackerData?.issues.forEach((issue) => {
-      const reference = issue.source_reference || {};
-      if (reference.invoice_version_rulecheck_id) tokens.add(`rule:${reference.invoice_version_rulecheck_id}`);
-      if (reference.invoice_version_located_field_id)
-        tokens.add(`invoice_field:${reference.invoice_version_located_field_id}`);
-      if (reference.supporting_document_located_field_id)
-        tokens.add(`supporting_document_field:${reference.supporting_document_located_field_id}`);
-      if (reference.di_field_key) tokens.add(`di_field:${reference.di_field_key}`);
-    });
-    return tokens;
-  }, [revisionTrackerData]);
-
-  const canAddRevisionIssue = !!revisionTrackerData?.capabilities?.can_add_issue;
-  const revisionAddDisabledReason = !revisionTrackerData
-    ? 'The revision tracker is still loading.'
-    : !canAddRevisionIssue
-      ? 'Revision issues can be added while the invoice is in the first-level admin inbox.'
-      : undefined;
 
   const handleRevisionTrackerChange = useCallback((next: RevisionTrackerData) => {
-    setRevisionTrackerData(next);
     setReadData((current: any) =>
       current
         ? {
@@ -886,6 +872,33 @@ export const InvoiceVersionShowScreen = () => {
         : current,
     );
   }, []);
+
+  const revisionInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
+  const revisionWorkspace = useAdminInlineRevisionWorkspace({
+    invoiceId: revisionInvoiceId,
+    enabled: canRunWorkflowActions && !!revisionInvoiceId,
+    onTrackerChange: handleRevisionTrackerChange,
+  });
+  const revisionTrackerData = revisionWorkspace.data;
+  const revisionIssueByIdentity = useMemo(() => {
+    const index = new Map<string, RevisionIssue>();
+    revisionWorkspace.issues.forEach((issue) => {
+      const key = revisionSourceIdentityKey(issue.source_identity);
+      if (key) index.set(key, issue);
+    });
+    return index;
+  }, [revisionWorkspace.issues]);
+  const canAddRevisionIssue = !!revisionTrackerData?.capabilities?.can_add_issue;
+  const revisionAddDisabledReason = !revisionTrackerData
+    ? 'The revision workspace is still loading.'
+    : !canAddRevisionIssue
+      ? 'Revision issues can be added while the invoice is in the first-level admin inbox.'
+      : undefined;
+
+  const revisionIssueForRulecheck = (row: any) => revisionIssueByIdentity.get(rulecheckRevisionIdentityKey(row));
+  const revisionIssueForInvoiceField = (row: any) => revisionIssueByIdentity.get(invoiceFieldRevisionIdentityKey(row));
+  const revisionIssueForDiField = (fieldKey: string) =>
+    revisionIssueByIdentity.get(diFieldRevisionIdentityKey(fieldKey));
 
   const addToRevision = async (entryType: string, sourceAttribute: string, sourceValue: string) => {
     const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
@@ -903,8 +916,10 @@ export const InvoiceVersionShowScreen = () => {
       );
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json?.error || `Could not add revision item (${response.status}).`);
-      setRevisionTrackerData(json as RevisionTrackerData);
-      setRevisionRefreshToken((value) => value + 1);
+      const previousIds = new Set(revisionWorkspace.issues.map((issue) => issue.id));
+      revisionWorkspace.adoptData(json as RevisionTrackerData);
+      const createdIssue = (json as RevisionTrackerData).issues.find((issue) => !previousIds.has(issue.id));
+      if (createdIssue) revisionWorkspace.focusIssue(createdIssue.id);
       toast({ title: 'Revision issue added', status: 'success', duration: 2500 });
     } catch (reason: any) {
       toast({
@@ -918,24 +933,30 @@ export const InvoiceVersionShowScreen = () => {
 
   const invoiceFieldRevisionProps = (row: any) => {
     const sourceId = String(row?.id || '').trim();
+    const issue = revisionIssueForInvoiceField(row);
     return {
-      revisionChecked: !!sourceId && activeRevisionReferenceTokens.has(`invoice_field:${sourceId}`),
-      onAddToRevision:
-        canRunWorkflowActions && canAddRevisionIssue && sourceId
+      revisionChecked: !!issue,
+      onAddToRevision: issue
+        ? () => revisionWorkspace.focusIssue(issue.id)
+        : canRunWorkflowActions && canAddRevisionIssue && sourceId
           ? () => addToRevision('invoice_field', 'invoice_version_located_field_id', sourceId)
           : undefined,
-      revisionAddDisabledReason: canRunWorkflowActions && sourceId ? revisionAddDisabledReason : undefined,
+      revisionAddDisabledReason: !issue && canRunWorkflowActions && sourceId ? revisionAddDisabledReason : undefined,
     };
   };
 
-  const diFieldRevisionProps = (fieldKey: string) => ({
-    revisionChecked: activeRevisionReferenceTokens.has(`di_field:${fieldKey}`),
-    onAddToRevision:
-      canRunWorkflowActions && canAddRevisionIssue
-        ? () => addToRevision('di_field', 'di_field_key', fieldKey)
-        : undefined,
-    revisionAddDisabledReason: canRunWorkflowActions ? revisionAddDisabledReason : undefined,
-  });
+  const diFieldRevisionProps = (fieldKey: string) => {
+    const issue = revisionIssueForDiField(fieldKey);
+    return {
+      revisionChecked: !!issue,
+      onAddToRevision: issue
+        ? () => revisionWorkspace.focusIssue(issue.id)
+        : canRunWorkflowActions && canAddRevisionIssue
+          ? () => addToRevision('di_field', 'di_field_key', fieldKey)
+          : undefined,
+      revisionAddDisabledReason: !issue && canRunWorkflowActions ? revisionAddDisabledReason : undefined,
+    };
+  };
 
   useEffect(() => {
     if (bannerHidden) {
@@ -1343,6 +1364,11 @@ export const InvoiceVersionShowScreen = () => {
 
   const runStatusTransition = async (transition: InvoiceStatusTransition) => {
     if (!canRunWorkflowActions) return;
+    if (revisionWorkspace.unsavedIssueIds.length) {
+      revisionWorkspace.focusIssue(revisionWorkspace.unsavedIssueIds[0]);
+      setStatusActionError('Save all changed revision recommendations before changing the invoice status.');
+      return;
+    }
 
     const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
     const action = INVOICE_STATUS_ACTIONS.find((candidate) => candidate.key === transition);
@@ -1740,6 +1766,49 @@ export const InvoiceVersionShowScreen = () => {
 
     return Array.from(sectionMap.values()).sort((a, b) => a.title.localeCompare(b.title));
   }, [uploadedSupportingDocuments]);
+  const supportingFieldIdentityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    uploadedSupportingDocuments.forEach((document: any) => {
+      const typeKey = document?.supporting_document_type_key;
+      const fields = Array.isArray(document?.located_fields) ? document.located_fields : [];
+      fields.forEach((field: any) => {
+        const key = supportingFieldRevisionIdentityKey(typeKey, field?.field_key);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [uploadedSupportingDocuments]);
+  const revisionIssueForSupportingField = (document: any, field: any) => {
+    const key = supportingFieldRevisionIdentityKey(document?.supporting_document_type_key, field?.field_key);
+    return supportingFieldIdentityCounts.get(key) === 1 ? revisionIssueByIdentity.get(key) : undefined;
+  };
+  const renderedRevisionIdentityKeys = useMemo(() => {
+    const keys = new Set<string>();
+    DI_FIELDS.forEach((field) => keys.add(diFieldRevisionIdentityKey(field.key)));
+    [...genAiFields, ...codeFields, ...classifierFields].forEach((field) =>
+      keys.add(invoiceFieldRevisionIdentityKey(field)),
+    );
+    filteredGenAiRulechecks.forEach((rulecheck) => keys.add(rulecheckRevisionIdentityKey(rulecheck)));
+    supportingFieldIdentityCounts.forEach((count, key) => {
+      if (count === 1) keys.add(key);
+    });
+    return keys;
+  }, [classifierFields, codeFields, filteredGenAiRulechecks, genAiFields, supportingFieldIdentityCounts]);
+  const matchedRevisionIssueIds = useMemo(() => {
+    const ids = new Set<string>();
+    revisionWorkspace.issues.forEach((issue) => {
+      const key = revisionSourceIdentityKey(issue.source_identity);
+      if (key && renderedRevisionIdentityKeys.has(key)) ids.add(issue.id);
+    });
+    return ids;
+  }, [renderedRevisionIdentityKeys, revisionWorkspace.issues]);
+  const unmatchedOpenRevisionIssues = useMemo(
+    () =>
+      revisionWorkspace.issues.filter(
+        (issue) => revisionIssueUnresolved(issue) && !matchedRevisionIssueIds.has(issue.id),
+      ),
+    [matchedRevisionIssueIds, revisionWorkspace.issues],
+  );
   const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
 
   // ============================================================
@@ -1886,6 +1955,9 @@ export const InvoiceVersionShowScreen = () => {
                 w="auto"
                 flex="1 1 auto"
               >
+                {canRunWorkflowActions && readData?.invoice_id ? (
+                  <AdminRevisionWorkspaceToolbar workspace={revisionWorkspace} />
+                ) : null}
                 {/* ============================================================
       SECTION 07.05.01 - FIELDS ACCORDION
       PURPOSE: Collapsible container for the DI header fields list
@@ -1948,24 +2020,31 @@ export const InvoiceVersionShowScreen = () => {
                           const display = f.formatter ? f.formatter(raw) : String(raw ?? '-');
                           const clickable = !f.disabled && !!f.pageKey && !!f.polygonKey;
 
+                          const issue = revisionIssueForDiField(f.key);
                           return (
-                            <FieldRow
-                              key={f.key}
-                              label={f.label}
-                              value={display}
-                              active={activeHighlightKey === f.key}
-                              disabled={!clickable}
-                              inline
-                              {...diFieldRevisionProps(f.key)}
-                              onClick={
-                                clickable
-                                  ? () => {
-                                      setRightPanelMode('document');
-                                      setActiveHighlightKey(f.key);
-                                    }
-                                  : undefined
-                              }
-                            />
+                            <React.Fragment key={f.key}>
+                              <FieldRow
+                                label={f.label}
+                                value={display}
+                                active={activeHighlightKey === f.key}
+                                disabled={!clickable}
+                                inline
+                                {...diFieldRevisionProps(f.key)}
+                                onClick={
+                                  clickable
+                                    ? () => {
+                                        setRightPanelMode('document');
+                                        setActiveHighlightKey(f.key);
+                                      }
+                                    : undefined
+                                }
+                              />
+                              {issue ? (
+                                <Box gridColumn="1 / -1">
+                                  <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                </Box>
+                              ) : null}
+                            </React.Fragment>
                           );
                         })}
                       </Box>
@@ -2115,75 +2194,75 @@ export const InvoiceVersionShowScreen = () => {
                             const confidence =
                               r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(2)}` : '';
                             const clickable = r.page != null;
+                            const issue = revisionIssueForInvoiceField(r);
+                            const revisionProps = invoiceFieldRevisionProps(r);
 
                             return (
-                              <Box
-                                key={r.id}
-                                role={clickable ? 'button' : undefined}
-                                cursor={clickable ? 'pointer' : 'default'}
-                                px="10px"
-                                py="2px"
-                                borderRadius="md"
-                                display="flex"
-                                alignItems="baseline"
-                                justifyContent="space-between"
-                                gap="6px"
-                                position="relative"
-                                pr="38px"
-                                bg={
-                                  activeHighlight?.source === 'classifier' && activeHighlight?.genaiId === Number(r.id)
-                                    ? 'blue.50'
-                                    : 'transparent'
-                                }
-                                _hover={clickable ? { bg: 'gray.50' } : undefined}
-                                onClick={
-                                  clickable
-                                    ? () => {
-                                        setActiveHighlight({
-                                          source: 'classifier',
-                                          genaiId: Number(r.id),
-                                          pageNumber: Number(r.page),
-                                          polygon: r.polygon ?? null,
-                                        });
-                                        setRightPanelMode('document');
-                                      }
-                                    : undefined
-                                }
-                              >
-                                <Box position="absolute" right="6px" top="1px">
-                                  <RevisionAddIconButton
-                                    label={label}
-                                    included={activeRevisionReferenceTokens.has(`invoice_field:${String(r.id)}`)}
-                                    onAdd={
-                                      canRunWorkflowActions && canAddRevisionIssue
-                                        ? () =>
-                                            void addToRevision(
-                                              'invoice_field',
-                                              'invoice_version_located_field_id',
-                                              String(r.id),
-                                            )
-                                        : undefined
-                                    }
-                                    disabledReason={canRunWorkflowActions ? revisionAddDisabledReason : undefined}
-                                  />
-                                </Box>
-                                <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
-                                  <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1} cursor="help">
-                                    {label}
-                                  </Text>
-                                </Tooltip>
-                                {confidence ? (
-                                  <Tooltip label={confidence} hasArrow placement="top">
-                                    <Text fontSize="sm" noOfLines={2} textAlign="right" cursor="help">
-                                      {value}
+                              <React.Fragment key={r.id}>
+                                <Box
+                                  role={clickable ? 'button' : undefined}
+                                  cursor={clickable ? 'pointer' : 'default'}
+                                  px="10px"
+                                  py="2px"
+                                  borderRadius="md"
+                                  display="flex"
+                                  alignItems="baseline"
+                                  justifyContent="space-between"
+                                  gap="6px"
+                                  position="relative"
+                                  pr="38px"
+                                  bg={
+                                    activeHighlight?.source === 'classifier' &&
+                                    activeHighlight?.genaiId === Number(r.id)
+                                      ? 'blue.50'
+                                      : 'transparent'
+                                  }
+                                  _hover={clickable ? { bg: 'gray.50' } : undefined}
+                                  onClick={
+                                    clickable
+                                      ? () => {
+                                          setActiveHighlight({
+                                            source: 'classifier',
+                                            genaiId: Number(r.id),
+                                            pageNumber: Number(r.page),
+                                            polygon: r.polygon ?? null,
+                                          });
+                                          setRightPanelMode('document');
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  <Box position="absolute" right="6px" top="1px">
+                                    <RevisionAddIconButton
+                                      label={label}
+                                      included={revisionProps.revisionChecked}
+                                      onAdd={revisionProps.onAddToRevision}
+                                      disabledReason={revisionProps.revisionAddDisabledReason}
+                                    />
+                                  </Box>
+                                  <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
+                                    <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1} cursor="help">
+                                      {label}
                                     </Text>
                                   </Tooltip>
-                                ) : (
-                                  <Text fontSize="sm" noOfLines={2} textAlign="right">
-                                    {value}
-                                  </Text>
-                                )}
-                              </Box>
+                                  {confidence ? (
+                                    <Tooltip label={confidence} hasArrow placement="top">
+                                      <Text fontSize="sm" noOfLines={2} textAlign="right" cursor="help">
+                                        {value}
+                                      </Text>
+                                    </Tooltip>
+                                  ) : (
+                                    <Text fontSize="sm" noOfLines={2} textAlign="right">
+                                      {value}
+                                    </Text>
+                                  )}
+                                </Box>
+                                {issue ? (
+                                  <Box gridColumn="1 / -1">
+                                    <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                  </Box>
+                                ) : null}
+                              </React.Fragment>
                             );
                           })}
                         </Box>
@@ -2418,6 +2497,7 @@ export const InvoiceVersionShowScreen = () => {
                                       const handleClick = clickable
                                         ? () => showSupportingDocumentInViewer(doc, field)
                                         : undefined;
+                                      const issue = revisionIssueForSupportingField(doc, field);
 
                                       return (
                                         <React.Fragment key={String(field?.id || field?.field_key)}>
@@ -2447,23 +2527,28 @@ export const InvoiceVersionShowScreen = () => {
                                           </Text>
                                           <RevisionAddIconButton
                                             label={displayLocatedFieldLabel(field)}
-                                            included={activeRevisionReferenceTokens.has(
-                                              `supporting_document_field:${String(field?.id)}`,
-                                            )}
+                                            included={!!issue}
                                             onAdd={
-                                              canRunWorkflowActions && canAddRevisionIssue
-                                                ? () =>
-                                                    void addToRevision(
-                                                      'supporting_document_field',
-                                                      'supporting_document_located_field_id',
-                                                      String(field?.id),
-                                                    )
-                                                : undefined
+                                              issue
+                                                ? () => revisionWorkspace.focusIssue(issue.id)
+                                                : canRunWorkflowActions && canAddRevisionIssue
+                                                  ? () =>
+                                                      void addToRevision(
+                                                        'supporting_document_field',
+                                                        'supporting_document_located_field_id',
+                                                        String(field?.id),
+                                                      )
+                                                  : undefined
                                             }
                                             disabledReason={
-                                              canRunWorkflowActions ? revisionAddDisabledReason : undefined
+                                              !issue && canRunWorkflowActions ? revisionAddDisabledReason : undefined
                                             }
                                           />
+                                          {issue ? (
+                                            <Box gridColumn="1 / -1">
+                                              <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                            </Box>
+                                          ) : null}
                                         </React.Fragment>
                                       );
                                     })}
@@ -3146,17 +3231,24 @@ export const InvoiceVersionShowScreen = () => {
                           {codeFields.map((r: any) => {
                             const label = displayLocatedFieldLabel(r);
                             const value = displayLocatedFieldValue(r);
+                            const issue = revisionIssueForInvoiceField(r);
 
                             return (
-                              <FieldRow
-                                key={r.id}
-                                label={label}
-                                labelHint={locatedFieldKeyHint(r)}
-                                value={value}
-                                disabled
-                                inline
-                                {...invoiceFieldRevisionProps(r)}
-                              />
+                              <React.Fragment key={r.id}>
+                                <FieldRow
+                                  label={label}
+                                  labelHint={locatedFieldKeyHint(r)}
+                                  value={value}
+                                  disabled
+                                  inline
+                                  {...invoiceFieldRevisionProps(r)}
+                                />
+                                {issue ? (
+                                  <Box gridColumn="1 / -1">
+                                    <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                  </Box>
+                                ) : null}
+                              </React.Fragment>
                             );
                           })}
                         </Box>
@@ -3246,33 +3338,43 @@ export const InvoiceVersionShowScreen = () => {
                                               ? `Confidence: ${Number(r.confidence).toFixed(0)}`
                                               : '';
                                           const clickable = r.page != null;
+                                          const issue = revisionIssueForInvoiceField(r);
 
                                           return (
-                                            <FieldRow
-                                              key={r.id}
-                                              label={label}
-                                              labelHint={locatedFieldKeyHint(r)}
-                                              value={value}
-                                              hint={confidence}
-                                              active={activeHighlightKey === highlightKey}
-                                              disabled={!clickable}
-                                              inline
-                                              {...invoiceFieldRevisionProps(r)}
-                                              onClick={
-                                                clickable
-                                                  ? () => {
-                                                      setActiveHighlight({
-                                                        source: highlightSource,
-                                                        genaiId: Number(r.id),
-                                                        pageNumber: Number(r.page),
-                                                        polygon: r.polygon ?? null,
-                                                      });
-                                                      setRightPanelMode('document');
-                                                      setActiveHighlightKey(highlightKey);
-                                                    }
-                                                  : undefined
-                                              }
-                                            />
+                                            <React.Fragment key={r.id}>
+                                              <FieldRow
+                                                label={label}
+                                                labelHint={locatedFieldKeyHint(r)}
+                                                value={value}
+                                                hint={confidence}
+                                                active={activeHighlightKey === highlightKey}
+                                                disabled={!clickable}
+                                                inline
+                                                {...invoiceFieldRevisionProps(r)}
+                                                onClick={
+                                                  clickable
+                                                    ? () => {
+                                                        setActiveHighlight({
+                                                          source: highlightSource,
+                                                          genaiId: Number(r.id),
+                                                          pageNumber: Number(r.page),
+                                                          polygon: r.polygon ?? null,
+                                                        });
+                                                        setRightPanelMode('document');
+                                                        setActiveHighlightKey(highlightKey);
+                                                      }
+                                                    : undefined
+                                                }
+                                              />
+                                              {issue ? (
+                                                <Box gridColumn="1 / -1">
+                                                  <AdminInlineRevisionIssue
+                                                    issue={issue}
+                                                    workspace={revisionWorkspace}
+                                                  />
+                                                </Box>
+                                              ) : null}
+                                            </React.Fragment>
                                           );
                                         })}
                                       </Box>
@@ -3311,6 +3413,7 @@ export const InvoiceVersionShowScreen = () => {
                                         {visibleRulechecks.map((r: any) => {
                                           const title = ruleDisplayTitle(r);
                                           const reason = r.reason_and_likely_causes ?? '';
+                                          const issue = revisionIssueForRulecheck(r);
 
                                           return (
                                             <Box
@@ -3350,19 +3453,23 @@ export const InvoiceVersionShowScreen = () => {
                                                 </Tooltip>
                                                 <RevisionAddIconButton
                                                   label={title}
-                                                  included={activeRevisionReferenceTokens.has(`rule:${String(r.id)}`)}
+                                                  included={!!issue}
                                                   onAdd={
-                                                    canRunWorkflowActions && canAddRevisionIssue
-                                                      ? () =>
-                                                          void addToRevision(
-                                                            'rule',
-                                                            'invoice_version_rulecheck_id',
-                                                            String(r.id),
-                                                          )
-                                                      : undefined
+                                                    issue
+                                                      ? () => revisionWorkspace.focusIssue(issue.id)
+                                                      : canRunWorkflowActions && canAddRevisionIssue
+                                                        ? () =>
+                                                            void addToRevision(
+                                                              'rule',
+                                                              'invoice_version_rulecheck_id',
+                                                              String(r.id),
+                                                            )
+                                                        : undefined
                                                   }
                                                   disabledReason={
-                                                    canRunWorkflowActions ? revisionAddDisabledReason : undefined
+                                                    !issue && canRunWorkflowActions
+                                                      ? revisionAddDisabledReason
+                                                      : undefined
                                                   }
                                                 />
                                               </Box>
@@ -3377,6 +3484,7 @@ export const InvoiceVersionShowScreen = () => {
                                                   </Text>
                                                 </Box>
                                               )}
+                                              <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
                                             </Box>
                                           );
                                         })}
@@ -3978,6 +4086,9 @@ export const InvoiceVersionShowScreen = () => {
                     </AccordionPanel>
                   </AccordionItem>
                 </Accordion>
+                {canRunWorkflowActions ? (
+                  <AdminUnmatchedRevisionIssues issues={unmatchedOpenRevisionIssues} workspace={revisionWorkspace} />
+                ) : null}
               </Box>
 
               {/* ============================================================
@@ -4295,12 +4406,7 @@ export const InvoiceVersionShowScreen = () => {
                 </Box>
               ) : rightPanelMode === 'revision' && canRunWorkflowActions && readData?.invoice_id ? (
                 <Box flex="0 0 640px" w="640px" maxW="640px" minW="640px" alignSelf="flex-start" overflow="hidden">
-                  <RevisionTracker
-                    invoiceId={String(readData.invoice_id)}
-                    viewerRole="admin"
-                    refreshToken={revisionRefreshToken}
-                    onTrackerChange={handleRevisionTrackerChange}
-                  />
+                  <AdminRevisionSnapshot workspace={revisionWorkspace} matchedIssueIds={matchedRevisionIssueIds} />
                 </Box>
               ) : rightPanelMode === 'revision' ? (
                 <Box flex="0 0 640px" w="640px" p={6} borderWidth="1px" borderRadius="md" bg="gray.50">
@@ -4380,6 +4486,10 @@ export const InvoiceVersionShowScreen = () => {
               ) : (
                 <RuleDetailText value="" />
               )}
+            </RuleDetailDrawerSection>
+
+            <RuleDetailDrawerSection label="Pre-check Contractor Action">
+              <RuleDetailText value={ruleDetailsDrawerRulecheck?.contractor_action} />
             </RuleDetailDrawerSection>
 
             <RuleDetailDrawerSection label={ruleDefinitionLabel(ruleDetailsDrawerRulecheck)}>

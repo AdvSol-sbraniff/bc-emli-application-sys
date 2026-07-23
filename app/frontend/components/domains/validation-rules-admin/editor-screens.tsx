@@ -44,6 +44,7 @@ type CodeRuleEditorProps = SharedProps & {
   contractorDisplayName: string;
   description: string;
   sourceQuote: string;
+  contractorAction: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
   adminWorkflowPolicy: string;
@@ -55,6 +56,7 @@ type CodeRuleEditorProps = SharedProps & {
   onContractorDisplayNameChange: (next: string) => void;
   onDescriptionChange: (next: string) => void;
   onSourceQuoteChange: (next: string) => void;
+  onContractorActionChange: (next: string) => void;
   onContractorVisibilityChange: (next: string) => void;
   onContractorBlockingPolicyChange: (next: string) => void;
   onAdminWorkflowPolicyChange: (next: string) => void;
@@ -81,10 +83,12 @@ type GenaiEditorProps = SharedProps & {
 
 type GenaiRuleEditorProps = GenaiEditorProps & {
   sourceQuote: string;
+  contractorAction: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
   adminWorkflowPolicy: string;
   onSourceQuoteChange: (next: string) => void;
+  onContractorActionChange: (next: string) => void;
   onContractorVisibilityChange: (next: string) => void;
   onContractorBlockingPolicyChange: (next: string) => void;
   onAdminWorkflowPolicyChange: (next: string) => void;
@@ -187,19 +191,23 @@ function SharedTopFields({
 
 function RuleSourceFields({
   sourceQuote,
+  contractorAction,
   contractorVisibility,
   contractorBlockingPolicy,
   adminWorkflowPolicy,
   onSourceQuoteChange,
+  onContractorActionChange,
   onContractorVisibilityChange,
   onContractorBlockingPolicyChange,
   onAdminWorkflowPolicyChange,
 }: {
   sourceQuote: string;
+  contractorAction: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
   adminWorkflowPolicy: string;
   onSourceQuoteChange: (next: string) => void;
+  onContractorActionChange: (next: string) => void;
   onContractorVisibilityChange: (next: string) => void;
   onContractorBlockingPolicyChange: (next: string) => void;
   onAdminWorkflowPolicyChange: (next: string) => void;
@@ -209,6 +217,15 @@ function RuleSourceFields({
       <FormControl isRequired>
         <FormLabel>Source quote from requirement PDF</FormLabel>
         <Textarea value={sourceQuote} onChange={(e) => onSourceQuoteChange(e.target.value)} minH="110px" />
+      </FormControl>
+
+      <FormControl>
+        <FormLabel>Pre-check contractor action</FormLabel>
+        <Textarea value={contractorAction} onChange={(e) => onContractorActionChange(e.target.value)} minH="90px" />
+        <Text fontSize="xs" opacity={0.7} mt={1}>
+          Shown during contractor pre-check. Once an administrator opens a revision, the human-authored request becomes
+          the action instead.
+        </Text>
       </FormControl>
 
       <Grid templateColumns={{ base: '1fr', xl: 'repeat(3, minmax(0, 1fr))' }} gap={4}>
@@ -303,10 +320,12 @@ export function CodeRuleEditorScreen(props: CodeRuleEditorProps) {
 
               <RuleSourceFields
                 sourceQuote={props.sourceQuote}
+                contractorAction={props.contractorAction}
                 contractorVisibility={props.contractorVisibility}
                 contractorBlockingPolicy={props.contractorBlockingPolicy}
                 adminWorkflowPolicy={props.adminWorkflowPolicy}
                 onSourceQuoteChange={props.onSourceQuoteChange}
+                onContractorActionChange={props.onContractorActionChange}
                 onContractorVisibilityChange={props.onContractorVisibilityChange}
                 onContractorBlockingPolicyChange={props.onContractorBlockingPolicyChange}
                 onAdminWorkflowPolicyChange={props.onAdminWorkflowPolicyChange}
@@ -441,10 +460,12 @@ export function GenaiRuleEditorScreen(props: GenaiRuleEditorProps) {
 
               <RuleSourceFields
                 sourceQuote={props.sourceQuote}
+                contractorAction={props.contractorAction}
                 contractorVisibility={props.contractorVisibility}
                 contractorBlockingPolicy={props.contractorBlockingPolicy}
                 adminWorkflowPolicy={props.adminWorkflowPolicy}
                 onSourceQuoteChange={props.onSourceQuoteChange}
+                onContractorActionChange={props.onContractorActionChange}
                 onContractorVisibilityChange={props.onContractorVisibilityChange}
                 onContractorBlockingPolicyChange={props.onContractorBlockingPolicyChange}
                 onAdminWorkflowPolicyChange={props.onAdminWorkflowPolicyChange}

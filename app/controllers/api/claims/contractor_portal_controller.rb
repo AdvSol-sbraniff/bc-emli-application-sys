@@ -454,13 +454,19 @@ module Api
           return
         end
 
-        invoice.set_workflow_status!(
-          "admin_review_inbox",
-          actor_user_id: current_user.id,
-          invoice_version_id: invoice_version.id,
-          submitter_id: invoice.submitter_id || current_user.id,
-          submitted_at: invoice.submitted_at || Time.current
-        )
+        ::Claims::Invoice.transaction do
+          invoice.set_workflow_status!(
+            "admin_review_inbox",
+            actor_user_id: current_user.id,
+            invoice_version_id: invoice_version.id,
+            submitter_id: invoice.submitter_id || current_user.id,
+            submitted_at: invoice.submitted_at || Time.current
+          )
+          ::Claims::RevisionIssues::EnsureManagedIssues.call(
+            invoice: invoice,
+            invoice_version: invoice_version
+          )
+        end
 
         render_submission_success(invoice)
       rescue ::Claims::RevisionIssues::SubmitRound::DocumentUploadRequired => e
@@ -493,6 +499,7 @@ module Api
                    invoice.as_json(
                      only: %i[
                        id
+                       reference_number
                        session_id
                        status
                        status_subtype

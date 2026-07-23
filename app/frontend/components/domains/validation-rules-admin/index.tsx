@@ -97,6 +97,7 @@ type CodeRuleEditorState = BaseEditorState & {
   contractorDisplayName: string;
   description: string;
   sourceQuote: string;
+  contractorAction: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
   adminWorkflowPolicy: string;
@@ -118,6 +119,7 @@ type GenaiRuleEditorState = BaseEditorState & {
   contractorDisplayName: string;
   promptText: string;
   sourceQuote: string;
+  contractorAction: string;
   contractorVisibility: string;
   contractorBlockingPolicy: string;
   adminWorkflowPolicy: string;
@@ -326,6 +328,7 @@ export default function ValidationRulesAdminScreen() {
             contractorDisplayName: '',
             description: '',
             sourceQuote: '',
+            contractorAction: '',
             contractorVisibility: 'fail_only',
             contractorBlockingPolicy: 'non_blocking',
             adminWorkflowPolicy: 'fail_only',
@@ -353,6 +356,7 @@ export default function ValidationRulesAdminScreen() {
             contractorDisplayName: '',
             promptText: '',
             sourceQuote: '',
+            contractorAction: '',
             contractorVisibility: 'fail_only',
             contractorBlockingPolicy: 'non_blocking',
             adminWorkflowPolicy: 'fail_only',
@@ -426,6 +430,7 @@ export default function ValidationRulesAdminScreen() {
           contractorDisplayName: row.detail?.contractor_display_name || '',
           description: row.detail?.description || '',
           sourceQuote: row.detail?.source_quote || '',
+          contractorAction: row.detail?.contractor_action || '',
           contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
           contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
           adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
@@ -457,6 +462,7 @@ export default function ValidationRulesAdminScreen() {
           contractorDisplayName: row.detail?.contractor_display_name || '',
           promptText: row.detail?.prompt_text || '',
           sourceQuote: row.detail?.source_quote || '',
+          contractorAction: row.detail?.contractor_action || '',
           contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
           contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
           adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
@@ -555,6 +561,7 @@ export default function ValidationRulesAdminScreen() {
             contractorDisplayName: row.detail?.contractor_display_name || '',
             description: row.detail?.description || '',
             sourceQuote: row.detail?.source_quote || '',
+            contractorAction: row.detail?.contractor_action || '',
             contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
             contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
             adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
@@ -586,6 +593,7 @@ export default function ValidationRulesAdminScreen() {
             contractorDisplayName: row.detail?.contractor_display_name || '',
             promptText: row.detail?.prompt_text || '',
             sourceQuote: row.detail?.source_quote || '',
+            contractorAction: row.detail?.contractor_action || '',
             contractorVisibility: row.detail?.contractor_visibility || 'fail_only',
             contractorBlockingPolicy: row.detail?.contractor_blocking_policy || 'non_blocking',
             adminWorkflowPolicy: row.detail?.admin_workflow_policy || 'fail_only',
@@ -650,6 +658,7 @@ export default function ValidationRulesAdminScreen() {
         body.contractor_display_name = editor.contractorDisplayName;
         body.description = editor.description;
         body.source_quote = editor.sourceQuote;
+        body.contractor_action = editor.contractorAction;
         body.contractor_visibility = editor.contractorVisibility;
         body.contractor_blocking_policy = editor.contractorBlockingPolicy;
         body.admin_workflow_policy = editor.adminWorkflowPolicy;
@@ -668,6 +677,7 @@ export default function ValidationRulesAdminScreen() {
         body.contractor_display_name = editor.contractorDisplayName;
         body.prompt_text = editor.promptText;
         body.source_quote = editor.sourceQuote;
+        body.contractor_action = editor.contractorAction;
         body.contractor_visibility = editor.contractorVisibility;
         body.contractor_blocking_policy = editor.contractorBlockingPolicy;
         body.admin_workflow_policy = editor.adminWorkflowPolicy;
@@ -798,6 +808,7 @@ export default function ValidationRulesAdminScreen() {
                   contractorDisplayName={editor.contractorDisplayName}
                   description={editor.description}
                   sourceQuote={editor.sourceQuote}
+                  contractorAction={editor.contractorAction}
                   contractorVisibility={editor.contractorVisibility}
                   contractorBlockingPolicy={editor.contractorBlockingPolicy}
                   adminWorkflowPolicy={editor.adminWorkflowPolicy}
@@ -827,6 +838,11 @@ export default function ValidationRulesAdminScreen() {
                   onSourceQuoteChange={(next) =>
                     setEditorField((current) =>
                       isCodeRuleEditor(current) ? { ...current, sourceQuote: next } : current,
+                    )
+                  }
+                  onContractorActionChange={(next) =>
+                    setEditorField((current) =>
+                      isCodeRuleEditor(current) ? { ...current, contractorAction: next } : current,
                     )
                   }
                   onContractorVisibilityChange={(next) =>
@@ -920,6 +936,7 @@ export default function ValidationRulesAdminScreen() {
                   contractorDisplayName={editor.contractorDisplayName}
                   promptText={editor.promptText}
                   sourceQuote={editor.sourceQuote}
+                  contractorAction={editor.contractorAction}
                   contractorVisibility={editor.contractorVisibility}
                   contractorBlockingPolicy={editor.contractorBlockingPolicy}
                   adminWorkflowPolicy={editor.adminWorkflowPolicy}
@@ -946,6 +963,11 @@ export default function ValidationRulesAdminScreen() {
                   onSourceQuoteChange={(next) =>
                     setEditorField((current) =>
                       isGenaiRuleEditor(current) ? { ...current, sourceQuote: next } : current,
+                    )
+                  }
+                  onContractorActionChange={(next) =>
+                    setEditorField((current) =>
+                      isGenaiRuleEditor(current) ? { ...current, contractorAction: next } : current,
                     )
                   }
                   onContractorVisibilityChange={(next) =>

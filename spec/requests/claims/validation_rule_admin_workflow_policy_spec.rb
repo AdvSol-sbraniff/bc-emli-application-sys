@@ -27,6 +27,7 @@ RSpec.describe "Claims validation-rule admin workflow policy", type: :request do
         description: "Code workflow API test.",
         enabled: true,
         source_quote: "Test requirement.",
+        contractor_action: "Original code action.",
         contractor_visibility: "fail_only",
         contractor_blocking_policy: "non_blocking",
         admin_workflow_policy: "fail_only"
@@ -42,6 +43,7 @@ RSpec.describe "Claims validation-rule admin workflow policy", type: :request do
         prompt_text: "GenAI workflow API test.",
         enabled: true,
         source_quote: "Test requirement.",
+        contractor_action: "Original GenAI action.",
         contractor_visibility: "fail_only",
         contractor_blocking_policy: "non_blocking",
         admin_workflow_policy: "fail_only"
@@ -55,35 +57,64 @@ RSpec.describe "Claims validation-rule admin workflow policy", type: :request do
       record_type: "code_rule",
       rule: code_rule,
       policy: "all_results",
+      contractor_action: "Updated code action.",
       upgrade_type: upgrade_type
     )
     expect(response).to have_http_status(:ok)
     expect(json_response.dig("detail", "admin_workflow_policy")).to eq(
       "all_results"
     )
+    expect(json_response.dig("detail", "contractor_action")).to eq(
+      "Updated code action."
+    )
 
     patch_rule_policy(
       record_type: "genai_rule",
       rule: genai_rule,
       policy: "warn_and_fail",
+      contractor_action: "Updated GenAI action.",
       upgrade_type: upgrade_type
     )
     expect(response).to have_http_status(:ok)
     expect(json_response.dig("detail", "admin_workflow_policy")).to eq(
       "warn_and_fail"
     )
+    expect(json_response.dig("detail", "contractor_action")).to eq(
+      "Updated GenAI action."
+    )
 
     expect(code_rule.reload.admin_workflow_policy).to eq("all_results")
     expect(genai_rule.reload.admin_workflow_policy).to eq("warn_and_fail")
+    expect(code_rule.contractor_action).to eq("Updated code action.")
+    expect(genai_rule.contractor_action).to eq("Updated GenAI action.")
+    expect(
+      Claims::CodeRuleHistory
+        .where(source_id: code_rule.id)
+        .last
+        .contractor_action
+    ).to eq("Original code action.")
+    expect(
+      Claims::GenaiRuleHistory
+        .where(source_id: genai_rule.id)
+        .last
+        .contractor_action
+    ).to eq("Original GenAI action.")
   end
 
   private
 
-  def patch_rule_policy(record_type:, rule:, policy:, upgrade_type:)
+  def patch_rule_policy(
+    record_type:,
+    rule:,
+    policy:,
+    contractor_action:,
+    upgrade_type:
+  )
     patch(
       "/api/claims/admin/validation_rules/#{record_type}/#{rule.id}",
       params: {
         admin_workflow_policy: policy,
+        contractor_action: contractor_action,
         mappings: [{ invoice_upgrade_type_id: upgrade_type.id }]
       },
       as: :json

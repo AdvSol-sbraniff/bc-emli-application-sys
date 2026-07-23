@@ -602,6 +602,7 @@ module Api
             [
               upgrade_type_select_sql("claims.invoice_version_rulechecks"),
               "COALESCE(gr.source_quote, cr.source_quote) AS source_quote",
+              "COALESCE(gr.contractor_action, cr.contractor_action) AS contractor_action",
               "COALESCE(gr.contractor_visibility, cr.contractor_visibility, 'hidden') AS effective_contractor_visibility",
               "COALESCE(gr.contractor_blocking_policy, cr.contractor_blocking_policy, 'non_blocking') AS effective_contractor_blocking_policy",
               "CASE WHEN claims.invoice_version_rulechecks.source_engine = 'genai' THEN gr.prompt_text ELSE cr.description END AS rule_definition_text"
@@ -679,6 +680,7 @@ module Api
             "upgrade_type_description" =>
               row.read_attribute("upgrade_type_description"),
             "source_quote" => row.read_attribute("source_quote"),
+            "contractor_action" => row.read_attribute("contractor_action"),
             "contractor_visibility" =>
               row.read_attribute("effective_contractor_visibility"),
             "contractor_blocking_policy" =>

@@ -47,6 +47,7 @@ module Claims
         prompt_text: attribute_in_database("prompt_text"),
         enabled: attribute_in_database("enabled"),
         source_quote: attribute_in_database("source_quote"),
+        contractor_action: attribute_in_database("contractor_action"),
         contractor_visibility: attribute_in_database("contractor_visibility"),
         contractor_blocking_policy:
           attribute_in_database("contractor_blocking_policy"),

@@ -7,6 +7,7 @@ type ViewerPanelModeSelectorProps = {
   value: ViewerPanelMode;
   onChange: (value: ViewerPanelMode) => void;
   includeRevision?: boolean;
+  showTooltips?: boolean;
 };
 
 const OPTIONS: Array<{ value: ViewerPanelMode; label: string; hint: string }> = [
@@ -27,7 +28,12 @@ const OPTIONS: Array<{ value: ViewerPanelMode; label: string; hint: string }> = 
   },
 ];
 
-export const ViewerPanelModeSelector = ({ value, onChange, includeRevision = true }: ViewerPanelModeSelectorProps) => {
+export const ViewerPanelModeSelector = ({
+  value,
+  onChange,
+  includeRevision = true,
+  showTooltips = true,
+}: ViewerPanelModeSelectorProps) => {
   const [openHint, setOpenHint] = React.useState<ViewerPanelMode | null>(null);
 
   const handleChange = (nextValue: string) => {
@@ -38,23 +44,31 @@ export const ViewerPanelModeSelector = ({ value, onChange, includeRevision = tru
   return (
     <RadioGroup value={value} onChange={handleChange} aria-label="Viewer layout">
       <Flex align="center" gap={{ base: 2, md: 4 }} flexWrap="wrap">
-        {OPTIONS.filter((option) => includeRevision || option.value !== 'revision').map((option) => (
-          <Tooltip
-            key={option.value}
-            label={option.hint}
-            hasArrow
-            isOpen={openHint === option.value}
-            closeOnPointerDown
-            onOpen={() => setOpenHint(option.value)}
-            onClose={() => setOpenHint((current) => (current === option.value ? null : current))}
-          >
+        {OPTIONS.filter((option) => includeRevision || option.value !== 'revision').map((option) => {
+          const radio = (
             <Radio value={option.value} size="sm" onClick={() => setOpenHint(null)}>
               <Text as="span" fontSize="xs" fontWeight="semibold" whiteSpace="nowrap">
                 {option.label}
               </Text>
             </Radio>
-          </Tooltip>
-        ))}
+          );
+
+          return showTooltips ? (
+            <Tooltip
+              key={option.value}
+              label={option.hint}
+              hasArrow
+              isOpen={openHint === option.value}
+              closeOnPointerDown
+              onOpen={() => setOpenHint(option.value)}
+              onClose={() => setOpenHint((current) => (current === option.value ? null : current))}
+            >
+              {radio}
+            </Tooltip>
+          ) : (
+            <React.Fragment key={option.value}>{radio}</React.Fragment>
+          );
+        })}
       </Flex>
     </RadioGroup>
   );

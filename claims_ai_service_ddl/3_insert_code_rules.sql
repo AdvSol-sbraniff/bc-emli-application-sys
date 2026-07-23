@@ -715,7 +715,7 @@ contractor_display_name_metadata (
 source_quote_metadata (
   code_rule_key,
   section_name,
-  action_sentence
+  contractor_action
 ) AS (
   VALUES
   ('ashp_electric_wood_rebate_math_within_cap', $$AIR SOURCE HEAT PUMP electric and wood requirements tables$$, $$Check the invoice rebate and upgrade cost. If the amounts are not clear or appear over the limit, upload a corrected invoice or contact program staff for assistance.$$),
@@ -763,6 +763,7 @@ INSERT INTO claims.code_rules (
   info_admin_message,
   admin_notes,
   source_quote,
+  contractor_action,
   contractor_visibility,
   contractor_blocking_policy,
   admin_workflow_policy,
@@ -783,9 +784,9 @@ SELECT
   CASE
     WHEN source_quote_metadata.section_name IS NULL THEN source_quote
     ELSE '**From the ' || source_quote_metadata.section_name || ' section of the PDF:**' || E'\n\n' ||
-      regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g') ||
-      E'\n\n**Action:** ' || source_quote_metadata.action_sentence
+      regexp_replace(replace(replace(source_quote, E'\r\n', E'\n'), E'\r', E'\n'), '(^|\n)([^\n]+)', '\1_\2_', 'g')
   END AS source_quote,
+  source_quote_metadata.contractor_action,
   CASE
     WHEN legacy_contractor_visible_flag THEN 'fail_only'
     ELSE 'hidden'
@@ -808,6 +809,7 @@ ON CONFLICT (code_rule_key) DO UPDATE SET
   info_admin_message = EXCLUDED.info_admin_message,
   admin_notes = COALESCE(claims.code_rules.admin_notes, EXCLUDED.admin_notes),
   source_quote = EXCLUDED.source_quote,
+  contractor_action = EXCLUDED.contractor_action,
   contractor_visibility = EXCLUDED.contractor_visibility,
   contractor_blocking_policy = EXCLUDED.contractor_blocking_policy,
   admin_workflow_policy = EXCLUDED.admin_workflow_policy,

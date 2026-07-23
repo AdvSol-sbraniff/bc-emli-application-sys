@@ -43,6 +43,8 @@ RSpec.describe "Claims durable revision issue workflow" do
       prompt_text: "Check whether the invoice information is complete.",
       enabled: true,
       source_quote: "Revision workflow test rule.",
+      contractor_action:
+        "Check the invoice and upload a corrected copy if needed.",
       contractor_visibility: "fail_only",
       contractor_blocking_policy: "non_blocking",
       admin_workflow_policy: admin_workflow_policy,
@@ -122,7 +124,9 @@ RSpec.describe "Claims durable revision issue workflow" do
     )
     expect(issue.opened_from_source_snapshot).to include(
       "friendly_label" => "Invoice information is complete",
-      "source_quote" => "Revision workflow test rule."
+      "source_quote" => "Revision workflow test rule.",
+      "contractor_action" =>
+        "Check the invoice and upload a corrected copy if needed."
     )
     expect(invoice.revision_rounds.count).to eq(1)
     expect(invoice.revision_rounds.first).to be_draft
@@ -417,6 +421,190 @@ RSpec.describe "Claims durable revision issue workflow" do
         expect(coverage.missing_rulechecks.map(&:id)).to eq(expected)
       end
     end
+  end
+
+  it "creates required rule issues only after the current package reaches the admin inbox" do
+    invoice, version, rule, field = build_package
+    invoice.update_columns(
+      status: "genai_complete",
+      status_updated_at: Time.current,
+      updated_at: Time.current
+    )
+
+    expect do
+      Claims::RevisionIssues::EnsureManagedIssues.call(
+        invoice: invoice,
+        invoice_version: version
+      )
+    end.to raise_error(
+      Claims::RevisionIssues::EnsureManagedIssues::WrongInvoiceStatus,
+      /handed to the admin inbox/
+    )
+    expect(invoice.revision_issues).to be_empty
+
+    invoice.set_workflow_status!(
+      "admin_review_inbox",
+      invoice_version_id: version.id
+    )
+    result =
+      Claims::RevisionIssues::EnsureManagedIssues.call(
+        invoice: invoice,
+        invoice_version: version
+      )
+
+    issue = invoice.revision_issues.reload.sole
+    expect(result.created_issue_ids).to eq([issue.id])
+    expect(issue).to be_pending_admin_review
+    expect(issue.opened_from_invoice_version_rulecheck_id).to eq(rule.id)
+    expect(issue.opened_from_rule_key).to eq(rule.rule_key)
+    expect(issue.opened_from_rule_upgrade_type_id).to eq(
+      rule.invoice_upgrade_type_id
+    )
+    expect(issue.opened_from_invoice_version_located_field_id).to be_nil
+    expect(field).to be_persisted
+  end
+
+  it "ensures managed rule issues idempotently without reopening a closed issue" do
+    invoice, version, = build_package
+
+    first =
+      Claims::RevisionIssues::EnsureManagedIssues.call(
+        invoice: invoice,
+        invoice_version: version
+      )
+    second =
+      Claims::RevisionIssues::EnsureManagedIssues.call(
+        invoice: invoice,
+        invoice_version: version
+      )
+
+    expect(first.created_issue_ids.length).to eq(1)
+    expect(second.created_issue_ids).to be_empty
+    expect(invoice.revision_issues.count).to eq(1)
+    expect(invoice.revision_rounds.count).to eq(1)
+    expect(invoice.revision_issues.first.comments.count).to eq(1)
+
+    issue = invoice.revision_issues.first
+    Claims::RevisionIssues::CloseIssue.call(
+      issue: issue,
+      status: "closed_no_contractor_action_required",
+      disposition_comment: "The managed result was confirmed internally."
+    )
+    third =
+      Claims::RevisionIssues::EnsureManagedIssues.call(
+        invoice: invoice,
+        invoice_version: version
+      )
+
+    expect(third.created_issue_ids).to be_empty
+    expect(invoice.revision_issues.count).to eq(1)
+    expect(issue.reload).to be_closed
+  end
+
+  it "creates distinct managed issues for the same rule in different upgrade contexts" do
+    invoice, version, rule, = build_package
+    second_upgrade_type =
+      Claims::InvoiceUpgradeType.create!(
+        upgrade_type_key: "revision_context_#{SecureRandom.hex(5)}",
+        description: "Second revision context"
+      )
+    second_rulecheck =
+      Claims::InvoiceVersionRulecheck.create!(
+        invoice_version: version,
+        invoice_upgrade_type_id: second_upgrade_type.id,
+        source_engine: rule.source_engine,
+        rule_key: rule.rule_key,
+        contractor_display_name: rule.contractor_display_name,
+        rule_result: "fail",
+        confidence: 90,
+        reason_and_likely_causes: "The same check failed in another context."
+      )
+
+    Claims::RevisionIssues::EnsureManagedIssues.call(
+      invoice: invoice,
+      invoice_version: version
+    )
+
+    expect(invoice.revision_issues.count).to eq(2)
+    expect(
+      invoice.revision_issues.pluck(:opened_from_rule_upgrade_type_id).to_set
+    ).to eq(
+      [
+        rule.invoice_upgrade_type_id,
+        second_rulecheck.invoice_upgrade_type_id
+      ].to_set
+    )
+  end
+
+  it "ensures newly managed rules when a later package is handed back to admins" do
+    invoice, first_version, first_rule, = build_package
+    existing_issue = create_issue(invoice, "rule", first_rule.id)
+    select_recommendation(existing_issue)
+    sent_round = invoice.revision_rounds.newest_first.first
+    Claims::RevisionIssues::SendRound.call(
+      revision_round: sent_round,
+      actor_user_id: nil
+    )
+    Claims::RevisionIssues::SaveContractorComment.call(
+      issue: existing_issue,
+      round: sent_round,
+      attributes: {
+        contractor_response_method: "explanation_provided",
+        comment_text: "The contractor supplied the requested explanation."
+      }
+    )
+
+    second_version =
+      Claims::InvoiceVersion.create!(
+        invoice: invoice,
+        invoice_versionno: 2,
+        storage_provider: "azure_blob",
+        storage_key: "revision-test/invoice-v2.pdf",
+        original_filename: "Invoice v2.pdf",
+        content_type: "application/pdf"
+      )
+    new_rule_key = "revision_new_after_fix_#{SecureRandom.hex(5)}"
+    Claims::GenaiRule.create!(
+      genai_rule_key: new_rule_key,
+      contractor_display_name: "Review newly detected information",
+      prompt_text: "Review the newly detected information.",
+      enabled: true,
+      source_quote: "New rule after a package correction.",
+      contractor_visibility: "hidden",
+      contractor_blocking_policy: "non_blocking",
+      admin_workflow_policy: "all_results"
+    )
+    new_rulecheck =
+      Claims::InvoiceVersionRulecheck.create!(
+        invoice_version: second_version,
+        invoice_upgrade_type_id: first_rule.invoice_upgrade_type_id,
+        source_engine: "genai",
+        rule_key: new_rule_key,
+        contractor_display_name: "Review newly detected information",
+        rule_result: "pass",
+        confidence: 95,
+        reason_and_likely_causes:
+          "The corrected package exposed new information."
+      )
+
+    expect do
+      Claims::RevisionIssues::SubmitRound.call(
+        invoice: invoice,
+        actor_user_id: nil,
+        invoice_version: second_version
+      )
+    end.to change { invoice.revision_issues.count }.from(1).to(2)
+
+    new_issue =
+      invoice.revision_issues.find_by!(
+        opened_from_invoice_version_rulecheck_id: new_rulecheck.id
+      )
+    expect(new_issue).to be_pending_admin_review
+    expect(invoice.reload.status).to eq("admin_review_inbox")
+    expect(invoice.revision_rounds.newest_first.first.invoice_version_id).to eq(
+      second_version.id
+    )
+    expect(first_version).to be_persisted
   end
 
   it "removes an empty hidden draft after its only unsent issue is deleted" do

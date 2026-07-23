@@ -44,6 +44,30 @@ module Api
                status: :not_found
       end
 
+      def ensure_managed
+        invoice = ::Claims::Invoice.find(params[:invoice_id])
+        version =
+          invoice
+            .invoice_versions
+            .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+            .first!
+        ::Claims::RevisionIssues::EnsureManagedIssues.call(
+          invoice: invoice,
+          invoice_version: version
+        )
+        render json: tracker(invoice.reload), status: :ok
+      rescue ::Claims::RevisionIssues::EnsureManagedIssues::WrongInvoiceStatus,
+             ::Claims::RevisionIssues::EnsureManagedIssues::StaleInvoiceVersion => e
+        render json: { error: e.message }, status: :conflict
+      rescue ActiveRecord::RecordInvalid => e
+        render_invalid(e)
+      rescue ActiveRecord::RecordNotFound
+        render json: {
+                 error: "Invoice or current package version not found"
+               },
+               status: :not_found
+      end
+
       def update_comment
         invoice, comment = find_comment!
         ::Claims::RevisionIssues::UpdateAdminComment.call(

@@ -75,6 +75,7 @@ module Api
           :info_admin_message,
           :admin_notes,
           :source_quote,
+          :contractor_action,
           :contractor_visibility,
           :contractor_blocking_policy
         )
@@ -93,6 +94,7 @@ module Api
           info_admin_message: rule.info_admin_message,
           admin_notes: rule.admin_notes,
           source_quote: rule.source_quote,
+          contractor_action: rule.contractor_action,
           contractor_visibility: rule.contractor_visibility,
           contractor_blocking_policy: rule.contractor_blocking_policy,
           created_at: rule.created_at,

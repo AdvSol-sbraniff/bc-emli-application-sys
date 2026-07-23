@@ -80,10 +80,17 @@ module Api
             view: :read_screen
           )
         invoice_version = ::Claims::InvoiceVersion.find_by(id: civ_id)
+        reference_number, submitted_at =
+          ::Claims::Invoice.where(id: row.invoice_id).pick(
+            :reference_number,
+            :submitted_at
+          )
 
         render json: {
                  read:
                    read_hash.merge(
+                     reference_number: reference_number,
+                     submitted_at: submitted_at,
                      ahri_product_match:
                        serialize_ahri_product_match(invoice_version),
                      neea_product_match:
@@ -405,6 +412,7 @@ module Api
           .select(
             *upgrade_type_select_sql("claims.invoice_version_rulechecks"),
             "COALESCE(gr.source_quote, cr.source_quote) AS source_quote",
+            "COALESCE(gr.contractor_action, cr.contractor_action) AS contractor_action",
             "COALESCE(gr.contractor_visibility, cr.contractor_visibility, 'hidden') AS effective_contractor_visibility",
             "COALESCE(gr.contractor_blocking_policy, cr.contractor_blocking_policy, 'non_blocking') AS effective_contractor_blocking_policy"
           )
@@ -480,6 +488,7 @@ module Api
             "upgrade_type_description" =>
               row.read_attribute("upgrade_type_description"),
             "source_quote" => row.read_attribute("source_quote"),
+            "contractor_action" => row.read_attribute("contractor_action"),
             "contractor_visibility" =>
               row.read_attribute("effective_contractor_visibility"),
             "contractor_blocking_policy" =>

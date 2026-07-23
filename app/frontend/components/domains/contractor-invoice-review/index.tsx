@@ -10,7 +10,9 @@ import {
   CloseButton,
   Container,
   Flex,
+  Heading,
   IconButton,
+  Link,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -28,10 +30,12 @@ import {
   ArrowSquareOut,
   CaretLeft,
   CaretRight,
+  CheckCircle,
   CornersOut,
   FrameCorners,
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
+  Warning,
 } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -118,12 +122,12 @@ const FieldRow = ({ label, labelHint, value, active, disabled, onClick, inline }
   >
     {labelHint ? (
       <Tooltip label={labelHint} hasArrow placement="top">
-        <Text fontSize="sm" opacity={0.7} flexShrink={0} cursor="help">
+        <Text fontSize="sm" color="#2D2D2D" flexShrink={0} cursor="help">
           {label}
         </Text>
       </Tooltip>
     ) : (
-      <Text fontSize="sm" opacity={0.7} flexShrink={0}>
+      <Text fontSize="sm" color="#2D2D2D" flexShrink={0}>
         {label}
       </Text>
     )}
@@ -153,7 +157,7 @@ const ValueGrid = ({ rows }: { rows: Array<[string, unknown]> }) => (
           justifyContent="space-between"
           gap="6px"
         >
-          <Text fontSize="sm" opacity={0.7} flexShrink={0}>
+          <Text fontSize="sm" color="#2D2D2D" flexShrink={0}>
             {label}
           </Text>
           <Text fontSize="sm" noOfLines={1} textAlign="right">
@@ -196,95 +200,11 @@ const normalizeResult = (result: unknown): RuleResult => {
   return value === 'pass' || value === 'info' || value === 'warn' || value === 'fail' ? value : null;
 };
 
-const ContractorAdviceMarkdown = ({ value, tone = 'advice' }: { value?: unknown; tone?: 'advice' | 'context' }) => {
-  const text = String(value ?? '').trim();
-  const contextual = tone === 'context';
-  if (!text) {
-    return (
-      <Text fontSize="sm" opacity={0.7}>
-        No program requirement found for this invoice version.
-      </Text>
-    );
-  }
-
-  return (
-    <Box
-      fontSize="sm"
-      bg={contextual ? 'gray.50' : 'orange.50'}
-      borderWidth="1px"
-      borderColor={contextual ? 'gray.200' : 'orange.200'}
-      borderLeftWidth={contextual ? '1px' : '5px'}
-      borderLeftColor={contextual ? 'gray.200' : 'orange.400'}
-      borderRadius="lg"
-      px="4"
-      py="3"
-      boxShadow="sm"
-      sx={{
-        p: { marginBottom: '0.7rem' },
-        'p:last-child': { marginBottom: 0 },
-        ul: { paddingLeft: '0', marginTop: '0.7rem', marginBottom: '0.7rem', listStyleType: 'none' },
-        li: {
-          marginBottom: '0.75rem',
-          padding: '0.85rem',
-          borderRadius: '0.75rem',
-          background: 'white',
-          border: `1px solid var(--chakra-colors-${contextual ? 'gray-200' : 'orange-100'})`,
-          boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05)',
-        },
-        'li:last-child': { marginBottom: 0 },
-        em: { fontStyle: 'italic', color: 'var(--chakra-colors-gray-800)' },
-        a: {
-          color: `var(--chakra-colors-${contextual ? 'blue-700' : 'orange-700'})`,
-          cursor: 'help',
-          textDecoration: 'none',
-        },
-        strong: { color: 'inherit' },
-      }}
-    >
-      <ReactMarkdown
-        components={{
-          p: ({ children }: any) => (
-            <Text as="p" fontSize="sm" whiteSpace="pre-wrap">
-              {children}
-            </Text>
-          ),
-          ul: ({ children }: any) => (
-            <Box as="ul" pl="0" mt="2" mb="3">
-              {children}
-            </Box>
-          ),
-          li: ({ children }: any) => <Box as="li">{children}</Box>,
-          em: ({ children }: any) => (
-            <Text as="em" fontStyle="italic">
-              {children}
-            </Text>
-          ),
-          strong: ({ children }: any) => (
-            <Text as="strong" fontWeight="bold">
-              {children}
-            </Text>
-          ),
-          a: ({ children, title }: any) => (
-            <Tooltip label={title} hasArrow placement="top">
-              <Text as="span" color={contextual ? 'blue.700' : 'orange.700'} cursor="help">
-                {children}
-              </Text>
-            </Tooltip>
-          ),
-        }}
-      >
-        {text}
-      </ReactMarkdown>
-    </Box>
-  );
-};
-
-const programRequirementWithoutPrecheckAction = (value: unknown): string => {
-  const text = String(value ?? '').trim();
-  const actionMarker = /\n+\*\*Action:\*\*/i;
-  const markerIndex = text.search(actionMarker);
-  return markerIndex >= 0 ? text.slice(0, markerIndex).trim() : text;
-};
+const requirementTextWithoutSourceHeading = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .replace(/^\*\*From the .+? section of the PDF:\*\*\s*/is, '')
+    .trim();
 
 const DI_FIELDS = [
   {
@@ -472,6 +392,7 @@ export default function ContractorInvoiceReviewScreen() {
   const [rotate, setRotate] = useState<number>(0);
   const [pageInput, setPageInput] = useState<string>('1');
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [submissionSuccess, setSubmissionSuccess] = useState<{ referenceNumber: string } | null>(null);
   const [finishLaterLoading, setFinishLaterLoading] = useState(false);
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
   const [revisionRefreshToken, setRevisionRefreshToken] = useState(0);
@@ -479,6 +400,10 @@ export default function ContractorInvoiceReviewScreen() {
   const [contractorDraftState, setContractorDraftState] = useState<ContractorDraftState | null>(null);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [programRequirementsModal, setProgramRequirementsModal] = useState<{
+    title: string;
+    sourceQuote: unknown;
+  } | null>(null);
 
   useEffect(() => {
     if (!chatPanelOpen) return;
@@ -492,6 +417,7 @@ export default function ContractorInvoiceReviewScreen() {
   const currentStatus = String(readData?.invoice_status || '').trim();
   const currentStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
   const currentInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
+  const currentReferenceNumber = String(readData?.reference_number ?? '').trim();
   const adoptRevisionTrackerData = useCallback((next: RevisionTrackerData) => {
     setRevisionAttentionIssueIds(next.capabilities?.document_upload_required_issue_ids || []);
   }, []);
@@ -1089,12 +1015,8 @@ export default function ContractorInvoiceReviewScreen() {
             }
           : prev,
       );
-      toast({
-        title: 'Invoice submitted',
-        description: 'Your invoice is now with the program team for first-level review.',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
+      setSubmissionSuccess({
+        referenceNumber: String(json?.invoice?.reference_number ?? '').trim(),
       });
       setRevisionRefreshToken((value) => value + 1);
     } catch (e: any) {
@@ -1232,10 +1154,40 @@ export default function ContractorInvoiceReviewScreen() {
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar
         title="Contractor Invoice Review"
+        contentMaxW="full"
         position="sticky"
         top={0}
         zIndex="sticky"
         boxShadow="0 4px 12px rgba(0, 0, 0, 0.16)"
+        leftElement={
+          currentStatus || currentReferenceNumber ? (
+            <Flex direction="column" align="flex-start" gap={1}>
+              {currentStatus ? (
+                <Tooltip label={currentStatusCopy.hint} hasArrow>
+                  <Badge
+                    p={1}
+                    color="greys.anotherGrey"
+                    bg="theme.orangeLight02"
+                    borderWidth="1px"
+                    borderColor="theme.orange"
+                    borderRadius="md"
+                    fontWeight="bold"
+                    textTransform="uppercase"
+                    whiteSpace="nowrap"
+                    aria-label={`Invoice status: ${currentStatusCopy.label}`}
+                  >
+                    {currentStatusCopy.label}
+                  </Badge>
+                </Tooltip>
+              ) : null}
+              {currentReferenceNumber ? (
+                <Text color="white" fontSize="xs" fontWeight="semibold" textTransform="uppercase" whiteSpace="nowrap">
+                  Reference #: {currentReferenceNumber}
+                </Text>
+              ) : null}
+            </Flex>
+          ) : null
+        }
         rightElement={
           <Flex align="center" gap="10px">
             <Button
@@ -1254,6 +1206,53 @@ export default function ContractorInvoiceReviewScreen() {
             >
               Save and finish later
             </Button>
+            <Tooltip
+              label={
+                canUploadFix
+                  ? 'Open the fix upload screen in a new tab.'
+                  : 'Fix upload is available after the pre-check finishes, or when the program team has requested a revision.'
+              }
+              hasArrow
+              shouldWrapChildren
+            >
+              <Button
+                size="md"
+                variant="outline"
+                color="white"
+                borderColor="whiteAlpha.800"
+                borderRadius="md"
+                px={6}
+                _hover={{ bg: 'whiteAlpha.200' }}
+                _active={{ bg: 'whiteAlpha.300' }}
+                isDisabled={!canUploadFix || !sessionId || !currentInvoiceId}
+                onClick={openFixUpload}
+              >
+                Upload
+              </Button>
+            </Tooltip>
+            <Tooltip
+              label={
+                canWithdraw ? 'Withdraw this invoice from the program.' : 'This invoice can no longer be withdrawn.'
+              }
+              hasArrow
+              shouldWrapChildren
+            >
+              <Button
+                size="md"
+                variant="outline"
+                color="white"
+                borderColor="whiteAlpha.800"
+                borderRadius="md"
+                px={6}
+                _hover={{ bg: 'whiteAlpha.200' }}
+                _active={{ bg: 'whiteAlpha.300' }}
+                isDisabled={!canWithdraw || submitLoading || finishLaterLoading}
+                isLoading={withdrawalLoading}
+                onClick={onWithdrawOpen}
+              >
+                Withdraw
+              </Button>
+            </Tooltip>
             <Tooltip label={submitTooltip} hasArrow shouldWrapChildren>
               <Button
                 size="md"
@@ -1272,58 +1271,37 @@ export default function ContractorInvoiceReviewScreen() {
                 Submit
               </Button>
             </Tooltip>
-            <Tooltip
-              label={
-                canUploadFix
-                  ? 'Open the fix upload screen in a new tab.'
-                  : 'Fix upload is available after the pre-check finishes, or when the program team has requested a revision.'
-              }
-              hasArrow
-              shouldWrapChildren
-            >
-              <Button
-                size="md"
-                colorScheme="orange"
-                variant={canUploadFix ? 'solid' : 'outline'}
-                borderRadius="md"
-                boxShadow={canUploadFix ? '0 8px 18px rgba(221, 107, 32, 0.18)' : 'none'}
-                isDisabled={!canUploadFix || !sessionId || !currentInvoiceId}
-                onClick={openFixUpload}
-              >
-                Upload
-              </Button>
-            </Tooltip>
-            <Tooltip
-              label={
-                canWithdraw ? 'Withdraw this invoice from the program.' : 'This invoice can no longer be withdrawn.'
-              }
-              hasArrow
-              shouldWrapChildren
-            >
-              <Button
-                size="md"
-                colorScheme="red"
-                variant="solid"
-                borderRadius="md"
-                isDisabled={!canWithdraw || submitLoading || finishLaterLoading}
-                isLoading={withdrawalLoading}
-                onClick={onWithdrawOpen}
-              >
-                Withdraw
-              </Button>
-            </Tooltip>
           </Flex>
         }
       />
       <Container maxW="full" px={6} pb={4} flex="1" pt={6}>
         <Box display="flex" flexDirection="column" height="100%">
-          <Box w="full" mb="16px" pb="14px" borderBottomWidth="1px" borderBottomColor="gray.200">
-            <Text fontSize="sm" fontWeight="bold" color="blue.800" mb="8px">
-              Attention Required
+          <Box w="full" mb="16px" px="0" py="14px" bg="white">
+            <Flex align="center" gap="8px" mb="4px">
+              <Text fontSize="lg" fontWeight="bold" color="#2D2D2D">
+                Attention Required
+              </Text>
+              <Flex align="center" gap="4px" color="gray.700">
+                <Warning size={17} weight="regular" color="#D69E2E" aria-hidden="true" />
+                <Text fontSize="sm" fontWeight="semibold">
+                  {programRequirementRulechecks.length} {programRequirementRulechecks.length === 1 ? 'issue' : 'issues'}
+                </Text>
+              </Flex>
+              <ContractorInlineRevisionStatus workspace={revisionWorkspace} />
+            </Flex>
+            <Text fontSize="sm" color="gray.700" mb="10px">
+              Follow the below recommendation to ensure your submission is processed promptly. Correct invoice and
+              re-upload where recommended. Chat with an admin if clarifications are required. Submit when all
+              recommendations have been actioned.
             </Text>
-            <ContractorInlineRevisionStatus workspace={revisionWorkspace} />
             {revisionWorkspace.loading ? null : programRequirementRulechecks.length > 0 ? (
-              <Accordion allowMultiple defaultIndex={programRequirementDefaultIndices}>
+              <Accordion
+                allowMultiple
+                defaultIndex={programRequirementDefaultIndices}
+                display="flex"
+                flexDirection="column"
+                gap="8px"
+              >
                 {programRequirementRulechecks.map((row: any) => {
                   const issue = revisionIssueForRulecheck(row);
                   const title = String(row?.contractor_display_name || row?.rule_key || 'Program requirement');
@@ -1332,12 +1310,27 @@ export default function ContractorInvoiceReviewScreen() {
                     : null;
 
                   return (
-                    <AccordionItem key={rulecheckIdentityKey(row)} borderColor="gray.200">
+                    <AccordionItem
+                      key={rulecheckIdentityKey(row)}
+                      bg="orange.50"
+                      borderWidth="1px"
+                      borderColor="orange.200"
+                      borderRadius="lg"
+                      overflow="hidden"
+                      boxShadow="none"
+                    >
                       <h2>
-                        <AccordionButton px="10px" py="8px">
+                        <AccordionButton
+                          px="10px"
+                          py="8px"
+                          borderBottomWidth="1px"
+                          borderBottomColor="#D8D8D8"
+                          boxShadow="none"
+                          _hover={{ bg: 'orange.100' }}
+                        >
                           <Flex flex="1" minW={0} align="center" gap="8px" wrap="wrap" textAlign="left">
                             <Text fontSize="sm" fontWeight="bold" noOfLines={2}>
-                              {title}
+                              Issue: {title}
                             </Text>
                             {revisionStatus ? (
                               <Badge colorScheme={revisionStatus.colorScheme} flexShrink={0}>
@@ -1349,47 +1342,39 @@ export default function ContractorInvoiceReviewScreen() {
                         </AccordionButton>
                       </h2>
                       <AccordionPanel px="10px" pt="8px" pb="12px">
+                        <Text fontSize="sm" color="gray.800" whiteSpace="pre-wrap">
+                          <Text as="span" fontWeight="normal" color="#2D2D2D">
+                            Recommendations:
+                          </Text>{' '}
+                          {String(row?.contractor_action ?? '').trim() || 'No recommendation has been provided.'}{' '}
+                          <Link
+                            as="button"
+                            type="button"
+                            color="blue.700"
+                            fontWeight="normal"
+                            textDecoration="underline"
+                            onClick={() =>
+                              setProgramRequirementsModal({
+                                title,
+                                sourceQuote: row?.source_quote,
+                              })
+                            }
+                          >
+                            Please read the program eligibility source.
+                          </Link>
+                        </Text>
                         {issue ? (
-                          <>
+                          <Box mt={3}>
                             <ContractorInlineRevisionIssueCard
                               issue={issue}
                               workspace={revisionWorkspace}
                               compactHeading
+                              integratedConversation
+                              submittedAt={readData?.submitted_at}
                               attention={revisionAttentionIssueIds.includes(issue.id)}
                             />
-                            <Accordion allowToggle mt={3}>
-                              <AccordionItem border="0" borderTopWidth="1px" borderColor="gray.200">
-                                <h3>
-                                  <AccordionButton px={0} py={3} _hover={{ bg: 'transparent' }}>
-                                    <Text
-                                      flex="1"
-                                      textAlign="left"
-                                      fontSize="xs"
-                                      fontWeight="semibold"
-                                      color="gray.700"
-                                    >
-                                      Program requirements — why this was flagged
-                                    </Text>
-                                    <AccordionIcon />
-                                  </AccordionButton>
-                                </h3>
-                                <AccordionPanel px={0} pt={0} pb={0}>
-                                  <ContractorAdviceMarkdown
-                                    value={programRequirementWithoutPrecheckAction(row?.source_quote)}
-                                    tone="context"
-                                  />
-                                </AccordionPanel>
-                              </AccordionItem>
-                            </Accordion>
-                          </>
-                        ) : (
-                          <>
-                            <Text fontSize="xs" fontWeight="bold" color="blue.800" mb="6px">
-                              Program Requirements
-                            </Text>
-                            <ContractorAdviceMarkdown value={row?.source_quote} />
-                          </>
-                        )}
+                          </Box>
+                        ) : null}
                       </AccordionPanel>
                     </AccordionItem>
                   );
@@ -1397,24 +1382,25 @@ export default function ContractorInvoiceReviewScreen() {
               </Accordion>
             ) : (
               <Box px="10px" py="3px">
-                {genAiError && readData?.contractor_advice ? (
-                  <>
-                    <Text fontSize="xs" fontWeight="bold" color="blue.800" mb="6px">
-                      Program Requirements
-                    </Text>
-                    <ContractorAdviceMarkdown value={readData.contractor_advice} />
-                  </>
-                ) : (
-                  <Text fontSize="sm" opacity={0.7}>
-                    No program requirements currently require action.
-                  </Text>
-                )}
+                <Text fontSize="sm" opacity={0.7}>
+                  {genAiError
+                    ? 'High-level actions could not be loaded. Please refresh the page.'
+                    : 'No issues currently require action.'}
+                </Text>
               </Box>
             )}
           </Box>
 
+          <Text fontSize="lg" fontWeight="bold" color="#2D2D2D" mb="8px">
+            Uploaded Information
+          </Text>
           <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap">
-            <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} includeRevision={false} />
+            <ViewerPanelModeSelector
+              value={rightPanelMode}
+              onChange={setRightPanelMode}
+              includeRevision={false}
+              showTooltips={false}
+            />
           </Box>
 
           <Box display="flex" gap="16px" flex="1" minH={0}>
@@ -1430,8 +1416,19 @@ export default function ContractorInvoiceReviewScreen() {
                 allowMultiple
                 defaultIndex={[0]}
                 sx={{
+                  '& > .chakra-accordion__item': {
+                    borderWidth: '1px',
+                    borderColor: '#D8D8D8',
+                    borderRadius: '6px',
+                    overflow: 'hidden',
+                    marginBottom: '8px',
+                  },
                   '.chakra-accordion__button': {
-                    color: 'blue.800',
+                    background: '#FAF9F8',
+                    paddingLeft: '10px',
+                    paddingRight: '10px',
+                    color: '#2D2D2D',
+                    fontSize: 'sm',
                     fontWeight: 700,
                     borderRadius: '6px',
                     borderLeftWidth: '2px',
@@ -1440,23 +1437,23 @@ export default function ContractorInvoiceReviewScreen() {
                     transition: 'background 180ms ease, border-color 180ms ease, color 180ms ease',
                   },
                   '.chakra-accordion__button:hover': {
-                    color: 'blue.900',
+                    background: '#FAF9F8',
+                    color: '#2D2D2D',
                   },
                   '.chakra-accordion__button[aria-expanded="true"]': {
-                    background: 'linear-gradient(180deg, rgba(49, 130, 206, 0.12) 0%, rgba(255, 255, 255, 0) 88%)',
+                    background: '#FAF9F8',
                     borderLeftColor: 'blue.300',
-                    color: 'blue.900',
+                    color: '#2D2D2D',
                   },
                   '.chakra-accordion__panel': {
-                    marginLeft: '12px',
+                    marginLeft: 0,
                     paddingLeft: '12px',
-                    borderLeftWidth: '2px',
-                    borderLeftStyle: 'solid',
-                    borderLeftColor: 'gray.100',
+                    paddingRight: '12px',
+                    borderLeftWidth: 0,
                   },
                 }}
               >
-                <AccordionItem border="none">
+                <AccordionItem borderWidth="1px" borderColor="#D8D8D8">
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
@@ -2501,11 +2498,161 @@ export default function ContractorInvoiceReviewScreen() {
         ) : null}
       </Box>
 
+      <Modal
+        isOpen={programRequirementsModal != null}
+        onClose={() => setProgramRequirementsModal(null)}
+        size="2xl"
+        isCentered
+      >
+        <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(8px)" />
+        <ModalContent mx={4} borderRadius="xl" boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)">
+          <ModalCloseButton />
+          <ModalBody px={{ base: 6, md: 8 }} py={{ base: 8, md: 10 }}>
+            <Text fontSize="sm" fontWeight="bold" color="gray.800" mb={3}>
+              {programRequirementsModal?.title}
+            </Text>
+            <Box
+              fontSize="sm"
+              fontStyle="italic"
+              sx={{
+                p: { margin: 0 },
+                'p + p': { marginTop: '0.85rem' },
+                strong: {
+                  color: 'var(--chakra-colors-blue-800)',
+                  fontWeight: 700,
+                },
+                em: {
+                  color: 'var(--chakra-colors-gray-800)',
+                  fontStyle: 'italic',
+                  lineHeight: 1.6,
+                },
+                ul: { paddingLeft: '1.25rem', marginTop: '0.75rem' },
+                li: { marginTop: '0.35rem' },
+              }}
+            >
+              <ReactMarkdown>
+                {requirementTextWithoutSourceHeading(programRequirementsModal?.sourceQuote) ||
+                  'No program requirement was found for this invoice version.'}
+              </ReactMarkdown>
+            </Box>
+            <Link
+              href="https://betterhomesbc.ca/learn-about-programs/energy-savings-program/energy-savings-program-requirements/"
+              isExternal
+              display="inline-flex"
+              alignItems="center"
+              gap="6px"
+              mt={5}
+              color="blue.700"
+              fontSize="sm"
+              fontWeight="semibold"
+              textDecoration="underline"
+            >
+              View the Energy Savings Program requirements website
+              <ArrowSquareOut size={16} aria-hidden="true" />
+            </Link>
+            <Flex justify="flex-end" mt={7}>
+              <Button variant="primary" onClick={() => setProgramRequirementsModal(null)}>
+                Close
+              </Button>
+            </Flex>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={submissionSuccess != null}
+        onClose={() => undefined}
+        closeOnEsc={false}
+        closeOnOverlayClick={false}
+        size="3xl"
+        isCentered
+      >
+        <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(8px)" />
+        <ModalContent
+          mx={4}
+          borderRadius="xl"
+          boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)"
+          maxH="calc(100vh - 32px)"
+          overflowY="auto"
+        >
+          <ModalBody px={{ base: 6, md: 10 }} py={{ base: 8, md: 10 }}>
+            <Flex direction="column" align="center">
+              <Box color="green.600">
+                <CheckCircle size={42} weight="regular" aria-hidden="true" />
+              </Box>
+
+              <Heading as="h2" mt={4} fontSize={{ base: 'xl', md: '2xl' }} color="theme.blueAlt" textAlign="center">
+                Your invoice form has been submitted!
+              </Heading>
+              <Text mt={3} fontSize="sm" color="gray.700" textAlign="center">
+                A confirmation email has been sent to your account.
+              </Text>
+
+              <Box
+                mt={5}
+                px={3}
+                py={2}
+                borderWidth="1px"
+                borderColor="semantic.info"
+                color="theme.blueAlt"
+                fontSize="sm"
+                fontWeight="semibold"
+              >
+                Reference # {submissionSuccess?.referenceNumber || 'Not available'}
+              </Box>
+
+              <Box alignSelf="stretch" mt={7} p={{ base: 5, md: 7 }} bg="gray.50">
+                <Box w="26px" h="3px" bg="green.500" mb={3} />
+                <Heading as="h3" fontSize="2xl" color="gray.800">
+                  What’s next?
+                </Heading>
+                <Box as="ul" mt={4} pl={5} color="gray.800">
+                  <Text as="li" fontSize="sm" mb={2}>
+                    You will receive an email confirming that your invoice was successfully submitted.
+                  </Text>
+                  <Text as="li" fontSize="sm" mb={2}>
+                    We randomly select some sites for inspection. If we select the site you worked at, we will let you
+                    know by email.
+                  </Text>
+                  <Text as="li" fontSize="sm">
+                    We will review your invoice and supporting information. If your invoice and supporting information
+                    are approved, we’ll issue the rebate(s) through your selected payment method.
+                  </Text>
+                </Box>
+
+                <Box mt={6} pt={5} borderTopWidth="1px" borderColor="gray.200">
+                  <Text fontSize="sm" color="gray.800">
+                    <Text as="span" fontWeight="bold">
+                      Need help?
+                    </Text>{' '}
+                    You can log in to the Better Homes Energy Savings Program to view your submitted forms. Please
+                    contact{' '}
+                    <Text
+                      as="a"
+                      href="mailto:ESPcontractorsupport@clearesult.com"
+                      color="theme.blueAlt"
+                      textDecoration="underline"
+                    >
+                      ESPcontractorsupport@clearesult.com
+                    </Text>{' '}
+                    for questions related to your form.
+                  </Text>
+                </Box>
+              </Box>
+
+              <Button variant="primary" mt={7} onClick={() => navigate('/ai-contractor-dashboard')}>
+                Return to dashboard
+              </Button>
+            </Flex>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
       <Modal isOpen={isSubmitWarningOpen} onClose={onSubmitWarningClose} size="2xl" isCentered>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>
-            {blockingRulechecks.length > 0 ? 'Submission blocked by failed checks' : 'Submit with outstanding checks?'}
+            {blockingRulechecks.length > 0 ? 'Submission blocked by failed checks' : 'Ready to Submit?'}
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
@@ -2513,18 +2660,8 @@ export default function ContractorInvoiceReviewScreen() {
               <Text fontSize="sm">
                 {blockingRulechecks.length > 0
                   ? 'This invoice has one or more failed checks configured to block submission. Correct those items or provide the required supporting information, then rerun the review before submitting.'
-                  : 'This invoice has contractor-visible warnings or errors. You can submit it to admin review, but admins may ask for corrections or supporting details. If an item is explainable, you can also use Messages & Requested Changes before submitting.'}
+                  : 'Please address the issues shown for quicker processing time. If you require clarifications please feel free to chat with an admin.'}
               </Text>
-              <Flex gap={3} flexWrap="wrap">
-                <Button variant="outline" onClick={onSubmitWarningClose}>
-                  Keep reviewing
-                </Button>
-                {blockingRulechecks.length === 0 && (
-                  <Button colorScheme="orange" onClick={submitToAdminAfterReview} isLoading={submitLoading}>
-                    Submit Anyway
-                  </Button>
-                )}
-              </Flex>
 
               <Box
                 borderWidth="1px"
@@ -2534,29 +2671,36 @@ export default function ContractorInvoiceReviewScreen() {
                 borderColor={blockingRulechecks.length > 0 ? 'red.100' : 'orange.100'}
               >
                 <Text fontSize="sm" fontWeight="bold" mb={3}>
-                  Outstanding checks
+                  Outstanding Issues Requiring Attention
                 </Text>
-                <Flex direction="column" gap={3}>
+                <Box as="ul" pl={5}>
                   {contractorActionableRulechecks.slice(0, 6).map((row: any) => {
                     const name = String(row.contractor_display_name || row.rule_key || 'Invoice review check');
 
                     return (
-                      <Box key={row.id ?? row.rule_key} bg="white" borderRadius="md" p={3}>
-                        <Flex align="center" gap={2}>
-                          <Text fontSize="sm" fontWeight="semibold">
-                            {name}
-                          </Text>
-                        </Flex>
-                      </Box>
+                      <Text as="li" key={row.id ?? row.rule_key} fontSize="sm" mb={2}>
+                        {name}
+                      </Text>
                     );
                   })}
-                </Flex>
+                </Box>
                 {contractorActionableRulechecks.length > 6 ? (
                   <Text fontSize="xs" mt={3} opacity={0.75}>
                     Plus {contractorActionableRulechecks.length - 6} more outstanding check(s) on this invoice.
                   </Text>
                 ) : null}
               </Box>
+
+              <Flex justify="center" gap={3} flexWrap="wrap">
+                <Button variant="outline" onClick={onSubmitWarningClose}>
+                  Back
+                </Button>
+                {blockingRulechecks.length === 0 && (
+                  <Button variant="primary" onClick={submitToAdminAfterReview} isLoading={submitLoading}>
+                    Submit
+                  </Button>
+                )}
+              </Flex>
             </Flex>
           </ModalBody>
         </ModalContent>

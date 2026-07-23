@@ -7,10 +7,8 @@ import {
   HStack,
   Modal,
   ModalBody,
-  ModalCloseButton,
   ModalContent,
   ModalFooter,
-  ModalHeader,
   ModalOverlay,
   Table,
   Tbody,
@@ -22,8 +20,10 @@ import {
   Tr,
   VStack,
 } from '@chakra-ui/react';
-import { CheckCircle, WarningCircle, XCircle } from '@phosphor-icons/react';
+import { CheckCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useMst } from '../../../setup/root';
+import { EFlashMessageStatus } from '../../../types/enums';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 import { ContractorProcessingGraphic } from '../../shared/claims/contractor-processing-graphic';
 
@@ -77,9 +77,76 @@ function fileSizeMb(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+type ApiErrorPayload = {
+  error?: unknown;
+  message?: unknown;
+};
+
+class ApiRequestError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+  }
+}
+
+const technicalErrorPattern =
+  /\bHTTP(?:\s+|=)\d{3}\b|\b(?:Net|Faraday|OpenSSL|Aws)::|stack trace|connection refused|ECONN(?:REFUSED|RESET)/i;
+
+function payloadErrorMessage(payload: ApiErrorPayload): string {
+  const value = payload?.error || payload?.message;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function apiRequestError(response: Response, payload: ApiErrorPayload, fallback: string): ApiRequestError {
+  const serverMessage = payloadErrorMessage(payload);
+  let message = serverMessage || fallback;
+
+  if (response.status === 401) {
+    message = 'Your sign-in session has expired. Your files were not uploaded. Please sign in again and retry.';
+  } else if (response.status === 403) {
+    message =
+      'Your account does not have permission to complete this upload. Please contact support if this is unexpected.';
+  } else if (response.status === 413) {
+    message = 'The selected files are too large to upload. Please reduce the package size and try again.';
+  } else if (response.status === 429) {
+    message = 'The upload service is busy right now. Please wait a moment and try again.';
+  } else if (response.status >= 500 || technicalErrorPattern.test(message)) {
+    message =
+      'A processing service is temporarily unavailable. Please try again. If the problem continues, contact support.';
+  }
+
+  return new ApiRequestError(response.status, message);
+}
+
+function caughtErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiRequestError) return error.message;
+  if (error instanceof TypeError) {
+    return 'We could not connect to the upload service. Check your connection and try again.';
+  }
+
+  const message = error instanceof Error ? error.message.trim() : '';
+  if (technicalErrorPattern.test(message)) {
+    return 'A processing service is temporarily unavailable. Please try again. If the problem continues, contact support.';
+  }
+  return message || fallback;
+}
+
+function contractorFacingFailureMessage(message: string): string {
+  const normalized = String(message || '').trim();
+  if (!normalized) return '';
+  if (technicalErrorPattern.test(normalized)) {
+    return 'A processing service is temporarily unavailable. Please try again. If the problem continues, contact support.';
+  }
+  return normalized;
+}
+
 export default function ContractorUploadInvoicesScreen() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { sessionStore, uiStore } = useMst();
   const runIdFromUrl = getParam(location.search, 'ingest_run_id');
 
   const [contractorError, setContractorError] = useState('');
@@ -91,12 +158,15 @@ export default function ContractorUploadInvoicesScreen() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [submitErrorStatus, setSubmitErrorStatus] = useState<number | null>(null);
   const [failureMessage, setFailureMessage] = useState('');
   const [dismissedFailureRunId, setDismissedFailureRunId] = useState('');
   const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
   const [runError, setRunError] = useState('');
+  const [runErrorStatus, setRunErrorStatus] = useState<number | null>(null);
   const [invoiceRows, setInvoiceRows] = useState<RunInvoiceRow[]>([]);
   const [rowsError, setRowsError] = useState('');
+  const [rowsErrorStatus, setRowsErrorStatus] = useState<number | null>(null);
 
   useEffect(() => setRunId(runIdFromUrl), [runIdFromUrl]);
 
@@ -112,10 +182,21 @@ export default function ContractorUploadInvoicesScreen() {
           cache: 'no-store',
         });
         const data: ContractorPortalResponse = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-        if (!cancelled) setContractorError('');
-      } catch (error: any) {
-        if (!cancelled) setContractorError(error?.message || 'Unable to load contractor account.');
+        if (!res.ok) throw apiRequestError(res, data, 'Unable to load your contractor account.');
+        if (!cancelled) {
+          setContractorError('');
+        }
+      } catch (error: unknown) {
+        if (!cancelled) {
+          const message = caughtErrorMessage(error, 'Unable to load your contractor account.');
+          const status = error instanceof ApiRequestError ? error.status : null;
+          setContractorError(message);
+          if (status === 401) {
+            sessionStore.setTokenExpired(true);
+          } else {
+            uiStore.flashMessage.show(EFlashMessageStatus.error, 'Unable to load contractor account', message);
+          }
+        }
       }
     };
 
@@ -124,11 +205,12 @@ export default function ContractorUploadInvoicesScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionStore, uiStore]);
 
   const loadRunHeader = async (id: string) => {
     if (!id) return;
     setRunError('');
+    setRunErrorStatus(null);
     try {
       const res = await fetch(`/api/claims/contractor/ingest/runs/${encodeURIComponent(id)}`, {
         method: 'GET',
@@ -137,11 +219,12 @@ export default function ContractorUploadInvoicesScreen() {
         cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (!res.ok) throw apiRequestError(res, data, 'We could not check the status of your upload.');
       setRunHeader(data as RunHeader);
       if (data?.failure_message) setFailureMessage(String(data.failure_message));
-    } catch (error: any) {
-      setRunError(error?.message || 'Failed to check upload status.');
+    } catch (error: unknown) {
+      setRunError(caughtErrorMessage(error, 'We could not check the status of your upload.'));
+      setRunErrorStatus(error instanceof ApiRequestError ? error.status : null);
       setRunHeader(null);
     }
   };
@@ -149,6 +232,7 @@ export default function ContractorUploadInvoicesScreen() {
   const loadRunInvoices = async (id: string) => {
     if (!id) return;
     setRowsError('');
+    setRowsErrorStatus(null);
     try {
       const res = await fetch(`/api/claims/contractor/ingest/runs/${encodeURIComponent(id)}/invoices`, {
         method: 'GET',
@@ -157,11 +241,12 @@ export default function ContractorUploadInvoicesScreen() {
         cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (!res.ok) throw apiRequestError(res, data, 'We could not load the invoices from your upload.');
       setInvoiceRows(Array.isArray(data?.rows) ? data.rows : []);
       if (data?.failure_message) setFailureMessage(String(data.failure_message));
-    } catch (error: any) {
-      setRowsError(error?.message || 'Failed to load uploaded invoices.');
+    } catch (error: unknown) {
+      setRowsError(caughtErrorMessage(error, 'We could not load the invoices from your upload.'));
+      setRowsErrorStatus(error instanceof ApiRequestError ? error.status : null);
       setInvoiceRows([]);
     }
   };
@@ -195,18 +280,16 @@ export default function ContractorUploadInvoicesScreen() {
   const clearUploadAttention = () => {
     setFailureMessage('');
     setSubmitError('');
+    setSubmitErrorStatus(null);
     setRunError('');
+    setRunErrorStatus(null);
     setRowsError('');
+    setRowsErrorStatus(null);
     if (runId) setDismissedFailureRunId(runId);
   };
 
   const closeUploadModal = () => {
     if (submitLoading || isProcessing) return;
-    setUploadModalOpen(false);
-  };
-
-  const clearUploadModalAttention = () => {
-    clearUploadAttention();
     setUploadModalOpen(false);
   };
 
@@ -272,10 +355,13 @@ export default function ContractorUploadInvoicesScreen() {
     setUploadModalOpen(true);
     setSubmitLoading(true);
     setSubmitError('');
+    setSubmitErrorStatus(null);
     setFailureMessage('');
     setDismissedFailureRunId('');
     setRunError('');
+    setRunErrorStatus(null);
     setRowsError('');
+    setRowsErrorStatus(null);
     try {
       if (!selectedFiles.length) throw new Error('Select an invoice package first.');
 
@@ -288,7 +374,7 @@ export default function ContractorUploadInvoicesScreen() {
         body: form,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      if (!res.ok) throw apiRequestError(res, data, 'We could not upload your invoice package.');
 
       const nextRunId = String(data?.ingest_run_id || '').trim();
       const nextSessionId = String(data?.session_id || '').trim();
@@ -298,8 +384,9 @@ export default function ContractorUploadInvoicesScreen() {
       setParams(navigate, location, { ingest_run_id: nextRunId, session_id: nextSessionId });
       if (data?.failure_message) setFailureMessage(String(data.failure_message));
       await refreshAll(nextRunId);
-    } catch (error: any) {
-      setSubmitError(error?.message || 'Failed to upload invoice package.');
+    } catch (error: unknown) {
+      setSubmitError(caughtErrorMessage(error, 'We could not upload your invoice package.'));
+      setSubmitErrorStatus(error instanceof ApiRequestError ? error.status : null);
     } finally {
       setSubmitLoading(false);
     }
@@ -333,13 +420,22 @@ export default function ContractorUploadInvoicesScreen() {
     !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
       ? 'We could not prepare your AI advice right now. Please try uploading the same files again later.'
       : '';
-  const displayFailureMessage = submitError || runError || rowsError || visibleFailureMessage || fallbackFailureMessage;
+  const displayFailureMessage = contractorFacingFailureMessage(
+    submitError || runError || rowsError || visibleFailureMessage || fallbackFailureMessage,
+  );
+  const authenticationExpired = [submitErrorStatus, runErrorStatus, rowsErrorStatus].includes(401);
+  const uploadNeedsTechnicalHelp =
+    runHeader?.failure_status === 'technical_failure' ||
+    invoiceRows.some((row) => String(row.invoice_status || '').toLowerCase() === 'technical_failure');
+  const uploadErrorStatus = submitErrorStatus ?? runErrorStatus ?? rowsErrorStatus;
+  const uploadMessageIsWarning =
+    [413, 422, 429].includes(uploadErrorStatus || 0) || ((hasFailedRows || runFailed) && !uploadNeedsTechnicalHelp);
   const processingStoryLabel = (() => {
-    if (submitLoading || runStatus === 'queued') return 'Uploading your package';
+    if (submitLoading || runStatus === 'queued') return 'Uploading your files';
     if (!invoiceRows.length) return 'Reading your files';
 
     const statuses = invoiceRows.map((row) => String(row.invoice_status || '').toLowerCase());
-    if (statuses.some((status) => status.startsWith('upload_'))) return 'Uploading your package';
+    if (statuses.some((status) => status.startsWith('upload_'))) return 'Uploading your files';
     if (statuses.some((status) => status.startsWith('ocr_'))) return 'Reading your files';
     if (statuses.some((status) => status === 'ocr_complete')) return 'Sorting invoice and support documents';
     if (statuses.some((status) => status.startsWith('genai_'))) return 'Preparing AI Advice';
@@ -357,10 +453,33 @@ export default function ContractorUploadInvoicesScreen() {
   const filesLocked = submitLoading || isProcessing || canContinue;
 
   useEffect(() => {
-    if (submitLoading || isProcessing || displayFailureMessage || canContinue) {
+    if (displayFailureMessage) {
+      setUploadModalOpen(false);
+      if (authenticationExpired) {
+        sessionStore.setTokenExpired(true);
+      } else {
+        uiStore.flashMessage.show(
+          uploadMessageIsWarning ? EFlashMessageStatus.warning : EFlashMessageStatus.error,
+          uploadMessageIsWarning ? 'Upload needs attention' : 'Upload could not be completed',
+          displayFailureMessage,
+        );
+      }
+      return;
+    }
+
+    if (submitLoading || isProcessing || canContinue) {
       setUploadModalOpen(true);
     }
-  }, [canContinue, displayFailureMessage, isProcessing, submitLoading]);
+  }, [
+    authenticationExpired,
+    canContinue,
+    displayFailureMessage,
+    isProcessing,
+    sessionStore,
+    submitLoading,
+    uiStore,
+    uploadMessageIsWarning,
+  ]);
 
   const continueToReview = () => {
     if (!canContinue) return;
@@ -376,7 +495,7 @@ export default function ContractorUploadInvoicesScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <BlueTitleBar title="Upload Invoice" />
+      <BlueTitleBar title="Upload Invoice and Supporting Documents" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -392,19 +511,9 @@ export default function ContractorUploadInvoicesScreen() {
 
           <VStack spacing={4} align="stretch" mb={5}>
             <Box p={0} bg="transparent">
-              <Flex justify="space-between" align="center" mb={3} wrap="wrap" gap={2}>
-                <Box>
-                  <Text fontSize="lg" fontWeight="bold">
-                    Step 1: Upload Invoice and Supporting Documents
-                  </Text>
-                  {contractorError ? (
-                    <Text fontSize="sm" color="red.700" mt={2}>
-                      {contractorError}
-                    </Text>
-                  ) : null}
-                </Box>
+              <Flex justify="flex-start" align="center" mb={3} wrap="wrap" gap={2}>
                 <HStack spacing={2}>
-                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} isDisabled={filesLocked}>
+                  <Button variant="secondary" onClick={() => fileInputRef.current?.click()} isDisabled={filesLocked}>
                     Add files
                   </Button>
                   <Button
@@ -486,7 +595,7 @@ export default function ContractorUploadInvoicesScreen() {
 
               <Flex mt={4} justify="space-between" align="center" wrap="wrap" gap={3}>
                 <Button
-                  colorScheme="blue"
+                  variant="primary"
                   onClick={() => void handleRunSubmission()}
                   isLoading={submitLoading}
                   loadingText="Uploading..."
@@ -498,58 +607,18 @@ export default function ContractorUploadInvoicesScreen() {
             </Box>
 
             <Modal
-              isOpen={uploadModalOpen && (submitLoading || isProcessing || !!displayFailureMessage || canContinue)}
+              isOpen={uploadModalOpen && (submitLoading || isProcessing || canContinue)}
               onClose={closeUploadModal}
-              closeOnOverlayClick={!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue}
-              closeOnEsc={!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue}
+              closeOnOverlayClick={false}
+              closeOnEsc={false}
               size="2xl"
               isCentered
             >
               <ModalOverlay bg="rgba(15, 23, 42, 0.38)" backdropFilter="blur(5px)" />
               <ModalContent borderRadius="28px" overflow="hidden" boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)">
-                <ModalHeader
-                  px={7}
-                  pt={6}
-                  pb={3}
-                  bg="linear-gradient(135deg, rgba(239,248,255,0.98), rgba(255,255,255,0.98))"
-                >
-                  <Text fontSize="lg" fontWeight="800">
-                    Upload Invoice
-                  </Text>
-                </ModalHeader>
-                {!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue ? (
-                  <ModalCloseButton />
-                ) : null}
                 <ModalBody px={7} py={7}>
                   {submitLoading || isProcessing ? (
                     <ContractorProcessingGraphic label={processingStoryLabel} />
-                  ) : displayFailureMessage ? (
-                    <Flex
-                      align="flex-start"
-                      gap={4}
-                      p={5}
-                      borderRadius="22px"
-                      bg="linear-gradient(135deg, rgba(255,245,240,0.96), rgba(255,255,255,0.98))"
-                      border="1px solid rgba(194, 65, 12, 0.18)"
-                      boxShadow="0 14px 38px rgba(124, 45, 18, 0.09)"
-                    >
-                      <Box color="orange.600" pt="1px">
-                        <WarningCircle size={30} weight="duotone" />
-                      </Box>
-                      <Box flex="1">
-                        <Text fontWeight="800" color="gray.800">
-                          {runHeader?.failure_status === 'technical_failure' ||
-                          invoiceRows.some(
-                            (row) => String(row.invoice_status || '').toLowerCase() === 'technical_failure',
-                          )
-                            ? 'Upload needs technical help'
-                            : 'Upload needs attention'}
-                        </Text>
-                        <Text mt={1} fontSize="sm" color="gray.700">
-                          {displayFailureMessage}
-                        </Text>
-                      </Box>
-                    </Flex>
                   ) : canContinue ? (
                     <Flex direction="column" align="center" gap={4} py={8} textAlign="center">
                       <Box
@@ -563,31 +632,17 @@ export default function ContractorUploadInvoicesScreen() {
                       </Box>
                       <Box>
                         <Text fontSize="2xl" fontWeight="800" color="gray.800">
-                          Advice is ready
-                        </Text>
-                        <Text mt={2} fontSize="sm" color="gray.600" maxW="460px">
-                          Continue to pre-check the invoice before submitting it.
+                          All files uploaded successfully
                         </Text>
                       </Box>
                     </Flex>
                   ) : null}
                 </ModalBody>
-                {displayFailureMessage && !submitLoading && !isProcessing ? (
-                  <ModalFooter px={7} pt={0} pb={7} gap={3}>
-                    <Button
-                      leftIcon={<XCircle size={17} />}
-                      colorScheme="orange"
-                      borderRadius="full"
-                      onClick={clearUploadModalAttention}
-                    >
-                      Try Again
-                    </Button>
-                  </ModalFooter>
-                ) : canContinue ? (
+                {canContinue ? (
                   <ModalFooter px={7} pt={0} pb={7}>
                     <Tooltip label={continueHelp} shouldWrapChildren>
-                      <Button colorScheme="green" size="lg" borderRadius="full" onClick={continueToReview}>
-                        Continue to Step 2: Pre-check
+                      <Button variant="primary" size="lg" onClick={continueToReview}>
+                        Next
                       </Button>
                     </Tooltip>
                   </ModalFooter>

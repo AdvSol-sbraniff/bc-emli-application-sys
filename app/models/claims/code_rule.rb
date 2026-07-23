@@ -52,6 +52,7 @@ module Claims
         info_admin_message: attribute_in_database("info_admin_message"),
         admin_notes: attribute_in_database("admin_notes"),
         source_quote: attribute_in_database("source_quote"),
+        contractor_action: attribute_in_database("contractor_action"),
         contractor_visibility: attribute_in_database("contractor_visibility"),
         contractor_blocking_policy:
           attribute_in_database("contractor_blocking_policy"),

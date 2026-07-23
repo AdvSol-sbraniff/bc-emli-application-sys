@@ -41,6 +41,40 @@ const pretty = (value: unknown): string =>
     .replace(/_/g, ' ')
     .replace(/^./, (letter) => letter.toUpperCase());
 
+const historicalCommentChoice = (comment: RevisionIssueComment): { label: string; value: string } | null => {
+  if (comment.author_type === 'admin' && comment.admin_recommended_remedy) {
+    return {
+      label: 'Requested response',
+      value: ADMIN_REMEDY_LABELS[comment.admin_recommended_remedy] || pretty(comment.admin_recommended_remedy),
+    };
+  }
+
+  if (comment.author_type === 'contractor' && comment.contractor_response_method) {
+    return {
+      label: 'Response method',
+      value:
+        CONTRACTOR_METHODS.find(([value]) => value === comment.contractor_response_method)?.[1] ||
+        pretty(comment.contractor_response_method),
+    };
+  }
+
+  return null;
+};
+
+const formatCommentDateTime = (value?: string | null): string => {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return 'Date unavailable';
+
+  return date.toLocaleString('en-CA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
 const draftComplete = (issue: RevisionIssue, draft: ContractorDraft): boolean => {
   if (!draft.method || !draft.text.trim()) return false;
   return !(draft.method === 'attestation_provided' && issue.issue_type !== 'rule' && !draft.assertedValue.trim());
@@ -368,6 +402,8 @@ type CardProps = {
   workspace: ContractorInlineRevisionWorkspace;
   attention?: boolean;
   compactHeading?: boolean;
+  integratedConversation?: boolean;
+  submittedAt?: string | null;
 };
 
 export const ContractorInlineRevisionIssueCard = ({
@@ -375,6 +411,8 @@ export const ContractorInlineRevisionIssueCard = ({
   workspace,
   attention = false,
   compactHeading = false,
+  integratedConversation = false,
+  submittedAt,
 }: CardProps) => {
   const draft = workspace.draftFor(issue);
   const presentation = contractorRevisionPresentationState(issue, workspace.data);
@@ -392,11 +430,8 @@ export const ContractorInlineRevisionIssueCard = ({
   const priorComments = issue.comments.filter(
     (comment) => comment.id !== latestAdminRequest?.id && comment.id !== displayedResponse?.id,
   );
+  const timelineComments = latestAdminRequest ? [...priorComments, latestAdminRequest] : priorComments;
   const needsAction = presentation.key === 'action_required' || presentation.key === 'upload_required';
-  const requestedResponse = latestAdminRequest?.admin_recommended_remedy
-    ? ADMIN_REMEDY_LABELS[latestAdminRequest.admin_recommended_remedy] ||
-      pretty(latestAdminRequest.admin_recommended_remedy)
-    : '';
   const savedResponseMethod = displayedResponse?.contractor_response_method
     ? CONTRACTOR_METHODS.find(([value]) => value === displayedResponse.contractor_response_method)?.[1] ||
       pretty(displayedResponse.contractor_response_method)
@@ -405,12 +440,12 @@ export const ContractorInlineRevisionIssueCard = ({
   return (
     <Box
       mt={3}
-      p={{ base: 3, md: 4 }}
-      borderWidth="1px"
+      p={integratedConversation ? 0 : { base: 3, md: 4 }}
+      borderWidth={integratedConversation ? 0 : '1px'}
       borderColor={attention ? 'red.300' : needsAction ? 'orange.200' : 'gray.200'}
-      borderRadius="lg"
-      bg={attention ? 'red.50' : 'white'}
-      boxShadow="sm"
+      borderRadius={integratedConversation ? 0 : 'lg'}
+      bg={integratedConversation ? 'transparent' : attention ? 'red.50' : 'white'}
+      boxShadow={integratedConversation ? 'none' : 'sm'}
     >
       {!compactHeading ? (
         <Text fontWeight="bold" color="blue.800" mb={3}>
@@ -419,7 +454,14 @@ export const ContractorInlineRevisionIssueCard = ({
       ) : null}
 
       {issue.disposition_comment ? (
-        <Box mb={4} p={3} bg="green.50" borderLeftWidth="4px" borderLeftColor="green.400" borderRadius="md">
+        <Box
+          mb={4}
+          p={integratedConversation ? 0 : 3}
+          bg={integratedConversation ? 'transparent' : 'green.50'}
+          borderLeftWidth={integratedConversation ? 0 : '4px'}
+          borderLeftColor="green.400"
+          borderRadius={integratedConversation ? 0 : 'md'}
+        >
           <Text fontSize="xs" fontWeight="bold" color="green.800" mb={1}>
             Resolution
           </Text>
@@ -429,154 +471,265 @@ export const ContractorInlineRevisionIssueCard = ({
         </Box>
       ) : null}
 
-      <Box>
-        <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide">
-          Program team request
-        </Text>
-        {requestedResponse ? (
-          <Text fontSize="xs" fontWeight="semibold" color="purple.700" mt={1}>
-            Requested response: {requestedResponse}
-          </Text>
-        ) : null}
-        {latestAdminRequest ? (
-          <Text fontSize="sm" whiteSpace="pre-wrap" mt={2}>
-            {latestAdminRequest.comment_text}
-          </Text>
-        ) : (
-          <Text fontSize="sm" opacity={0.7} mt={2}>
-            No program team request is available for this item.
-          </Text>
-        )}
-      </Box>
+      {integratedConversation && (submittedAt || timelineComments.length > 0) ? (
+        <Box ml={{ base: 6, md: 12 }} mb={4} py={2}>
+          <Flex direction="column" ml={1} borderLeftWidth="4px" borderLeftColor="orange.200">
+            {submittedAt ? (
+              <Box position="relative" pl={5} pb={5} _last={{ pb: 0 }}>
+                <Box
+                  aria-hidden="true"
+                  position="absolute"
+                  top="2px"
+                  left="-7px"
+                  w="10px"
+                  h="10px"
+                  bg="orange.200"
+                  borderRadius="full"
+                />
+                <Flex align="center" gap={2} wrap="wrap">
+                  <Badge colorScheme="orange">Submitted By Contractor</Badge>
+                  <Text fontSize="xs" opacity={0.7}>
+                    {formatCommentDateTime(submittedAt)}
+                  </Text>
+                </Flex>
+              </Box>
+            ) : null}
+            {timelineComments.map((comment) => {
+              const choice = historicalCommentChoice(comment);
 
-      {displayedResponse && !editing ? (
-        <Box mt={4} pt={4} borderTopWidth="1px" borderColor="gray.200">
-          <Flex align="center" gap={2} wrap="wrap">
-            <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide">
-              Your response
-            </Text>
-            {savedResponseMethod ? (
-              <Text fontSize="xs" fontWeight="semibold" color="blue.700">
-                {savedResponseMethod}
-              </Text>
-            ) : null}
-            {issue.can_contractor_respond ? (
-              <Button
-                size="xs"
-                variant="ghost"
-                colorScheme="blue"
-                ml="auto"
-                onClick={() => workspace.beginEditing(issue)}
-              >
-                Edit response
-              </Button>
-            ) : null}
+              return (
+                <Box key={comment.id} position="relative" pl={5} pb={5} _last={{ pb: 0 }}>
+                  <Box
+                    aria-hidden="true"
+                    position="absolute"
+                    top="2px"
+                    left="-7px"
+                    w="10px"
+                    h="10px"
+                    bg="orange.200"
+                    borderRadius="full"
+                  />
+                  <Flex align="center" gap={2} wrap="wrap" mb={1}>
+                    <Badge colorScheme={comment.author_type === 'admin' ? 'gray' : 'blue'}>
+                      {comment.author_type === 'admin' ? 'Admin' : 'You'}
+                    </Badge>
+                    <Text fontSize="xs" opacity={0.7}>
+                      {formatCommentDateTime(comment.created_at)}
+                    </Text>
+                  </Flex>
+                  {choice ? (
+                    <Text fontSize="xs" fontWeight="semibold" color="#2D2D2D" mb={1}>
+                      {choice.label}: {choice.value}
+                    </Text>
+                  ) : null}
+                  <Text fontSize="sm" whiteSpace="pre-wrap">
+                    {comment.comment_text}
+                  </Text>
+                  {comment.contractor_asserted_value ? (
+                    <Text fontSize="sm" mt={1}>
+                      Attested value: <strong>{comment.contractor_asserted_value}</strong>
+                    </Text>
+                  ) : null}
+                </Box>
+              );
+            })}
           </Flex>
-          <Text fontSize="sm" whiteSpace="pre-wrap" mt={2}>
-            {displayedResponse.comment_text}
-          </Text>
-          {displayedResponse.contractor_asserted_value ? (
-            <Text fontSize="sm" mt={2}>
-              Attested value: <strong>{displayedResponse.contractor_asserted_value}</strong>
-            </Text>
-          ) : null}
         </Box>
       ) : null}
 
-      {showResponseForm ? (
-        <Box mt={4} pt={4} borderTopWidth="1px" borderColor="gray.200">
-          <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide" mb={2}>
-            Your response
+      {!integratedConversation ? (
+        <Box>
+          <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide">
+            Admin request
           </Text>
-          <Text fontSize="xs" fontWeight="semibold" mb={1}>
-            How did you respond?
-          </Text>
-          <Select
-            size="sm"
-            value={draft.method}
-            onChange={(event) => workspace.setDraft(issue.id, { method: event.target.value })}
-          >
-            <option value="" disabled>
-              Choose how you responded
-            </option>
-            {CONTRACTOR_METHODS.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-          {draft.method === 'attestation_provided' && issue.issue_type !== 'rule' ? (
-            <Box mt={3}>
-              <Text fontSize="xs" fontWeight="semibold" mb={1}>
-                Attested value
+          {latestAdminRequest?.admin_recommended_remedy ? (
+            <Text fontSize="xs" fontWeight="semibold" color="#2D2D2D" mt={1}>
+              Requested response:{' '}
+              {ADMIN_REMEDY_LABELS[latestAdminRequest.admin_recommended_remedy] ||
+                pretty(latestAdminRequest.admin_recommended_remedy)}
+            </Text>
+          ) : null}
+          {latestAdminRequest ? (
+            <Text fontSize="sm" whiteSpace="pre-wrap" mt={2}>
+              {latestAdminRequest.comment_text}
+            </Text>
+          ) : (
+            <Text fontSize="sm" opacity={0.7} mt={2}>
+              No admin request is available for this item.
+            </Text>
+          )}
+        </Box>
+      ) : null}
+
+      {(displayedResponse && !editing) || showResponseForm ? (
+        <Box
+          p={integratedConversation ? 3 : 0}
+          bg={integratedConversation ? 'white' : 'transparent'}
+          borderWidth={integratedConversation ? '1px' : 0}
+          borderColor={integratedConversation ? '#D8D8D8' : 'transparent'}
+          borderRadius={integratedConversation ? 'md' : 0}
+        >
+          {displayedResponse && !editing ? (
+            <Box
+              mt={integratedConversation ? 0 : 4}
+              pt={integratedConversation ? 0 : 4}
+              borderTopWidth={integratedConversation ? 0 : '1px'}
+              borderColor="gray.200"
+            >
+              <Flex align="center" gap={2} wrap="wrap">
+                <Text fontSize="xs" fontWeight="bold" color="blue.800" textTransform="uppercase" letterSpacing="wide">
+                  Your response
+                </Text>
+                {savedResponseMethod ? (
+                  <Text fontSize="xs" fontWeight="semibold" color="blue.700">
+                    {savedResponseMethod}
+                  </Text>
+                ) : null}
+                {issue.can_contractor_respond ? (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    colorScheme="blue"
+                    ml="auto"
+                    onClick={() => workspace.beginEditing(issue)}
+                  >
+                    Edit response
+                  </Button>
+                ) : null}
+              </Flex>
+              <Text fontSize="sm" whiteSpace="pre-wrap" mt={2}>
+                {displayedResponse.comment_text}
               </Text>
-              <Textarea
-                size="sm"
-                rows={2}
-                placeholder="Value you are attesting to"
-                value={draft.assertedValue}
-                onChange={(event) => workspace.setDraft(issue.id, { assertedValue: event.target.value })}
-              />
+              {displayedResponse.contractor_asserted_value ? (
+                <Text fontSize="sm" mt={2}>
+                  Attested value: <strong>{displayedResponse.contractor_asserted_value}</strong>
+                </Text>
+              ) : null}
             </Box>
           ) : null}
-          <Box mt={3}>
-            <Text fontSize="xs" fontWeight="semibold" mb={1}>
-              Response details
-            </Text>
-            <Textarea
-              size="sm"
-              rows={3}
-              placeholder="Explain your response"
-              value={draft.text}
-              onChange={(event) => workspace.setDraft(issue.id, { text: event.target.value })}
-            />
-          </Box>
-          <Flex justify="flex-end" gap={2} mt={3}>
-            {savedResponse ? (
-              <Button size="sm" variant="ghost" onClick={() => workspace.cancelEditing(issue)}>
-                Cancel
-              </Button>
-            ) : null}
-            <Button size="sm" colorScheme="blue" isLoading={workspace.busy} onClick={() => void workspace.save(issue)}>
-              Save response
-            </Button>
-          </Flex>
+
+          {showResponseForm ? (
+            <Box
+              mt={displayedResponse && !editing ? 4 : integratedConversation ? 0 : 4}
+              pt={displayedResponse && !editing ? 4 : integratedConversation ? 0 : 4}
+              borderTopWidth={displayedResponse && !editing ? '1px' : integratedConversation ? 0 : '1px'}
+              borderColor="gray.200"
+            >
+              <Text
+                fontSize="xs"
+                fontWeight="bold"
+                color="blue.800"
+                textTransform="uppercase"
+                letterSpacing="wide"
+                mb={2}
+              >
+                Your response
+              </Text>
+              <Text fontSize="xs" fontWeight="semibold" mb={1}>
+                How did you respond?
+              </Text>
+              <Select
+                size="sm"
+                value={draft.method}
+                onChange={(event) => workspace.setDraft(issue.id, { method: event.target.value })}
+              >
+                <option value="" disabled>
+                  Choose how you responded
+                </option>
+                {CONTRACTOR_METHODS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              {draft.method === 'attestation_provided' && issue.issue_type !== 'rule' ? (
+                <Box mt={3}>
+                  <Text fontSize="xs" fontWeight="semibold" mb={1}>
+                    Attested value
+                  </Text>
+                  <Textarea
+                    size="sm"
+                    rows={2}
+                    placeholder="Value you are attesting to"
+                    value={draft.assertedValue}
+                    onChange={(event) => workspace.setDraft(issue.id, { assertedValue: event.target.value })}
+                  />
+                </Box>
+              ) : null}
+              <Box mt={3}>
+                <Text fontSize="xs" fontWeight="semibold" mb={1}>
+                  Response details
+                </Text>
+                <Textarea
+                  size="sm"
+                  rows={3}
+                  placeholder="Explain your response"
+                  value={draft.text}
+                  onChange={(event) => workspace.setDraft(issue.id, { text: event.target.value })}
+                />
+              </Box>
+              <Flex justify="flex-start" gap={2} mt={3}>
+                {savedResponse ? (
+                  <Button size="sm" variant="ghost" onClick={() => workspace.cancelEditing(issue)}>
+                    Cancel
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="primary"
+                  isLoading={workspace.busy}
+                  onClick={() => void workspace.save(issue)}
+                >
+                  Save response
+                </Button>
+              </Flex>
+            </Box>
+          ) : null}
         </Box>
       ) : null}
 
-      {priorComments.length > 0 ? (
+      {!integratedConversation && priorComments.length > 0 ? (
         <Accordion allowToggle mt={4}>
           <AccordionItem border="0" borderTopWidth="1px" borderColor="gray.200">
             <h3>
               <AccordionButton px={0} py={3} _hover={{ bg: 'transparent' }}>
                 <Text flex="1" textAlign="left" fontSize="xs" fontWeight="semibold" color="gray.700">
-                  Previous exchanges ({priorComments.length})
+                  Conversation history ({priorComments.length})
                 </Text>
                 <AccordionIcon />
               </AccordionButton>
             </h3>
             <AccordionPanel px={0} pt={0} pb={0}>
               <Flex direction="column" gap={2}>
-                {priorComments.map((comment) => (
-                  <Box key={comment.id} bg="gray.50" borderRadius="md" p={3}>
-                    <Flex align="center" gap={2} wrap="wrap" mb={1}>
-                      <Badge colorScheme={comment.author_type === 'admin' ? 'purple' : 'blue'}>
-                        {comment.author_type === 'admin' ? 'Program team' : 'You'}
-                      </Badge>
-                      <Text fontSize="xs" opacity={0.7}>
-                        Exchange {comment.round_number}
+                {priorComments.map((comment) => {
+                  const choice = historicalCommentChoice(comment);
+
+                  return (
+                    <Box key={comment.id} bg="gray.50" borderRadius="md" p={3}>
+                      <Flex align="center" gap={2} wrap="wrap" mb={1}>
+                        <Badge colorScheme={comment.author_type === 'admin' ? 'purple' : 'blue'}>
+                          {comment.author_type === 'admin' ? 'Admin' : 'You'}
+                        </Badge>
+                        <Text fontSize="xs" opacity={0.7}>
+                          {formatCommentDateTime(comment.created_at)}
+                        </Text>
+                      </Flex>
+                      {choice ? (
+                        <Text fontSize="xs" fontWeight="semibold" color="#2D2D2D" mb={1}>
+                          {choice.label}: {choice.value}
+                        </Text>
+                      ) : null}
+                      <Text fontSize="sm" whiteSpace="pre-wrap">
+                        {comment.comment_text}
                       </Text>
-                    </Flex>
-                    <Text fontSize="sm" whiteSpace="pre-wrap">
-                      {comment.comment_text}
-                    </Text>
-                    {comment.contractor_asserted_value ? (
-                      <Text fontSize="sm" mt={1}>
-                        Attested value: <strong>{comment.contractor_asserted_value}</strong>
-                      </Text>
-                    ) : null}
-                  </Box>
-                ))}
+                      {comment.contractor_asserted_value ? (
+                        <Text fontSize="sm" mt={1}>
+                          Attested value: <strong>{comment.contractor_asserted_value}</strong>
+                        </Text>
+                      ) : null}
+                    </Box>
+                  );
+                })}
               </Flex>
             </AccordionPanel>
           </AccordionItem>
@@ -589,18 +742,31 @@ export const ContractorInlineRevisionIssueCard = ({
 export const ContractorInlineRevisionStatus = ({ workspace }: { workspace: ContractorInlineRevisionWorkspace }) => {
   if (workspace.loading) {
     return (
-      <Flex align="center" gap={2} py={2}>
-        <Spinner size="sm" />
-        <Text fontSize="sm">Loading requested changes...</Text>
-      </Flex>
+      <Badge colorScheme="gray" display="inline-flex" alignItems="center" gap={1}>
+        <Spinner size="xs" />
+        Loading responses
+      </Badge>
     );
   }
-  if (!workspace.error) return null;
+  if (workspace.error) {
+    return <Badge colorScheme="red">Response status unavailable</Badge>;
+  }
+
+  const editable = workspace.issues.filter((issue) => issue.can_contractor_respond);
+  if (!editable.length) return null;
+  const saved = editable.filter((issue) => {
+    const draft = workspace.draftFor(issue);
+    const response = workspace.savedResponseFor(issue);
+    return !!response && draftComplete(issue, draft) && !draftDiffers(draft, response);
+  }).length;
+  const unsaved = editable.filter((issue) => {
+    const response = workspace.savedResponseFor(issue);
+    return draftDiffers(workspace.draftFor(issue), response);
+  }).length;
+
   return (
-    <Box p={3} borderWidth="1px" borderColor="red.200" bg="red.50" borderRadius="md">
-      <Text color="red.700" fontSize="sm">
-        {workspace.error}
-      </Text>
-    </Box>
+    <Badge colorScheme={unsaved ? 'yellow' : saved === editable.length ? 'green' : 'blue'}>
+      {saved} of {editable.length} responses saved
+    </Badge>
   );
 };

@@ -290,6 +290,8 @@ Rails.application.routes.draw do
           to: "invoice_revision_issues_admin#index"
       post "admin/invoices/:invoice_id/revision_issues",
            to: "invoice_revision_issues_admin#create_issue"
+      post "admin/invoices/:invoice_id/revision_issues/ensure_managed",
+           to: "invoice_revision_issues_admin#ensure_managed"
       post "admin/invoices/:invoice_id/revision_issues/send",
            to: "invoice_revision_issues_admin#send_issues"
       post "admin/invoices/:invoice_id/revision_issues/:issue_id/comment",

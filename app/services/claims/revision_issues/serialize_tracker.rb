@@ -58,7 +58,11 @@ module Claims
         scope = @invoice.revision_issues
         return scope unless contractor?
 
-        scope.contractor_visible
+        scope
+          .contractor_visible
+          .joins(comments: :revision_round)
+          .where.not("claims.revision_rounds.admin_sent_at" => nil)
+          .distinct
       end
 
       def suppressed_source_identities
@@ -105,6 +109,13 @@ module Claims
           comments.any? do |comment|
             comment.revision_round.admin_sent_at.present?
           end
+        sent_rounds =
+          comments
+            .map(&:revision_round)
+            .select { |round| round.admin_sent_at.present? }
+            .uniq(&:id)
+        first_sent_at = sent_rounds.filter_map(&:admin_sent_at).min
+        last_sent_at = sent_rounds.filter_map(&:admin_sent_at).max
         editable_admin_comment =
           comments.reverse.find do |comment|
             admin? && comment.admin? && latest_round&.draft? &&
@@ -126,6 +137,9 @@ module Claims
           created_at: issue.created_at,
           updated_at: issue.updated_at,
           in_latest_round: in_latest_round,
+          was_sent_to_contractor: has_sent_history,
+          first_sent_to_contractor_at: first_sent_at,
+          last_sent_to_contractor_at: last_sent_at,
           can_delete:
             admin? && issue.pending_admin_review? && latest_round&.draft? &&
               in_latest_round && !has_sent_history,

@@ -41,6 +41,7 @@ export type RevisionSource = {
   evidence_text?: string | null;
   expected_text?: string | null;
   source_quote?: string | null;
+  contractor_action?: string | null;
   page?: number | null;
   polygon?: unknown;
   value?: unknown;
@@ -76,6 +77,8 @@ export type RevisionIssueComment = {
   contractor_response_method?: string | null;
   comment_text?: string | null;
   contractor_asserted_value?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   can_edit?: boolean;
 };
 
@@ -100,6 +103,9 @@ export type RevisionIssue = {
     | 'closed_as_withdrawn';
   disposition_comment?: string | null;
   in_latest_round?: boolean;
+  was_sent_to_contractor?: boolean;
+  first_sent_to_contractor_at?: string | null;
+  last_sent_to_contractor_at?: string | null;
   can_delete?: boolean;
   can_close?: boolean;
   can_admin_comment?: boolean;

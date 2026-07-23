@@ -23,6 +23,7 @@ RSpec.describe "Claims contractor invoice read", type: :request do
           contractor_id: contractor.id,
           status: "genai_complete",
           status_updated_at: now,
+          submitted_at: now,
           created_at: now,
           updated_at: now
         )
@@ -82,6 +83,32 @@ RSpec.describe "Claims contractor invoice read", type: :request do
         created_at: now,
         updated_at: now
       )
+      rule_key = "contractor_action_#{SecureRandom.hex(4)}"
+      Claims::GenaiRule.create!(
+        genai_rule_key: rule_key,
+        contractor_display_name: "Invoice requirement test",
+        prompt_text: "Check the invoice requirement.",
+        enabled: true,
+        source_quote: "The invoice must show the required information.",
+        contractor_action:
+          "Upload a corrected invoice if the information is missing.",
+        contractor_visibility: "fail_only",
+        contractor_blocking_policy: "non_blocking",
+        admin_workflow_policy: "fail_only",
+        created_at: now,
+        updated_at: now
+      )
+      Claims::InvoiceVersionRulecheck.create!(
+        invoice_version_id: invoice_version.id,
+        invoice_upgrade_type_id: upgrade_type.id,
+        source_engine: "genai",
+        rule_key: rule_key,
+        contractor_display_name: "Invoice requirement test",
+        rule_result: "fail",
+        confidence: 95,
+        created_at: now,
+        updated_at: now
+      )
       supporting_document =
         Claims::SupportingDocument.create!(
           invoice_version_id: invoice_version.id,
@@ -126,6 +153,8 @@ RSpec.describe "Claims contractor invoice read", type: :request do
 
       expect(response).to have_http_status(:ok)
       read = json_response.fetch("read")
+      expect(read.fetch("reference_number")).to eq(invoice.reference_number)
+      expect(Time.zone.parse(read.fetch("submitted_at"))).to eq(now)
 
       supporting_type_group =
         read
@@ -157,6 +186,19 @@ RSpec.describe "Claims contractor invoice read", type: :request do
       expect(document.fetch("visual_findings").first).to include(
         "finding_type" => "label_visible",
         "summary" => "The energy label is visible."
+      )
+
+      get "/api/claims/sessions/#{session.id}/invoices/#{invoice.id}/read_genai"
+
+      expect(response).to have_http_status(:ok)
+      rulecheck =
+        json_response
+          .fetch("rulechecks")
+          .find { |row| row.fetch("rule_key") == rule_key }
+      expect(rulecheck).to include(
+        "source_quote" => "The invoice must show the required information.",
+        "contractor_action" =>
+          "Upload a corrected invoice if the information is missing."
       )
     end
   end
