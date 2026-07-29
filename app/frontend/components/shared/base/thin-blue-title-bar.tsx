@@ -1,4 +1,4 @@
-import { Box, BoxProps, Container, ContainerProps, Flex, Heading } from '@chakra-ui/react';
+import { Box, BoxProps, Container, ContainerProps, Flex, Heading, HeadingProps } from '@chakra-ui/react';
 import React from 'react';
 
 interface IThinBlueTitleBarProps extends BoxProps {
@@ -6,6 +6,7 @@ interface IThinBlueTitleBarProps extends BoxProps {
   leftElement?: React.ReactNode;
   rightElement?: React.ReactNode;
   contentMaxW?: ContainerProps['maxW'];
+  titleFontSize?: HeadingProps['fontSize'];
 }
 
 export const ThinBlueTitleBar = ({
@@ -13,6 +14,7 @@ export const ThinBlueTitleBar = ({
   leftElement,
   rightElement,
   contentMaxW = 'container.lg',
+  titleFontSize = '1.75rem',
   ...rest
 }: IThinBlueTitleBarProps) => {
   return (
@@ -28,7 +30,7 @@ export const ThinBlueTitleBar = ({
       >
         <Flex alignItems="center" gap={4}>
           {leftElement ? <Box flexShrink={0}>{leftElement}</Box> : null}
-          <Heading as="h1" color="greys.white" fontSize="1.75rem">
+          <Heading as="h1" color="greys.white" fontSize={titleFontSize}>
             {title}
           </Heading>
         </Flex>

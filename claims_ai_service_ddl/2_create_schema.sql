@@ -1079,6 +1079,33 @@ CREATE INDEX IF NOT EXISTS index_claims_users_eligibilitycodes_on_income_level
   ON claims.users_eligibilitycodes (income_level);
 
 
+-- ============================================================
+-- personal_information_types
+-- PURPOSE: Configured categories used by the existing per-file
+-- classifier when it flags unnecessary or high-risk PI.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS claims.personal_information_types (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+
+  type_key text NOT NULL,
+  display_name text NOT NULL,
+  description text NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  sort_order integer NOT NULL DEFAULT 0,
+
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT personal_information_types_pkey PRIMARY KEY (id),
+  CONSTRAINT personal_information_types_type_key_uniq UNIQUE (type_key),
+  CONSTRAINT personal_information_types_sort_order_chk
+    CHECK (sort_order >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_personal_information_types_enabled_sort
+  ON claims.personal_information_types (enabled, sort_order, type_key);
+
+
 
   -- 
   -- invoice_versions
@@ -1097,6 +1124,11 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   content_type      character varying NULL,  -- e.g., 'application/pdf'
   byte_size         bigint NULL,
   sha256            character varying NULL,
+
+  -- per-file classifier PI review (NULL means legacy/not evaluated)
+  personal_information_review_status text NULL,
+  personal_information_type_id uuid NULL,
+  personal_information_review_reason text NULL,
 
   -- from the genai
   genai_raw_json jsonb NULL,
@@ -1181,6 +1213,11 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   CONSTRAINT fk_claims_versions_invoice
     FOREIGN KEY (invoice_id) REFERENCES claims.invoices(id),
 
+  CONSTRAINT fk_invoice_versions_personal_information_type
+    FOREIGN KEY (personal_information_type_id)
+    REFERENCES claims.personal_information_types(id)
+    ON DELETE RESTRICT,
+
   CONSTRAINT fk_invoice_versions_ahri_product
     FOREIGN KEY (ahri_product_id)
     REFERENCES claims.ahri_products(id),
@@ -1220,7 +1257,39 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
     CHECK (invoice_versionno >= 1),
 
   CONSTRAINT invoice_versions_genai_result_chk
-    CHECK (genai_result IS NULL OR genai_result IN ('pass','info','warn','fail'))
+    CHECK (genai_result IS NULL OR genai_result IN ('pass','info','warn','fail')),
+
+  CONSTRAINT invoice_versions_pi_review_status_chk
+    CHECK (
+      personal_information_review_status IS NULL OR
+      personal_information_review_status IN (
+        'not_flagged',
+        'review_recommended',
+        'high_risk',
+        'unable_to_assess'
+      )
+    ),
+
+  CONSTRAINT invoice_versions_pi_review_combination_chk
+    CHECK (
+      (
+        personal_information_review_status IS NULL AND
+        personal_information_type_id IS NULL AND
+        personal_information_review_reason IS NULL
+      ) OR (
+        personal_information_review_status = 'not_flagged' AND
+        personal_information_type_id IS NULL AND
+        personal_information_review_reason IS NULL
+      ) OR (
+        personal_information_review_status IN ('review_recommended', 'high_risk') AND
+        personal_information_type_id IS NOT NULL AND
+        NULLIF(btrim(personal_information_review_reason), '') IS NOT NULL
+      ) OR (
+        personal_information_review_status = 'unable_to_assess' AND
+        personal_information_type_id IS NULL AND
+        NULLIF(btrim(personal_information_review_reason), '') IS NOT NULL
+      )
+    )
 );
 
 -- Common access paths
@@ -1262,6 +1331,9 @@ CREATE INDEX IF NOT EXISTS index_invoice_versions_on_users_eligibilitycode_id
 
 CREATE INDEX IF NOT EXISTS index_invoice_versions_on_participant_user_id
   ON claims.invoice_versions (participant_user_id);
+
+CREATE INDEX IF NOT EXISTS index_invoice_versions_on_personal_information_type_id
+  ON claims.invoice_versions (personal_information_type_id);
 
 
 -- ============================================================
@@ -1900,6 +1972,11 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   di_read_raw_json jsonb NULL,
   classifier_raw_json jsonb NULL,
 
+  -- per-file classifier PI review (NULL means legacy/not evaluated)
+  personal_information_review_status text NULL,
+  personal_information_type_id uuid NULL,
+  personal_information_review_reason text NULL,
+
   classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
@@ -1921,6 +1998,11 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
     FOREIGN KEY (supporting_document_type_id)
     REFERENCES claims.supporting_document_types(id),
 
+  CONSTRAINT fk_supporting_documents_personal_information_type
+    FOREIGN KEY (personal_information_type_id)
+    REFERENCES claims.personal_information_types(id)
+    ON DELETE RESTRICT,
+
   CONSTRAINT supporting_documents_classification_status_chk
     CHECK (classification_status IN ('pending','classified','needs_review','failed')),
 
@@ -1928,6 +2010,38 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
     CHECK (
       supporting_document_routing_quality IS NULL OR
       supporting_document_routing_quality IN ('usable','needs_review','requires_visual_review','unusable')
+    ),
+
+  CONSTRAINT supporting_documents_pi_review_status_chk
+    CHECK (
+      personal_information_review_status IS NULL OR
+      personal_information_review_status IN (
+        'not_flagged',
+        'review_recommended',
+        'high_risk',
+        'unable_to_assess'
+      )
+    ),
+
+  CONSTRAINT supporting_documents_pi_review_combination_chk
+    CHECK (
+      (
+        personal_information_review_status IS NULL AND
+        personal_information_type_id IS NULL AND
+        personal_information_review_reason IS NULL
+      ) OR (
+        personal_information_review_status = 'not_flagged' AND
+        personal_information_type_id IS NULL AND
+        personal_information_review_reason IS NULL
+      ) OR (
+        personal_information_review_status IN ('review_recommended', 'high_risk') AND
+        personal_information_type_id IS NOT NULL AND
+        NULLIF(btrim(personal_information_review_reason), '') IS NOT NULL
+      ) OR (
+        personal_information_review_status = 'unable_to_assess' AND
+        personal_information_type_id IS NULL AND
+        NULLIF(btrim(personal_information_review_reason), '') IS NOT NULL
+      )
     )
 );
 
@@ -1936,6 +2050,9 @@ CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_invoice_version_
 
 CREATE INDEX IF NOT EXISTS index_claims_supporting_documents_on_type_id
   ON claims.supporting_documents (supporting_document_type_id);
+
+CREATE INDEX IF NOT EXISTS index_supporting_documents_on_personal_information_type_id
+  ON claims.supporting_documents (personal_information_type_id);
 
 -- Prevent duplicate uploads of same blob/key under the same invoice version snapshot.
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_supporting_documents_invoice_version_storage_key

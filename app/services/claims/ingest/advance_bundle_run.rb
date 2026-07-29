@@ -1147,9 +1147,19 @@ module Claims
             classifier_payload: classifier_payload
           )
 
-        return if result[:ok] || result["ok"]
+        unless result[:ok] || result["ok"]
+          raise "ApplyClassifierResult failed: #{result.inspect}"
+        end
 
-        raise "ApplyClassifierResult failed: #{result.inspect}"
+        personal_information_attributes =
+          ::Claims::PersonalInformation::NormalizeClassifierResult.call(
+            classifier_payload: classifier_payload || {}
+          )
+        return if personal_information_attributes.empty?
+
+        ::Claims::InvoiceVersion.find(invoice_version_id).update!(
+          personal_information_attributes.merge(updated_at: Time.current)
+        )
       end
 
       def next_invoice_versionno(invoice_id)

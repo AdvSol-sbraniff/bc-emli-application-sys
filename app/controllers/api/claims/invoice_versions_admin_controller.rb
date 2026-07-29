@@ -470,6 +470,10 @@ module Api
 
       def invoice_version_read_json(invoice_version)
         invoice_version.as_json.merge(
+          "personal_information_type" =>
+            serialize_personal_information_type(
+              invoice_version.personal_information_type
+            ),
           "contractor_advice" =>
             ::Claims::InvoiceVersions::BuildContractorAdvice.call(
               invoice_version_id: invoice_version.id
@@ -776,6 +780,7 @@ module Api
           .where(invoice_version_id: invoice_version_id)
           .includes(
             :supporting_document_type,
+            :personal_information_type,
             :supporting_document_visual_findings
           )
           .order(created_at: :desc, id: :desc)
@@ -799,6 +804,14 @@ module Api
                 row.supporting_document_routing_quality,
               supporting_document_routing_quality_reason:
                 row.supporting_document_routing_quality_reason,
+              personal_information_review_status:
+                row.personal_information_review_status,
+              personal_information_type:
+                serialize_personal_information_type(
+                  row.personal_information_type
+                ),
+              personal_information_review_reason:
+                row.personal_information_review_reason,
               located_fields: serialize_supporting_document_located_fields(row),
               visual_findings:
                 serialize_supporting_document_visual_findings(row),
@@ -811,6 +824,12 @@ module Api
               updated_at: row.updated_at
             }
           end
+      end
+
+      def serialize_personal_information_type(type)
+        return nil if type.nil?
+
+        { type_key: type.type_key, display_name: type.display_name }
       end
 
       def serialize_supporting_document_visual_findings(row)

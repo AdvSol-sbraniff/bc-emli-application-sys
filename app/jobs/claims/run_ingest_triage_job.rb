@@ -145,6 +145,7 @@ module Claims
       if sys.strip.empty?
         raise "validationgenai_config.document_triage_system_record is empty"
       end
+      sys = "#{sys.rstrip}\n\n#{personal_information_classifier_config}"
 
       messages = [
         { role: "system", content: [{ type: "input_text", text: sys }] }
@@ -247,7 +248,29 @@ module Claims
         upgrade types and the eligibility code. If it is a supporting document,
         classify its type and routing quality. Do not extract official supporting-
         document evidence in this call; that happens in the downstream supporting-
-        document extraction step.
+        document extraction step. Also assess this individual file for unnecessary
+        or high-risk personal information using the supplied PI type configuration.
+      TEXT
+    end
+
+    def personal_information_classifier_config
+      types = ::Claims::PersonalInformationType.enabled.classifier_order.to_a
+      if types.empty?
+        raise "No enabled personal_information_types are configured."
+      end
+
+      type_lines =
+        types.map do |type|
+          "- #{type.type_key} (priority #{type.sort_order}): #{type.description}"
+        end
+
+      <<~TEXT
+        Enabled personal-information type configuration:
+        #{type_lines.join("\n")}
+
+        When more than one inappropriate PI type is visible, return the enabled type
+        with the lowest priority number as personal_information_type_key and summarize
+        secondary concerns without reproducing sensitive values.
       TEXT
     end
 

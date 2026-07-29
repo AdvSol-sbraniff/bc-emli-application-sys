@@ -45,6 +45,11 @@ module Claims
                foreign_key: :participant_user_id,
                optional: true
 
+    belongs_to :personal_information_type,
+               class_name: "Claims::PersonalInformationType",
+               foreign_key: :personal_information_type_id,
+               optional: true
+
     has_many :located_fields,
              class_name: "Claims::InvoiceVersionLocatedField",
              foreign_key: :invoice_version_id,

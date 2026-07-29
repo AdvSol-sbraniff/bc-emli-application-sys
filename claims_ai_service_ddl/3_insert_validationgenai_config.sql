@@ -145,6 +145,9 @@ Output-json-schema:
   "supporting_document_type_reason": null,
   "supporting_document_routing_quality": null,
   "supporting_document_routing_quality_reason": null,
+  "personal_information_review_status": "not_flagged|review_recommended|high_risk|unable_to_assess",
+  "personal_information_type_key": null,
+  "personal_information_review_reason": null,
   "eligibility_code": {
     "value": null,
     "confidence": 0,
@@ -193,6 +196,17 @@ Rules:
 - Use supporting_document_routing_quality="requires_visual_review" when text/DI is not enough because the evidence depends on image content, such as photos, labels, or visual before/after proof.
 - Use supporting_document_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
 - supporting_document_routing_quality_reason is mandatory when supporting_document_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
+- Return personal_information_review_status, personal_information_type_key, and personal_information_review_reason for every file, regardless of document_kind.
+- Assess whether personal information is inappropriate in the context of this specific file. Expected names, ordinary contact information, service or installation addresses, invoice/program identifiers, costs, equipment, work scope, inspection details, and document-required signatures are not inappropriate merely because they are personal information.
+- Use personal_information_review_status="not_flagged" when no inappropriate PI is visible. Return personal_information_type_key=null and personal_information_review_reason=null.
+- Use personal_information_review_status="review_recommended" for apparently unnecessary or unrelated PI that is not high risk. Return one enabled personal_information_type_key and a concise nonblank reason.
+- Use personal_information_review_status="high_risk" for government identifiers, medical details, bank/routing/full card details, passwords or authentication secrets, or clearly unrelated information about children or other third parties. Return one enabled personal_information_type_key and a concise nonblank reason.
+- Any visible name, age, birth detail, image, or other personal information about a child or minor that is unrelated to validating the document must be high_risk, not review_recommended.
+- Use personal_information_review_status="unable_to_assess" only when the file cannot be assessed reliably. Return personal_information_type_key=null and a concise nonblank reason.
+- Use only a personal_information_type_key supplied in the enabled personal-information type configuration appended to this system record.
+- If more than one inappropriate PI type is present, use the configured priority to select one primary type and summarize other concerns in the reason.
+- State where the concern appears when possible and why it is unnecessary for the document type.
+- Never reproduce a full identifier, account number, credential, password hint, medical detail, birth date, or other sensitive value in personal_information_review_reason. Use masked or categorical wording.
 - Do not return supporting_document_located_fields. Supporting-document extraction is handled by a separate extraction call.
 - If document_kind is supporting_document or unknown, return eligibility_code.value=null, detected_upgrade_types=[], and not_detected_upgrade_types=[].
 - Return only allowed upgrade_type_key values.

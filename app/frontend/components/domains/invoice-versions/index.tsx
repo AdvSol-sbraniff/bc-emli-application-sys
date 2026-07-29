@@ -571,6 +571,51 @@ const invoiceStatusActionIcon = (key: InvoiceStatusTransition) => {
   return <XCircle size={25} weight="bold" />;
 };
 
+const PersonalInformationReviewFlag = ({ record }: { record: any }) => {
+  const status = String(record?.personal_information_review_status || '').trim();
+  if (!status || status === 'not_flagged') return null;
+
+  const isHighRisk = status === 'high_risk';
+  const isUnavailable = status === 'unable_to_assess';
+  const label = isHighRisk
+    ? 'High-risk personal information'
+    : isUnavailable
+      ? 'PI assessment unavailable'
+      : 'PI review recommended';
+  const typeLabel = String(record?.personal_information_type?.display_name || '').trim();
+  const reason = String(record?.personal_information_review_reason || '').trim();
+  const borderColor = isHighRisk ? 'red.300' : isUnavailable ? 'gray.300' : 'orange.300';
+  const background = isHighRisk ? 'red.50' : isUnavailable ? 'gray.50' : 'orange.50';
+  const colorScheme = isHighRisk ? 'red' : isUnavailable ? 'gray' : 'orange';
+
+  return (
+    <Box
+      aria-label="Personal information review"
+      borderWidth="1px"
+      borderColor={borderColor}
+      borderRadius="md"
+      bg={background}
+      px="12px"
+      py="10px"
+      mb="10px"
+    >
+      <Flex align="center" gap="8px" wrap="wrap">
+        <Badge colorScheme={colorScheme}>{label}</Badge>
+        {typeLabel && (
+          <Text fontSize="sm" fontWeight="semibold">
+            {typeLabel}
+          </Text>
+        )}
+      </Flex>
+      {reason && (
+        <Text fontSize="sm" mt="5px">
+          {reason}
+        </Text>
+      )}
+    </Box>
+  );
+};
+
 // ============================================================
 // SECTION 02.02 - FIELD CATALOG
 // PURPOSE: Single source of truth for left-panel rows + highlight mapping
@@ -2012,6 +2057,7 @@ export const InvoiceVersionShowScreen = () => {
                     </h2>
 
                     <AccordionPanel px="0" pt="3px">
+                      <PersonalInformationReviewFlag record={readData} />
                       <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                         {DI_FIELDS.map((f) => {
                           const raw = readData?.[f.valueKey];
@@ -2418,6 +2464,7 @@ export const InvoiceVersionShowScreen = () => {
                             </h2>
                             <AccordionPanel px="0" pt="8px">
                               <Box px="10px" py="3px">
+                                <PersonalInformationReviewFlag record={doc} />
                                 <Flex justify="flex-end" gap="8px" mb="6px">
                                   <Tooltip label={`Show ${filename} in application`}>
                                     <IconButton

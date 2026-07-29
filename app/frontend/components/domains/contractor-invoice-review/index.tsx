@@ -122,17 +122,17 @@ const FieldRow = ({ label, labelHint, value, active, disabled, onClick, inline }
   >
     {labelHint ? (
       <Tooltip label={labelHint} hasArrow placement="top">
-        <Text fontSize="sm" color="#2D2D2D" flexShrink={0} cursor="help">
+        <Text fontSize="md" color="#2D2D2D" flexShrink={0} cursor="help">
           {label}
         </Text>
       </Tooltip>
     ) : (
-      <Text fontSize="sm" color="#2D2D2D" flexShrink={0}>
+      <Text fontSize="md" color="#2D2D2D" flexShrink={0}>
         {label}
       </Text>
     )}
     <Text
-      fontSize="sm"
+      fontSize="md"
       fontWeight={active ? 'semibold' : 'normal'}
       noOfLines={inline ? 1 : 2}
       textAlign={inline ? 'right' : undefined}
@@ -157,10 +157,10 @@ const ValueGrid = ({ rows }: { rows: Array<[string, unknown]> }) => (
           justifyContent="space-between"
           gap="6px"
         >
-          <Text fontSize="sm" color="#2D2D2D" flexShrink={0}>
+          <Text fontSize="md" color="#2D2D2D" flexShrink={0}>
             {label}
           </Text>
-          <Text fontSize="sm" noOfLines={1} textAlign="right">
+          <Text fontSize="md" noOfLines={1} textAlign="right">
             {fmtText(value)}
           </Text>
         </Box>
@@ -173,7 +173,7 @@ const ProductMatchAccordion = ({ title, rows }: { title: string; rows: Array<[st
     <h2>
       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
         <Box flex="1" textAlign="left">
-          <Text size="sm" fontWeight="bold">
+          <Text fontSize="lg" fontWeight="bold">
             {title}
           </Text>
         </Box>
@@ -1154,6 +1154,7 @@ export default function ContractorInvoiceReviewScreen() {
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
       <ThinBlueTitleBar
         title="Contractor Invoice Review"
+        titleFontSize="4xl"
         contentMaxW="full"
         position="sticky"
         top={0}
@@ -1166,6 +1167,7 @@ export default function ContractorInvoiceReviewScreen() {
                 <Tooltip label={currentStatusCopy.hint} hasArrow>
                   <Badge
                     p={1}
+                    fontSize="md"
                     color="greys.anotherGrey"
                     bg="theme.orangeLight02"
                     borderWidth="1px"
@@ -1181,7 +1183,7 @@ export default function ContractorInvoiceReviewScreen() {
                 </Tooltip>
               ) : null}
               {currentReferenceNumber ? (
-                <Text color="white" fontSize="xs" fontWeight="semibold" textTransform="uppercase" whiteSpace="nowrap">
+                <Text color="white" fontSize="md" fontWeight="semibold" textTransform="uppercase" whiteSpace="nowrap">
                   Reference #: {currentReferenceNumber}
                 </Text>
               ) : null}
@@ -1278,18 +1280,18 @@ export default function ContractorInvoiceReviewScreen() {
         <Box display="flex" flexDirection="column" height="100%">
           <Box w="full" mb="16px" px="0" py="14px" bg="white">
             <Flex align="center" gap="8px" mb="4px">
-              <Text fontSize="lg" fontWeight="bold" color="#2D2D2D">
+              <Text fontSize="3xl" fontWeight="bold" color="#2D2D2D">
                 Attention Required
               </Text>
               <Flex align="center" gap="4px" color="gray.700">
                 <Warning size={17} weight="regular" color="#D69E2E" aria-hidden="true" />
-                <Text fontSize="sm" fontWeight="semibold">
+                <Text fontSize="md" fontWeight="semibold">
                   {programRequirementRulechecks.length} {programRequirementRulechecks.length === 1 ? 'issue' : 'issues'}
                 </Text>
               </Flex>
               <ContractorInlineRevisionStatus workspace={revisionWorkspace} />
             </Flex>
-            <Text fontSize="sm" color="gray.700" mb="10px">
+            <Text fontSize="md" color="gray.700" mb="10px">
               Follow the below recommendation to ensure your submission is processed promptly. Correct invoice and
               re-upload where recommended. Chat with an admin if clarifications are required. Submit when all
               recommendations have been actioned.
@@ -1329,11 +1331,11 @@ export default function ContractorInvoiceReviewScreen() {
                           _hover={{ bg: 'orange.100' }}
                         >
                           <Flex flex="1" minW={0} align="center" gap="8px" wrap="wrap" textAlign="left">
-                            <Text fontSize="sm" fontWeight="bold" noOfLines={2}>
+                            <Text fontSize="lg" fontWeight="bold" noOfLines={2}>
                               Issue: {title}
                             </Text>
                             {revisionStatus ? (
-                              <Badge colorScheme={revisionStatus.colorScheme} flexShrink={0}>
+                              <Badge colorScheme={revisionStatus.colorScheme} flexShrink={0} fontSize="md">
                                 {revisionStatus.label}
                               </Badge>
                             ) : null}
@@ -1342,27 +1344,29 @@ export default function ContractorInvoiceReviewScreen() {
                         </AccordionButton>
                       </h2>
                       <AccordionPanel px="10px" pt="8px" pb="12px">
-                        <Text fontSize="sm" color="gray.800" whiteSpace="pre-wrap">
-                          <Text as="span" fontWeight="normal" color="#2D2D2D">
-                            Recommendations:
-                          </Text>{' '}
-                          {String(row?.contractor_action ?? '').trim() || 'No recommendation has been provided.'}{' '}
-                          <Link
-                            as="button"
-                            type="button"
-                            color="blue.700"
-                            fontWeight="normal"
-                            textDecoration="underline"
-                            onClick={() =>
-                              setProgramRequirementsModal({
-                                title,
-                                sourceQuote: row?.source_quote,
-                              })
-                            }
-                          >
-                            Please read the program eligibility source.
-                          </Link>
-                        </Text>
+                        {!issue ? (
+                          <Text fontSize="md" color="gray.800" whiteSpace="pre-wrap">
+                            <Text as="span" fontWeight="normal" color="#2D2D2D">
+                              Recommendations:
+                            </Text>{' '}
+                            {String(row?.contractor_action ?? '').trim() || 'No recommendation has been provided.'}{' '}
+                            <Link
+                              as="button"
+                              type="button"
+                              color="blue.700"
+                              fontWeight="normal"
+                              textDecoration="underline"
+                              onClick={() =>
+                                setProgramRequirementsModal({
+                                  title,
+                                  sourceQuote: row?.source_quote,
+                                })
+                              }
+                            >
+                              Please read the program eligibility source.
+                            </Link>
+                          </Text>
+                        ) : null}
                         {issue ? (
                           <Box mt={3}>
                             <ContractorInlineRevisionIssueCard
@@ -1370,7 +1374,27 @@ export default function ContractorInvoiceReviewScreen() {
                               workspace={revisionWorkspace}
                               compactHeading
                               integratedConversation
-                              submittedAt={readData?.submitted_at}
+                              recommendation={
+                                String(row?.contractor_action ?? '').trim() || 'No recommendation has been provided.'
+                              }
+                              recommendationAt={readData?.created_at}
+                              recommendationSource={
+                                <Link
+                                  as="button"
+                                  type="button"
+                                  color="blue.700"
+                                  fontWeight="normal"
+                                  textDecoration="underline"
+                                  onClick={() =>
+                                    setProgramRequirementsModal({
+                                      title,
+                                      sourceQuote: row?.source_quote,
+                                    })
+                                  }
+                                >
+                                  Please read the program eligibility source.
+                                </Link>
+                              }
                               attention={revisionAttentionIssueIds.includes(issue.id)}
                             />
                           </Box>
@@ -1382,7 +1406,7 @@ export default function ContractorInvoiceReviewScreen() {
               </Accordion>
             ) : (
               <Box px="10px" py="3px">
-                <Text fontSize="sm" opacity={0.7}>
+                <Text fontSize="md" opacity={0.7}>
                   {genAiError
                     ? 'High-level actions could not be loaded. Please refresh the page.'
                     : 'No issues currently require action.'}
@@ -1428,7 +1452,7 @@ export default function ContractorInvoiceReviewScreen() {
                     paddingLeft: '10px',
                     paddingRight: '10px',
                     color: '#2D2D2D',
-                    fontSize: 'sm',
+                    fontSize: 'lg',
                     fontWeight: 700,
                     borderRadius: '6px',
                     borderLeftWidth: '2px',
@@ -1457,7 +1481,7 @@ export default function ContractorInvoiceReviewScreen() {
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
+                        <Text fontSize="lg" fontWeight="bold">
                           Invoice
                         </Text>
                       </Box>
@@ -1470,12 +1494,12 @@ export default function ContractorInvoiceReviewScreen() {
                         label={`${currentStatusCopy.hint} Technical status: ${currentStatus || 'unknown'}.`}
                         hasArrow
                       >
-                        <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
+                        <Text fontSize="md" fontWeight="bold" textTransform="uppercase">
                           Status: {currentStatusCopy.label}
                         </Text>
                       </Tooltip>
                       {readData?.invoice_versionno != null && (
-                        <Text fontSize="xs" fontWeight="bold" textTransform="uppercase">
+                        <Text fontSize="md" fontWeight="bold" textTransform="uppercase">
                           Version {String(readData.invoice_versionno)}
                         </Text>
                       )}
@@ -1510,7 +1534,7 @@ export default function ContractorInvoiceReviewScreen() {
                     </Box>
                     {commonInvoiceFields.length > 0 && (
                       <Box mt="10px" pt="10px" borderTopWidth="1px" borderColor="gray.200">
-                        <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" mb="4px">
+                        <Text fontSize="md" fontWeight="bold" textTransform="uppercase" mb="4px">
                           Additional details found
                         </Text>
                         <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
@@ -1527,7 +1551,7 @@ export default function ContractorInvoiceReviewScreen() {
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
+                        <Text fontSize="lg" fontWeight="bold">
                           Details We Found
                         </Text>
                       </Box>
@@ -1536,12 +1560,12 @@ export default function ContractorInvoiceReviewScreen() {
                   </h2>
                   <AccordionPanel px="0" pt="8px">
                     {genAiError && (
-                      <Text fontSize="xs" color="red.500" mb="8px">
+                      <Text fontSize="md" color="red.500" mb="8px">
                         {genAiError}
                       </Text>
                     )}
                     {!genAiError && detailsGroups.length === 0 ? (
-                      <Text fontSize="sm" opacity={0.7}>
+                      <Text fontSize="md" opacity={0.7}>
                         No upgrade-specific details found.
                       </Text>
                     ) : (
@@ -1552,7 +1576,7 @@ export default function ContractorInvoiceReviewScreen() {
                           return (
                             <Box key={group.upgradeTypeKey}>
                               <Flex align="center" gap="8px" mb="6px">
-                                <Text fontSize="sm" fontWeight="bold">
+                                <Text fontSize="md" fontWeight="bold">
                                   {meta.label}
                                 </Text>
                                 <InvoiceUpgradeTypeTile
@@ -1579,7 +1603,7 @@ export default function ContractorInvoiceReviewScreen() {
                     <h2>
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
+                          <Text fontSize="lg" fontWeight="bold">
                             Supporting documents
                           </Text>
                         </Box>
@@ -1587,7 +1611,7 @@ export default function ContractorInvoiceReviewScreen() {
                       </AccordionButton>
                     </h2>
                     <AccordionPanel px="0" pt="8px">
-                      <Text fontSize="sm" opacity={0.7}>
+                      <Text fontSize="md" opacity={0.7}>
                         No supporting-document evidence stored for this invoice.
                       </Text>
                     </AccordionPanel>
@@ -1609,7 +1633,7 @@ export default function ContractorInvoiceReviewScreen() {
                           <h2>
                             <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                               <Box flex="1" textAlign="left" minW={0}>
-                                <Text size="sm" fontWeight="bold" noOfLines={1}>
+                                <Text fontSize="lg" fontWeight="bold" noOfLines={1}>
                                   {`Supporting document - ${section.title}${showFilename ? ` - ${filename}` : ''}`}
                                 </Text>
                               </Box>
@@ -1641,7 +1665,7 @@ export default function ContractorInvoiceReviewScreen() {
                                 </Tooltip>
                               </Flex>
 
-                              <Text fontSize="sm" fontWeight="bold" opacity={0.78} noOfLines={1}>
+                              <Text fontSize="md" fontWeight="bold" opacity={0.78} noOfLines={1}>
                                 File details
                               </Text>
                               <Box
@@ -1653,10 +1677,10 @@ export default function ContractorInvoiceReviewScreen() {
                                 pl="12px"
                                 mt="2px"
                               >
-                                <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                <Text fontSize="md" opacity={0.7} noOfLines={1}>
                                   details
                                 </Text>
-                                <Text fontSize="sm" noOfLines={1}>
+                                <Text fontSize="md" noOfLines={1}>
                                   {[
                                     `size ${fmtBytes(doc?.byte_size)}`,
                                     doc?.classification_confidence != null
@@ -1708,7 +1732,7 @@ export default function ContractorInvoiceReviewScreen() {
                                       <React.Fragment key={String(field?.id || field?.field_key)}>
                                         <Tooltip label={locatedFieldKeyHint(field)} hasArrow placement="top">
                                           <Text
-                                            fontSize="sm"
+                                            fontSize="md"
                                             opacity={0.7}
                                             noOfLines={1}
                                             cursor="help"
@@ -1720,7 +1744,7 @@ export default function ContractorInvoiceReviewScreen() {
                                           </Text>
                                         </Tooltip>
                                         <Text
-                                          fontSize="sm"
+                                          fontSize="md"
                                           noOfLines={1}
                                           cursor={clickable ? 'pointer' : 'default'}
                                           bg={isActive ? 'red.50' : 'transparent'}
@@ -1748,7 +1772,7 @@ export default function ContractorInvoiceReviewScreen() {
 
                               {findings.length > 0 && (
                                 <Box mt="10px">
-                                  <Text fontSize="sm" fontWeight="bold" opacity={0.78}>
+                                  <Text fontSize="md" fontWeight="bold" opacity={0.78}>
                                     Visual findings
                                   </Text>
                                   <Box
@@ -1775,15 +1799,15 @@ export default function ContractorInvoiceReviewScreen() {
                                         <React.Fragment
                                           key={String(finding?.id || finding?.finding_seqno || finding?.summary)}
                                         >
-                                          <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                          <Text fontSize="md" opacity={0.7} noOfLines={1}>
                                             {displayVisualFindingLabel(finding?.finding_type)}
                                           </Text>
                                           <Box>
-                                            <Text fontSize="sm" noOfLines={2}>
+                                            <Text fontSize="md" noOfLines={2}>
                                               {String(finding?.summary || '')}
                                             </Text>
                                             {findingMeta && (
-                                              <Text fontSize="xs" opacity={0.65} noOfLines={1} mt="1px">
+                                              <Text fontSize="md" opacity={0.65} noOfLines={1} mt="1px">
                                                 {findingMeta}
                                               </Text>
                                             )}
@@ -1806,7 +1830,7 @@ export default function ContractorInvoiceReviewScreen() {
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
-                        <Text size="sm" fontWeight="bold">
+                        <Text fontSize="lg" fontWeight="bold">
                           Possible Supporting Documents
                         </Text>
                       </Box>
@@ -1815,7 +1839,7 @@ export default function ContractorInvoiceReviewScreen() {
                   </h2>
                   <AccordionPanel px="0" pt="3px">
                     {supportingDocumentTypeGroups.length === 0 ? (
-                      <Text fontSize="sm" opacity={0.7}>
+                      <Text fontSize="md" opacity={0.7}>
                         No supporting-document type mappings are configured for the detected upgrade types.
                       </Text>
                     ) : (
@@ -1837,7 +1861,7 @@ export default function ContractorInvoiceReviewScreen() {
                               py="2px"
                             >
                               <Flex align="center" gap="8px" mb="2px" wrap="wrap">
-                                <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                                <Text fontSize="md" fontWeight="bold" noOfLines={1}>
                                   {title}
                                 </Text>
                                 <InvoiceUpgradeTypeTile
@@ -1848,7 +1872,7 @@ export default function ContractorInvoiceReviewScreen() {
                               </Flex>
 
                               {types.length === 0 ? (
-                                <Text fontSize="sm" opacity={0.7}>
+                                <Text fontSize="md" opacity={0.7}>
                                   No supporting document types mapped to this upgrade type.
                                 </Text>
                               ) : (
@@ -1856,7 +1880,7 @@ export default function ContractorInvoiceReviewScreen() {
                                   {types.map((typeRow: any) => (
                                     <Text
                                       key={String(typeRow?.supporting_document_type_id || typeRow?.type_key || 'type')}
-                                      fontSize="sm"
+                                      fontSize="md"
                                       noOfLines={1}
                                     >
                                       {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
@@ -1877,7 +1901,7 @@ export default function ContractorInvoiceReviewScreen() {
                     <h2>
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
+                          <Text fontSize="lg" fontWeight="bold">
                             Product Codes
                           </Text>
                         </Box>
@@ -2079,7 +2103,7 @@ export default function ContractorInvoiceReviewScreen() {
                     <h2>
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
+                          <Text fontSize="lg" fontWeight="bold">
                             Other outstanding requested changes
                           </Text>
                         </Box>
@@ -2107,7 +2131,7 @@ export default function ContractorInvoiceReviewScreen() {
                     <h2>
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                         <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
+                          <Text fontSize="lg" fontWeight="bold">
                             Other resolved requested changes
                           </Text>
                         </Box>
@@ -2165,7 +2189,7 @@ export default function ContractorInvoiceReviewScreen() {
                           isDisabled={activePageNumber <= 1}
                         />
                       </Tooltip>
-                      <Text fontSize="xs" opacity={0.7} fontWeight="semibold">
+                      <Text fontSize="md" opacity={0.7} fontWeight="semibold">
                         Page
                       </Text>
                       <Box
@@ -2189,11 +2213,11 @@ export default function ContractorInvoiceReviewScreen() {
                           border: '1px solid #E2E8F0',
                           borderRadius: 999,
                           background: 'white',
-                          fontSize: 12,
+                          fontSize: 16,
                           textAlign: 'center',
                         }}
                       />
-                      <Text fontSize="xs" opacity={0.7}>
+                      <Text fontSize="md" opacity={0.7}>
                         / {numPages || '-'}
                       </Text>
                       <Tooltip label="Next page" hasArrow>
@@ -2220,7 +2244,7 @@ export default function ContractorInvoiceReviewScreen() {
                           onClick={() => setZoom((value) => Math.max(0.5, +(value - 0.1).toFixed(2)))}
                         />
                       </Tooltip>
-                      <Text fontSize="xs" minW="44px" textAlign="center" fontWeight="semibold" opacity={0.75}>
+                      <Text fontSize="md" minW="44px" textAlign="center" fontWeight="semibold" opacity={0.75}>
                         {Math.round(zoom * 100)}%
                       </Text>
                       <Tooltip label="Zoom in" hasArrow>
@@ -2388,7 +2412,7 @@ export default function ContractorInvoiceReviewScreen() {
                       </Box>
                     </Document>
                   )}
-                  <Text fontSize="xs" opacity={0.6} mt="8px">
+                  <Text fontSize="md" opacity={0.6} mt="8px">
                     active file {viewerFilename} | active page {activePageNumber} / {numPages || '-'} | unit{' '}
                     {activePageMeta?.unit ?? '-'}
                   </Text>
@@ -2508,11 +2532,11 @@ export default function ContractorInvoiceReviewScreen() {
         <ModalContent mx={4} borderRadius="xl" boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)">
           <ModalCloseButton />
           <ModalBody px={{ base: 6, md: 8 }} py={{ base: 8, md: 10 }}>
-            <Text fontSize="sm" fontWeight="bold" color="gray.800" mb={3}>
+            <Text fontSize="2xl" fontWeight="bold" color="gray.800" mb={3}>
               {programRequirementsModal?.title}
             </Text>
             <Box
-              fontSize="sm"
+              fontSize="md"
               fontStyle="italic"
               sx={{
                 p: { margin: 0 },

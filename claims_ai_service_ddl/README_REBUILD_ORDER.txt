@@ -13,14 +13,15 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 7. `3_insert_vent_fan_sources.sql`
 8. `3_insert_invoice_status_subtypes.sql`
 9. `3_insert_invoice_upgrade_types.sql`
-10. `3_insert_supporting_document_types.sql`
-11. `3_insert_supporting_document_type_upgrade_types.sql`
-12. `3_insert_supporting_document_type_located_fields.sql`
-13. `3_insert_code_rules.sql`
-14. `3_insert_code_located_fields.sql`
-15. `3_insert_validationgenai_config.sql`
-16. `3_insert_genai_normalized.sql`
-17. `4_create_views.sql`
+10. `3_insert_personal_information_types.sql`
+11. `3_insert_supporting_document_types.sql`
+12. `3_insert_supporting_document_type_upgrade_types.sql`
+13. `3_insert_supporting_document_type_located_fields.sql`
+14. `3_insert_code_rules.sql`
+15. `3_insert_code_located_fields.sql`
+16. `3_insert_validationgenai_config.sql`
+17. `3_insert_genai_normalized.sql`
+18. `4_create_views.sql`
 
 ## Optional local test data
 

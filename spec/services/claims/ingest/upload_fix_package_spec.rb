@@ -188,6 +188,98 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         ).count
       ).to eq(2)
     end
+
+    it "retains PI review evidence when invoice and supporting files are cloned" do
+      now = Time.zone.parse("2026-07-28 13:05:00")
+      contractor = Contractor.create!(business_name: "PI Clone Contractor")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "genai_complete",
+          created_at: now,
+          updated_at: now
+        )
+      pi_type =
+        Claims::PersonalInformationType.find_or_create_by!(
+          type_key: "government_identifier"
+        ) do |row|
+          row.display_name = "Government identifier"
+          row.description = "Government identification."
+          row.enabled = true
+          row.sort_order = 20
+        end
+      source_version =
+        Claims::InvoiceVersion.create!(
+          invoice_id: invoice.id,
+          invoice_versionno: 1,
+          storage_provider: "azure_blob",
+          storage_key: "source/pi-invoice.pdf",
+          original_filename: "PI invoice.pdf",
+          content_type: "application/pdf",
+          personal_information_review_status: "high_risk",
+          personal_information_type_id: pi_type.id,
+          personal_information_review_reason:
+            "A possible government identifier appears on page 2.",
+          created_at: now,
+          updated_at: now
+        )
+      source_document =
+        Claims::SupportingDocument.create!(
+          invoice_version_id: source_version.id,
+          storage_provider: "azure_blob",
+          storage_key: "source/pi-support.pdf",
+          original_filename: "PI supporting document.pdf",
+          content_type: "application/pdf",
+          classification_status: "classified",
+          personal_information_review_status: "review_recommended",
+          personal_information_type_id: pi_type.id,
+          personal_information_review_reason:
+            "Unexpected personal information appears in this file.",
+          created_at: now,
+          updated_at: now
+        )
+
+      allow(Claims::Ingest::UploadEvidenceFileToNode).to receive(
+        :call
+      ) do |args|
+        {
+          "storage_key" => "uploaded/#{args.fetch(:ingest_document_id)}.jpg",
+          "byte_size" => 2345,
+          "sha256" => SecureRandom.hex(16)
+        }
+      end
+      allow(Claims::RunIngestReadOcrJob).to receive(:perform_async)
+
+      result =
+        described_class.call(
+          invoice_id: invoice.id,
+          clone_invoice_version_id: source_version.id,
+          clone_supporting_document_ids: [source_document.id],
+          files: [fake_upload("new-label.jpeg")]
+        )
+
+      cloned_version = Claims::InvoiceVersion.find(result.invoice_version_id)
+      cloned_document =
+        Claims::SupportingDocument.find_by!(
+          invoice_version_id: cloned_version.id,
+          storage_key: source_document.storage_key
+        )
+
+      expect(cloned_version).to have_attributes(
+        personal_information_review_status: "high_risk",
+        personal_information_type_id: pi_type.id,
+        personal_information_review_reason:
+          source_version.personal_information_review_reason
+      )
+      expect(cloned_document).to have_attributes(
+        personal_information_review_status: "review_recommended",
+        personal_information_type_id: pi_type.id,
+        personal_information_review_reason:
+          source_document.personal_information_review_reason
+      )
+    end
   end
 
   def fake_upload(filename, content_type = "image/jpeg")

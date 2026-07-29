@@ -20,6 +20,10 @@ module Claims
       def call
         document_kind = normalized_document_kind
         type_key = supporting_document_type_key
+        personal_information_attributes =
+          ::Claims::PersonalInformation::NormalizeClassifierResult.call(
+            classifier_payload: @triage_payload
+          )
         type =
           ::Claims::SupportingDocumentType.find_by(
             type_key: type_key
@@ -78,7 +82,8 @@ module Claims
           supporting_document_type_confidence:
             ingest_document.classification_confidence,
           supporting_document_routing_quality:
-            ingest_document.supporting_document_routing_quality
+            ingest_document.supporting_document_routing_quality,
+          **personal_information_attributes
         }
       rescue => e
         { ok: false, error: e.message, error_class: e.class.name }

@@ -21,6 +21,10 @@ module Claims
             @resolved_invoice_version_id
           )
         ingest_document = ::Claims::IngestDocument.find(@ingest_document_id)
+        personal_information_attributes =
+          ::Claims::PersonalInformation::NormalizeClassifierResult.call(
+            classifier_payload: ingest_document.classifier_raw_json || {}
+          )
 
         document =
           ::Claims::SupportingDocument.find_or_initialize_by(
@@ -46,6 +50,7 @@ module Claims
           supporting_document_routing_quality_reason:
             ingest_document.supporting_document_routing_quality_reason,
           classified_at: ingest_document.classified_at,
+          **personal_information_attributes,
           updated_at: Time.current
         )
         document.created_at ||= Time.current

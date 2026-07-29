@@ -11,6 +11,11 @@ module Claims
                foreign_key: :supporting_document_type_id,
                optional: true
 
+    belongs_to :personal_information_type,
+               class_name: "Claims::PersonalInformationType",
+               foreign_key: :personal_information_type_id,
+               optional: true
+
     has_many :supporting_document_located_fields,
              class_name: "Claims::SupportingDocumentLocatedField",
              foreign_key: :supporting_document_id,
