@@ -26,6 +26,12 @@ import { useMst } from '../../../setup/root';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 import { CustomMessageBox } from '../../shared/base/custom-message-box';
 import { ContractorProcessingGraphic } from '../../shared/claims/contractor-processing-graphic';
+import {
+  ClaimsUploadRequestError,
+  claimsUploadCaughtErrorMessage,
+  claimsUploadRequestError,
+  contractorFacingClaimsFailureMessage,
+} from '../../shared/claims/upload-error';
 
 type ContractorPortalResponse = {
   contractor?: {
@@ -75,72 +81,6 @@ function fileSizeMb(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-type ApiErrorPayload = {
-  error?: unknown;
-  message?: unknown;
-};
-
-class ApiRequestError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'ApiRequestError';
-    this.status = status;
-  }
-}
-
-const technicalErrorPattern =
-  /\bHTTP(?:\s+|=)\d{3}\b|\b(?:Net|Faraday|OpenSSL|Aws)::|stack trace|connection refused|ECONN(?:REFUSED|RESET)/i;
-
-function payloadErrorMessage(payload: ApiErrorPayload): string {
-  const value = payload?.error || payload?.message;
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function apiRequestError(response: Response, payload: ApiErrorPayload, fallback: string): ApiRequestError {
-  const serverMessage = payloadErrorMessage(payload);
-  let message = serverMessage || fallback;
-
-  if (response.status === 401) {
-    message = 'Your sign-in session has expired. Your files were not uploaded. Please sign in again and retry.';
-  } else if (response.status === 403) {
-    message =
-      'Your account does not have permission to complete this upload. Please contact support if this is unexpected.';
-  } else if (response.status === 413) {
-    message = 'The selected files are too large to upload. Please reduce the package size and try again.';
-  } else if (response.status === 429) {
-    message = 'The upload service is busy right now. Please wait a moment and try again.';
-  } else if (response.status >= 500 || technicalErrorPattern.test(message)) {
-    message =
-      'A processing service is temporarily unavailable. Please try again. If the problem continues, contact support.';
-  }
-
-  return new ApiRequestError(response.status, message);
-}
-
-function caughtErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiRequestError) return error.message;
-  if (error instanceof TypeError) {
-    return 'We could not connect to the upload service. Check your connection and try again.';
-  }
-
-  const message = error instanceof Error ? error.message.trim() : '';
-  if (technicalErrorPattern.test(message)) {
-    return 'A processing service is temporarily unavailable. Please try again. If the problem continues, contact support.';
-  }
-  return message || fallback;
-}
-
-function contractorFacingFailureMessage(message: string): string {
-  const normalized = String(message || '').trim();
-  if (!normalized) return '';
-  if (technicalErrorPattern.test(normalized)) {
-    return 'A processing service is temporarily unavailable. Please try again. If the problem continues, contact support.';
-  }
-  return normalized;
-}
-
 export default function ContractorUploadInvoicesScreen() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -177,14 +117,14 @@ export default function ContractorUploadInvoicesScreen() {
           cache: 'no-store',
         });
         const data: ContractorPortalResponse = await res.json().catch(() => ({}));
-        if (!res.ok) throw apiRequestError(res, data, 'Unable to load your contractor account.');
+        if (!res.ok) throw claimsUploadRequestError(res, data, 'Unable to load your contractor account.');
         if (!cancelled) {
           setContractorError('');
         }
       } catch (error: unknown) {
         if (!cancelled) {
-          const message = caughtErrorMessage(error, 'Unable to load your contractor account.');
-          const status = error instanceof ApiRequestError ? error.status : null;
+          const message = claimsUploadCaughtErrorMessage(error, 'Unable to load your contractor account.');
+          const status = error instanceof ClaimsUploadRequestError ? error.status : null;
           setContractorError(message);
           if (status === 401) {
             sessionStore.setTokenExpired(true);
@@ -210,14 +150,14 @@ export default function ContractorUploadInvoicesScreen() {
         cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw apiRequestError(res, data, 'We could not check the status of your upload.');
+      if (!res.ok) throw claimsUploadRequestError(res, data, 'We could not check the status of your upload.');
       setRunHeader(data as RunHeader);
       setRunError('');
       setRunErrorStatus(null);
       setFailureMessage(data?.failure_message ? String(data.failure_message) : '');
     } catch (error: unknown) {
-      setRunError(caughtErrorMessage(error, 'We could not check the status of your upload.'));
-      setRunErrorStatus(error instanceof ApiRequestError ? error.status : null);
+      setRunError(claimsUploadCaughtErrorMessage(error, 'We could not check the status of your upload.'));
+      setRunErrorStatus(error instanceof ClaimsUploadRequestError ? error.status : null);
       setRunHeader(null);
     }
   };
@@ -339,7 +279,7 @@ export default function ContractorUploadInvoicesScreen() {
         body: form,
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw apiRequestError(res, data, 'We could not upload your invoice package.');
+      if (!res.ok) throw claimsUploadRequestError(res, data, 'We could not upload your invoice package.');
 
       const nextRunId = String(data?.ingest_run_id || '').trim();
       const nextSessionId = String(data?.session_id || '').trim();
@@ -349,8 +289,8 @@ export default function ContractorUploadInvoicesScreen() {
       setParams(navigate, location, { ingest_run_id: nextRunId, session_id: nextSessionId });
       if (data?.failure_message) setFailureMessage(String(data.failure_message));
     } catch (error: unknown) {
-      setSubmitError(caughtErrorMessage(error, 'We could not upload your invoice package.'));
-      setSubmitErrorStatus(error instanceof ApiRequestError ? error.status : null);
+      setSubmitError(claimsUploadCaughtErrorMessage(error, 'We could not upload your invoice package.'));
+      setSubmitErrorStatus(error instanceof ClaimsUploadRequestError ? error.status : null);
     } finally {
       setSubmitLoading(false);
     }
@@ -381,7 +321,7 @@ export default function ContractorUploadInvoicesScreen() {
     !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
       ? 'We could not prepare your AI advice right now. Please try uploading the same files again later.'
       : '';
-  const displayFailureMessage = contractorFacingFailureMessage(
+  const displayFailureMessage = contractorFacingClaimsFailureMessage(
     submitError || runError || visibleFailureMessage || fallbackFailureMessage,
   );
   const authenticationExpired = [submitErrorStatus, runErrorStatus].includes(401);

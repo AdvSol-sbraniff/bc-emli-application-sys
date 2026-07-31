@@ -20,6 +20,7 @@ module Api
   module Claims
     class IngestController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      include Api::Claims::Concerns::UploadErrorRendering
 
       # ============================================================
       # SECTION 01.01 — AUTH / POLICY BYPASSES
@@ -246,18 +247,17 @@ module Api
             files: files
           )
 
-        render json: result.to_h,
-               status: (result.ok ? :accepted : :unprocessable_entity)
+        response_status =
+          if result.ok
+            :accepted
+          elsif result.failure_status == "technical_failure"
+            :internal_server_error
+          else
+            :unprocessable_entity
+          end
+        render json: result.to_h, status: response_status
       rescue StandardError => e
-        Rails.logger.error(
-          "[claims][ingest][upload_fix_package] ERROR: #{e.class}: #{e.message}"
-        )
-        render json: {
-                 ok: false,
-                 stage: "upload_fix_package",
-                 error: e.message
-               },
-               status: :unprocessable_entity
+        render_claims_upload_error(e, log_prefix: "ingest][upload_fix_package")
       end
 
       # ============================================================
@@ -415,7 +415,11 @@ module Api
       def admin_submit_batch
         contractor_id = params[:contractor_id].to_s.strip
 
-        raise "Missing contractor_id" if contractor_id.empty?
+        if contractor_id.empty?
+          raise ::Claims::Ingest::UploadErrors::ValidationError.new(
+                  "Select a contractor before uploading files."
+                )
+        end
 
         files =
           Array(params[:"pdfs[]"]) + Array(params[:pdfs]) +
@@ -423,7 +427,9 @@ module Api
 
         files = files.flatten.compact
         if files.empty?
-          raise "No files received. Expected multipart field pdfs[] (or pdfs)."
+          raise ::Claims::Ingest::UploadErrors::ValidationError.new(
+                  "Select at least one invoice or supporting document to upload."
+                )
         end
 
         result =
@@ -435,14 +441,7 @@ module Api
 
         render json: result, status: :ok
       rescue StandardError => e
-        Rails.logger.error(
-          "[claims][ingest][admin_submit_batch] ERROR: #{e.class}: #{e.message}"
-        )
-        render json: {
-                 ok: false,
-                 error: e.message
-               },
-               status: :unprocessable_entity
+        render_claims_upload_error(e, log_prefix: "ingest][admin_submit_batch")
       end
 
       private

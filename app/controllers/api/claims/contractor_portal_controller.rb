@@ -1,6 +1,8 @@
 module Api
   module Claims
     class ContractorPortalController < Api::ApplicationController
+      include Api::Claims::Concerns::UploadErrorRendering
+
       skip_after_action :verify_authorized,
                         only: %i[
                           index
@@ -162,14 +164,10 @@ module Api
 
         render json: result, status: :ok
       rescue StandardError => e
-        Rails.logger.error(
-          "[claims][contractor_portal][upload_batch] ERROR: #{e.class}: #{e.message}"
+        render_claims_upload_error(
+          e,
+          log_prefix: "contractor_portal][upload_batch"
         )
-        render json: {
-                 ok: false,
-                 error: e.message
-               },
-               status: :unprocessable_entity
       end
 
       # GET /api/claims/contractor/invoices/:invoice_id/revision_issues

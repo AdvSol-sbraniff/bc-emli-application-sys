@@ -29,6 +29,12 @@ import { CheckCircle, FilePlus, Trash, UploadSimple, WarningCircle, XCircle } fr
 import { useNavigate, useParams } from 'react-router-dom';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 import { ContractorProcessingGraphic } from '../../shared/claims/contractor-processing-graphic';
+import {
+  ClaimsUploadRequestError,
+  claimsUploadCaughtErrorMessage,
+  claimsUploadRequestError,
+  contractorFacingClaimsFailureMessage,
+} from '../../shared/claims/upload-error';
 
 type SupportingDocumentRow = {
   id: string;
@@ -152,10 +158,14 @@ export default function ContractorFixUploadScreen() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [submitErrorStatus, setSubmitErrorStatus] = useState<number | null>(null);
+  const [submitFailureStatus, setSubmitFailureStatus] = useState('');
   const [failureMessage, setFailureMessage] = useState('');
   const [dismissedFailureRunId, setDismissedFailureRunId] = useState('');
   const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
   const [runError, setRunError] = useState('');
+  const [runErrorStatus, setRunErrorStatus] = useState<number | null>(null);
+  const [runFailureStatus, setRunFailureStatus] = useState('');
 
   const loadCurrentPackage = useCallback(async () => {
     if (!sessionId || !invoiceId) {
@@ -178,12 +188,12 @@ export default function ContractorFixUploadScreen() {
         },
       );
       const data = (await res.json().catch(() => ({}))) as CurrentReadPayload;
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (!res.ok) throw claimsUploadRequestError(res, data, 'Failed to load the current invoice package.');
 
       setReadPayload(data);
       setProposedRows(buildCloneRows(data));
-    } catch (error: any) {
-      setLoadError(error?.message || 'Failed to load the current invoice package.');
+    } catch (error: unknown) {
+      setLoadError(claimsUploadCaughtErrorMessage(error, 'Failed to load the current invoice package.'));
       setReadPayload(null);
       setProposedRows([]);
     } finally {
@@ -226,12 +236,16 @@ export default function ContractorFixUploadScreen() {
         cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (!res.ok) throw claimsUploadRequestError(res, data, 'Failed to check fix upload status.');
       setRunHeader(data as RunHeader);
       setRunError('');
+      setRunErrorStatus(null);
+      setRunFailureStatus('');
       setFailureMessage(data?.failure_message ? String(data.failure_message) : '');
-    } catch (error: any) {
-      setRunError(error?.message || 'Failed to check fix upload status.');
+    } catch (error: unknown) {
+      setRunError(claimsUploadCaughtErrorMessage(error, 'Failed to check fix upload status.'));
+      setRunErrorStatus(error instanceof ClaimsUploadRequestError ? error.status : null);
+      setRunFailureStatus(error instanceof ClaimsUploadRequestError ? error.failureStatus : '');
       setRunHeader(null);
     }
   }, []);
@@ -274,7 +288,9 @@ export default function ContractorFixUploadScreen() {
     !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
       ? 'We could not prepare the updated AI Advice right now. Please try uploading the same fix again later.'
       : '';
-  const displayFailureMessage = submitError || runError || visibleFailureMessage || fallbackFailureMessage;
+  const displayFailureMessage = contractorFacingClaimsFailureMessage(
+    submitError || runError || visibleFailureMessage || fallbackFailureMessage,
+  );
   const filesLocked = submitLoading || isProcessing || canContinue;
   const controlsLocked = filesLocked || !!fixAvailabilityMessage;
 
@@ -371,9 +387,13 @@ export default function ContractorFixUploadScreen() {
     setUploadModalOpen(true);
     setSubmitLoading(true);
     setSubmitError('');
+    setSubmitErrorStatus(null);
+    setSubmitFailureStatus('');
     setFailureMessage('');
     setDismissedFailureRunId('');
     setRunError('');
+    setRunErrorStatus(null);
+    setRunFailureStatus('');
     setRunHeader(null);
 
     try {
@@ -400,15 +420,19 @@ export default function ContractorFixUploadScreen() {
         headers: { Accept: 'application/json' },
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (!res.ok || data?.ok === false) {
+        throw claimsUploadRequestError(res, data, 'Failed to upload the package fix.');
+      }
 
       const nextRunId = String(data?.ingest_run_id || '').trim();
       if (!nextRunId) throw new Error('The fix upload response did not include a processing id.');
 
       setRunId(nextRunId);
       if (data?.failure_message) setFailureMessage(String(data.failure_message));
-    } catch (error: any) {
-      setSubmitError(error?.message || 'Failed to upload the package fix.');
+    } catch (error: unknown) {
+      setSubmitError(claimsUploadCaughtErrorMessage(error, 'Failed to upload the package fix.'));
+      setSubmitErrorStatus(error instanceof ClaimsUploadRequestError ? error.status : null);
+      setSubmitFailureStatus(error instanceof ClaimsUploadRequestError ? error.failureStatus : '');
     } finally {
       setSubmitLoading(false);
     }
@@ -421,8 +445,12 @@ export default function ContractorFixUploadScreen() {
 
   const clearUploadModalAttention = () => {
     setSubmitError('');
+    setSubmitErrorStatus(null);
+    setSubmitFailureStatus('');
     setFailureMessage('');
     setRunError('');
+    setRunErrorStatus(null);
+    setRunFailureStatus('');
     if (runId) setDismissedFailureRunId(runId);
     setUploadModalOpen(false);
   };
@@ -444,7 +472,13 @@ export default function ContractorFixUploadScreen() {
     setRunError('');
   };
 
-  const isTechnicalFailure = runHeader?.failure_status === 'technical_failure' || invoiceStatus === 'technical_failure';
+  const isTechnicalFailure =
+    runHeader?.failure_status === 'technical_failure' ||
+    invoiceStatus === 'technical_failure' ||
+    submitFailureStatus === 'technical_failure' ||
+    runFailureStatus === 'technical_failure' ||
+    (submitErrorStatus !== null && submitErrorStatus >= 500) ||
+    (runErrorStatus !== null && runErrorStatus >= 500);
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">

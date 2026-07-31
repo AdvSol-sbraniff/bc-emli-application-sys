@@ -17,7 +17,12 @@ module Claims
           :ingest_run_id,
           :status,
           :message,
-          :error
+          :error,
+          :failure_status,
+          :failure_status_subtype,
+          :error_code,
+          :retryable,
+          :diagnostic_id
         ) do
           def to_h
             {
@@ -30,8 +35,13 @@ module Claims
               ingest_run_id: ingest_run_id,
               status: status,
               message: message,
-              error: error
-            }
+              error: error,
+              failure_status: failure_status,
+              failure_status_subtype: failure_status_subtype,
+              error_code: error_code,
+              retryable: retryable,
+              diagnostic_id: diagnostic_id
+            }.compact
           end
         end
 
@@ -79,37 +89,33 @@ module Claims
         source_invoice_version = source_invoice_version_for(invoice)
 
         now = Time.current
-        ingest_run = nil
+        ingest_run =
+          ::Claims::IngestRun.create!(
+            session_id: invoice.session_id,
+            contractor_id: invoice.contractor_id,
+            status: "queued",
+            total_files: total_file_count(source_invoice_version),
+            completed_files: 0,
+            failed_files: 0,
+            created_at: now,
+            updated_at: now
+          )
+        stage_step =
+          ::Claims::IngestStepRun.create!(
+            ingest_run_id: ingest_run.id,
+            session_id: invoice.session_id,
+            step_type: "fix_upload_package_stage",
+            status: "in_progress",
+            error_text: nil,
+            created_at: now,
+            updated_at: now
+          )
         new_invoice_version = nil
-        stage_step = nil
         new_file_documents = []
 
         ::Claims::Invoice.transaction do
           locked_invoice = ::Claims::Invoice.lock.find(invoice.id)
           next_versionno = next_invoice_versionno(locked_invoice.id)
-
-          ingest_run =
-            ::Claims::IngestRun.create!(
-              session_id: locked_invoice.session_id,
-              contractor_id: locked_invoice.contractor_id,
-              status: "queued",
-              total_files: total_file_count(source_invoice_version),
-              completed_files: 0,
-              failed_files: 0,
-              created_at: now,
-              updated_at: now
-            )
-
-          stage_step =
-            ::Claims::IngestStepRun.create!(
-              ingest_run_id: ingest_run.id,
-              session_id: locked_invoice.session_id,
-              step_type: "fix_upload_package_stage",
-              status: "in_progress",
-              error_text: nil,
-              created_at: now,
-              updated_at: now
-            )
 
           new_invoice_version =
             if @clone_invoice_version_id.present?
@@ -181,52 +187,151 @@ module Claims
           ingest_run.id,
           ingest_run.status,
           "Fix package accepted. The next invoice version is being prepared.",
+          nil,
+          nil,
+          nil,
+          nil,
+          nil,
           nil
         )
       rescue StandardError => e
         failure_status, failure_subtype =
           upload_fix_failure_status_and_subtype(e)
-        begin
-          stage_step&.update!(
-            status: "failed",
-            error_text: "#{e.class}: #{e.message}",
-            genai_results_json: nil,
-            **::Claims::Invoices::FailureSubtypes.step_attributes(
-              status: failure_status,
-              status_subtype: failure_subtype,
-              error: e
-            ),
-            updated_at: Time.current
+        retryable = ::Claims::Invoices::FailureSubtypes.retryable?(e)
+        diagnostic_id = SecureRandom.uuid if failure_status ==
+          "technical_failure"
+        finalize_upload_fix_failure!(
+          stage_step: stage_step,
+          invoice: invoice,
+          ingest_run: ingest_run,
+          failure_status: failure_status,
+          failure_subtype: failure_subtype,
+          retryable: retryable,
+          diagnostic_id: diagnostic_id,
+          error: e
+        )
+
+        if diagnostic_id.present?
+          Rails.logger.error(
+            "[claims][ingest][upload_fix_package] diagnostic_id=#{diagnostic_id} " \
+              "ingest_run_id=#{ingest_run&.id || "-"} " \
+              "ERROR: #{e.class}: #{e.message}"
           )
-          invoice&.set_workflow_status!(
-            failure_status,
-            status_subtype: failure_subtype
-          )
-          mark_ingest_run_failed!(
-            ingest_run: ingest_run,
-            status: failure_status,
-            status_subtype: invoice&.status_subtype || failure_subtype,
-            error: e
-          )
-        rescue StandardError
-          nil
+          Rails.logger.error(Array(e.backtrace).join("\n"))
         end
+
+        safe_error =
+          ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+            failure_status,
+            failure_subtype
+          ).presence || ::Claims::Ingest::UploadErrors::SAFE_TECHNICAL_MESSAGE
 
         Result.new(
           false,
           "upload_fix_package",
           invoice&.id,
-          new_invoice_version&.id,
-          new_invoice_version&.invoice_versionno,
+          persisted_invoice_version_value(new_invoice_version, :id),
+          persisted_invoice_version_value(
+            new_invoice_version,
+            :invoice_versionno
+          ),
           invoice&.session_id,
           ingest_run&.id,
           safe_ingest_run_status(ingest_run),
           nil,
-          "#{e.class}: #{e.message}"
+          safe_error,
+          failure_status,
+          failure_subtype,
+          failure_subtype,
+          retryable,
+          diagnostic_id
         )
       end
 
       private
+
+      def finalize_upload_fix_failure!(
+        stage_step:,
+        invoice:,
+        ingest_run:,
+        failure_status:,
+        failure_subtype:,
+        retryable:,
+        diagnostic_id:,
+        error:
+      )
+        now = Time.current
+        diagnostic_attributes =
+          ::Claims::Invoices::FailureSubtypes.step_attributes(
+            status: failure_status,
+            status_subtype: failure_subtype,
+            error: error
+          )
+        diagnostic_attributes[
+          :diagnostic_id
+        ] ||= diagnostic_id if diagnostic_id.present?
+        diagnostic_attributes[:retryable] = retryable
+
+        safely_finalize_upload_fix!(
+          label: "stage step",
+          diagnostic_id: diagnostic_id
+        ) do
+          stage_step&.update_columns(
+            status: "failed",
+            error_text: "Fix upload failed: #{failure_subtype}.",
+            genai_results_json: nil,
+            completed_at: now,
+            **diagnostic_attributes,
+            updated_at: now
+          )
+        end
+
+        normalized_subtype =
+          ::Claims::Invoices::StatusSubtypes.normalize(
+            failure_status,
+            failure_subtype
+          ).presence || failure_subtype
+        safely_finalize_upload_fix!(
+          label: "invoice",
+          diagnostic_id: diagnostic_id
+        ) do
+          invoice&.update_columns(
+            status: failure_status,
+            status_subtype: normalized_subtype,
+            status_updated_at: now,
+            updated_at: now
+          )
+        end
+
+        safely_finalize_upload_fix!(
+          label: "ingest run",
+          diagnostic_id: diagnostic_id
+        ) do
+          mark_ingest_run_failed!(
+            ingest_run: ingest_run,
+            status: failure_status,
+            status_subtype: normalized_subtype,
+            now: now
+          )
+        end
+      end
+
+      def safely_finalize_upload_fix!(label:, diagnostic_id:)
+        yield
+      rescue StandardError => finalization_error
+        Rails.logger.error(
+          "[claims][ingest][upload_fix_package] diagnostic_id=#{diagnostic_id || "-"} " \
+            "failed to finalize #{label}: " \
+            "#{finalization_error.class}: #{finalization_error.message}"
+        )
+      end
+
+      def persisted_invoice_version_value(invoice_version, attribute)
+        return nil unless invoice_version&.id
+        return nil unless ::Claims::InvoiceVersion.exists?(invoice_version.id)
+
+        invoice_version.public_send(attribute)
+      end
 
       def source_invoice_version_for(invoice)
         if @clone_invoice_version_id.present?
@@ -714,18 +819,18 @@ module Claims
         ["technical_failure", ::Claims::Invoices::FailureSubtypes.upload(error)]
       end
 
-      def mark_ingest_run_failed!(ingest_run:, status:, status_subtype:, error:)
+      def mark_ingest_run_failed!(ingest_run:, status:, status_subtype:, now:)
         return unless ingest_run&.id
 
-        ingest_run.update!(
+        ingest_run.update_columns(
           status: "failed",
           failed_files: 1,
           failure_status: status,
           failure_status_subtype: status_subtype,
           pipeline_error_code: status_subtype,
           pipeline_error_description: "Fix upload failed: #{status_subtype}.",
-          completed_at: Time.current,
-          updated_at: Time.current
+          completed_at: now,
+          updated_at: now
         )
       end
 

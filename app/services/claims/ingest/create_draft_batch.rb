@@ -33,9 +33,20 @@ module Claims
       end
 
       def call
-        raise "Missing contractor_id" if contractor_id.empty?
+        session_id = nil
+        ingest_run = nil
+        shell_invoice = nil
+        stage_step = nil
+
+        if contractor_id.empty?
+          raise ::Claims::Ingest::UploadErrors::ValidationError.new(
+                  "A contractor is required to start an upload."
+                )
+        end
         if files.empty?
-          raise "No files received. Expected multipart field files[] (or files)."
+          raise ::Claims::Ingest::UploadErrors::ValidationError.new(
+                  "Select at least one invoice or supporting document to upload."
+                )
         end
 
         session_result =
@@ -159,6 +170,28 @@ module Claims
           failed_files: ingest_run.failed_files,
           results: results
         }
+      rescue ::Claims::Ingest::UploadErrors::ValidationError
+        raise
+      rescue StandardError => error
+        diagnostic_id = SecureRandom.uuid
+        error_code =
+          finalize_unexpected_failure!(
+            error: error,
+            diagnostic_id: diagnostic_id,
+            ingest_run: ingest_run,
+            shell_invoice: shell_invoice,
+            stage_step: stage_step
+          )
+        raise(
+          ::Claims::Ingest::UploadErrors::UnexpectedError.new(
+            diagnostic_id: diagnostic_id,
+            error_code: error_code,
+            ingest_run_id: ingest_run&.id,
+            session_id: session_id,
+            invoice_id: shell_invoice&.id
+          ),
+          cause: error
+        )
       end
 
       private
@@ -167,6 +200,81 @@ module Claims
                   :files,
                   :log_prefix,
                   :cleanup_failed_invoice_artifacts
+
+      def finalize_unexpected_failure!(
+        error:,
+        diagnostic_id:,
+        ingest_run:,
+        shell_invoice:,
+        stage_step:
+      )
+        error_code =
+          ::Claims::Invoices::FailureSubtypes.upload(error).presence ||
+            "upload_unexpected_exception"
+        now = Time.current
+        diagnostic_attributes =
+          ::Claims::Invoices::FailureSubtypes.step_attributes(
+            status: "technical_failure",
+            status_subtype: error_code,
+            error: error
+          )
+        diagnostic_attributes[:diagnostic_id] ||= diagnostic_id
+        diagnostic_attributes[:retryable] = false
+
+        safely_finalize_unexpected_failure!(
+          label: "stage step",
+          diagnostic_id: diagnostic_id
+        ) do
+          stage_step&.update_columns(
+            status: "failed",
+            error_text: "Upload package staging failed: #{error_code}.",
+            genai_results_json: nil,
+            context_window_json: nil,
+            completed_at: now,
+            **diagnostic_attributes,
+            updated_at: now
+          )
+        end
+        safely_finalize_unexpected_failure!(
+          label: "invoice",
+          diagnostic_id: diagnostic_id
+        ) do
+          shell_invoice&.update_columns(
+            status: "technical_failure",
+            status_subtype: error_code,
+            status_updated_at: now,
+            updated_at: now
+          )
+        end
+        safely_finalize_unexpected_failure!(
+          label: "ingest run",
+          diagnostic_id: diagnostic_id
+        ) do
+          ingest_run&.update_columns(
+            status: "failed",
+            failed_files: [ingest_run.failed_files.to_i, 1].max,
+            failure_status: "technical_failure",
+            failure_status_subtype: error_code,
+            pipeline_error_code: error_code,
+            pipeline_error_description:
+              "Upload package staging failed before processing completed.",
+            completed_at: now,
+            updated_at: now
+          )
+        end
+        cleanup_failed_contractor_upload!(ingest_run) if ingest_run&.id
+        error_code
+      end
+
+      def safely_finalize_unexpected_failure!(label:, diagnostic_id:)
+        yield
+      rescue StandardError => finalization_error
+        Rails.logger.error(
+          "[claims][ingest][#{log_prefix}] diagnostic_id=#{diagnostic_id} " \
+            "failed to finalize #{label}: " \
+            "#{finalization_error.class}: #{finalization_error.message}"
+        )
+      end
 
       def process_file(file, index, session_id, ingest_run, shell_invoice_id)
         name =

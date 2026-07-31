@@ -280,6 +280,107 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
           source_document.personal_information_review_reason
       )
     end
+
+    it "returns a safe structured technical failure and closes the fix run" do
+      now = Time.zone.parse("2026-07-30 18:00:00")
+      contractor = Contractor.create!(business_name: "Fix Failure Contractor")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "genai_complete",
+          created_at: now,
+          updated_at: now
+        )
+      Claims::InvoiceVersion.create!(
+        invoice_id: invoice.id,
+        invoice_versionno: 1,
+        storage_provider: "azure_blob",
+        storage_key: "source/fix-failure.pdf",
+        original_filename: "Original invoice.pdf",
+        content_type: "application/pdf",
+        created_at: now,
+        updated_at: now
+      )
+      raw_message = "undefined method `completed_at=' for a private object"
+      allow(Claims::Ingest::UploadEvidenceFileToNode).to receive(
+        :call
+      ).and_raise(NoMethodError, raw_message)
+
+      result =
+        described_class.call(
+          invoice_id: invoice.id,
+          files: [fake_upload("Replacement invoice.pdf", "application/pdf")]
+        )
+
+      run = Claims::IngestRun.find(result.ingest_run_id)
+      stage_step =
+        Claims::IngestStepRun.find_by!(
+          ingest_run_id: run.id,
+          step_type: "fix_upload_package_stage"
+        )
+
+      expect(result).to have_attributes(
+        ok: false,
+        failure_status: "technical_failure",
+        failure_status_subtype: "upload_unexpected_exception",
+        error_code: "upload_unexpected_exception",
+        retryable: false
+      )
+      expect(result.diagnostic_id).to be_present
+      expect(result.error).not_to include(raw_message)
+      expect(run.status).to eq("failed")
+      expect(run.completed_at).to be_present
+      expect(stage_step).to have_attributes(
+        status: "failed",
+        error_text: "Fix upload failed: upload_unexpected_exception.",
+        diagnostic_id: result.diagnostic_id
+      )
+      expect(stage_step.completed_at).to be_present
+    end
+
+    it "keeps an unsupported fix file as a correctable package failure" do
+      now = Time.zone.parse("2026-07-30 18:05:00")
+      contractor =
+        Contractor.create!(business_name: "Fix Validation Contractor")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "genai_complete",
+          created_at: now,
+          updated_at: now
+        )
+      Claims::InvoiceVersion.create!(
+        invoice_id: invoice.id,
+        invoice_versionno: 1,
+        storage_provider: "azure_blob",
+        storage_key: "source/fix-validation.pdf",
+        original_filename: "Original invoice.pdf",
+        content_type: "application/pdf",
+        created_at: now,
+        updated_at: now
+      )
+
+      result =
+        described_class.call(
+          invoice_id: invoice.id,
+          files: [fake_upload("notes.txt", "text/plain")]
+        )
+
+      expect(result).to have_attributes(
+        ok: false,
+        failure_status: "package_needs_correction",
+        failure_status_subtype: "package_unsupported_file_type",
+        error_code: "package_unsupported_file_type",
+        retryable: false,
+        diagnostic_id: nil
+      )
+      expect(result.error).to include("upload package needs a change")
+      expect(result.error).not_to include("RuntimeError")
+    end
   end
 
   def fake_upload(filename, content_type = "image/jpeg")
