@@ -76,7 +76,6 @@ module Claims
           total_files: total_items,
           completed_files: succeeded,
           failed_files: failed,
-          messages: parse_messages(run.messages),
           completed_at: TERMINAL_STATUSES.include?(status) ? Time.current : nil,
           updated_at: Time.current
         )
@@ -208,14 +207,6 @@ module Claims
         return "running" if processed.positive? || running.positive?
 
         "queued"
-      end
-
-      def parse_messages(messages)
-        return messages if messages.is_a?(Array)
-
-        JSON.parse(messages.to_s)
-      rescue JSON::ParserError, TypeError
-        []
       end
     end
   end

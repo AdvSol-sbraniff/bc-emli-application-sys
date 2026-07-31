@@ -461,6 +461,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
       <MenuGroup title="AI System Settings">
         <NavMenuItem label="Test AI Network Connectivity" to={'/hello-ai-admin'} />
         <NavMenuItem label="System Config" to={'/validation-rules-config'} />
+        <NavMenuItem label="Ingest Runs" to={'/ingest-runs-admin'} />
       </MenuGroup>
       <MenuDivider my={0} borderColor="border.light" />
       <MenuGroup title="Create Test Data">

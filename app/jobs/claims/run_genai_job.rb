@@ -30,6 +30,7 @@ module Claims
       if %w[classifier_only triage_only].include?(requested_mode)
         raise "RunGenaiJob no longer runs classifier modes. Use RunIngestTriageJob through OCR/triage instead."
       end
+
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
 
@@ -90,7 +91,7 @@ module Claims
           upgrade_type: upgrade_type
         )
       end
-    rescue => e
+    rescue StandardError => e
       failed_step =
         latest_failed_validation_step(
           ingest_run_id: ingest_run_id,
@@ -113,8 +114,8 @@ module Claims
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
-          genai_results_json:
-            failure_payload(status_subtype: status_subtype, error: e),
+          genai_results_json: nil,
+          **failure_step_attributes(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -136,7 +137,7 @@ module Claims
         # ignore
       end
 
-      raise
+      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     def run_genai_ruleset_child!(
@@ -172,7 +173,7 @@ module Claims
         ingest_run_id,
         "finish_validation"
       )
-    rescue => e
+    rescue StandardError => e
       failed_step =
         latest_step(
           ingest_run_id: ingest_run_id,
@@ -198,7 +199,7 @@ module Claims
       rescue StandardError
         nil
       end
-      raise
+      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     def finish_validation_if_ready!(
@@ -235,7 +236,10 @@ module Claims
             )
           end
 
-        if failed_step = step_rows.compact.find { |row| row.status == "failed" }
+        if (
+             failed_step =
+               step_rows.compact.find { |row| row.status == "failed" }
+           )
           status_subtype =
             failure_subtype_from_step(
               failed_step,
@@ -367,14 +371,14 @@ module Claims
       )
 
       payload
-    rescue => e
+    rescue StandardError => e
       status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
-          genai_results_json:
-            failure_payload(status_subtype: status_subtype, error: e),
+          genai_results_json: nil,
+          **failure_step_attributes(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -419,14 +423,14 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-    rescue => e
+    rescue StandardError => e
       status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
-          genai_results_json:
-            failure_payload(status_subtype: status_subtype, error: e),
+          genai_results_json: nil,
+          **failure_step_attributes(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -447,8 +451,8 @@ module Claims
       ::Claims::Invoices::FailureSubtypes.runtime(error)
     end
 
-    def failure_payload(status_subtype:, error:)
-      ::Claims::Invoices::FailureSubtypes.payload(
+    def failure_step_attributes(status_subtype:, error:)
+      ::Claims::Invoices::FailureSubtypes.step_attributes(
         status: "technical_failure",
         status_subtype: status_subtype,
         error: error
@@ -504,10 +508,9 @@ module Claims
           invoice_version_id: invoice_version_id,
           step_type: step_type
         )
-      scope =
-        scope.where(
-          invoice_upgrade_type_id: invoice_upgrade_type_id
-        ) if invoice_upgrade_type_id.present?
+      if invoice_upgrade_type_id.present?
+        scope = scope.where(invoice_upgrade_type_id: invoice_upgrade_type_id)
+      end
       scope.order(created_at: :desc).first
     end
 
@@ -546,6 +549,7 @@ module Claims
       unless step&.status == "succeeded"
         raise "Missing succeeded case_facts step for invoice_version_id=#{invoice_version_id}"
       end
+
       payload = step&.genai_results_json
       case_facts = payload&.dig("case_facts") || payload&.dig(:case_facts)
       return case_facts if case_facts.is_a?(Hash)
@@ -712,10 +716,9 @@ module Claims
             invoice_version_id: invoice_version_id,
             step_type: step_type
           ).where(status: %w[queued in_progress])
-        scope =
-          scope.where(
-            invoice_upgrade_type_id: invoice_upgrade_type_id
-          ) if invoice_upgrade_type_id.present?
+        if invoice_upgrade_type_id.present?
+          scope = scope.where(invoice_upgrade_type_id: invoice_upgrade_type_id)
+        end
 
         step = scope.order(created_at: :asc).first
       end
@@ -737,27 +740,10 @@ module Claims
     end
 
     def call_node_genai!(contextwindowjson:, diagnostic_context: {})
-      base = ENV.fetch("INV_NODE_BASE_URL")
-      uri = URI("#{base}/inv/genai")
-
-      req = Net::HTTP::Post.new(uri)
-      req["Content-Type"] = "application/json"
-      req.body =
-        JSON.generate(
-          contextwindowjson: contextwindowjson,
-          diagnostic_context: diagnostic_context
-        )
-
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.open_timeout = 10
-      http.read_timeout = 300
-
-      resp = http.request(req)
-      unless resp.is_a?(Net::HTTPSuccess)
-        raise "Node GenAI failed #{resp.code}: #{resp.body.to_s[0, 500]}"
-      end
-
-      JSON.parse(resp.body)
+      ::Claims::Genai::NodeClient.call(
+        contextwindowjson: contextwindowjson,
+        diagnostic_context: diagnostic_context
+      )
     end
 
     def run_genai_ruleset!(
@@ -854,7 +840,7 @@ module Claims
       )
 
       { upgrade_type: upgrade_type, payload: payload }
-    rescue => e
+    rescue StandardError => e
       status_subtype = genai_failure_subtype(e)
       begin
         upsert_genai_manifest!(
@@ -870,8 +856,8 @@ module Claims
           status: "failed",
           context_window_json: contextwindowjson,
           error_text: "#{e.class}: #{e.message}",
-          genai_results_json:
-            failure_payload(status_subtype: status_subtype, error: e),
+          genai_results_json: nil,
+          **failure_step_attributes(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -926,14 +912,14 @@ module Claims
       )
 
       result
-    rescue => e
+    rescue StandardError => e
       status_subtype = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
-          genai_results_json:
-            failure_payload(status_subtype: status_subtype, error: e),
+          genai_results_json: nil,
+          **failure_step_attributes(status_subtype: status_subtype, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -951,7 +937,7 @@ module Claims
       overall =
         (
           if payload.is_a?(Hash)
-            (payload["overall"] || payload[:overall] || {})
+            payload["overall"] || payload[:overall] || {}
           else
             {}
           end
@@ -985,11 +971,11 @@ module Claims
     end
 
     def detected_upgrade_types(classifier_payload)
-      rows =
-        classifier_payload["detected_upgrade_types"] ||
-          classifier_payload[
-            :detected_upgrade_types
-          ] if classifier_payload.is_a?(Hash)
+      if classifier_payload.is_a?(Hash)
+        rows =
+          classifier_payload["detected_upgrade_types"] ||
+            classifier_payload[:detected_upgrade_types]
+      end
       Array(rows)
         .filter_map do |row|
           row["upgrade_type_key"] || row[:upgrade_type_key] if row.is_a?(Hash)
@@ -1193,7 +1179,7 @@ module Claims
         begin
           raw = value || 0
           numeric = Float(raw)
-          numeric = numeric * 100 if numeric.positive? && numeric <= 1
+          numeric *= 100 if numeric.positive? && numeric <= 1
           numeric.round
         rescue StandardError
           0
@@ -1276,38 +1262,36 @@ module Claims
         }
       end
 
-      messages.concat(
-        [
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-                  User record 1 (fields to locate and rules to evaluate)
-                  #{gt}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 2 (supporting documents possible)
-#{supporting_documents_possible_record(supporting_document_context).to_json}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 3 (supporting documents actually attached)
-#{supporting_documents_attached_record(supporting_document_context).to_json}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 4 (pre-existing database values)
-#{pre_existing_database_values_record(case_facts).to_json}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 5 (classifier-located key fields)
-#{classifier_located_key_fields_record(classifier_payload).to_json}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-            User record 6 (raw DI invoice JSON)
-#{di_raw_json.to_json}
-          TEXT
-          { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
-            User record 7 (one-line actual ask)
-            Please perform the location tasks and rulecheck tasks.
-            Reply must be using the strict JSON output schema defined in the system record.
-          TEXT
-        ]
+      messages.push(
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+          User record 1 (fields to locate and rules to evaluate)
+          #{gt}
+        TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                      User record 2 (supporting documents possible)
+          #{supporting_documents_possible_record(supporting_document_context).to_json}
+        TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                      User record 3 (supporting documents actually attached)
+          #{supporting_documents_attached_record(supporting_document_context).to_json}
+        TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                      User record 4 (pre-existing database values)
+          #{pre_existing_database_values_record(case_facts).to_json}
+        TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                      User record 5 (classifier-located key fields)
+          #{classifier_located_key_fields_record(classifier_payload).to_json}
+        TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
+                      User record 6 (raw DI invoice JSON)
+          #{di_raw_json.to_json}
+        TEXT
+        { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
+          User record 7 (one-line actual ask)
+          Please perform the location tasks and rulecheck tasks.
+          Reply must be using the strict JSON output schema defined in the system record.
+        TEXT
       )
     end
 

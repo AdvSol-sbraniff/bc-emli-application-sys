@@ -21,6 +21,12 @@ import {
   toChatMessages,
   toResponsesInputAndInstructions,
 } from './genai-api';
+import {
+  isRetryableGenAiError,
+  providerCode,
+  providerStatus,
+  sanitizedGenAiError,
+} from './genai-error-policy';
 
 import {
   BlobSASPermissions,
@@ -471,19 +477,8 @@ export class InvService {
     return undefined;
   }
 
-  private isRetryableGenAiError(error: any): boolean {
-    const status = error?.status ?? error?.response?.status;
-    return (
-      status === 429 ||
-      status === 500 ||
-      status === 502 ||
-      status === 503 ||
-      status === 504
-    );
-  }
-
   private async withGenAiRetries<T>(operation: () => Promise<T>): Promise<T> {
-    const maxAttempts = Number(process.env.GENAI_MAX_ATTEMPTS || 6);
+    const maxAttempts = Number(process.env.GENAI_MAX_ATTEMPTS || 2);
     const baseDelayMs = Number(process.env.GENAI_RETRY_BASE_MS || 5000);
     const maxDelayMs = Number(process.env.GENAI_RETRY_MAX_MS || 60000);
 
@@ -491,7 +486,8 @@ export class InvService {
       try {
         return await operation();
       } catch (error: any) {
-        if (attempt >= maxAttempts || !this.isRetryableGenAiError(error)) {
+        error.genai_attempt_count = attempt;
+        if (attempt >= maxAttempts || !isRetryableGenAiError(error)) {
           throw error;
         }
 
@@ -605,11 +601,11 @@ export class InvService {
   }
 
   private providerStatus(error: any): number | string | undefined {
-    return error?.status ?? error?.response?.status;
+    return providerStatus(error);
   }
 
   private providerCode(error: any): string | undefined {
-    return this.boundedString(error?.code ?? error?.error?.code, 120);
+    return providerCode(error);
   }
 
   private providerRequestId(error: any): string | undefined {
@@ -638,42 +634,6 @@ export class InvService {
       error?.response?.data ?? error?.error ?? error?.message,
       700,
     );
-  }
-
-  private categorizeGenAiError(error: any): string {
-    const status = Number(this.providerStatus(error));
-    const code = String(this.providerCode(error) || '').toLowerCase();
-    const message = String(error?.message || '').toLowerCase();
-
-    if (
-      status === 408 ||
-      code.includes('timeout') ||
-      message.includes('timeout')
-    ) {
-      return 'provider_timeout';
-    }
-    if (
-      status === 429 ||
-      code.includes('rate') ||
-      message.includes('throttl')
-    ) {
-      return 'provider_throttled';
-    }
-    if (status === 401 || status === 403) return 'provider_auth_error';
-    if (status === 400) return 'provider_bad_request';
-    if ([502, 503, 504].includes(status) || status >= 500) {
-      return 'provider_gateway_error';
-    }
-    if (message.includes('content') && message.includes('filter')) {
-      return 'provider_content_filter';
-    }
-    if (
-      ['econnreset', 'enotfound', 'econnrefused', 'eai_again'].includes(code)
-    ) {
-      return 'provider_connection_error';
-    }
-
-    return 'provider_unknown_error';
   }
 
   private logGenAiDiagnostic(
@@ -786,12 +746,20 @@ export class InvService {
       }
     } catch (error: any) {
       const elapsed_ms = Date.now() - startedAt;
-      const category = this.categorizeGenAiError(error);
+      const safeError = sanitizedGenAiError({
+        error,
+        diagnosticId,
+        elapsedMs: elapsed_ms,
+        phase: diagnosticContext?.step_type,
+      });
 
       this.logGenAiDiagnostic('claims.genai.request.failed', {
         ...diagnosticBase,
         elapsed_ms,
-        category,
+        category: safeError.category,
+        error_code: safeError.code,
+        retryable: safeError.retryable,
+        provider_attempt_count: safeError.provider_attempt_count,
         provider_status: this.providerStatus(error),
         provider_code: this.providerCode(error),
         provider_request_id: this.providerRequestId(error),
@@ -800,13 +768,10 @@ export class InvService {
       });
 
       throw new HttpException(
-        {
-          message: 'GenAI provider request failed',
-          diagnostic_id: diagnosticId,
-          category,
-          elapsed_ms,
-        },
-        HttpStatus.BAD_GATEWAY,
+        safeError,
+        safeError.retryable
+          ? HttpStatus.SERVICE_UNAVAILABLE
+          : HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 

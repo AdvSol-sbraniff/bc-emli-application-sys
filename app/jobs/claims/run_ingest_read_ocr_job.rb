@@ -43,17 +43,17 @@ module Claims
       )
 
       advance_run!(ingest_run_id: ingest_run_id)
-    rescue => e
+    rescue StandardError => e
       status_subtype = ::Claims::Invoices::FailureSubtypes.ocr(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
-        di_results_json:
-          ::Claims::Invoices::FailureSubtypes.payload(
-            status: "technical_failure",
-            status_subtype: status_subtype,
-            error: e
-          ),
+        di_results_json: nil,
+        **::Claims::Invoices::FailureSubtypes.step_attributes(
+          status: "technical_failure",
+          status_subtype: status_subtype,
+          error: e
+        ),
         updated_at: Time.current
       )
       advance_run!(ingest_run_id: ingest_run_id)

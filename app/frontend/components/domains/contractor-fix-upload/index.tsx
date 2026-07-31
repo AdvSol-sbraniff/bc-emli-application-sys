@@ -77,15 +77,13 @@ type RunHeader = {
   failure_status_subtype?: string | null;
   failure_message?: string | null;
   retry_guidance?: string | null;
-};
-
-type RunInvoiceRow = {
-  invoice_id: string;
+  invoice_id?: string | null;
   invoice_status?: string | null;
   invoice_status_subtype?: string | null;
-  invoice_version_id: string;
+  invoice_version_id?: string | null;
   invoice_versionno?: number | null;
   original_filename?: string | null;
+  can_continue?: boolean;
 };
 
 function makeClientId(prefix: string) {
@@ -158,8 +156,6 @@ export default function ContractorFixUploadScreen() {
   const [dismissedFailureRunId, setDismissedFailureRunId] = useState('');
   const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
   const [runError, setRunError] = useState('');
-  const [invoiceRows, setInvoiceRows] = useState<RunInvoiceRow[]>([]);
-  const [rowsError, setRowsError] = useState('');
 
   const loadCurrentPackage = useCallback(async () => {
     if (!sessionId || !invoiceId) {
@@ -222,7 +218,6 @@ export default function ContractorFixUploadScreen() {
 
   const loadRunHeader = useCallback(async (id: string) => {
     if (!id) return;
-    setRunError('');
     try {
       const res = await fetch(`/api/claims/contractor/ingest/runs/${encodeURIComponent(id)}`, {
         method: 'GET',
@@ -233,75 +228,53 @@ export default function ContractorFixUploadScreen() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setRunHeader(data as RunHeader);
-      if (data?.failure_message) setFailureMessage(String(data.failure_message));
+      setRunError('');
+      setFailureMessage(data?.failure_message ? String(data.failure_message) : '');
     } catch (error: any) {
       setRunError(error?.message || 'Failed to check fix upload status.');
       setRunHeader(null);
     }
   }, []);
 
-  const loadRunInvoices = useCallback(async (id: string) => {
-    if (!id) return;
-    setRowsError('');
-    try {
-      const res = await fetch(`/api/claims/contractor/ingest/runs/${encodeURIComponent(id)}/invoices`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setInvoiceRows(Array.isArray(data?.rows) ? data.rows : []);
-      if (data?.failure_message) setFailureMessage(String(data.failure_message));
-    } catch (error: any) {
-      setRowsError(error?.message || 'Failed to load the updated invoice status.');
-      setInvoiceRows([]);
-    }
-  }, []);
-
-  const refreshAll = useCallback(
+  const refreshRun = useCallback(
     async (id = runId) => {
       if (!id) return;
-      await Promise.all([loadRunHeader(id), loadRunInvoices(id)]);
+      await loadRunHeader(id);
     },
-    [loadRunHeader, loadRunInvoices, runId],
+    [loadRunHeader, runId],
   );
 
   useEffect(() => {
     if (!runId) return;
-    void refreshAll(runId);
-  }, [refreshAll, runId]);
+    void refreshRun(runId);
+  }, [refreshRun, runId]);
 
-  const readyRows = invoiceRows.filter((row) => String(row.invoice_status || '').toLowerCase() === 'genai_complete');
   const failureDismissedForCurrentRun = !!runId && dismissedFailureRunId === runId;
   const visibleFailureMessage = failureDismissedForCurrentRun ? '' : failureMessage;
   const runStatus = String(runHeader?.status || '').toLowerCase();
+  const invoiceStatus = String(runHeader?.invoice_status || '').toLowerCase();
   const runFailed = runStatus === 'failed';
   const runTerminal = runStatus === 'failed' || runStatus === 'succeeded' || runStatus === 'partial';
   const hasFailedRows =
     !!visibleFailureMessage ||
-    invoiceRows.some((row) => {
-      const status = String(row.invoice_status || '').toLowerCase();
-      return status.endsWith('_failed') || status === 'package_needs_correction' || status === 'technical_failure';
-    });
-  const hasProcessingRows = invoiceRows.some((row) => {
-    const status = String(row.invoice_status || '').toLowerCase();
-    return status.includes('queued') || status.includes('progress') || status === 'ocr_complete';
-  });
-  const canContinue = invoiceRows.length > 0 && readyRows.length === invoiceRows.length;
+    invoiceStatus.endsWith('_failed') ||
+    invoiceStatus === 'package_needs_correction' ||
+    invoiceStatus === 'technical_failure';
+  const hasProcessingRows =
+    invoiceStatus.includes('queued') || invoiceStatus.includes('progress') || invoiceStatus === 'ocr_complete';
+  const canContinue = runHeader?.can_continue === true;
   const isProcessing =
     submitLoading ||
     (!failureMessage &&
       !!runId &&
       !canContinue &&
       !runTerminal &&
-      (runStatus === 'queued' || runStatus === 'running' || hasProcessingRows || invoiceRows.length === 0));
+      (runStatus === 'queued' || runStatus === 'running' || hasProcessingRows || !runHeader?.invoice_id));
   const fallbackFailureMessage =
     !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
       ? 'We could not prepare the updated AI Advice right now. Please try uploading the same fix again later.'
       : '';
-  const displayFailureMessage = submitError || runError || rowsError || visibleFailureMessage || fallbackFailureMessage;
+  const displayFailureMessage = submitError || runError || visibleFailureMessage || fallbackFailureMessage;
   const filesLocked = submitLoading || isProcessing || canContinue;
   const controlsLocked = filesLocked || !!fixAvailabilityMessage;
 
@@ -309,10 +282,10 @@ export default function ContractorFixUploadScreen() {
   useEffect(() => {
     if (!shouldPoll) return;
     const id = window.setInterval(() => {
-      void refreshAll();
+      void refreshRun();
     }, 3000);
     return () => window.clearInterval(id);
-  }, [refreshAll, shouldPoll]);
+  }, [refreshRun, shouldPoll]);
 
   useEffect(() => {
     if (submitLoading || isProcessing || displayFailureMessage || canContinue) {
@@ -322,13 +295,12 @@ export default function ContractorFixUploadScreen() {
 
   const processingStoryLabel = (() => {
     if (submitLoading || runStatus === 'queued') return 'Uploading revised package';
-    if (!invoiceRows.length) return 'Reading revised files';
+    if (!runHeader?.invoice_id) return 'Reading revised files';
 
-    const statuses = invoiceRows.map((row) => String(row.invoice_status || '').toLowerCase());
-    if (statuses.some((status) => status.startsWith('upload_'))) return 'Uploading revised package';
-    if (statuses.some((status) => status.startsWith('ocr_'))) return 'Reading revised files';
-    if (statuses.some((status) => status === 'ocr_complete')) return 'Extracting revised invoice evidence';
-    if (statuses.some((status) => status.startsWith('genai_'))) return 'Refreshing AI Advice';
+    if (invoiceStatus.startsWith('upload_')) return 'Uploading revised package';
+    if (invoiceStatus.startsWith('ocr_')) return 'Reading revised files';
+    if (invoiceStatus === 'ocr_complete') return 'Extracting revised invoice evidence';
+    if (invoiceStatus.startsWith('genai_')) return 'Refreshing AI Advice';
     if (runStatus === 'running') return 'Preparing updated review';
 
     return 'Refreshing AI Advice';
@@ -348,7 +320,6 @@ export default function ContractorFixUploadScreen() {
     setSubmitError('');
     setFailureMessage('');
     setRunError('');
-    setRowsError('');
     setProposedRows((existing) => [
       ...existing,
       ...supportedEvidenceFiles.map((file) => ({
@@ -403,9 +374,7 @@ export default function ContractorFixUploadScreen() {
     setFailureMessage('');
     setDismissedFailureRunId('');
     setRunError('');
-    setRowsError('');
     setRunHeader(null);
-    setInvoiceRows([]);
 
     try {
       const formData = new FormData();
@@ -438,7 +407,6 @@ export default function ContractorFixUploadScreen() {
 
       setRunId(nextRunId);
       if (data?.failure_message) setFailureMessage(String(data.failure_message));
-      await refreshAll(nextRunId);
     } catch (error: any) {
       setSubmitError(error?.message || 'Failed to upload the package fix.');
     } finally {
@@ -455,7 +423,6 @@ export default function ContractorFixUploadScreen() {
     setSubmitError('');
     setFailureMessage('');
     setRunError('');
-    setRowsError('');
     if (runId) setDismissedFailureRunId(runId);
     setUploadModalOpen(false);
   };
@@ -475,12 +442,9 @@ export default function ContractorFixUploadScreen() {
     setSubmitError('');
     setFailureMessage('');
     setRunError('');
-    setRowsError('');
   };
 
-  const isTechnicalFailure =
-    runHeader?.failure_status === 'technical_failure' ||
-    invoiceRows.some((row) => String(row.invoice_status || '').toLowerCase() === 'technical_failure');
+  const isTechnicalFailure = runHeader?.failure_status === 'technical_failure' || invoiceStatus === 'technical_failure';
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">

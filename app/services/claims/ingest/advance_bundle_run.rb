@@ -7,7 +7,6 @@ module Claims
       BUNDLE_UNKNOWN_ERROR_CODE = "invoice_bundle_unknown_documents"
       BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE =
         "invoice_bundle_no_supported_upgrade_type"
-      SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE = "supporting_documents_attached"
       DEFAULT_WORKER_ATTEMPT_LIMIT = 4
       STEP_STATUS_RANK = {
         "queued" => 1,
@@ -42,8 +41,6 @@ module Claims
         document_ids = documents.pluck(:id)
         total_files = run.total_files.to_i
         total_files = document_ids.size if total_files <= 0
-        messages = sanitize_bundle_messages(parse_messages(run.messages))
-
         read_step_type = read_step_type_for(run)
         classifier_step_type = classifier_step_type_for(run)
         supporting_document_extraction_step_type =
@@ -60,33 +57,29 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
         end
-        if failed_row = read_steps.values.find { |row| row.status == "failed" }
+        if (
+             failed_row =
+               read_steps.values.find { |row| row.status == "failed" }
+           )
           if step_failure_retry_pending?(failed_row)
             return(
               update_running!(
                 run: run,
                 total_files: total_files,
-                messages: messages,
                 shell_invoice_id: shell_invoice_id
               )
             )
           end
 
-          failed_doc =
-            read_documents.detect do |doc|
-              doc.id == failed_row.ingest_document_id
-            end
           return(
             update_failed!(
               run: run,
               total_files: total_files,
               failed_files: 1,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: "technical_failure",
               shell_invoice_status_subtype:
@@ -94,15 +87,7 @@ module Claims
                   failed_row,
                   fallback: "ocr_unexpected_exception"
                 ),
-              extra_messages: [
-                {
-                  code: "bundle_read_ocr_failed",
-                  level: "error",
-                  message: "One or more files failed during initial OCR read.",
-                  ingest_document_id: failed_row.ingest_document_id,
-                  filename: failed_doc&.original_filename
-                }
-              ]
+              fallback_error_code: "bundle_read_ocr_failed"
             )
           )
         end
@@ -111,7 +96,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
@@ -133,50 +117,39 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
         end
-        if failed_row =
-             triage_steps.values.find { |row| row.status == "failed" }
+        if (
+             failed_row =
+               triage_steps.values.find { |row| row.status == "failed" }
+           )
           if step_failure_retry_pending?(failed_row)
             return(
               update_running!(
                 run: run,
                 total_files: total_files,
-                messages: messages,
                 shell_invoice_id: shell_invoice_id
               )
             )
           end
 
-          failed_doc =
-            classifier_documents.detect do |doc|
-              doc.id == failed_row.ingest_document_id
-            end
+          failure_status =
+            failure_status_from_step(failed_row, fallback: "technical_failure")
           return(
             update_failed!(
               run: run,
               total_files: total_files,
               failed_files: 1,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "technical_failure",
+              shell_invoice_status: failure_status,
               shell_invoice_status_subtype:
                 failure_subtype_from_step(
                   failed_row,
                   fallback: "genai_unexpected_exception"
                 ),
-              extra_messages: [
-                {
-                  code: "bundle_triage_failed",
-                  level: "error",
-                  message: "One or more files failed during document triage.",
-                  ingest_document_id: failed_row.ingest_document_id,
-                  filename: failed_doc&.original_filename
-                }
-              ]
+              fallback_error_code: "bundle_triage_failed"
             )
           )
         end
@@ -185,7 +158,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
@@ -198,20 +170,11 @@ module Claims
               run: run,
               total_files: total_files,
               failed_files: unknown_docs.size,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: "package_needs_correction",
               shell_invoice_status_subtype:
                 "package_invoice_classification_conflict",
-              extra_messages: [
-                {
-                  code: BUNDLE_UNKNOWN_ERROR_CODE,
-                  level: "error",
-                  message:
-                    "One or more uploaded files could not be classified as either an invoice or a supporting document.",
-                  filenames: unknown_docs.map(&:original_filename).compact.sort
-                }
-              ]
+              fallback_error_code: BUNDLE_UNKNOWN_ERROR_CODE
             )
           )
         end
@@ -231,21 +194,10 @@ module Claims
               run: run,
               total_files: total_files,
               failed_files: [invoice_docs.size, 1].max,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: "package_needs_correction",
               shell_invoice_status_subtype: package_status_subtype,
-              extra_messages: [
-                {
-                  code: BUNDLE_INVALID_ERROR_CODE,
-                  level: "error",
-                  message:
-                    "Exactly one invoice is required in the upload bundle; detected #{invoice_docs.size} invoice candidates.",
-                  invoice_candidate_count: invoice_docs.size,
-                  invoice_candidate_filenames:
-                    invoice_docs.map(&:original_filename).compact.sort
-                }
-              ]
+              fallback_error_code: BUNDLE_INVALID_ERROR_CODE
             )
           )
         end
@@ -258,19 +210,10 @@ module Claims
               run: run,
               total_files: total_files,
               failed_files: non_pdf_invoice_docs.size,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: "package_needs_correction",
               shell_invoice_status_subtype: "package_invoice_not_pdf",
-              extra_messages: [
-                {
-                  code: BUNDLE_INVALID_ERROR_CODE,
-                  level: "error",
-                  message: "The primary invoice must be uploaded as a PDF.",
-                  invoice_candidate_filenames:
-                    non_pdf_invoice_docs.map(&:original_filename).compact.sort
-                }
-              ]
+              fallback_error_code: BUNDLE_INVALID_ERROR_CODE
             )
           )
         end
@@ -300,20 +243,10 @@ module Claims
               run: run,
               total_files: total_files,
               failed_files: 1,
-              messages: messages,
               shell_invoice_id: resolved_invoice_id || shell_invoice_id,
               shell_invoice_status: "package_needs_correction",
               shell_invoice_status_subtype: "package_no_supported_upgrade_type",
-              extra_messages: [
-                {
-                  code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE,
-                  level: "error",
-                  message:
-                    "The invoice was classified as an invoice, but no supported ESP rebate upgrade type was detected.",
-                  invoice_version_id: resolved_invoice_version_id,
-                  invoice_filename: resolved_document.original_filename
-                }
-              ]
+              fallback_error_code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE
             )
           )
         end
@@ -356,7 +289,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
@@ -367,53 +299,41 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
         end
 
-        if failed_row =
-             extraction_steps.values.find { |row| row.status == "failed" }
+        if (
+             failed_row =
+               extraction_steps.values.find { |row| row.status == "failed" }
+           )
           if step_failure_retry_pending?(failed_row)
             return(
               update_running!(
                 run: run,
                 total_files: total_files,
-                messages: messages,
                 shell_invoice_id: shell_invoice_id
               )
             )
           end
 
-          failed_type =
-            ::Claims::SupportingDocumentType.find_by(
-              id: failed_row.supporting_document_type_id
-            )
+          failure_status =
+            failure_status_from_step(failed_row, fallback: "technical_failure")
           return(
             update_failed!(
               run: run,
               total_files: total_files,
               failed_files: 1,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
-              shell_invoice_status: "technical_failure",
+              shell_invoice_status: failure_status,
               shell_invoice_status_subtype:
                 failure_subtype_from_step(
                   failed_row,
                   fallback: "genai_unexpected_exception"
                 ),
-              extra_messages: [
-                {
-                  code: "bundle_supporting_document_extraction_failed",
-                  level: "error",
-                  message:
-                    "One or more supporting document types failed during located-field extraction.",
-                  supporting_document_type_id:
-                    failed_row.supporting_document_type_id,
-                  supporting_document_type_key: failed_type&.type_key
-                }
-              ]
+              fallback_error_code:
+                "bundle_supporting_document_extraction_failed"
             )
           )
         end
@@ -423,7 +343,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
@@ -452,7 +371,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
@@ -464,7 +382,6 @@ module Claims
               update_running!(
                 run: run,
                 total_files: total_files,
-                messages: messages,
                 shell_invoice_id: shell_invoice_id
               )
             )
@@ -475,7 +392,6 @@ module Claims
               run: run,
               total_files: total_files,
               failed_files: 1,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: "technical_failure",
               shell_invoice_status_subtype:
@@ -483,15 +399,7 @@ module Claims
                   invoice_ocr_step,
                   fallback: "ocr_unexpected_exception"
                 ),
-              extra_messages: [
-                {
-                  code: "bundle_invoice_ocr_failed",
-                  level: "error",
-                  message:
-                    "The resolved invoice failed during the invoice-model OCR pass.",
-                  invoice_version_id: resolved_invoice_version_id
-                }
-              ]
+              fallback_error_code: "bundle_invoice_ocr_failed"
             )
           )
         end
@@ -500,7 +408,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id
             )
           )
@@ -523,7 +430,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: "genai_queued"
             )
@@ -549,7 +455,6 @@ module Claims
               update_running!(
                 run: run,
                 total_files: total_files,
-                messages: messages,
                 shell_invoice_id: shell_invoice_id,
                 shell_invoice_status: "genai_in_progress"
               )
@@ -580,19 +485,10 @@ module Claims
               run: run,
               total_files: total_files,
               failed_files: 1,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status: failure_status,
               shell_invoice_status_subtype: failure_subtype,
-              extra_messages: [
-                {
-                  code: "bundle_invoice_genai_failed",
-                  level: "error",
-                  message:
-                    "The resolved invoice failed during the validation runtime.",
-                  invoice_version_id: resolved_invoice_version_id
-                }
-              ]
+              fallback_error_code: "bundle_invoice_genai_failed"
             )
           )
         end
@@ -604,7 +500,6 @@ module Claims
             update_running!(
               run: run,
               total_files: total_files,
-              messages: messages,
               shell_invoice_id: shell_invoice_id,
               shell_invoice_status:
                 running_shell_invoice_status_for(
@@ -614,23 +509,13 @@ module Claims
           )
         end
 
-        info_messages = []
-        if supporting_document_rows.any?
-          info_messages << {
-            code: SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE,
-            level: "info",
-            message:
-              "#{supporting_document_rows.size} supporting document#{"s" unless supporting_document_rows.size == 1} attached to the resolved invoice.",
-            attached_supporting_documents_count: supporting_document_rows.size
-          }
-        end
-
         run.update!(
           status: "succeeded",
           total_files: total_files,
           completed_files: total_files,
           failed_files: 0,
-          messages: messages + info_messages,
+          failure_status: nil,
+          failure_status_subtype: nil,
           completed_at: Time.current,
           updated_at: Time.current
         )
@@ -1236,8 +1121,19 @@ module Claims
         ::Claims::Invoices::FailureSubtypes.from_step(step, fallback: fallback)
       end
 
+      def failure_status_from_step(step, fallback:)
+        ::Claims::Invoices::FailureSubtypes.status_from_step(
+          step,
+          fallback: fallback
+        )
+      end
+
       def step_failure_retry_pending?(step)
         return false unless step&.status == "failed"
+
+        analytics =
+          ::Claims::Invoices::FailureSubtypes.analytics_from_step(step)
+        return false if analytics["retryable"] == false
 
         same_target_step_attempts(step) < worker_attempt_limit
       end
@@ -1279,7 +1175,6 @@ module Claims
       def update_running!(
         run:,
         total_files:,
-        messages:,
         shell_invoice_id: nil,
         shell_invoice_status: "ocr_in_progress",
         shell_invoice_status_subtype: nil
@@ -1294,7 +1189,10 @@ module Claims
           total_files: total_files,
           completed_files: 0,
           failed_files: 0,
-          messages: messages,
+          failure_status: nil,
+          failure_status_subtype: nil,
+          pipeline_error_code: nil,
+          pipeline_error_description: nil,
           completed_at: nil,
           updated_at: Time.current
         )
@@ -1304,10 +1202,9 @@ module Claims
         run:,
         total_files:,
         failed_files:,
-        messages:,
-        extra_messages:,
+        fallback_error_code:,
         shell_invoice_id: nil,
-        shell_invoice_status: "ocr_failed",
+        shell_invoice_status: "technical_failure",
         shell_invoice_status_subtype: nil
       )
         sync_shell_invoice_status!(
@@ -1315,22 +1212,72 @@ module Claims
           status: shell_invoice_status,
           status_subtype: shell_invoice_status_subtype
         )
-        final_messages =
-          contractor_failure_messages(
-            run: run,
-            shell_invoice_id: shell_invoice_id,
-            messages: messages + extra_messages
-          )
+        failed_steps =
+          ::Claims::IngestStepRun
+            .where(ingest_run_id: run.id, status: "failed")
+            .order(created_at: :asc, id: :asc)
+            .to_a
+        failed_step =
+          ::Claims::Invoices::FailureSubtypes.primary_failed_step(failed_steps)
+        analytics =
+          ::Claims::Invoices::FailureSubtypes.analytics_from_step(failed_step)
+        attempt_count =
+          failed_step.present? ? same_target_step_attempts(failed_step) : nil
+        pipeline_error_code =
+          analytics["error_code"].presence || fallback_error_code
         run.update!(
           status: "failed",
           total_files: total_files,
           completed_files: 0,
           failed_files: [failed_files, 0].max,
-          messages: final_messages,
+          failure_status: shell_invoice_status,
+          failure_status_subtype: shell_invoice_status_subtype,
+          pipeline_error_code: pipeline_error_code,
+          pipeline_error_description:
+            pipeline_error_description(
+              step: failed_step,
+              analytics: analytics,
+              attempt_count: attempt_count,
+              fallback_code: pipeline_error_code
+            ),
           completed_at: Time.current,
           updated_at: Time.current
         )
         cleanup_failed_contractor_upload!(run)
+      end
+
+      def pipeline_error_description(
+        step:,
+        analytics:,
+        attempt_count:,
+        fallback_code:
+      )
+        return fallback_code.to_s.humanize if step.blank?
+
+        code = analytics["error_code"].presence || fallback_code
+        parts = ["#{step.step_type} failed"]
+        parts << code if code.present?
+        if analytics["provider_status"].present?
+          parts << "provider HTTP #{analytics["provider_status"]}"
+        end
+        parts << "non-retryable" if analytics["retryable"] == false
+        if analytics["diagnostic_id"].present?
+          parts << "diagnostic #{analytics["diagnostic_id"]}"
+        end
+        provider_attempts = analytics["provider_attempt_count"].to_i
+        if provider_attempts > 1
+          parts << "#{provider_attempts} provider attempts"
+        elsif attempt_count.to_i > 1 && step_target_present?(step)
+          parts << "#{attempt_count} step attempts"
+        end
+
+        "#{parts.join("; ")}."
+      end
+
+      def step_target_present?(step)
+        step.ingest_document_id.present? || step.invoice_version_id.present? ||
+          step.supporting_document_type_id.present? ||
+          step.invoice_upgrade_type_id.present?
       end
 
       def sync_shell_invoice_status!(
@@ -1342,6 +1289,7 @@ module Claims
 
         invoice = ::Claims::Invoice.find_by(id: shell_invoice_id)
         return if invoice.nil?
+
         subtype =
           ::Claims::Invoices::StatusSubtypes.normalize(status, status_subtype)
         return if invoice.status == status && invoice.status_subtype == subtype
@@ -1361,73 +1309,21 @@ module Claims
         "genai_in_progress"
       end
 
-      def contractor_failure_messages(run:, shell_invoice_id:, messages:)
-        return messages unless run.cleanup_failed_invoice_artifacts
-        return messages if shell_invoice_id.blank?
-        if Array(messages).any? { |row| row["contractor_message"].present? }
-          return messages
-        end
-
-        invoice = ::Claims::Invoice.find_by(id: shell_invoice_id)
-        return messages unless invoice
-        unless %w[package_needs_correction technical_failure].include?(
-                 invoice.status.to_s
-               )
-          return messages
-        end
-
-        messages +
-          [
-            {
-              level: "error",
-              status: invoice.status,
-              status_subtype: invoice.status_subtype,
-              code: invoice.status_subtype,
-              contractor_message:
-                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-                  invoice.status,
-                  invoice.status_subtype
-                ),
-              message: "Invoice package processing failed."
-            }
-          ]
-      end
-
       def cleanup_failed_contractor_upload!(run)
         return unless run.cleanup_failed_invoice_artifacts
         return if run.contractor_id.blank?
+        if ::Claims::IngestStepRun.where(
+             ingest_run_id: run.id,
+             status: "in_progress"
+           ).exists?
+          return
+        end
 
         ::Claims::Ingest::CleanupFailedContractorUpload.call(ingest_run: run)
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][advance_bundle_run] cleanup failed ingest_run_id=#{run.id}: #{e.class}: #{e.message}"
         )
-      end
-
-      def parse_messages(messages)
-        return messages if messages.is_a?(Array)
-
-        JSON.parse(messages.to_s)
-      rescue JSON::ParserError, TypeError
-        []
-      end
-
-      def sanitize_bundle_messages(messages)
-        Array(messages).reject do |row|
-          next false unless row.is_a?(Hash)
-
-          code = row["code"].to_s.presence || row[:code].to_s
-          [
-            BUNDLE_INVALID_ERROR_CODE,
-            BUNDLE_UNKNOWN_ERROR_CODE,
-            SUPPORTING_DOCUMENTS_ATTACHED_INFO_CODE,
-            "bundle_read_ocr_failed",
-            "bundle_triage_failed",
-            "bundle_supporting_document_extraction_failed",
-            "bundle_invoice_ocr_failed",
-            "bundle_invoice_genai_failed"
-          ].include?(code)
-        end
       end
     end
   end

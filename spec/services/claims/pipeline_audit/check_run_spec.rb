@@ -143,7 +143,6 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
         total_files: total_files,
         completed_files: total_files,
         failed_files: 0,
-        messages: [],
         completed_at: Time.current
       }.merge(attrs)
     )

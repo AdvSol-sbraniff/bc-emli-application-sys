@@ -51,7 +51,6 @@ module Claims
             total_files: files.size,
             completed_files: 0,
             failed_files: 0,
-            messages: [],
             created_at: Time.current,
             updated_at: Time.current
           )
@@ -101,24 +100,20 @@ module Claims
             status: "failed",
             error_text:
               "One or more evidence files failed during upload package staging.",
+            **::Claims::Invoices::FailureSubtypes.step_attributes(
+              status: failure_status,
+              status_subtype: shell_invoice.status_subtype
+            ),
             updated_at: Time.current
           )
           ingest_run.update!(
             status: "failed",
             failed_files: failed_results.size,
-            messages:
-              parse_ingest_messages(ingest_run.messages) +
-                [
-                  {
-                    level: "error",
-                    status: failure_status,
-                    status_subtype: shell_invoice.status_subtype,
-                    code: shell_invoice.status_subtype,
-                    contractor_message: failure_payload[:failure_message],
-                    message:
-                      "One or more evidence files failed during upload package staging."
-                  }
-                ],
+            failure_status: failure_status,
+            failure_status_subtype: shell_invoice.status_subtype,
+            pipeline_error_code: shell_invoice.status_subtype,
+            pipeline_error_description:
+              "Upload package staging failed: #{shell_invoice.status_subtype}.",
             completed_at: Time.current,
             updated_at: Time.current
           )
@@ -267,7 +262,7 @@ module Claims
             job_id: jid,
             ingest_document_id: ingest_document.id
           }
-        rescue => e
+        rescue StandardError => e
           Rails.logger.error(
             "[claims][ingest][#{log_prefix}] file failed index=#{index + 1} filename=#{name.inspect} " \
               "ingest_document_id=#{ingest_document&.id}: #{e.class}: #{e.message}"
@@ -351,7 +346,7 @@ module Claims
         ::Claims::Ingest::CleanupFailedContractorUpload.call(
           ingest_run: ingest_run
         )
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][#{log_prefix}] cleanup failed ingest_run_id=#{ingest_run.id}: #{e.class}: #{e.message}"
         )
@@ -368,12 +363,11 @@ module Claims
           step_type: "ocr_read",
           status: "failed",
           error_text: "ocr_enqueue_or_upload_failed: #{error.message}",
-          di_results_json:
-            ::Claims::Invoices::FailureSubtypes.payload(
-              status: "technical_failure",
-              status_subtype: status_subtype,
-              error: error
-            ),
+          **::Claims::Invoices::FailureSubtypes.step_attributes(
+            status: "technical_failure",
+            status_subtype: status_subtype,
+            error: error
+          ),
           created_at: Time.current,
           updated_at: Time.current
         )
@@ -399,21 +393,6 @@ module Claims
 
         return if orphaned_failures.zero?
 
-        messages = parse_ingest_messages(ingest_run.messages)
-        messages +=
-          results
-            .select do |result|
-              result[:status] == "failed" &&
-                result[:ingest_document_id].to_s.strip.empty?
-            end
-            .map do |result|
-              {
-                level: "error",
-                file: result[:original_filename],
-                message: result[:error]
-              }
-            end
-
         failed_files = ingest_run.failed_files.to_i + orphaned_failures
         completed_files = ingest_run.completed_files.to_i
         processed_files = completed_files + failed_files
@@ -429,19 +408,13 @@ module Claims
           status: status,
           total_files: total_files,
           failed_files: failed_files,
-          messages: messages,
+          pipeline_error_code: "upload_unexpected_exception",
+          pipeline_error_description:
+            "#{orphaned_failures} file upload #{"failure".pluralize(orphaned_failures)} could not be attached to an ingest document.",
           completed_at:
             %w[succeeded failed partial].include?(status) ? Time.current : nil,
           updated_at: Time.current
         )
-      end
-
-      def parse_ingest_messages(messages)
-        return messages if messages.is_a?(Array)
-
-        JSON.parse(messages.to_s)
-      rescue JSON::ParserError, TypeError
-        []
       end
     end
   end

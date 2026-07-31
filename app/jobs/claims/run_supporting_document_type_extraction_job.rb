@@ -77,21 +77,22 @@ module Claims
       )
 
       advance_run!(ingest_run_id: ingest_run_id)
-    rescue => e
+    rescue StandardError => e
+      failure_status = ::Claims::Invoices::FailureSubtypes.genai_status(e)
       status_subtype = ::Claims::Invoices::FailureSubtypes.genai(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
-        genai_results_json:
-          ::Claims::Invoices::FailureSubtypes.payload(
-            status: "technical_failure",
-            status_subtype: status_subtype,
-            error: e
-          ),
+        genai_results_json: nil,
+        **::Claims::Invoices::FailureSubtypes.step_attributes(
+          status: failure_status,
+          status_subtype: status_subtype,
+          error: e
+        ),
         updated_at: Time.current
       )
       advance_run!(ingest_run_id: ingest_run_id)
-      raise
+      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     private
@@ -171,24 +172,24 @@ module Claims
       [
         { role: "system", content: [{ type: "input_text", text: sys }] },
         { role: "user", content: [{ type: "input_text", text: <<~TEXT }] },
-                User record: Selected supporting document type
-                supporting_document_type_key: #{type.type_key}
-                supporting_document_type_description: #{type.description}
+          User record: Selected supporting document type
+          supporting_document_type_key: #{type.type_key}
+          supporting_document_type_description: #{type.description}
 
-                #{field_tasks}
-              TEXT
+          #{field_tasks}
+        TEXT
         { role: "user", content: [{ type: "input_text", text: <<~TEXT }] }
-                User record: Supporting documents to extract as one type-level set
-                #{document_context(documents).to_json}
+          User record: Supporting documents to extract as one type-level set
+          #{document_context(documents).to_json}
 
-                Actual ask:
-                Extract the configured supporting_document_located_fields and relevant visual_findings separately for each supplied supporting document.
-                Use each file's DI-read text, filename, metadata, and attached file visuals when available.
-                Return one supporting_document_located_fields_by_document[] object for every supplied supporting document.
-                Copy each supporting_document_id exactly.
-                Do not return group-level located fields or final eligibility decisions.
-                Reply must be strict JSON using the supporting-document type extraction schema from the system record.
-              TEXT
+          Actual ask:
+          Extract the configured supporting_document_located_fields and relevant visual_findings separately for each supplied supporting document.
+          Use each file's DI-read text, filename, metadata, and attached file visuals when available.
+          Return one supporting_document_located_fields_by_document[] object for every supplied supporting document.
+          Copy each supporting_document_id exactly.
+          Do not return group-level located fields or final eligibility decisions.
+          Reply must be strict JSON using the supporting-document type extraction schema from the system record.
+        TEXT
       ]
     end
 
@@ -228,28 +229,11 @@ module Claims
       attachments: [],
       diagnostic_context: {}
     )
-      base = ENV.fetch("INV_NODE_BASE_URL")
-      uri = URI("#{base}/inv/genai")
-
-      req = Net::HTTP::Post.new(uri)
-      req["Content-Type"] = "application/json"
-      req.body =
-        JSON.generate(
-          contextwindowjson: contextwindowjson,
-          attachments: attachments,
-          diagnostic_context: diagnostic_context
-        )
-
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.open_timeout = 10
-      http.read_timeout = 300
-
-      resp = http.request(req)
-      unless resp.is_a?(Net::HTTPSuccess)
-        raise "Node GenAI failed #{resp.code}: #{resp.body.to_s[0, 500]}"
-      end
-
-      JSON.parse(resp.body)
+      ::Claims::Genai::NodeClient.call(
+        contextwindowjson: contextwindowjson,
+        attachments: attachments,
+        diagnostic_context: diagnostic_context
+      )
     end
 
     def genai_diagnostic_context(

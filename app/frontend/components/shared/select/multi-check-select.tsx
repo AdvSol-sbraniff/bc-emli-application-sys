@@ -9,6 +9,7 @@ interface IMultiCheckSelectProps<T extends string> {
   placeholder?: string;
   label?: string;
   menuListMinW?: string;
+  showSelectedValues?: boolean;
 }
 
 export const MultiCheckSelect = <T extends string>({
@@ -18,6 +19,7 @@ export const MultiCheckSelect = <T extends string>({
   label,
   placeholder = 'Select items...',
   menuListMinW,
+  showSelectedValues = true,
 }: IMultiCheckSelectProps<T>) => {
   const toggleItem = (value: T) => {
     const newValues = selectedValues.includes(value)
@@ -50,7 +52,7 @@ export const MultiCheckSelect = <T extends string>({
           _focus={{ boxShadow: 'outline' }}
           rightIcon={<CaretDown />}
         >
-          {selectedLabels || placeholder}
+          {showSelectedValues ? selectedLabels || placeholder : placeholder}
         </MenuButton>
         <MenuList maxH="200px" minW={menuListMinW} overflowY="auto">
           {allItems.map((item) => (

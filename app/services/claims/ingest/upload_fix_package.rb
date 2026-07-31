@@ -68,7 +68,7 @@ module Claims
         @clone_supporting_document_ids =
           Array(clone_supporting_document_ids).flatten.compact.map(&:to_s)
         @clone_all_current_supporting_documents =
-          !!clone_all_current_supporting_documents
+          !clone_all_current_supporting_documents.nil?
         @files = Array(files).flatten.compact
       end
 
@@ -96,10 +96,6 @@ module Claims
               total_files: total_file_count(source_invoice_version),
               completed_files: 0,
               failed_files: 0,
-              messages: [
-                "Fix package upload started.",
-                "Selected current-version evidence will be cloned into the next version."
-              ],
               created_at: now,
               updated_at: now
             )
@@ -187,20 +183,19 @@ module Claims
           "Fix package accepted. The next invoice version is being prepared.",
           nil
         )
-      rescue => e
+      rescue StandardError => e
         failure_status, failure_subtype =
           upload_fix_failure_status_and_subtype(e)
-        failure_payload =
-          ::Claims::Invoices::FailureSubtypes.payload(
-            status: failure_status,
-            status_subtype: failure_subtype,
-            error: e
-          )
         begin
           stage_step&.update!(
             status: "failed",
             error_text: "#{e.class}: #{e.message}",
-            genai_results_json: failure_payload,
+            genai_results_json: nil,
+            **::Claims::Invoices::FailureSubtypes.step_attributes(
+              status: failure_status,
+              status_subtype: failure_subtype,
+              error: e
+            ),
             updated_at: Time.current
           )
           invoice&.set_workflow_status!(
@@ -401,32 +396,31 @@ module Claims
         new_invoice_version:,
         now:
       )
-        document =
-          ::Claims::IngestDocument.create!(
-            ingest_run_id: ingest_run.id,
-            session_id: invoice.session_id,
-            contractor_id: invoice.contractor_id,
-            invoice_id: invoice.id,
-            resolved_invoice_id: invoice.id,
-            resolved_invoice_version_id: new_invoice_version.id,
-            storage_provider: new_invoice_version.storage_provider,
-            storage_key: new_invoice_version.storage_key,
-            original_filename: new_invoice_version.original_filename,
-            content_type: new_invoice_version.content_type,
-            byte_size: new_invoice_version.byte_size,
-            sha256: new_invoice_version.sha256,
-            di_read_raw_json: source_invoice_version.di_raw_json,
-            classifier_raw_json: nil,
-            document_kind: "invoice",
-            document_kind_confidence: 100,
-            document_kind_reason: "Cloned from prior invoice version.",
-            classification_status: "classified",
-            classification_confidence: 100,
-            classification_reason: "Cloned from prior invoice version.",
-            classified_at: now,
-            created_at: now,
-            updated_at: now
-          )
+        ::Claims::IngestDocument.create!(
+          ingest_run_id: ingest_run.id,
+          session_id: invoice.session_id,
+          contractor_id: invoice.contractor_id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          resolved_invoice_version_id: new_invoice_version.id,
+          storage_provider: new_invoice_version.storage_provider,
+          storage_key: new_invoice_version.storage_key,
+          original_filename: new_invoice_version.original_filename,
+          content_type: new_invoice_version.content_type,
+          byte_size: new_invoice_version.byte_size,
+          sha256: new_invoice_version.sha256,
+          di_read_raw_json: source_invoice_version.di_raw_json,
+          classifier_raw_json: nil,
+          document_kind: "invoice",
+          document_kind_confidence: 100,
+          document_kind_reason: "Cloned from prior invoice version.",
+          classification_status: "classified",
+          classification_confidence: 100,
+          classification_reason: "Cloned from prior invoice version.",
+          classified_at: now,
+          created_at: now,
+          updated_at: now
+        )
       end
 
       def clone_supporting_documents!(
@@ -528,38 +522,37 @@ module Claims
         new_doc:,
         now:
       )
-        document =
-          ::Claims::IngestDocument.create!(
-            ingest_run_id: ingest_run.id,
-            session_id: invoice.session_id,
-            contractor_id: invoice.contractor_id,
-            invoice_id: invoice.id,
-            resolved_invoice_id: invoice.id,
-            resolved_invoice_version_id: new_doc.invoice_version_id,
-            promoted_supporting_document_id: new_doc.id,
-            storage_provider: new_doc.storage_provider,
-            storage_key: new_doc.storage_key,
-            original_filename: new_doc.original_filename,
-            content_type: new_doc.content_type,
-            byte_size: new_doc.byte_size,
-            sha256: new_doc.sha256,
-            di_read_raw_json: new_doc.di_read_raw_json,
-            classifier_raw_json: new_doc.classifier_raw_json,
-            document_kind: "supporting_document",
-            document_kind_confidence: 100,
-            document_kind_reason: "Cloned from prior invoice version.",
-            supporting_document_type_id: new_doc.supporting_document_type_id,
-            classification_status: new_doc.classification_status,
-            classification_confidence: new_doc.classification_confidence,
-            classification_reason: new_doc.classification_reason,
-            supporting_document_routing_quality:
-              new_doc.supporting_document_routing_quality,
-            supporting_document_routing_quality_reason:
-              new_doc.supporting_document_routing_quality_reason,
-            classified_at: now,
-            created_at: now,
-            updated_at: now
-          )
+        ::Claims::IngestDocument.create!(
+          ingest_run_id: ingest_run.id,
+          session_id: invoice.session_id,
+          contractor_id: invoice.contractor_id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          resolved_invoice_version_id: new_doc.invoice_version_id,
+          promoted_supporting_document_id: new_doc.id,
+          storage_provider: new_doc.storage_provider,
+          storage_key: new_doc.storage_key,
+          original_filename: new_doc.original_filename,
+          content_type: new_doc.content_type,
+          byte_size: new_doc.byte_size,
+          sha256: new_doc.sha256,
+          di_read_raw_json: new_doc.di_read_raw_json,
+          classifier_raw_json: new_doc.classifier_raw_json,
+          document_kind: "supporting_document",
+          document_kind_confidence: 100,
+          document_kind_reason: "Cloned from prior invoice version.",
+          supporting_document_type_id: new_doc.supporting_document_type_id,
+          classification_status: new_doc.classification_status,
+          classification_confidence: new_doc.classification_confidence,
+          classification_reason: new_doc.classification_reason,
+          supporting_document_routing_quality:
+            new_doc.supporting_document_routing_quality,
+          supporting_document_routing_quality_reason:
+            new_doc.supporting_document_routing_quality_reason,
+          classified_at: now,
+          created_at: now,
+          updated_at: now
+        )
       end
 
       def build_new_file_documents!(
@@ -727,20 +720,10 @@ module Claims
         ingest_run.update!(
           status: "failed",
           failed_files: 1,
-          messages: [
-            {
-              level: "error",
-              status: status,
-              status_subtype: status_subtype,
-              code: status_subtype,
-              contractor_message:
-                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-                  status,
-                  status_subtype
-                ),
-              message: error.message.to_s
-            }
-          ],
+          failure_status: status,
+          failure_status_subtype: status_subtype,
+          pipeline_error_code: status_subtype,
+          pipeline_error_description: "Fix upload failed: #{status_subtype}.",
           completed_at: Time.current,
           updated_at: Time.current
         )

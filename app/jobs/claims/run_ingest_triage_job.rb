@@ -15,6 +15,7 @@ module Claims
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
       end
+
       step_type = classifier_step_type_for(requested_step_type)
 
       step =
@@ -65,21 +66,22 @@ module Claims
       )
 
       advance_run!(ingest_run_id: ingest_run_id)
-    rescue => e
+    rescue StandardError => e
+      failure_status = ::Claims::Invoices::FailureSubtypes.genai_status(e)
       status_subtype = ::Claims::Invoices::FailureSubtypes.genai(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
-        genai_results_json:
-          ::Claims::Invoices::FailureSubtypes.payload(
-            status: "technical_failure",
-            status_subtype: status_subtype,
-            error: e
-          ),
+        genai_results_json: nil,
+        **::Claims::Invoices::FailureSubtypes.step_attributes(
+          status: failure_status,
+          status_subtype: status_subtype,
+          error: e
+        ),
         updated_at: Time.current
       )
       advance_run!(ingest_run_id: ingest_run_id)
-      raise
+      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     private
@@ -145,6 +147,7 @@ module Claims
       if sys.strip.empty?
         raise "validationgenai_config.document_triage_system_record is empty"
       end
+
       sys = "#{sys.rstrip}\n\n#{personal_information_classifier_config}"
 
       messages = [
@@ -159,20 +162,20 @@ module Claims
       messages << {
         role: "user",
         content: [{ type: "input_text", text: <<~TEXT }]
-              User record: Document to classify
-              classifier_step_type: #{step_type}
-              File metadata:
-              original_filename: #{document.original_filename}
-              content_type: #{document.content_type}
-              byte_size: #{document.byte_size}
+          User record: Document to classify
+          classifier_step_type: #{step_type}
+          File metadata:
+          original_filename: #{document.original_filename}
+          content_type: #{document.content_type}
+          byte_size: #{document.byte_size}
 
-              Document Intelligence raw json:
-              #{document.di_read_raw_json.to_json}
+          Document Intelligence raw json:
+          #{document.di_read_raw_json.to_json}
 
-              Actual ask:
-              #{classifier_actual_ask}
-              Reply must be strict JSON using the classifier schema from the system record.
-            TEXT
+          Actual ask:
+          #{classifier_actual_ask}
+          Reply must be strict JSON using the classifier schema from the system record.
+        TEXT
       }
 
       messages
@@ -196,28 +199,11 @@ module Claims
       attachments: [],
       diagnostic_context: {}
     )
-      base = ENV.fetch("INV_NODE_BASE_URL")
-      uri = URI("#{base}/inv/genai")
-
-      req = Net::HTTP::Post.new(uri)
-      req["Content-Type"] = "application/json"
-      req.body =
-        JSON.generate(
-          contextwindowjson: contextwindowjson,
-          attachments: attachments,
-          diagnostic_context: diagnostic_context
-        )
-
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.open_timeout = 10
-      http.read_timeout = 300
-
-      resp = http.request(req)
-      unless resp.is_a?(Net::HTTPSuccess)
-        raise "Node GenAI failed #{resp.code}: #{resp.body.to_s[0, 500]}"
-      end
-
-      JSON.parse(resp.body)
+      ::Claims::Genai::NodeClient.call(
+        contextwindowjson: contextwindowjson,
+        attachments: attachments,
+        diagnostic_context: diagnostic_context
+      )
     end
 
     def genai_diagnostic_context(document:, step_type:, ingest_run_id:)

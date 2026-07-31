@@ -1,11 +1,12 @@
 import {
+  Badge,
   Box,
+  Button,
   Container,
   Flex,
   FormControl,
   FormLabel,
   Hide,
-  IconButton,
   Input,
   Select,
   Show,
@@ -18,11 +19,9 @@ import {
   Text,
   Tooltip,
 } from '@chakra-ui/react';
-import { PencilIcon, XCircle } from '@phosphor-icons/react';
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as ReactRouterLink } from 'react-router-dom';
 import { useMst, useServerAPI } from '../../../setup/root';
 import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
 import { getRuntimeBooleanMetaValue } from '../../../utils/utility-functions';
@@ -96,12 +95,40 @@ function contractorStatusLabel(status?: string | null, statusSubtype?: string | 
   return invoiceStatusCopy(status, statusSubtype).label;
 }
 
+function lastUpdatedAt(row: ContractorPortalRow) {
+  return row.statusUpdatedAt || row.latestInvoiceVersionUpdatedAt || row.invoiceUpdatedAt || row.invoiceCreatedAt || '';
+}
+
 const contractorStatusFilterOptions = INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
   label: group.label,
   value: group.statuses.join(','),
 }));
 
 const DEFAULT_CONTRACTOR_STATUS_FILTER = 'genai_complete,contractor_revision_inbox';
+
+const STATUS_COMPLETION_RANK: Record<string, number> = {
+  approved_paid: 0,
+  ineligible: 0,
+  contractor_withdrawn: 0,
+  approved_pending: 1,
+  in_review: 2,
+  contractor_revision_inbox: 3,
+  admin_review_inbox: 4,
+  genai_complete: 5,
+  genai_failed: 6,
+  genai_in_progress: 7,
+  genai_queued: 8,
+  ocr_complete: 9,
+  ocr_failed: 10,
+  ocr_in_progress: 11,
+  ocr_queued: 12,
+  package_needs_correction: 13,
+  upload_complete: 14,
+  upload_failed: 15,
+  upload_in_progress: 16,
+  upload_queued: 17,
+  technical_failure: 18,
+};
 
 const selectedStatusGroupValuesFor = (statusFilter: string) => {
   const selectedStatuses = new Set(
@@ -141,30 +168,26 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
   const sorted = [...rows];
 
   sorted.sort((left, right) => {
-    const leftUpdated = left.statusUpdatedAt || left.latestInvoiceVersionUpdatedAt || '';
-    const rightUpdated = right.statusUpdatedAt || right.latestInvoiceVersionUpdatedAt || '';
+    const leftUpdated = lastUpdatedAt(left);
+    const rightUpdated = lastUpdatedAt(right);
+    const leftCompletionRank = STATUS_COMPLETION_RANK[left.status];
+    const rightCompletionRank = STATUS_COMPLETION_RANK[right.status];
+    const leftRankKnown = leftCompletionRank !== undefined;
+    const rightRankKnown = rightCompletionRank !== undefined;
 
     switch (sort) {
-      case 'created_at:asc':
-        return String(left.invoiceCreatedAt || '').localeCompare(String(right.invoiceCreatedAt || ''));
-      case 'created_at:desc':
-        return String(right.invoiceCreatedAt || '').localeCompare(String(left.invoiceCreatedAt || ''));
-      case 'address:asc':
-        return String(left.latestDiOcrCustomerAddress || left.invoiceId).localeCompare(
-          String(right.latestDiOcrCustomerAddress || right.invoiceId),
-        );
-      case 'address:desc':
-        return String(right.latestDiOcrCustomerAddress || right.invoiceId).localeCompare(
-          String(left.latestDiOcrCustomerAddress || left.invoiceId),
-        );
-      case 'status:asc':
-        return contractorStatusLabel(left.status, left.statusSubtype).localeCompare(
-          contractorStatusLabel(right.status, right.statusSubtype),
-        );
-      case 'status:desc':
-        return contractorStatusLabel(right.status, right.statusSubtype).localeCompare(
-          contractorStatusLabel(left.status, left.statusSubtype),
-        );
+      case 'status_completion:most':
+      case 'status_completion:least': {
+        if (leftRankKnown !== rightRankKnown) return leftRankKnown ? -1 : 1;
+
+        if (leftRankKnown && rightRankKnown && leftCompletionRank !== rightCompletionRank) {
+          return sort === 'status_completion:most'
+            ? leftCompletionRank - rightCompletionRank
+            : rightCompletionRank - leftCompletionRank;
+        }
+
+        return String(rightUpdated).localeCompare(String(leftUpdated));
+      }
       case 'updated_at:asc':
         return String(leftUpdated).localeCompare(String(rightUpdated));
       case 'updated_at:desc':
@@ -180,6 +203,8 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
   const title = row.latestDiOcrCustomerAddress || 'Service address unavailable';
   const statusCopy = invoiceStatusCopy(row.status, row.statusSubtype);
   const statusHint = `${statusCopy.hint} Technical status: ${row.status || 'unknown'}.`;
+  const isPrecheckContinuation = row.status === 'genai_complete' && !row.invoiceSubmittedAt;
+  const actionLabel = isPrecheckContinuation ? 'Continue' : 'View';
   const ocrFacts = [
     row.latestDiOcrInvoiceId ? ['Invoice #', row.latestDiOcrInvoiceId] : null,
     row.latestDiOcrCustomerName ? ['Customer', row.latestDiOcrCustomerName] : null,
@@ -214,17 +239,17 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
               <Flex gap={3} wrap="wrap">
                 {ocrFacts.map(([label, value]) => (
                   <Box key={`${row.invoiceId}-${label}`} minW="130px">
-                    <Text fontSize="xs" color="greys.grey01" fontWeight="bold" textTransform="uppercase">
+                    <Text fontSize="md" color="#2D2D2D">
                       {label}
                     </Text>
-                    <Text fontSize="sm">{value}</Text>
+                    <Text fontSize="md">{value}</Text>
                   </Box>
                 ))}
               </Flex>
             ) : null}
 
             <Flex gap={4} flex="1" alignItems="end" wrap="wrap">
-              <Text>
+              <Text fontSize="md" color="#2D2D2D">
                 Started on:
                 <Text as="span"> </Text>
                 <Show below="md">
@@ -238,20 +263,20 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
               <Show below="sm">
                 <Spacer />
               </Show>
-              <Text>
+              <Text fontSize="md" color="#2D2D2D">
                 Last updated:
                 <Text as="span"> </Text>
                 <Show below="md">
                   <br />
                 </Show>
-                {formatTimestamp(row.latestInvoiceVersionUpdatedAt)}
+                {formatTimestamp(lastUpdatedAt(row))}
               </Text>
               {row.invoiceSubmittedAt ? (
                 <>
                   <Show below="sm">
                     <Spacer />
                   </Show>
-                  <Text>
+                  <Text fontSize="md" color="#2D2D2D">
                     Submitted:
                     <Text as="span"> </Text>
                     <Show below="md">
@@ -266,7 +291,7 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
                   <Show below="sm">
                     <Spacer />
                   </Show>
-                  <Text>
+                  <Text fontSize="md" color="#2D2D2D">
                     Submitted by:
                     <Text as="span"> </Text>
                     <Show below="md">
@@ -287,29 +312,43 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
         </Flex>
 
         <Flex direction="column" align={{ base: 'flex-start', md: 'flex-end' }} gap={4} flexShrink={0}>
+          <Tooltip label={statusHint} hasArrow>
+            <Badge
+              p={1}
+              fontSize="md"
+              color="greys.anotherGrey"
+              bg="theme.orangeLight02"
+              borderWidth="1px"
+              borderColor="theme.orange"
+              borderRadius="md"
+              fontWeight="bold"
+              textTransform="uppercase"
+              whiteSpace="nowrap"
+              aria-label={`Invoice status: ${statusCopy.label}`}
+            >
+              {contractorStatusLabel(row.status, row.statusSubtype)}
+            </Badge>
+          </Tooltip>
+
           <Box>
-            <Text align={{ base: 'left', md: 'right' }} variant="tiny_uppercase">
+            <Text align={{ base: 'left', md: 'right' }} fontSize="md" color="#2D2D2D">
               Reference #
             </Text>
-            <Text align={{ base: 'left', md: 'right' }}>{formatClaimsReferenceNumber(row.referenceNumber)}</Text>
+            <Text align={{ base: 'left', md: 'right' }} fontSize="md">
+              {formatClaimsReferenceNumber(row.referenceNumber)}
+            </Text>
           </Box>
 
-          <Tooltip label={statusHint}>
-            <Text fontSize="sm" fontWeight="semibold" color="gray.700">
-              {contractorStatusLabel(row.status, row.statusSubtype)}
-            </Text>
-          </Tooltip>
-
-          <Tooltip label="Edit or view" hasArrow>
-            <IconButton
-              as={ReactRouterLink}
-              to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
-              aria-label={`Edit or view invoice submission for ${title}`}
-              icon={<PencilIcon size={20} />}
-              variant="outline"
-              borderRadius="full"
-            />
-          </Tooltip>
+          <RouterLinkButton
+            to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
+            aria-label={`${actionLabel} invoice submission for ${title}`}
+            variant={isPrecheckContinuation ? 'secondary' : 'primary'}
+            bg={isPrecheckContinuation ? 'greys.white' : undefined}
+            color={isPrecheckContinuation ? '#2D2D2D' : undefined}
+            borderColor={isPrecheckContinuation ? '#2D2D2D' : undefined}
+          >
+            {actionLabel}
+          </RouterLinkButton>
         </Flex>
       </Flex>
     </Flex>
@@ -497,58 +536,57 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                     w={{ base: 'full', md: 'fit-content' }}
                   >
                     <Flex direction={{ base: 'column', md: 'row' }} alignItems={{ md: 'end', base: 'stretch' }} gap={4}>
-                      <FormControl flex={1}>
-                        <FormLabel>{t('ui.search')}</FormLabel>
-                        <Box minW={{ md: 250, base: '100%' }}>
-                          <Input
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Search invoices..."
-                            bg="white"
-                          />
-                        </Box>
-                      </FormControl>
-
-                      <FormControl w={{ base: 'full', md: '280px' }}>
-                        <FormLabel>Status</FormLabel>
+                      <FormControl w={{ base: 'full', md: '200px' }}>
+                        <FormLabel fontSize="md" color="#2D2D2D">
+                          Filter By Status
+                        </FormLabel>
                         <MultiCheckSelect
                           selectedValues={selectedStatusGroupValues}
                           setSelectedValues={(values) => setStatusFilter(statusFilterFromGroupValues(values))}
                           allItems={contractorStatusFilterOptions}
-                          placeholder="All statuses"
+                          placeholder="Choose statuses"
                           menuListMinW="360px"
+                          showSelectedValues={false}
                         />
                       </FormControl>
 
-                      <FormControl w={{ base: 'full', md: '220px' }}>
-                        <FormLabel>Sort</FormLabel>
+                      <FormControl w={{ base: 'full', md: '240px' }}>
+                        <FormLabel fontSize="md" color="#2D2D2D">
+                          {t('ui.search')}
+                        </FormLabel>
+                        <Input
+                          value={query}
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder="Search invoices..."
+                          bg="white"
+                        />
+                      </FormControl>
+
+                      <FormControl w={{ base: 'full', md: '300px' }}>
+                        <FormLabel fontSize="md" color="#2D2D2D">
+                          Sort
+                        </FormLabel>
                         <Select value={sort} onChange={(event) => setSort(event.target.value)} bg="white">
-                          <option value="updated_at:desc">updated desc</option>
-                          <option value="updated_at:asc">updated asc</option>
-                          <option value="created_at:desc">created desc</option>
-                          <option value="created_at:asc">created asc</option>
-                          <option value="address:asc">address A-Z</option>
-                          <option value="address:desc">address Z-A</option>
-                          <option value="status:asc">status A-Z</option>
-                          <option value="status:desc">status Z-A</option>
+                          <option value="updated_at:desc">Last Updated - Newest First</option>
+                          <option value="updated_at:asc">Last Updated - Oldest First</option>
+                          <option value="status_completion:most">Status Most Complete</option>
+                          <option value="status_completion:least">Status Least Complete</option>
                         </Select>
                       </FormControl>
 
-                      {(query || statusFilter !== DEFAULT_CONTRACTOR_STATUS_FILTER || sort !== 'updated_at:desc') && (
-                        <Tooltip label="Clear filters">
-                          <IconButton
-                            aria-label="Clear filters"
-                            icon={<XCircle size={18} />}
-                            variant="outline"
-                            mb={{ base: 0, md: 2 }}
-                            onClick={() => {
-                              setQuery('');
-                              setStatusFilter(DEFAULT_CONTRACTOR_STATUS_FILTER);
-                              setSort('updated_at:desc');
-                            }}
-                          />
-                        </Tooltip>
-                      )}
+                      <Button
+                        variant="secondary"
+                        bg="greys.white"
+                        color="#2D2D2D"
+                        borderColor="#2D2D2D"
+                        onClick={() => {
+                          setQuery('');
+                          setStatusFilter(DEFAULT_CONTRACTOR_STATUS_FILTER);
+                          setSort('updated_at:desc');
+                        }}
+                      >
+                        Reset All
+                      </Button>
                     </Flex>
                   </Flex>
                 </Flex>

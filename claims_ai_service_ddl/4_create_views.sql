@@ -5,6 +5,8 @@ DROP VIEW IF EXISTS claims.v_reporting_invoice_business;
 DROP VIEW IF EXISTS claims.v_revision_request_grid;
 DROP VIEW IF EXISTS claims.v_conversation_message_grid;
 DROP VIEW IF EXISTS claims.v_invoice_grid;
+DROP VIEW IF EXISTS claims.v_ingest_step_runs;
+DROP VIEW IF EXISTS claims.v_ingest_runs;
 DROP VIEW IF EXISTS claims.v_current_invoice_versions;
 
 CREATE OR REPLACE VIEW claims.v_current_invoice_versions AS
@@ -275,6 +277,40 @@ JOIN (
   ORDER BY vent_fan_source_id, completed_at DESC NULLS LAST, started_at DESC, id DESC
 ) latest
   ON latest.id = run.id;
+
+
+-- View: ingest runs + contractor display fields
+-- Read model for the read-only Admin > AI System Settings > Ingest Runs grid.
+
+CREATE OR REPLACE VIEW claims.v_ingest_runs AS
+SELECT
+  ir.*,
+  c.business_name AS contractor_business_name,
+  c.number AS contractor_number,
+  CASE
+    WHEN ir.completed_at IS NULL THEN NULL
+    ELSE EXTRACT(EPOCH FROM (ir.completed_at - ir.created_at))::double precision
+  END AS duration_seconds
+FROM claims.ingest_runs ir
+LEFT JOIN public.contractors c
+  ON c.id = ir.contractor_id;
+
+
+-- View: ingest step runs + readable target fields
+-- Preserves one row per step attempt while exposing the original filename
+-- from the retained ingest-document processing ledger.
+
+CREATE OR REPLACE VIEW claims.v_ingest_step_runs AS
+SELECT
+  isr.*,
+  idoc.original_filename AS ingest_document_original_filename,
+  CASE
+    WHEN isr.completed_at IS NULL THEN NULL
+    ELSE EXTRACT(EPOCH FROM (isr.completed_at - isr.created_at))::double precision
+  END AS duration_seconds
+FROM claims.ingest_step_runs isr
+LEFT JOIN claims.ingest_documents idoc
+  ON idoc.id = isr.ingest_document_id;
 
 
 

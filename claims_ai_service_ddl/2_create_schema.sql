@@ -3066,7 +3066,8 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
   completed_files integer NOT NULL DEFAULT 0,
   failed_files    integer NOT NULL DEFAULT 0,
 
-  messages jsonb NULL, -- array of strings, optional
+  failure_status text NULL,
+  failure_status_subtype text NULL,
   pipeline_error_code text NULL,
   pipeline_error_description text NULL,
 
@@ -3092,6 +3093,54 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
 
   CONSTRAINT ingest_runs_status_chk
     CHECK (status IN ('queued','running','succeeded','failed','partial')),
+
+  CONSTRAINT ingest_runs_failure_status_chk
+    CHECK (
+      failure_status IS NULL
+      OR failure_status IN ('package_needs_correction','technical_failure')
+    ),
+
+  CONSTRAINT ingest_runs_failure_subtype_chk
+    CHECK (
+      failure_status_subtype IS NULL
+      OR failure_status_subtype IN (
+        'package_no_invoice_pdf',
+        'package_multiple_invoice_pdfs',
+        'package_invoice_not_pdf',
+        'package_replacement_not_invoice',
+        'package_replacement_multiple_files',
+        'package_unsupported_file_type',
+        'package_unreadable_file',
+        'package_duplicate_file_conflict',
+        'package_no_processable_files',
+        'package_invoice_classification_conflict',
+        'package_no_supported_upgrade_type',
+        'package_missing_required_fix_file',
+        'package_file_too_large',
+        'upload_service_no_response',
+        'upload_service_error',
+        'upload_service_malformed_response',
+        'upload_storage_key_missing',
+        'upload_storage_write_failure',
+        'upload_unexpected_exception',
+        'ocr_service_no_response',
+        'ocr_service_error',
+        'ocr_service_malformed_response',
+        'ocr_storage_read_failure',
+        'ocr_provider_timeout',
+        'ocr_unexpected_exception',
+        'genai_service_no_response',
+        'genai_service_error',
+        'genai_service_malformed_response',
+        'genai_provider_timeout',
+        'genai_unexpected_exception',
+        'code_rule_runtime_failure',
+        'configuration_missing',
+        'db_persistence_failure',
+        'worker_retry_exhausted',
+        'unknown_runtime_failure'
+      )
+    ),
 
   CONSTRAINT ingest_runs_counts_chk
     CHECK (
@@ -3180,7 +3229,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
   CONSTRAINT fk_ingest_documents_invoice
     FOREIGN KEY (invoice_id)
     REFERENCES claims.invoices(id)
-    ON DELETE CASCADE,
+    ON DELETE SET NULL,
 
   CONSTRAINT fk_ingest_documents_resolved_invoice
     FOREIGN KEY (resolved_invoice_id)
@@ -3279,16 +3328,28 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   -- failed states must provide error details
   error_text text NULL,
+  failure_status text NULL,
+  failure_status_subtype text NULL,
+  error_code text NULL,
+  error_category text NULL,
+  error_phase text NULL,
+  retryable boolean NULL,
+  diagnostic_id character varying(160) NULL,
+  provider_status smallint NULL,
+  provider_code character varying(160) NULL,
+  provider_attempt_count integer NULL,
 
   -- unlike invoice_versions this is a per run record which can be multiple
   di_results_json  jsonb NULL,
 
-  -- unlike invoice_versions table this is a per run genAI artifacts (retention indefinite for now)
+  -- Per-attempt GenAI results. Failed contractor-upload cleanup retains a
+  -- sanitized diagnostic summary and removes document/prompt payloads.
   genai_results_json  jsonb NULL,
   context_window_json jsonb NULL,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
+  completed_at timestamp(6) without time zone NULL,
 
   CONSTRAINT ingest_step_runs_pkey PRIMARY KEY (id),
 
@@ -3305,12 +3366,12 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   CONSTRAINT fk_ingest_step_runs_invoice_version
     FOREIGN KEY (invoice_version_id)
     REFERENCES claims.invoice_versions(id)
-    ON DELETE CASCADE,
+    ON DELETE SET NULL,
 
   CONSTRAINT fk_ingest_step_runs_ingest_document
     FOREIGN KEY (ingest_document_id)
     REFERENCES claims.ingest_documents(id)
-    ON DELETE CASCADE,
+    ON DELETE SET NULL,
 
   CONSTRAINT fk_ingest_step_runs_upgrade_type
     FOREIGN KEY (invoice_upgrade_type_id)
@@ -3337,6 +3398,78 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       (status = 'failed' AND error_text IS NOT NULL)
     ),
 
+  CONSTRAINT ingest_step_runs_failure_status_chk
+    CHECK (
+      failure_status IS NULL
+      OR failure_status IN ('package_needs_correction','technical_failure')
+    ),
+
+  CONSTRAINT ingest_step_runs_failure_subtype_chk
+    CHECK (
+      failure_status_subtype IS NULL
+      OR failure_status_subtype IN (
+        'package_no_invoice_pdf',
+        'package_multiple_invoice_pdfs',
+        'package_invoice_not_pdf',
+        'package_replacement_not_invoice',
+        'package_replacement_multiple_files',
+        'package_unsupported_file_type',
+        'package_unreadable_file',
+        'package_duplicate_file_conflict',
+        'package_no_processable_files',
+        'package_invoice_classification_conflict',
+        'package_no_supported_upgrade_type',
+        'package_missing_required_fix_file',
+        'package_file_too_large',
+        'upload_service_no_response',
+        'upload_service_error',
+        'upload_service_malformed_response',
+        'upload_storage_key_missing',
+        'upload_storage_write_failure',
+        'upload_unexpected_exception',
+        'ocr_service_no_response',
+        'ocr_service_error',
+        'ocr_service_malformed_response',
+        'ocr_storage_read_failure',
+        'ocr_provider_timeout',
+        'ocr_unexpected_exception',
+        'genai_service_no_response',
+        'genai_service_error',
+        'genai_service_malformed_response',
+        'genai_provider_timeout',
+        'genai_unexpected_exception',
+        'code_rule_runtime_failure',
+        'configuration_missing',
+        'db_persistence_failure',
+        'worker_retry_exhausted',
+        'unknown_runtime_failure'
+      )
+    ),
+
+  CONSTRAINT ingest_step_runs_error_code_format_chk
+    CHECK (
+      error_code IS NULL
+      OR error_code ~ '^[a-z][a-z0-9_]*$'
+    ),
+
+  CONSTRAINT ingest_step_runs_error_category_format_chk
+    CHECK (
+      error_category IS NULL
+      OR error_category ~ '^[a-z][a-z0-9_]*$'
+    ),
+
+  CONSTRAINT ingest_step_runs_provider_status_chk
+    CHECK (
+      provider_status IS NULL
+      OR provider_status BETWEEN 100 AND 599
+    ),
+
+  CONSTRAINT ingest_step_runs_provider_attempt_count_chk
+    CHECK (
+      provider_attempt_count IS NULL
+      OR provider_attempt_count > 0
+    ),
+
   -- Only require upgrade type for the new typed GenAI calls.
   CONSTRAINT ingest_step_runs_upgrade_type_required_for_typed_genai_chk
     CHECK (
@@ -3348,6 +3481,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   CONSTRAINT ingest_step_runs_target_required_chk
     CHECK (
       step_type IN ('upload_package_stage','fix_upload_package_stage')
+      OR (
+        status IN ('succeeded','failed')
+        AND invoice_version_id IS NULL
+        AND ingest_document_id IS NULL
+      )
       OR (
         invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
@@ -3367,6 +3505,12 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
 
   CONSTRAINT ingest_step_runs_target_compatibility_chk
     CHECK (
+      (
+        status IN ('succeeded','failed')
+        AND invoice_version_id IS NULL
+        AND ingest_document_id IS NULL
+      )
+      OR
       (
         step_type IN ('upload_package_stage','fix_upload_package_stage')
         AND invoice_version_id IS NULL
@@ -3432,6 +3576,15 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_supporting_document_type_step
 
 CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_on_iv_upgrade_step
   ON claims.ingest_step_runs (invoice_version_id, invoice_upgrade_type_id, step_type, created_at DESC);
+
+-- Structured failure analytics
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_error_code_created
+  ON claims.ingest_step_runs (error_code, created_at DESC)
+  WHERE error_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_provider_status_created
+  ON claims.ingest_step_runs (provider_status, created_at DESC)
+  WHERE provider_status IS NOT NULL;
 
 -- Prevent concurrent pipeline advancement from creating duplicate active/success
 -- rows for the same logical step target. Failed rows remain repeatable so worker

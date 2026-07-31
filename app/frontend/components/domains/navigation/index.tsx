@@ -70,6 +70,9 @@ const VentFanProductListAdminScreen = lazy(() =>
 );
 const DownloadsAdminScreen = lazy(() => import('../downloads-admin').then((module) => ({ default: module.default })));
 const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
+const IngestRunsAdminScreen = lazy(() =>
+  import('../ingest-runs-admin').then((module) => ({ default: module.default })),
+);
 
 // the invoicesadmin is in ../invoices-admin/
 // below is the code for it
@@ -482,6 +485,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/get-support': 'Support',
   '/heat-pump-product-list-admin': 'Heat Pump Product List Admin',
   '/hello-ai-admin': 'Hello AI Admin',
+  '/ingest-runs-admin': 'Ingest Runs',
   '/herv-product-list-admin': 'HERV ENERGY STAR Product List Admin',
   '/hpwh-product-list-admin': 'HPWH Product List Admin',
   '/invoice-supporting-documents-admin': 'Invoice Supporting Documents Admin',
@@ -1010,6 +1014,7 @@ const AppRoutes = observer(() => {
           <Route path="/herv-product-list-admin" element={<HervProductListAdminScreen />} />
           <Route path="/vent-fan-product-list-admin" element={<VentFanProductListAdminScreen />} />
           <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
+          <Route path="/ingest-runs-admin" element={<IngestRunsAdminScreen />} />
           <Route path="/contractorfixsimulation" element={<ContractorFixSimulationAdminScreen />} />
           <Route path="/advice-refresh-simulation-admin" element={<AdviceRefreshSimulationAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />

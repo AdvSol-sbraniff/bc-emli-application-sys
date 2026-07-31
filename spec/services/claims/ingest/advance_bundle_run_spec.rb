@@ -287,11 +287,12 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       ).to be_empty
       expect(Claims::RunOcrJob).not_to have_received(:perform_async)
       expect(Claims::RunGenaiJob).not_to have_received(:perform_async)
-      expect(run.messages).to include(
-        a_hash_including(
-          "code" => "invoice_bundle_no_supported_upgrade_type",
-          "level" => "error"
-        )
+      expect(run.pipeline_error_code).to eq(
+        "invoice_bundle_no_supported_upgrade_type"
+      )
+      expect(run.failure_status).to eq("package_needs_correction")
+      expect(run.failure_status_subtype).to eq(
+        "package_no_supported_upgrade_type"
       )
     end
 
@@ -958,6 +959,132 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       expect(run.reload.status).to eq("failed")
       expect(run.failed_files).to eq(1)
       expect(run.completed_at).to be_present
+    end
+
+    it "fails immediately when a classifier error is explicitly permanent" do
+      now = Time.zone.parse("2026-06-22 13:03:12")
+      contractor = Contractor.create!(business_name: "Permanent Failure")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "ocr_in_progress",
+          created_at: now,
+          updated_at: now
+        )
+      run =
+        Claims::IngestRun.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "running",
+          total_files: 1,
+          completed_files: 0,
+          failed_files: 0,
+          created_at: now,
+          updated_at: now
+        )
+      document =
+        Claims::IngestDocument.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          storage_provider: "azure_blob",
+          storage_key: "uploaded/corrupt.jpg",
+          original_filename: "Corrupt image.jpg",
+          content_type: "image/jpeg",
+          di_read_raw_json: {
+            "read" => "image"
+          },
+          created_at: now,
+          updated_at: now
+        )
+
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        ingest_document_id: document.id,
+        step_type: "ocr_read",
+        status: "succeeded",
+        created_at: now - 30.seconds,
+        updated_at: now - 20.seconds
+      )
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        ingest_document_id: document.id,
+        step_type: "classifier_files",
+        status: "failed",
+        error_text: "Node GenAI request failed.",
+        failure_status: "package_needs_correction",
+        failure_status_subtype: "package_unreadable_file",
+        error_code: "genai_input_image_invalid",
+        error_category: "provider_invalid_image",
+        retryable: false,
+        diagnostic_id: "diag-permanent",
+        provider_status: 400,
+        created_at: now,
+        updated_at: now
+      )
+
+      described_class.call(ingest_run_id: run.id)
+
+      expect(run.reload.status).to eq("failed")
+      expect(run.failed_files).to eq(1)
+      expect(run.pipeline_error_code).to eq("genai_input_image_invalid")
+      expect(run.pipeline_error_description).to eq(
+        "classifier_files failed; genai_input_image_invalid; provider HTTP 400; non-retryable; diagnostic diag-permanent."
+      )
+      expect(invoice.reload.status).to eq("package_needs_correction")
+      expect(invoice.status_subtype).to eq("package_unreadable_file")
+    end
+
+    it "waits for active parallel steps before cleaning failed contractor artifacts" do
+      contractor = Contractor.create!(business_name: "Parallel Cleanup")
+      session = Claims::Session.create!
+      run =
+        Claims::IngestRun.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "failed",
+          cleanup_failed_invoice_artifacts: true,
+          total_files: 2,
+          completed_files: 0,
+          failed_files: 1
+        )
+      active_step =
+        Claims::IngestStepRun.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          step_type: "upload_package_stage",
+          status: "in_progress"
+        )
+      service = described_class.new(ingest_run_id: run.id)
+      allow(Claims::Ingest::CleanupFailedContractorUpload).to receive(:call)
+
+      service.send(:cleanup_failed_contractor_upload!, run)
+
+      expect(
+        Claims::Ingest::CleanupFailedContractorUpload
+      ).not_to have_received(:call)
+
+      active_step.update!(
+        status: "failed",
+        error_text: "Cancelled after another parallel step failed.",
+        failure_status: "technical_failure",
+        failure_status_subtype: "unknown_runtime_failure",
+        error_code: "pipeline_cancelled_after_failure",
+        error_category: "pipeline_cancelled",
+        retryable: false
+      )
+
+      service.send(:cleanup_failed_contractor_upload!, run)
+
+      expect(Claims::Ingest::CleanupFailedContractorUpload).to have_received(
+        :call
+      ).with(ingest_run: run)
     end
   end
 end

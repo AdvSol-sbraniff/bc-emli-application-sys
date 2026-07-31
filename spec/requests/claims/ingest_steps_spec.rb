@@ -133,12 +133,30 @@ RSpec.describe "Claims ingest step history", type: :request do
       ingest_run =
         Claims::IngestRun.create!(
           session_id: session.id,
-          status: "succeeded",
+          status: "failed",
           total_files: 1,
-          completed_files: 1,
-          failed_files: 0,
+          completed_files: 0,
+          failed_files: 1,
+          failure_status: "technical_failure",
+          failure_status_subtype: "genai_service_error",
           pipeline_error_code: "checker_test_error",
           pipeline_error_description: "Checker test description."
+        )
+      failed_step =
+        Claims::IngestStepRun.create!(
+          ingest_run_id: ingest_run.id,
+          session_id: session.id,
+          step_type: "classifier_files",
+          status: "failed",
+          error_text: "Provider request failed.",
+          failure_status: "technical_failure",
+          failure_status_subtype: "genai_service_error",
+          error_code: "genai_provider_gateway_error",
+          error_category: "provider_gateway_error",
+          retryable: true,
+          diagnostic_id: "diag-admin-monitor",
+          provider_status: 503,
+          provider_code: "service_unavailable"
         )
 
       get "/api/claims/ingest/runs/#{ingest_run.id}"
@@ -150,6 +168,16 @@ RSpec.describe "Claims ingest step history", type: :request do
       expect(json_response.fetch("pipeline_error_description")).to eq(
         "Checker test description."
       )
+      expect(json_response.fetch("failure_status")).to eq("technical_failure")
+      expect(json_response.fetch("primary_failure")).to include(
+        "step_id" => failed_step.id,
+        "error_code" => "genai_provider_gateway_error",
+        "provider_status" => 503,
+        "provider_code" => "service_unavailable",
+        "retryable" => true,
+        "diagnostic_id" => "diag-admin-monitor"
+      )
+      expect(json_response).not_to have_key("messages")
     end
   end
 end

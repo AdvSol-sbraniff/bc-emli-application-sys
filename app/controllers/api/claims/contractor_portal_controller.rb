@@ -14,7 +14,6 @@ module Api
                           submit_to_admin
                           withdraw
                           ingest_run_show
-                          ingest_run_invoices
                           ingest_invoice_steps
                         ]
       skip_after_action :verify_policy_scoped, only: %i[index]
@@ -91,8 +90,6 @@ module Api
                 (
                   if invoice.respond_to?(:invoice_submitted_at)
                     invoice.invoice_submitted_at
-                  else
-                    nil
                   end
                 ),
               submitted:
@@ -164,7 +161,7 @@ module Api
           )
 
         render json: result, status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][upload_batch] ERROR: #{e.class}: #{e.message}"
         )
@@ -187,7 +184,7 @@ module Api
                status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Invoice not found" }, status: :not_found
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][revision_issues] ERROR: #{e.class}: #{e.message}"
         )
@@ -236,7 +233,7 @@ module Api
                status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Invoice not found" }, status: :not_found
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][conversation_messages] ERROR: #{e.class}: #{e.message}"
         )
@@ -285,7 +282,7 @@ module Api
                  error: e.record.errors.full_messages.join(", ")
                },
                status: :unprocessable_entity
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][mark_conversation_messages_read] ERROR: #{e.class}: #{e.message}"
         )
@@ -323,7 +320,7 @@ module Api
                  error: e.record.errors.full_messages.join(", ")
                },
                status: :unprocessable_entity
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][create_conversation_message] ERROR: #{e.class}: #{e.message}"
         )
@@ -365,7 +362,7 @@ module Api
                  error: e.record.errors.full_messages.join(", ")
                },
                status: :unprocessable_entity
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][update_conversation_message] ERROR: #{e.class}: #{e.message}"
         )
@@ -485,7 +482,7 @@ module Api
                status: :unprocessable_entity
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Invoice not found" }, status: :not_found
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][contractor_portal][submit_to_admin] ERROR: #{e.class}: #{e.message}"
         )
@@ -558,6 +555,7 @@ module Api
       def ingest_run_show
         run = contractor_ingest_run!
         failure_payload = contractor_ingest_run_failure_payload(run)
+        invoice_payload = contractor_ingest_run_invoice_payload(run)
 
         render json: {
                  id: run.id,
@@ -574,49 +572,15 @@ module Api
                  total_files: run.total_files,
                  completed_files: run.completed_files,
                  failed_files: run.failed_files,
-                 messages: run.messages,
                  created_at: run.created_at,
                  updated_at: run.updated_at,
                  completed_at: run.completed_at
-               },
+               }.merge(invoice_payload),
                status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Ingest run not found" }, status: :not_found
-      rescue => e
+      rescue StandardError => e
         render json: { error: e.message }, status: :unprocessable_entity
-      end
-
-      # GET /api/claims/contractor/ingest/runs/:ingest_run_id/invoices
-      def ingest_run_invoices
-        run = contractor_ingest_run!
-        rows =
-          contractor_ingest_run_invoice_rows(
-            ingest_run_id: run.id,
-            contractor_id: current_contractor.id
-          )
-        failure_payload = contractor_ingest_run_failure_payload(run)
-
-        render json: {
-                 rows: rows,
-                 failure_status: failure_payload[:failure_status],
-                 failure_status_subtype:
-                   failure_payload[:failure_status_subtype],
-                 failure_message: failure_payload[:failure_message],
-                 retry_guidance: failure_payload[:retry_guidance]
-               },
-               status: :ok
-      rescue ActiveRecord::RecordNotFound
-        render json: {
-                 rows: [],
-                 error: "Ingest run not found"
-               },
-               status: :not_found
-      rescue => e
-        render json: {
-                 rows: [],
-                 error: e.message
-               },
-               status: :unprocessable_entity
       end
 
       # GET /api/claims/contractor/ingest/invoices/:invoice_id/steps
@@ -650,7 +614,7 @@ module Api
                  error: "Invoice not found"
                },
                status: :not_found
-      rescue => e
+      rescue StandardError => e
         render json: {
                  rows: [],
                  error: e.message
@@ -660,87 +624,45 @@ module Api
 
       private
 
-      def contractor_ingest_run_invoice_rows(ingest_run_id:, contractor_id:)
-        rows_by_invoice_id = {}
-
-        documents =
-          ::Claims::IngestDocument
-            .where(ingest_run_id: ingest_run_id, contractor_id: contractor_id)
-            .where.not(resolved_invoice_id: nil)
-            .order(created_at: :asc)
-            .to_a
-
-        documents
-          .group_by(&:resolved_invoice_id)
-          .each do |invoice_id, docs|
-            invoice =
-              ::Claims::Invoice.find_by(
-                id: invoice_id,
-                contractor_id: contractor_id
-              )
-            next if invoice.nil?
-
-            primary_doc =
-              docs.find { |doc| doc.document_kind == "invoice" } || docs.first
-            invoice_version =
-              ::Claims::InvoiceVersion.find_by(
-                id:
-                  primary_doc&.resolved_invoice_version_id ||
-                    docs.map(&:resolved_invoice_version_id).compact.first
-              )
-
-            rows_by_invoice_id[invoice.id] = {
-              invoice_id: invoice.id,
-              invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
-              invoice_status_updated_at: invoice.status_updated_at,
-              invoice_version_id: invoice_version&.id,
-              invoice_versionno: invoice_version&.invoice_versionno,
-              original_filename:
-                primary_doc&.original_filename ||
-                  invoice_version&.original_filename,
-              created_at: invoice.created_at,
-              updated_at: invoice.updated_at
-            }.merge(invoice_status_subtype_copy(invoice))
-          end
-
-        invoice_version_ids =
-          ::Claims::IngestStepRun
-            .where(ingest_run_id: ingest_run_id)
-            .where.not(invoice_version_id: nil)
-            .distinct
-            .pluck(:invoice_version_id)
-
-        ::Claims::InvoiceVersion
-          .joins(:invoice)
-          .where(id: invoice_version_ids)
-          .where("claims.invoices.contractor_id = ?", contractor_id)
-          .order(created_at: :asc)
-          .each do |invoice_version|
-            invoice = invoice_version.invoice
-            rows_by_invoice_id[invoice.id] ||= {
-              invoice_id: invoice.id,
-              invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
-              invoice_status_updated_at: invoice.status_updated_at,
-              invoice_version_id: invoice_version.id,
-              invoice_versionno: invoice_version.invoice_versionno,
-              original_filename: invoice_version.original_filename,
-              created_at: invoice.created_at,
-              updated_at: invoice.updated_at
-            }.merge(invoice_status_subtype_copy(invoice))
-          end
-
-        rows_by_invoice_id.values.sort_by do |row|
-          row[:created_at] || Time.at(0)
+      def contractor_ingest_run_invoice_payload(run)
+        contractor_id = run.contractor_id.presence || current_contractor&.id
+        invoice_version =
+          ::Claims::InvoiceVersion.includes(:invoice).find_by(
+            id: run.resolved_invoice_version_id
+          )
+        if invoice_version&.invoice&.contractor_id.to_s != contractor_id.to_s
+          invoice_version = nil
         end
-      end
 
-      def invoice_status_subtype_copy(invoice)
-        ::Claims::Invoices::StatusSubtypes.invoice_row_copy(
-          invoice.status,
-          invoice.status_subtype
-        )
+        invoice =
+          invoice_version&.invoice ||
+            ::Claims::Invoice
+              .where(session_id: run.session_id, contractor_id: contractor_id)
+              .order(updated_at: :desc, created_at: :desc, id: :desc)
+              .first
+
+        if invoice && invoice_version.nil?
+          invoice_version =
+            ::Claims::InvoiceVersion
+              .where(invoice_id: invoice.id)
+              .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+              .first
+        end
+
+        can_continue =
+          run.status == "succeeded" && invoice&.status == "genai_complete" &&
+            invoice_version.present?
+
+        {
+          invoice_id: invoice&.id,
+          invoice_status: invoice&.status,
+          invoice_status_subtype: invoice&.status_subtype,
+          invoice_status_updated_at: invoice&.status_updated_at,
+          invoice_version_id: invoice_version&.id,
+          invoice_versionno: invoice_version&.invoice_versionno,
+          original_filename: invoice_version&.original_filename,
+          can_continue: can_continue
+        }
       end
 
       def contractor_ingest_invoice_step_rows(
@@ -751,8 +673,9 @@ module Api
         invoice = contractor_invoice!
         document_scope =
           ::Claims::IngestDocument.where(resolved_invoice_id: invoice.id)
-        document_scope =
-          document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+        if ingest_run_id
+          document_scope = document_scope.where(ingest_run_id: ingest_run_id)
+        end
         documents = document_scope.order(created_at: :asc).to_a
         documents_by_id = documents.index_by(&:id)
 
@@ -775,10 +698,10 @@ module Api
             )
             .where("iv.invoice_id = ?", invoice.id)
             .where(supporting_document_type_id: nil)
-        invoice_step_scope =
-          invoice_step_scope.where(
-            ingest_run_id: ingest_run_id
-          ) if ingest_run_id
+        if ingest_run_id
+          invoice_step_scope =
+            invoice_step_scope.where(ingest_run_id: ingest_run_id)
+        end
         invoice_steps = invoice_step_scope.to_a
         invoice_versions_by_id =
           ::Claims::InvoiceVersion.where(
@@ -955,22 +878,69 @@ module Api
       end
 
       def contractor_ingest_run_failure_payload(run)
-        messages = parse_messages(run.messages)
-        message_payload =
-          messages.reverse.find do |message|
-            message["contractor_message"].present?
-          end
-
-        if message_payload
+        run_failure_status = run.failure_status.to_s.strip
+        run_failure_subtype =
+          ::Claims::Invoices::StatusSubtypes.normalize(
+            run_failure_status,
+            run.failure_status_subtype
+          )
+        if run_failure_subtype.present?
           return(
             {
-              failure_status: message_payload["status"],
-              failure_status_subtype:
-                message_payload["status_subtype"] || message_payload["code"],
-              failure_message: message_payload["contractor_message"],
-              retry_guidance: nil
+              failure_status: run_failure_status,
+              failure_status_subtype: run_failure_subtype,
+              failure_message:
+                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+                  run_failure_status,
+                  run_failure_subtype
+                ),
+              retry_guidance:
+                ::Claims::Invoices::StatusSubtypes.retry_guidance(
+                  run_failure_status,
+                  run_failure_subtype
+                )
             }
           )
+        end
+
+        failed_steps =
+          ::Claims::IngestStepRun
+            .where(ingest_run_id: run.id, status: "failed")
+            .order(created_at: :asc, id: :asc)
+            .to_a
+        failed_step =
+          ::Claims::Invoices::FailureSubtypes.primary_failed_step(failed_steps)
+        if failed_step
+          status =
+            ::Claims::Invoices::FailureSubtypes.status_from_step(
+              failed_step,
+              fallback: "technical_failure"
+            )
+          subtype =
+            ::Claims::Invoices::FailureSubtypes.from_step(
+              failed_step,
+              fallback: run.pipeline_error_code
+            )
+          subtype =
+            ::Claims::Invoices::StatusSubtypes.normalize(status, subtype)
+          if subtype.present?
+            return(
+              {
+                failure_status: status,
+                failure_status_subtype: subtype,
+                failure_message:
+                  ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+                    status,
+                    subtype
+                  ),
+                retry_guidance:
+                  ::Claims::Invoices::StatusSubtypes.retry_guidance(
+                    status,
+                    subtype
+                  )
+              }
+            )
+          end
         end
 
         invoice =
@@ -983,30 +953,26 @@ module Api
             .order(updated_at: :desc)
             .first
 
-        return {} unless invoice
+        if invoice
+          return(
+            {
+              failure_status: invoice.status,
+              failure_status_subtype: invoice.status_subtype,
+              failure_message:
+                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+                  invoice.status,
+                  invoice.status_subtype
+                ),
+              retry_guidance:
+                ::Claims::Invoices::StatusSubtypes.retry_guidance(
+                  invoice.status,
+                  invoice.status_subtype
+                )
+            }
+          )
+        end
 
-        {
-          failure_status: invoice.status,
-          failure_status_subtype: invoice.status_subtype,
-          failure_message:
-            ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-              invoice.status,
-              invoice.status_subtype
-            ),
-          retry_guidance:
-            ::Claims::Invoices::StatusSubtypes.retry_guidance(
-              invoice.status,
-              invoice.status_subtype
-            )
-        }
-      end
-
-      def parse_messages(messages)
-        return messages if messages.is_a?(Array)
-
-        JSON.parse(messages.to_s)
-      rescue JSON::ParserError, TypeError
-        []
+        {}
       end
     end
   end

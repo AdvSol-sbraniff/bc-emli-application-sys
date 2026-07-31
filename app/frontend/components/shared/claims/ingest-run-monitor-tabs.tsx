@@ -28,9 +28,25 @@ type RunHeader = {
   failed_files: number;
   pipeline_error_code?: string | null;
   pipeline_error_description?: string | null;
+  failure_status?: string | null;
+  failure_status_subtype?: string | null;
+  primary_failure?: StepDiagnostics | null;
   created_at?: string | null;
   updated_at?: string | null;
   completed_at?: string | null;
+};
+
+type StepDiagnostics = {
+  failure_status?: string | null;
+  failure_status_subtype?: string | null;
+  error_code?: string | null;
+  error_category?: string | null;
+  error_phase?: string | null;
+  retryable?: boolean | null;
+  diagnostic_id?: string | null;
+  provider_status?: number | null;
+  provider_code?: string | null;
+  provider_attempt_count?: number | null;
 };
 
 type RunInvoiceRow = {
@@ -48,7 +64,7 @@ type RunInvoiceRow = {
   updated_at?: string | null;
 };
 
-type StepRow = {
+type StepRow = StepDiagnostics & {
   id: string;
   ingest_run_id?: string | null;
   ingest_document_id?: string | null;
@@ -155,7 +171,19 @@ function isActiveStepStatus(status?: string | null) {
 function checkerStatusText(runHeader: RunHeader | null) {
   if (!runHeader) return 'Pipeline checker status will appear after a run starts.';
   if (isActiveRunStatus(runHeader.status)) return 'Pipeline checker pending until the run succeeds.';
-  if (runHeader.pipeline_error_code) return runHeader.pipeline_error_description || 'Pipeline checker found a problem.';
+  if (runHeader.pipeline_error_code) {
+    const failure = runHeader.primary_failure;
+    const details = [
+      failure?.error_code,
+      failure?.provider_status ? `provider HTTP ${failure.provider_status}` : '',
+      failure?.provider_code,
+      failure?.retryable === false ? 'non-retryable' : '',
+      failure?.diagnostic_id ? `diagnostic ${failure.diagnostic_id}` : '',
+    ].filter(Boolean);
+    return details.length
+      ? `${details.join('; ')}.`
+      : runHeader.pipeline_error_description || 'Pipeline checker found a problem.';
+  }
   if (String(runHeader.status || '').toLowerCase() === 'succeeded') return 'No pipeline checker error recorded.';
   return 'Pipeline checker did not run because this pipeline did not finish successfully.';
 }
@@ -450,6 +478,17 @@ export function IngestRunMonitorTabs({
           <Text fontSize="sm" whiteSpace="pre-wrap">
             {checkerStatusText(runHeader)}
           </Text>
+          {runHeader?.primary_failure?.provider_status ? (
+            <HStack mt={2} spacing={2} wrap="wrap">
+              <Badge colorScheme="red">HTTP {runHeader.primary_failure.provider_status}</Badge>
+              {runHeader.primary_failure.provider_code ? (
+                <Badge colorScheme="gray">{runHeader.primary_failure.provider_code}</Badge>
+              ) : null}
+              <Badge colorScheme={runHeader.primary_failure.retryable === false ? 'red' : 'orange'}>
+                {runHeader.primary_failure.retryable === false ? 'non-retryable' : 'retryable'}
+              </Badge>
+            </HStack>
+          ) : null}
         </Box>
       )}
 
@@ -592,7 +631,7 @@ export function IngestRunMonitorTabs({
             </Box>
 
             <Box borderWidth="1px" borderRadius="md" overflow="auto">
-              <Table size="sm" minW="850px">
+              <Table size="sm" minW="1350px">
                 <Thead bg="gray.50">
                   <Tr>
                     <Th>created</Th>
@@ -600,6 +639,9 @@ export function IngestRunMonitorTabs({
                     <Th>document kind</Th>
                     <Th>step</Th>
                     <Th>state</Th>
+                    <Th>error code</Th>
+                    <Th>provider</Th>
+                    <Th>diagnostic</Th>
                     <Th>error / note</Th>
                   </Tr>
                 </Thead>
@@ -611,13 +653,27 @@ export function IngestRunMonitorTabs({
                       <Td fontSize="xs">{s.document_kind || '-'}</Td>
                       <Td fontSize="xs">{s.step_type || '-'}</Td>
                       <Td fontSize="xs">{renderStepState(s, failedAttemptDisplayById[s.id])}</Td>
+                      <Td fontSize="xs">{s.error_code ? <Badge colorScheme="red">{s.error_code}</Badge> : '-'}</Td>
+                      <Td fontSize="xs">
+                        {s.provider_status ? (
+                          <>
+                            <Text fontWeight="bold">HTTP {s.provider_status}</Text>
+                            <Text>{s.provider_code || '-'}</Text>
+                          </>
+                        ) : (
+                          '-'
+                        )}
+                      </Td>
+                      <Td fontSize="xs" fontFamily="mono">
+                        {s.diagnostic_id || '-'}
+                      </Td>
                       <Td fontSize="xs">{s.error_text || s.step_note || '-'}</Td>
                     </Tr>
                   ))}
 
                   {!stepsLoading && steps.length === 0 && (
                     <Tr>
-                      <Td colSpan={6}>
+                      <Td colSpan={9}>
                         <Text fontSize="sm" opacity={0.7}>
                           {runIdValue ? 'No step rows for current selection.' : emptyMessage}
                         </Text>

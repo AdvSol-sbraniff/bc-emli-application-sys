@@ -77,8 +77,6 @@ Rails.application.routes.draw do
             to: "contractor_portal#save_revision_issue_comment"
       get "contractor/ingest/runs/:ingest_run_id",
           to: "contractor_portal#ingest_run_show"
-      get "contractor/ingest/runs/:ingest_run_id/invoices",
-          to: "contractor_portal#ingest_run_invoices"
       get "contractor/ingest/invoices/:invoice_id/steps",
           to: "contractor_portal#ingest_invoice_steps"
 
@@ -131,6 +129,10 @@ Rails.application.routes.draw do
           to: "reports_volume_value#summary"
       get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"
       get "admin/reports/volume_value/detail", to: "reports_volume_value#detail"
+      get "admin/ingest_runs", to: "ingest_runs_admin#index"
+      get "admin/ingest_runs/:ingest_run_id/steps",
+          to: "ingest_runs_admin#steps"
+      get "admin/ingest_step_runs/:id", to: "ingest_runs_admin#show_step"
 
       # ============================================================
       # SECTION 20 — SESSION CRUD (AI Admin / POC)

@@ -88,10 +88,6 @@ module Claims
               total_files: 0,
               completed_files: 0,
               failed_files: 0,
-              messages: [
-                "Advice refresh requested from admin invoice grid.",
-                "Existing evidence was cloned into a new invoice version; AI advice will be regenerated."
-              ],
               created_at: now,
               updated_at: now
             )

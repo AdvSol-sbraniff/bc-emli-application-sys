@@ -113,7 +113,7 @@ module Api
             end
 
         render json: { runs: rows }, status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][runs_index] ERROR: #{e.class}: #{e.message}"
         )
@@ -155,13 +155,14 @@ module Api
                 step_type: r.step_type,
                 status: r.status,
                 error_text: r.error_text,
+                **step_diagnostic_payload(r),
                 created_at: r.created_at,
                 updated_at: r.updated_at
               }
             end
 
         render json: { steps: rows }, status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][steps_index] ERROR: #{e.class}: #{e.message}"
         )
@@ -205,13 +206,14 @@ module Api
                 step_type: r.step_type,
                 status: r.status,
                 error_text: r.error_text,
+                **step_diagnostic_payload(r),
                 created_at: r.created_at,
                 updated_at: r.updated_at
               }
             end
 
         render json: { steps: rows }, status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][steps_by_session_index] ERROR: #{e.class}: #{e.message}"
         )
@@ -246,7 +248,7 @@ module Api
 
         render json: result.to_h,
                status: (result.ok ? :accepted : :unprocessable_entity)
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][upload_fix_package] ERROR: #{e.class}: #{e.message}"
         )
@@ -286,7 +288,7 @@ module Api
                  ingest_run_id: ingest_run_id
                },
                status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][run_ocr] ERROR: #{e.class}: #{e.message}"
         )
@@ -315,16 +317,18 @@ module Api
                  status: run.status,
                  pipeline_error_code: run.pipeline_error_code,
                  pipeline_error_description: run.pipeline_error_description,
+                 failure_status: run.failure_status,
+                 failure_status_subtype: run.failure_status_subtype,
+                 primary_failure: primary_failure_payload_for_run(run),
                  total_files: run.total_files,
                  completed_files: run.completed_files,
                  failed_files: run.failed_files,
-                 messages: run.messages,
                  created_at: run.created_at,
                  updated_at: run.updated_at,
                  completed_at: run.completed_at
                },
                status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][run_show] ERROR: #{e.class}: #{e.message}"
         )
@@ -344,7 +348,7 @@ module Api
         rows = ingest_run_invoice_rows(ingest_run_id: ingest_run_id)
 
         render json: { rows: rows }, status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][run_invoices_index] ERROR: #{e.class}: #{e.message}"
         )
@@ -389,7 +393,7 @@ module Api
                  classifier_results: classifier_results
                },
                status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][steps_by_invoice_index] ERROR: #{e.class}: #{e.message}"
         )
@@ -430,7 +434,7 @@ module Api
           )
 
         render json: result, status: :ok
-      rescue => e
+      rescue StandardError => e
         Rails.logger.error(
           "[claims][ingest][admin_submit_batch] ERROR: #{e.class}: #{e.message}"
         )
@@ -556,8 +560,9 @@ module Api
             "invoice_id = :invoice_id OR resolved_invoice_id = :invoice_id",
             invoice_id: invoice.id
           )
-        document_scope =
-          document_scope.where(ingest_run_id: ingest_run_id) if ingest_run_id
+        if ingest_run_id
+          document_scope = document_scope.where(ingest_run_id: ingest_run_id)
+        end
         documents = document_scope.order(created_at: :asc).to_a
         documents_by_id = documents.index_by(&:id)
 
@@ -580,10 +585,10 @@ module Api
             )
             .where("iv.invoice_id = ?", invoice.id)
             .where(supporting_document_type_id: nil)
-        invoice_step_scope =
-          invoice_step_scope.where(
-            ingest_run_id: ingest_run_id
-          ) if ingest_run_id
+        if ingest_run_id
+          invoice_step_scope =
+            invoice_step_scope.where(ingest_run_id: ingest_run_id)
+        end
         invoice_steps = invoice_step_scope.to_a
         invoice_versions_by_id =
           ::Claims::InvoiceVersion.where(invoice_id: invoice.id).index_by(&:id)
@@ -663,6 +668,7 @@ module Api
               state_label: nil,
               step_note: nil,
               error_text: step.error_text,
+              **step_diagnostic_payload(step),
               created_at: step.created_at,
               updated_at: step.updated_at
             }
@@ -687,6 +693,7 @@ module Api
               state_label: nil,
               step_note: nil,
               error_text: step.error_text,
+              **step_diagnostic_payload(step),
               created_at: step.created_at,
               updated_at: step.updated_at
             }
@@ -724,6 +731,7 @@ module Api
               state_label: nil,
               step_note: nil,
               error_text: step.error_text,
+              **step_diagnostic_payload(step),
               created_at: step.created_at,
               updated_at: step.updated_at
             }
@@ -750,6 +758,7 @@ module Api
               state_label: nil,
               step_note: nil,
               error_text: step.error_text,
+              **step_diagnostic_payload(step),
               created_at: step.created_at,
               updated_at: step.updated_at
             }
@@ -861,18 +870,16 @@ module Api
           return run_invoice_version_ids if run_invoice_version_ids.any?
         end
 
-        latest_invoice_version_id =
-          ::Claims::InvoiceVersion
-            .where(invoice_id: invoice_id)
-            .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
-            .limit(1)
-            .pluck(:id)
-
-        latest_invoice_version_id
+        ::Claims::InvoiceVersion
+          .where(invoice_id: invoice_id)
+          .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+          .limit(1)
+          .pluck(:id)
       end
 
       def file_safe_call(obj, method_name)
         return nil unless obj.respond_to?(method_name)
+
         obj.public_send(method_name)
       rescue StandardError
         nil
@@ -922,6 +929,38 @@ module Api
         node_resp.fetch("storage_key")
       end
 
+      def primary_failure_payload_for_run(run)
+        steps =
+          ::Claims::IngestStepRun
+            .where(ingest_run_id: run.id, status: "failed")
+            .order(created_at: :asc, id: :asc)
+            .to_a
+        step = ::Claims::Invoices::FailureSubtypes.primary_failed_step(steps)
+        return if step.nil?
+
+        {
+          step_id: step.id,
+          step_type: step.step_type,
+          error_text: step.error_text,
+          **step_diagnostic_payload(step)
+        }
+      end
+
+      def step_diagnostic_payload(step)
+        {
+          failure_status: step.failure_status,
+          failure_status_subtype: step.failure_status_subtype,
+          error_code: step.error_code,
+          error_category: step.error_category,
+          error_phase: step.error_phase,
+          retryable: step.retryable,
+          diagnostic_id: step.diagnostic_id,
+          provider_status: step.provider_status,
+          provider_code: step.provider_code,
+          provider_attempt_count: step.provider_attempt_count
+        }
+      end
+
       def mark_orphaned_ingest_failures!(ingest_run:, results:)
         orphaned_failures =
           results.count do |result|
@@ -930,21 +969,6 @@ module Api
           end
 
         return if orphaned_failures.zero?
-
-        messages = parse_ingest_messages(ingest_run.messages)
-        messages +=
-          results
-            .select do |result|
-              result[:status] == "failed" &&
-                result[:invoice_version_id].to_s.strip.empty?
-            end
-            .map do |result|
-              {
-                level: "error",
-                file: result[:original_filename],
-                message: result[:error]
-              }
-            end
 
         failed_files = ingest_run.failed_files.to_i + orphaned_failures
         completed_files = ingest_run.completed_files.to_i
@@ -962,19 +986,13 @@ module Api
           status: status,
           total_files: total_files,
           failed_files: failed_files,
-          messages: messages,
+          pipeline_error_code: "upload_unexpected_exception",
+          pipeline_error_description:
+            "#{orphaned_failures} file upload #{"failure".pluralize(orphaned_failures)} could not be attached to an invoice version.",
           completed_at:
             %w[succeeded failed partial].include?(status) ? Time.current : nil,
           updated_at: Time.current
         )
-      end
-
-      def parse_ingest_messages(messages)
-        return messages if messages.is_a?(Array)
-
-        JSON.parse(messages.to_s)
-      rescue JSON::ParserError, TypeError
-        []
       end
     end
   end

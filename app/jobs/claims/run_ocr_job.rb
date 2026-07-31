@@ -148,19 +148,19 @@ module Claims
       if ingest_run_id.present?
         Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
       end
-    rescue => e
+    rescue StandardError => e
       status_subtype = ocr_failure_subtype(e)
       # mark failed (best-effort)
       begin
         step&.update!(
           status: "failed",
           error_text: e.message,
-          di_results_json:
-            ::Claims::Invoices::FailureSubtypes.payload(
-              status: "technical_failure",
-              status_subtype: status_subtype,
-              error: e
-            ),
+          di_results_json: nil,
+          **::Claims::Invoices::FailureSubtypes.step_attributes(
+            status: "technical_failure",
+            status_subtype: status_subtype,
+            error: e
+          ),
           updated_at: Time.current
         )
       rescue StandardError
