@@ -136,7 +136,7 @@ module Claims
             rule_result: result,
             confidence: %w[pass fail].include?(result) ? 100 : 0,
             expected_text:
-              "The invoice should show an AHRI reference, supporting product evidence should corroborate that same AHRI reference, and the AHRI reference should exist in the current imported BC Hydro heat-pump product list.",
+              "The invoice should show an AHRI reference and that reference should exist in the current imported BC Hydro heat-pump product list. Supporting-document AHRI evidence is compared when present.",
             calculation:
               product_validation_calculation_text(
                 evidence: evidence,
@@ -194,8 +194,8 @@ module Claims
           if supporting_ahris.empty?
             return(
               subcheck(
-                "warn",
-                "No supporting-document AHRI reference was extracted."
+                "info",
+                "No supporting-document AHRI reference was extracted. This does not contradict eligibility because invoice AHRI and product-list validation passed, but the package is less corroborated than a fully clean pass."
               )
             )
           end
@@ -258,6 +258,7 @@ module Claims
           statuses = subchecks.values.map { |row| row.fetch(:status) }
           return "fail" if statuses.include?("fail")
           return "warn" if statuses.include?("warn")
+          return "info" if statuses.include?("info")
 
           "pass"
         end
@@ -269,7 +270,8 @@ module Claims
             "download_lookup: table=claims.v_current_ahri_products; matched_product_id=#{product&.id || "(none)"}",
             subcheck_lines("subchecks", subchecks),
             subcheck_lines("failed_subchecks", subchecks, status: "fail"),
-            subcheck_lines("warn_subchecks", subchecks, status: "warn")
+            subcheck_lines("warn_subchecks", subchecks, status: "warn"),
+            subcheck_lines("info_subchecks", subchecks, status: "info")
           ].compact.join("\n")
         end
 
@@ -295,6 +297,14 @@ module Claims
                 "The stored invoice version points to ahri_products.id=#{product.id}."
             )
           end
+          if result == "info"
+            return(
+              "The invoice AHRI reference is present and matches the current imported BC Hydro heat-pump product list. " \
+                "This is a blue pass because no supporting-document AHRI reference was extracted. " \
+                "That missing corroboration does not contradict the requirement or request a contractor correction, but it makes the package less squeaky clean than one where the invoice and supporting product documents both show the same AHRI. " \
+                "If admin wants a fully corroborated package, the useful follow-up would be a heat-pump AHRI certificate, AHRI directory printout, manufacturer product submittal, or product specification sheet showing the same AHRI reference and installed heat-pump component models."
+            )
+          end
 
           failed =
             subchecks
@@ -304,12 +314,17 @@ module Claims
             subchecks
               .select { |_key, row| row.fetch(:status) == "warn" }
               .map { |key, row| "#{key}: #{row.fetch(:reason)}" }
+          info =
+            subchecks
+              .select { |_key, row| row.fetch(:status) == "info" }
+              .map { |key, row| "#{key}: #{row.fetch(:reason)}" }
 
           [
             "AHRI product validation did not fully pass.",
             ("Failed subchecks: #{failed.join(" | ")}" if failed.any?),
             ("Warning subchecks: #{warned.join(" | ")}" if warned.any?),
-            "Admin should verify the invoice AHRI, supporting product evidence, and current AHRI product-list import."
+            ("Informational subchecks: #{info.join(" | ")}" if info.any?),
+            "Admin should verify the invoice AHRI and current AHRI product-list import when a warning or failure remains."
           ].compact.join(" ")
         end
 

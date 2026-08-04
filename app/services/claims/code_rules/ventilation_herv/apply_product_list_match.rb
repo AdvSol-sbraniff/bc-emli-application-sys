@@ -375,10 +375,13 @@ module Claims
         end
 
         def product_list_match_row(field_bundle:, product:, status:)
+          result = product_list_rule_result(status)
+
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
-            rule_result: product_list_rule_result(status),
-            confidence: product.present? ? 100 : 0,
+            rule_result: result,
+            confidence:
+              product_list_confidence(result: result, product: product),
             expected_text:
               "For HRV/ERV ventilation upgrades, the invoice and supporting document should both identify the same product, and that product should match a row in the imported NRCan ENERGY STAR heat/energy recovery ventilator product list.",
             calculation:
@@ -445,13 +448,21 @@ module Claims
           when :matched
             "pass"
           when :bathroom_fan
-            "info"
+            "pass"
           when :unclear_system_type, :missing_invoice, :missing_supporting,
                :source_unavailable
             "warn"
           else
             "fail"
           end
+        end
+
+        def product_list_confidence(result:, product:)
+          return 100 if result == "pass" && product.present?
+          return 100 if result == "pass"
+          return 100 if result == "fail"
+
+          0
         end
 
         def product_list_calculation_text(field_bundle:, status:, product:)
@@ -492,7 +503,12 @@ module Claims
           {
             invoice_herv_product_identity_present:
               (
-                if field_bundle.fetch(:invoice_model_values).empty?
+                if status == :bathroom_fan
+                  [
+                    "pass",
+                    "Not applicable because evidence indicates bathroom/exhaust fan; the bathroom fan product-list rule owns product validation."
+                  ]
+                elsif field_bundle.fetch(:invoice_model_values).empty?
                   ["warn", "No invoice HRV/ERV product identity was extracted."]
                 else
                   [
@@ -503,6 +519,11 @@ module Claims
               ),
             supporting_document_matches_invoice:
               case status
+              when :bathroom_fan
+                [
+                  "pass",
+                  "Not applicable because evidence indicates bathroom/exhaust fan; the bathroom fan product-list rule owns product validation."
+                ]
               when :missing_supporting
                 [
                   "warn",
@@ -577,7 +598,7 @@ module Claims
         def product_list_reason_text(field_bundle:, status:, product:)
           case status
           when :bathroom_fan
-            "This ventilation upgrade evidence appears to describe a bathroom or exhaust fan, not an HRV/ERV. The NRCan ENERGY STAR HERV product-list requirement applies to heat/energy recovery ventilators, so this code rule records information only and leaves bathroom-fan feature review to the configured ventilation GenAI rules."
+            "This ventilation upgrade evidence appears to describe a bathroom or exhaust fan, not an HRV/ERV. The NRCan ENERGY STAR HERV product-list requirement is not applicable to bathroom fan equipment; the separate bathroom fan ENERGY STAR product rule owns product-list validation for this package."
           when :unclear_system_type
             "The ventilation evidence did not clearly identify the equipment as an HRV or ERV. Code should not force a product-list failure when the triggering equipment type is unclear. Admin should review vent_system_type and supporting product evidence, then rerun extraction if the HRV/ERV wording is visible but was missed."
           when :missing_invoice

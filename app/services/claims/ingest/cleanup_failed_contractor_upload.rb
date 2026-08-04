@@ -87,14 +87,20 @@ module Claims
       attr_reader :ingest_run
 
       def retain_ingest_documents!(ingest_document_ids)
-        ::Claims::IngestDocument.where(id: ingest_document_ids).update_all(
+        attributes = {
           invoice_id: nil,
           resolved_invoice_id: nil,
           resolved_invoice_version_id: nil,
           promoted_supporting_document_id: nil,
-          di_read_raw_json: nil,
-          classifier_raw_json: nil,
           updated_at: Time.current
+        }
+        unless preserve_debug_payloads?
+          attributes[:di_read_raw_json] = nil
+          attributes[:classifier_raw_json] = nil
+        end
+
+        ::Claims::IngestDocument.where(id: ingest_document_ids).update_all(
+          attributes
         )
       end
 
@@ -130,13 +136,21 @@ module Claims
                 diagnostic_attributes: diagnostic_attributes,
                 retained_status: retained_status
               ),
-            di_results_json: nil,
-            genai_results_json: nil,
-            context_window_json: nil,
+            **retained_payload_attributes,
             **diagnostic_attributes,
             updated_at: Time.current
           )
         end
+      end
+
+      def retained_payload_attributes
+        return {} if preserve_debug_payloads?
+
+        {
+          di_results_json: nil,
+          genai_results_json: nil,
+          context_window_json: nil
+        }
       end
 
       def retained_step_diagnostic_attributes(step, retained_status:)
@@ -172,6 +186,7 @@ module Claims
         if %w[queued in_progress].include?(step.status)
           return "Processing cancelled after the upload run failed."
         end
+        return step.error_text if preserve_debug_payloads?
 
         code =
           diagnostic_attributes[:error_code].presence ||
@@ -197,6 +212,10 @@ module Claims
             .compact
 
         (ids + staging_invoice_ids).uniq
+      end
+
+      def preserve_debug_payloads?
+        ingest_run.failure_status == "technical_failure"
       end
     end
   end

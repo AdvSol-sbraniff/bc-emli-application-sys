@@ -1331,7 +1331,9 @@ module Claims
             summary["present_configured_type_counts"] || {},
         documents:
           summary[:configured_documents] || summary["configured_documents"] ||
-            []
+            [],
+        other_documents:
+          summary[:other_documents] || summary["other_documents"] || []
       }
     end
 

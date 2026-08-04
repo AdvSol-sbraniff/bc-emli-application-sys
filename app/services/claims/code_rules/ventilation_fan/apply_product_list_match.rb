@@ -403,10 +403,13 @@ module Claims
         end
 
         def product_list_match_row(field_bundle:, product:, status:)
+          result = product_list_rule_result(status)
+
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
-            rule_result: product_list_rule_result(status),
-            confidence: product.present? ? 100 : 0,
+            rule_result: result,
+            confidence:
+              product_list_confidence(result: result, product: product),
             expected_text:
               "For bathroom/utility/exhaust fan ventilation upgrades, the invoice and supporting document should both identify the same fan product, and that product should match a row in the imported ENERGY STAR certified ventilating fan product list.",
             calculation:
@@ -504,7 +507,7 @@ module Claims
           when :matched
             "pass"
           when :hrv_or_erv
-            "info"
+            "pass"
           when :missing_invoice, :missing_supporting, :source_unavailable,
                :unclear_system_type
             "warn"
@@ -513,12 +516,20 @@ module Claims
           end
         end
 
+        def product_list_confidence(result:, product:)
+          return 100 if result == "pass" && product.present?
+          return 100 if result == "pass"
+          return 100 if result == "fail"
+
+          0
+        end
+
         def capacity_rule_result(status)
           case status
           when :matched_product_pass, :visible_exact_pass
             "pass"
           when :hrv_or_erv
-            "info"
+            "pass"
           when :visible_exact_fail
             "fail"
           else
@@ -531,7 +542,7 @@ module Claims
           when :matched_product_pass, :visible_exact_pass, :visible_exact_fail
             100
           when :hrv_or_erv
-            0
+            100
           else
             50
           end
@@ -575,7 +586,12 @@ module Claims
           {
             invoice_fan_product_identity_present:
               (
-                if field_bundle.fetch(:invoice_model_values).empty?
+                if status == :hrv_or_erv
+                  [
+                    "pass",
+                    "Not applicable because evidence indicates HRV/ERV; the HRV/ERV product-list rule owns product validation."
+                  ]
+                elsif field_bundle.fetch(:invoice_model_values).empty?
                   ["warn", "No invoice fan product identity was extracted."]
                 else
                   [
@@ -586,6 +602,11 @@ module Claims
               ),
             supporting_document_matches_invoice:
               case status
+              when :hrv_or_erv
+                [
+                  "pass",
+                  "Not applicable because evidence indicates HRV/ERV; the HRV/ERV product-list rule owns product validation."
+                ]
               when :missing_supporting
                 [
                   "warn",
@@ -663,7 +684,7 @@ module Claims
         def product_list_reason_text(field_bundle:, status:, product:)
           case status
           when :hrv_or_erv
-            "This ventilation upgrade evidence appears to describe an HRV/ERV, not a bathroom/utility/exhaust fan. The fan product-list requirement is not applicable to that equipment, so this code rule records information only."
+            "This ventilation upgrade evidence appears to describe an HRV/ERV, not a bathroom/utility/exhaust fan. The ENERGY STAR ventilating-fan product-list requirement is not applicable to HRV/ERV equipment; the separate HRV/ERV NRCan product rule owns product-list validation for this package."
           when :unclear_system_type
             "The ventilation evidence did not clearly identify the equipment as a bathroom, utility, exhaust, or ventilating fan. Code should not force a product-list failure when the triggering equipment type is unclear. Admin should review vent_system_type and supporting product evidence."
           when :missing_invoice

@@ -49,4 +49,41 @@ RSpec.describe Claims::Invoices::FailureSubtypes do
     expect(described_class).to be_retryable(error)
     expect(described_class.genai_status(error)).to eq("technical_failure")
   end
+
+  it "maps invalid model JSON to a retryable malformed GenAI response" do
+    error =
+      Claims::Genai::NodeClient::Error.new(
+        http_status: 503,
+        payload: {
+          code: "genai_model_output_invalid_json",
+          category: "model_output_invalid_json",
+          retryable: true,
+          diagnostic_id: "diag-json",
+          phase: "classifier_files",
+          snippet: "not json"
+        }
+      )
+
+    expect(described_class.genai_status(error)).to eq("technical_failure")
+    expect(described_class.genai(error)).to eq(
+      "genai_service_malformed_response"
+    )
+    expect(described_class).to be_retryable(error)
+    expect(
+      described_class.step_attributes(
+        status: described_class.genai_status(error),
+        status_subtype: described_class.genai(error),
+        error: error
+      )
+    ).to include(
+      failure_status: "technical_failure",
+      failure_status_subtype: "genai_service_malformed_response",
+      error_code: "genai_model_output_invalid_json",
+      error_category: "model_output_invalid_json",
+      retryable: true,
+      diagnostic_id: "diag-json",
+      error_phase: "classifier_files"
+    )
+    expect(error.message).to include("snippet=not json")
+  end
 end

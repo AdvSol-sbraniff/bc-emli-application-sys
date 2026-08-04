@@ -8,7 +8,7 @@ import DocumentIntelligence, {
   isUnexpected,
 } from '@azure-rest/ai-document-intelligence';
 import { AzureKeyCredential } from '@azure/core-auth';
-import OpenAI, { toFile } from 'openai';
+import OpenAI from 'openai';
 
 import { BlobServiceClient } from '@azure/storage-blob';
 import * as crypto from 'crypto';
@@ -723,25 +723,18 @@ export class InvService {
       if (this.genaiApiStyle === 'responses') {
         const responsesPrompt =
           toResponsesInputAndInstructions(contextwindowjson);
-        const preparedAttachments = await this.withInputFileAttachments(
+        const responsesInput = await this.withInputFileAttachments(
           responsesPrompt.input,
           attachments,
         );
-        try {
-          const resp = await this.withGenAiRetries(() =>
-            this.genaiClient.responses.create({
-              model: this.genaiDeployment,
-              instructions: responsesPrompt.instructions,
-              input: preparedAttachments.input,
-            }),
-          );
-          raw = resp.output_text ?? '';
-        } finally {
-          await this.deleteProviderFiles(
-            preparedAttachments.providerFileIds,
-            diagnosticId,
-          );
-        }
+        const resp = await this.withGenAiRetries(() =>
+          this.genaiClient.responses.create({
+            model: this.genaiDeployment,
+            instructions: responsesPrompt.instructions,
+            input: responsesInput,
+          }),
+        );
+        raw = resp.output_text ?? '';
       } else {
         const resp = await this.withGenAiRetries(() =>
           this.genaiClient.chat.completions.create({
@@ -794,13 +787,22 @@ export class InvService {
     try {
       return JSON.parse(candidate);
     } catch {
-      // Thin, but not silent: tell Rails exactly what happened
+      const elapsed_ms = Date.now() - startedAt;
       throw new HttpException(
         {
           message: 'Model output was not valid JSON',
-          snippet: stripThinkBlocks(raw).slice(0, 2000), // keep it bounded
+          code: 'genai_model_output_invalid_json',
+          category: 'model_output_invalid_json',
+          retryable: true,
+          diagnostic_id: diagnosticId,
+          elapsed_ms,
+          phase: diagnosticContext?.step_type
+            ? String(diagnosticContext.step_type).slice(0, 120)
+            : undefined,
+          output_chars: raw.length,
+          snippet: stripThinkBlocks(raw).slice(0, 2000),
         },
-        HttpStatus.UNPROCESSABLE_ENTITY, // 422
+        HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
   }
@@ -808,100 +810,60 @@ export class InvService {
   private async withInputFileAttachments(
     input: any[],
     attachments: any[],
-  ): Promise<{ input: any[]; providerFileIds: string[] }> {
+  ): Promise<any[]> {
     if (!Array.isArray(attachments) || attachments.length === 0) {
-      return { input, providerFileIds: [] };
+      return input;
     }
 
     const attachmentParts = [];
-    const providerFileIds: string[] = [];
-    try {
-      for (const attachment of attachments) {
-        if (!attachment || attachment.type !== 'input_file') continue;
+    for (const attachment of attachments) {
+      if (!attachment || attachment.type !== 'input_file') continue;
 
-        const storageKey = String(attachment.storageKey || '').trim();
-        if (!storageKey) continue;
+      const storageKey = String(attachment.storageKey || '').trim();
+      if (!storageKey) continue;
 
-        const blob = await this.downloadBlob({
-          container: attachment.container,
-          storageKey,
-        });
-        const contentType =
-          blob.content_type ||
-          this.contentTypeFromStorageKey(storageKey) ||
-          'application/pdf';
-        const filename =
-          String(
-            attachment.filename || blob.filename || 'document.pdf',
-          ).trim() || 'document.pdf';
+      const blob = await this.downloadBlob({
+        container: attachment.container,
+        storageKey,
+      });
+      const contentType =
+        blob.content_type ||
+        this.contentTypeFromStorageKey(storageKey) ||
+        'application/pdf';
+      const filename =
+        String(attachment.filename || blob.filename || 'document.pdf').trim() ||
+        'document.pdf';
 
+      attachmentParts.push({
+        type: 'input_text',
+        text: `Attached supporting document file: ${filename}`,
+      });
+      const dataUrl = `data:${contentType};base64,${blob.buffer.toString('base64')}`;
+      if (contentType === 'image/jpeg' || contentType === 'image/png') {
         attachmentParts.push({
-          type: 'input_text',
-          text: `Attached supporting document file: ${filename}`,
+          type: 'input_image',
+          image_url: dataUrl,
+          detail: 'auto',
         });
-        if (contentType === 'image/jpeg' || contentType === 'image/png') {
-          const providerFile = await this.withGenAiRetries(async () =>
-            this.genaiClient.files.create({
-              file: await toFile(blob.buffer, filename, {
-                type: contentType,
-              }),
-              purpose: 'assistants',
-            }),
-          );
-          providerFileIds.push(providerFile.id);
-          attachmentParts.push({
-            type: 'input_image',
-            file_id: providerFile.id,
-            detail: 'auto',
-          });
-        } else {
-          attachmentParts.push({
-            type: 'input_file',
-            filename,
-            file_data: `data:${contentType};base64,${blob.buffer.toString('base64')}`,
-          });
-        }
+      } else {
+        attachmentParts.push({
+          type: 'input_file',
+          filename,
+          file_data: dataUrl,
+        });
       }
-    } catch (error) {
-      await this.deleteProviderFiles(providerFileIds);
-      throw error;
     }
 
-    if (attachmentParts.length === 0) {
-      return { input, providerFileIds };
-    }
+    if (attachmentParts.length === 0) return input;
 
-    return {
-      input: [
-        ...input,
-        {
-          type: 'message',
-          role: 'user',
-          content: attachmentParts,
-        },
-      ],
-      providerFileIds,
-    };
-  }
-
-  private async deleteProviderFiles(
-    fileIds: string[],
-    diagnosticId?: string,
-  ): Promise<void> {
-    const uniqueFileIds = [...new Set(fileIds.filter(Boolean))];
-    if (uniqueFileIds.length === 0) return;
-
-    const results = await Promise.allSettled(
-      uniqueFileIds.map((fileId) => this.genaiClient.files.delete(fileId)),
-    );
-    const failedCount = results.filter(
-      (result) => result.status === 'rejected',
-    ).length;
-    if (failedCount > 0) {
-      console.warn(
-        `[claims][genai] diagnostic_id=${diagnosticId || '-'} failed to delete ${failedCount} temporary provider image file(s).`,
-      );
-    }
+    return [
+      ...input,
+      {
+        type: 'message',
+        role: 'user',
+        content: attachmentParts,
+      },
+    ];
   }
 
   // end service layer class

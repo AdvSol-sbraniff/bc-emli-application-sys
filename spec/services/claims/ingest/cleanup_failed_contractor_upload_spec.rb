@@ -125,4 +125,89 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
       "Raw private provider response"
     )
   end
+
+  it "preserves technical failure payloads for admin diagnosis" do
+    contractor = Contractor.create!(business_name: "Debug Contractor")
+    session = Claims::Session.create!
+    invoice =
+      Claims::Invoice.create!(
+        session_id: session.id,
+        contractor_id: contractor.id,
+        status: "technical_failure",
+        status_subtype: "genai_service_malformed_response"
+      )
+    invoice_version =
+      Claims::InvoiceVersion.create!(
+        invoice_id: invoice.id,
+        invoice_versionno: 1,
+        storage_provider: "azure_blob",
+        storage_key: "failed/invoice.pdf",
+        original_filename: "Invoice.pdf",
+        content_type: "application/pdf"
+      )
+    run =
+      Claims::IngestRun.create!(
+        session_id: session.id,
+        contractor_id: contractor.id,
+        status: "failed",
+        failure_status: "technical_failure",
+        failure_status_subtype: "genai_service_malformed_response",
+        cleanup_failed_invoice_artifacts: true,
+        total_files: 1,
+        failed_files: 1
+      )
+    document =
+      Claims::IngestDocument.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        contractor_id: contractor.id,
+        invoice_id: invoice.id,
+        resolved_invoice_id: invoice.id,
+        resolved_invoice_version_id: invoice_version.id,
+        storage_provider: "azure_blob",
+        storage_key: "failed/invoice.pdf",
+        original_filename: "Invoice.pdf",
+        content_type: "application/pdf",
+        di_read_raw_json: {
+          "content" => "ocr debug text"
+        },
+        classifier_raw_json: {
+          "document_kind" => "invoice"
+        }
+      )
+    failed_step =
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: session.id,
+        ingest_document_id: document.id,
+        step_type: "classifier_files",
+        status: "failed",
+        error_text:
+          "Node GenAI request failed " \
+            "(genai_model_output_invalid_json; snippet=not json)",
+        failure_status: "technical_failure",
+        failure_status_subtype: "genai_service_malformed_response",
+        error_code: "genai_model_output_invalid_json",
+        error_category: "model_output_invalid_json",
+        retryable: true,
+        diagnostic_id: "diag-json",
+        genai_results_json: {
+          "raw_debug" => "model payload"
+        },
+        context_window_json: [{ "prompt" => "classifier prompt" }]
+      )
+
+    described_class.call(ingest_run: run)
+
+    document.reload
+    failed_step.reload
+
+    expect(document.di_read_raw_json).to eq("content" => "ocr debug text")
+    expect(document.classifier_raw_json).to eq("document_kind" => "invoice")
+    expect(failed_step.error_text).to include("snippet=not json")
+    expect(failed_step.genai_results_json).to eq("raw_debug" => "model payload")
+    expect(failed_step.context_window_json).to eq(
+      [{ "prompt" => "classifier prompt" }]
+    )
+  end
 end

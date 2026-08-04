@@ -40,7 +40,7 @@ describe('InvService Responses API attachments', () => {
     delete process.env.GENAI_MAX_ATTEMPTS;
   });
 
-  it('uploads a JPEG for vision and references its file id', async () => {
+  it('sends a JPEG as an inline Responses image', async () => {
     service.downloadBlob.mockResolvedValue({
       content_type: 'image/jpeg',
       filename: 'before.jpg',
@@ -52,13 +52,8 @@ describe('InvService Responses API attachments', () => {
     ]);
 
     expect(result).toEqual({ document_kind: 'photo' });
-    expect(filesCreate).toHaveBeenCalledTimes(1);
-    const upload = filesCreate.mock.calls[0][0];
-    expect(upload).toMatchObject({ purpose: 'assistants' });
-    expect(upload.file).toMatchObject({
-      name: 'before.jpg',
-      type: 'image/jpeg',
-    });
+    expect(filesCreate).not.toHaveBeenCalled();
+    expect(filesDelete).not.toHaveBeenCalled();
 
     const request = responsesCreate.mock.calls[0][0];
     const imagePart = request.input
@@ -66,11 +61,10 @@ describe('InvService Responses API attachments', () => {
       .find((part: any) => part.type === 'input_image');
     expect(imagePart).toEqual({
       type: 'input_image',
-      file_id: 'file-image-123',
+      image_url: 'data:image/jpeg;base64,/9j/2Q==',
       detail: 'auto',
     });
-    expect(JSON.stringify(request)).not.toContain('data:image/jpeg;base64');
-    expect(filesDelete).toHaveBeenCalledWith('file-image-123');
+    expect(JSON.stringify(request)).toContain('data:image/jpeg;base64');
   });
 
   it('keeps PDF attachments inline without a provider file upload', async () => {
@@ -97,7 +91,7 @@ describe('InvService Responses API attachments', () => {
     expect(filePart.file_data).toMatch(/^data:application\/pdf;base64,/);
   });
 
-  it('deletes the temporary image when the response request fails', async () => {
+  it('does not create a provider file when the response request fails', async () => {
     service.downloadBlob.mockResolvedValue({
       content_type: 'image/jpeg',
       filename: 'after.jpg',
@@ -114,7 +108,32 @@ describe('InvService Responses API attachments', () => {
       service.genai(prompt(), [attachment('after.jpg', 'evidence/after.jpg')]),
     ).rejects.toBeDefined();
 
-    expect(filesDelete).toHaveBeenCalledWith('file-image-123');
+    expect(filesCreate).not.toHaveBeenCalled();
+    expect(filesDelete).not.toHaveBeenCalled();
+  });
+
+  it('returns a structured retryable error when model output is not JSON', async () => {
+    responsesCreate.mockResolvedValue({
+      output_text: 'I found an invoice, but this is not JSON.',
+    });
+
+    await expect(service.genai(prompt())).rejects.toMatchObject({
+      status: 503,
+    });
+
+    try {
+      await service.genai(prompt(), [], { step_type: 'classifier_files' });
+    } catch (error: any) {
+      expect(error.getResponse()).toMatchObject({
+        message: 'Model output was not valid JSON',
+        code: 'genai_model_output_invalid_json',
+        category: 'model_output_invalid_json',
+        retryable: true,
+        phase: 'classifier_files',
+        output_chars: expect.any(Number),
+        snippet: 'I found an invoice, but this is not JSON.',
+      });
+    }
   });
 
   function prompt() {

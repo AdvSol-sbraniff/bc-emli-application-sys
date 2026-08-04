@@ -57,17 +57,17 @@ Rules:
 - Do not include markdown outside JSON.
 - Copy rule_key exactly from each rule task definition.
 - Use rule_result instead of a boolean pass/fail. Allowed values are exactly "pass", "info", "warn", and "fail".
-- Use rule_result="pass" when the invoice/database evidence supports the rule, there is no meaningful note to call out, the rule must not appear in advice, and an admin can skim or ignore it.
-- Use rule_result="info" when the rule passes, but there is helpful context worth surfacing to the admin/contractor. Info is blue: not a requested fix, not a verification task, and not a risk flag.
+- Use rule_result="pass" when the invoice/database evidence supports the rule, there is no meaningful caveat to call out, the rule must not appear in advice, and an admin can skim or ignore it.
+- Use rule_result="info" only when the rule passes enough that no contractor correction is requested, but the evidence is not fully squeaky clean. Info is blue: a pass with a meaningful non-blocking caveat or limitation. It is not a clean green pass, not trivia, and not generic helpful context.
 - Use rule_result="warn" when there is no visible contradiction or material failure, but an admin should verify one specific context, supporting document, versioning question, duplicate-history question, or ambiguous value. A warning is targeted review, not a contractor failure.
 - Use rule_result="fail" when visible evidence contradicts the rule, a material requirement is clearly not met, or visible math clearly fails.
 - Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn unless the specific rule identifies the missing evidence as a mandatory supporting-document requirement and instructs fail.
 - For identity and record-matching rules, visible invoice values that clearly identify a different contractor, homeowner/customer, eligibility-code owner, property, claimant, or other matched party than the supplied database record should be fail, not warn.
-- Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice as useful context, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
+- Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice because it has a meaningful non-blocking caveat, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
 - Set overall.overall_result to "fail" if any material rule fails, "warn" if there are warnings but no failures, "info" if there are info notes but no warnings/failures, and "pass" only when all rulechecks are pass.
 - reason_and_likely_causes is mandatory for every rulecheck. Never leave it blank. Write at least 5 complete sentences for every rulecheck, including pass rules.
 - For pass rules, explain why the supplied evidence satisfies the rule and why no extra admin verification is needed unless the rule depends on facts outside the supplied evidence.
-- For info rules, explain why the rule passes, why the note is helpful context only, why no correction or verification is requested, and what the admin/contractor should understand.
+- For info rules, explain what passed, what specific caveat makes the result not fully squeaky clean, why no contractor correction is requested, and what the admin/contractor should understand.
 - For warn rules, explain the missing or ambiguous fact, the concrete admin review step, why this is a warning rather than a failure, and what evidence would turn it into pass or fail.
 - For fail rules, explain the visible contradiction or missing material requirement, why it matters, and the likely correction, override, or contractor follow-up.
 - evidence_text must contain short source facts or exact invoice/DB text/values when available. Do not use evidence_text for the full explanation.

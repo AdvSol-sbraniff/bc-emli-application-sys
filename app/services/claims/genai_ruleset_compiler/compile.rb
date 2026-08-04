@@ -78,15 +78,27 @@ module Claims
       end
 
       def rule_intro_text
+        result_rubric = <<~TEXT.strip
+          Result rubric:
+          Use rule_result="pass" when the requirement is satisfied and no correction or meaningful caveat is needed.
+          Use rule_result="info" only when the requirement is satisfied enough that no contractor correction is requested, but the evidence is not fully squeaky clean. Info is blue: a pass with a meaningful non-blocking caveat or limitation. Do not use info for a clean pass, and do not use info for trivia or generic helpful context.
+          Use rule_result="warn" when evidence is missing, ambiguous, incomplete, low-confidence, or requires admin verification before the requirement can be relied on.
+          Use rule_result="fail" when visible evidence clearly contradicts the requirement or required evidence is clearly absent.
+        TEXT
+
         common_upgrade_type? ? <<~TEXT.strip : <<~TEXT.strip
             For v1, create these rulechecks from the OCR/DI JSON and supplied database values.
+            #{result_rubric}
             Use the supplied supporting-document summaries and located fields when a common rule asks about application attachments, utility/account documents, income documents, landlord consent, labels, photos, permits, or other non-invoice evidence.
+            Use other_documents[] only as optional corroborating context for unusual or unclassified attachments; do not treat other_documents[] as a replacement for a clearly required configured supporting-document type unless its OCR excerpt or classification reason directly supports the rule.
             For shared database facts such as invoices.submitted_at, classifier.eligibility_code, and users_eligibilitycodes.*, use the supplied database values exactly as provided.
             For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
             Show the date math in calculation when a date rule is evaluated.
           TEXT
             Use the OCR/DI JSON, supplied database values, and supporting_document_summary_for_upgrade_type for this upgrade type.
+            #{result_rubric}
             When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, or other supporting documents, inspect configured_documents[].located_fields before warning or failing for missing evidence.
+            Use other_documents[] only as optional corroborating context for unusual or unclassified attachments; do not treat other_documents[] as a replacement for a clearly required configured supporting-document type unless its OCR excerpt or classification reason directly supports the rule.
             For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
             Show the date math in calculation when a date rule is evaluated.
           TEXT

@@ -62,6 +62,9 @@ module Claims
         if node_error_code(error) == "genai_input_image_invalid"
           return "package_unreadable_file"
         end
+        if node_error_code(error) == "genai_model_output_invalid_json"
+          return "genai_service_malformed_response"
+        end
         return "configuration_missing" if configuration_error?(message)
         if malformed_genai_response?(error, message)
           return "genai_service_malformed_response"

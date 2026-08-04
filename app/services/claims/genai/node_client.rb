@@ -69,6 +69,10 @@ module Claims
           parts = [error_code]
           diagnostic_id = bounded(payload["diagnostic_id"], 160)
           parts << "diagnostic_id=#{diagnostic_id}" if diagnostic_id.present?
+          snippet = bounded(payload["snippet"], 1_000)
+          if error_code == "genai_model_output_invalid_json" && snippet.present?
+            parts << "snippet=#{snippet}"
+          end
           "Node GenAI request failed (#{parts.join("; ")})"
         end
 

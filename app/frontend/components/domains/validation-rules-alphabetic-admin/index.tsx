@@ -14,9 +14,10 @@ import {
   HStack,
   IconButton,
   Input,
+  Radio,
+  RadioGroup,
   Select,
   Spinner,
-  Switch,
   Table,
   Tbody,
   Td,
@@ -64,7 +65,10 @@ const RULE_TYPE_LABELS: Record<RuleRecordType, string> = {
   genai_rule: 'GenAI',
 };
 
-type ListViewMode = 'matrix' | 'description';
+type RuleViewMode = 'sharing' | 'description' | 'workflow';
+type ContractorVisibilityFilter = 'all' | 'hidden' | 'fail_only' | 'warn_and_fail';
+type ContractorBlockingFilter = 'all' | 'non_blocking' | 'block_on_fail';
+type AdminWorkflowFilter = 'all' | 'not_managed' | 'fail_only' | 'warn_and_fail' | 'all_results';
 
 const ruleRowHoverSx = {
   td: {
@@ -108,6 +112,74 @@ const compactUpgradeLabel = (upgradeType: UpgradeTypeRow) => {
 const isRuleRow = (row: ValidationRuleRow): row is ValidationRuleRow & { record_type: RuleRecordType } =>
   row.record_type === 'code_rule' || row.record_type === 'genai_rule';
 
+const ruleDisplayName = (row: ValidationRuleRow) => {
+  const configuredName = String(row.detail?.contractor_display_name || '').trim();
+  if (configuredName) return configuredName;
+
+  return row.record_key.replace(/_/g, ' ');
+};
+
+const contractorVisibilityLabel = (value?: string | null) => {
+  switch (value) {
+    case 'warn_and_fail':
+      return 'Warnings + errors';
+    case 'fail_only':
+      return 'Errors only';
+    case 'hidden':
+      return 'Hidden';
+    default:
+      return 'Unknown';
+  }
+};
+
+const contractorVisibilityColor = (value?: string | null) => {
+  switch (value) {
+    case 'warn_and_fail':
+      return 'orange';
+    case 'fail_only':
+      return 'teal';
+    case 'hidden':
+      return 'gray';
+    default:
+      return 'gray';
+  }
+};
+
+const contractorBlockingLabel = (value?: string | null) =>
+  value === 'block_on_fail' ? 'Blocks on errors' : 'Non-blocking';
+
+const contractorBlockingColor = (value?: string | null) => (value === 'block_on_fail' ? 'red' : 'gray');
+
+const adminWorkflowLabel = (value?: string | null) => {
+  switch (value) {
+    case 'all_results':
+      return 'All results';
+    case 'warn_and_fail':
+      return 'Warnings + errors';
+    case 'not_managed':
+      return 'Not managed';
+    case 'fail_only':
+      return 'Errors only';
+    default:
+      return 'Unknown';
+  }
+};
+
+const adminWorkflowColor = (value?: string | null) => {
+  switch (value) {
+    case 'all_results':
+      return 'purple';
+    case 'warn_and_fail':
+      return 'orange';
+    case 'fail_only':
+      return 'teal';
+    case 'not_managed':
+      return 'gray';
+    default:
+      return 'gray';
+  }
+};
+
 export default function ValidationRulesAlphabeticAdminScreen() {
   const navigate = useNavigate();
   const infoDrawer = useDisclosure();
@@ -120,7 +192,10 @@ export default function ValidationRulesAlphabeticAdminScreen() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | RuleRecordType>('all');
   const [upgradeFilterId, setUpgradeFilterId] = useState('all');
-  const [listViewMode, setListViewMode] = useState<ListViewMode>('matrix');
+  const [listViewMode, setListViewMode] = useState<RuleViewMode>('sharing');
+  const [contractorVisibilityFilter, setContractorVisibilityFilter] = useState<ContractorVisibilityFilter>('all');
+  const [contractorBlockingFilter, setContractorBlockingFilter] = useState<ContractorBlockingFilter>('all');
+  const [adminWorkflowFilter, setAdminWorkflowFilter] = useState<AdminWorkflowFilter>('all');
 
   const fetchUpgradeTypes = useCallback(async () => {
     setLoadingUpgradeTypes(true);
@@ -184,13 +259,26 @@ export default function ValidationRulesAlphabeticAdminScreen() {
         ) {
           return false;
         }
+        if (contractorVisibilityFilter !== 'all' && row.detail?.contractor_visibility !== contractorVisibilityFilter) {
+          return false;
+        }
+        if (contractorBlockingFilter !== 'all' && row.detail?.contractor_blocking_policy !== contractorBlockingFilter) {
+          return false;
+        }
+        if (adminWorkflowFilter !== 'all' && row.detail?.admin_workflow_policy !== adminWorkflowFilter) {
+          return false;
+        }
         if (!normalizedQuery) return true;
 
         const haystack = [
+          ruleDisplayName(row),
           row.record_key,
           RULE_TYPE_LABELS[row.record_type],
           row.detail?.description,
           row.detail?.prompt_text,
+          contractorVisibilityLabel(row.detail?.contractor_visibility),
+          contractorBlockingLabel(row.detail?.contractor_blocking_policy),
+          adminWorkflowLabel(row.detail?.admin_workflow_policy),
           ...row.upgrade_types.map((upgradeType) => upgradeType.upgrade_type_key),
           ...row.upgrade_types.map((upgradeType) => upgradeType.description),
         ]
@@ -200,8 +288,16 @@ export default function ValidationRulesAlphabeticAdminScreen() {
 
         return haystack.includes(normalizedQuery);
       })
-      .sort((a, b) => a.record_key.localeCompare(b.record_key));
-  }, [query, rows, typeFilter, upgradeFilterId]);
+      .sort((a, b) => ruleDisplayName(a).localeCompare(ruleDisplayName(b)) || a.record_key.localeCompare(b.record_key));
+  }, [
+    adminWorkflowFilter,
+    contractorBlockingFilter,
+    contractorVisibilityFilter,
+    query,
+    rows,
+    typeFilter,
+    upgradeFilterId,
+  ]);
 
   const mappedUpgradeTypeIds = useCallback(
     (row: ValidationRuleRow) => new Set(row.mappings.map((mapping) => mapping.invoice_upgrade_type_id)),
@@ -253,11 +349,11 @@ export default function ValidationRulesAlphabeticAdminScreen() {
               </Button>
             </Flex>
 
-            <Flex gap={3} mb={4} direction={{ base: 'column', lg: 'row' }}>
+            <Flex gap={3} mb={4} direction={{ base: 'column', xl: 'row' }} flexWrap="wrap">
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter by rule key, prompt, description, or upgrade type"
+                placeholder="Filter by advice check, rule key, prompt, description, or upgrade type"
                 maxW={{ base: 'full', lg: '520px' }}
               />
               <Select
@@ -281,25 +377,60 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                   </option>
                 ))}
               </Select>
+              <Select
+                value={contractorVisibilityFilter}
+                onChange={(event) => setContractorVisibilityFilter(event.target.value as ContractorVisibilityFilter)}
+                maxW={{ base: 'full', lg: '230px' }}
+              >
+                <option value="all">All contractor visibility</option>
+                <option value="hidden">Hidden from contractors</option>
+                <option value="fail_only">Errors only</option>
+                <option value="warn_and_fail">Warnings + errors</option>
+              </Select>
+              <Select
+                value={contractorBlockingFilter}
+                onChange={(event) => setContractorBlockingFilter(event.target.value as ContractorBlockingFilter)}
+                maxW={{ base: 'full', lg: '210px' }}
+              >
+                <option value="all">All submission blocking</option>
+                <option value="non_blocking">Non-blocking</option>
+                <option value="block_on_fail">Blocks on errors</option>
+              </Select>
+              <Select
+                value={adminWorkflowFilter}
+                onChange={(event) => setAdminWorkflowFilter(event.target.value as AdminWorkflowFilter)}
+                maxW={{ base: 'full', lg: '230px' }}
+              >
+                <option value="all">All admin workflow</option>
+                <option value="not_managed">Not managed</option>
+                <option value="fail_only">Errors only</option>
+                <option value="warn_and_fail">Warnings + errors</option>
+                <option value="all_results">All results</option>
+              </Select>
             </Flex>
 
             <Flex justify="space-between" align={{ base: 'start', md: 'center' }} gap={3} mb={4} flexWrap="wrap">
-              <HStack spacing={3}>
-                <Text fontSize="sm" fontWeight={listViewMode === 'matrix' ? 'bold' : 'normal'}>
-                  Matrix
-                </Text>
-                <Switch
-                  colorScheme="blue"
-                  isChecked={listViewMode === 'description'}
-                  onChange={(event) => setListViewMode(event.target.checked ? 'description' : 'matrix')}
-                />
-                <Text fontSize="sm" fontWeight={listViewMode === 'description' ? 'bold' : 'normal'}>
-                  Description Preview
-                </Text>
-              </HStack>
+              <RadioGroup value={listViewMode} onChange={(value) => setListViewMode(value as RuleViewMode)}>
+                <HStack spacing={5}>
+                  <Radio value="sharing" colorScheme="blue">
+                    Sharing
+                  </Radio>
+                  <Radio value="description" colorScheme="blue">
+                    Description
+                  </Radio>
+                  <Radio value="workflow" colorScheme="blue">
+                    Workflow
+                  </Radio>
+                </HStack>
+              </RadioGroup>
               {listViewMode === 'description' ? (
                 <Text fontSize="sm" opacity={0.75}>
                   Preview shows the first 180 characters. Use the info icon for the full rule text.
+                </Text>
+              ) : null}
+              {listViewMode === 'workflow' ? (
+                <Text fontSize="sm" opacity={0.75}>
+                  Workflow shows who sees each rule, whether failed rules block submission, and what admin tracks.
                 </Text>
               ) : null}
             </Flex>
@@ -316,12 +447,12 @@ export default function ValidationRulesAlphabeticAdminScreen() {
               </Flex>
             ) : (
               <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="md" overflowX="auto">
-                {listViewMode === 'matrix' ? (
+                {listViewMode === 'sharing' ? (
                   <Table size="sm" width="max-content">
                     <Thead bg="gray.50">
                       <Tr>
                         <Th position="sticky" left={0} zIndex={1} bg="gray.50" minW="480px" w="480px" maxW="480px">
-                          Rule key
+                          Advice check
                         </Th>
                         <Th minW="56px" w="56px" maxW="56px" px={1}>
                           Type
@@ -387,6 +518,15 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                               maxW="460px"
                             >
                               <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                                {ruleDisplayName(row)}
+                              </Text>
+                              <Text
+                                fontFamily="mono"
+                                fontSize="xs"
+                                opacity={0.55}
+                                lineHeight="short"
+                                overflowWrap="anywhere"
+                              >
                                 {row.record_key}
                               </Text>
                             </Td>
@@ -416,9 +556,9 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                                 lineHeight="short"
                               >
                                 <Tooltip
-                                  label={`${row.record_key} ${mappedIds.has(upgradeType.id) ? 'is mapped to' : 'is not mapped to'} ${
-                                    upgradeType.description || upgradeType.upgrade_type_key
-                                  }`}
+                                  label={`${ruleDisplayName(row)} (${row.record_key}) ${
+                                    mappedIds.has(upgradeType.id) ? 'is mapped to' : 'is not mapped to'
+                                  } ${upgradeType.description || upgradeType.upgrade_type_key}`}
                                   hasArrow
                                 >
                                   <Text as="span" display="inline-block" minW="18px">
@@ -463,11 +603,120 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                       ) : null}
                     </Tbody>
                   </Table>
+                ) : listViewMode === 'workflow' ? (
+                  <Table size="sm">
+                    <Thead bg="gray.50">
+                      <Tr>
+                        <Th>Advice check</Th>
+                        <Th minW="56px" w="56px" maxW="56px" px={1}>
+                          Type
+                        </Th>
+                        <Th minW="50px" w="50px" maxW="50px" px={1}>
+                          On
+                        </Th>
+                        <Th>Contractor visibility</Th>
+                        <Th>Submission blocking</Th>
+                        <Th>Admin workflow management</Th>
+                        <Th>Upgrade types</Th>
+                        <Th textAlign="right" minW="100px">
+                          Actions
+                        </Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {filteredRows.map((row) => (
+                        <Tr key={`${row.record_type}-${row.id}`} sx={ruleRowHoverSx}>
+                          <Td py={0.5} minW="360px" borderLeftWidth="3px" borderLeftColor="transparent">
+                            <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                              {ruleDisplayName(row)}
+                            </Text>
+                            <Text
+                              fontFamily="mono"
+                              fontSize="xs"
+                              opacity={0.55}
+                              lineHeight="short"
+                              overflowWrap="anywhere"
+                            >
+                              {row.record_key}
+                            </Text>
+                          </Td>
+                          <Td py={0.5} px={1}>
+                            <Badge colorScheme={row.record_type === 'code_rule' ? 'green' : 'blue'} fontSize="2xs">
+                              {RULE_TYPE_LABELS[row.record_type]}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} px={1}>
+                            <Badge colorScheme={row.enabled ? 'green' : 'gray'} fontSize="2xs">
+                              {row.enabled ? 'Y' : 'N'}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} minW="170px">
+                            <Badge
+                              colorScheme={contractorVisibilityColor(row.detail?.contractor_visibility)}
+                              fontSize="xs"
+                            >
+                              {contractorVisibilityLabel(row.detail?.contractor_visibility)}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} minW="160px">
+                            <Badge
+                              colorScheme={contractorBlockingColor(row.detail?.contractor_blocking_policy)}
+                              fontSize="xs"
+                            >
+                              {contractorBlockingLabel(row.detail?.contractor_blocking_policy)}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} minW="190px">
+                            <Badge colorScheme={adminWorkflowColor(row.detail?.admin_workflow_policy)} fontSize="xs">
+                              {adminWorkflowLabel(row.detail?.admin_workflow_policy)}
+                            </Badge>
+                          </Td>
+                          <Td py={0.5} minW="300px">
+                            <Text fontSize="xs" lineHeight="short" opacity={0.8}>
+                              {row.upgrade_types.map((upgradeType) => compactUpgradeLabel(upgradeType)).join(', ') ||
+                                'No mappings'}
+                            </Text>
+                          </Td>
+                          <Td textAlign="right" py={0.5}>
+                            <HStack justify="end" spacing={1}>
+                              <Tooltip label="Advice check details">
+                                <IconButton
+                                  aria-label="Advice check details"
+                                  icon={<Info size={18} />}
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => openInfo(row)}
+                                />
+                              </Tooltip>
+                              <Tooltip label="Edit in Fields and Advice Editor">
+                                <IconButton
+                                  aria-label="Edit advice check"
+                                  icon={<PencilSimple size={18} />}
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => openEdit(row)}
+                                />
+                              </Tooltip>
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      ))}
+                      {filteredRows.length === 0 ? (
+                        <Tr>
+                          <Td colSpan={8}>
+                            <Text py={6} textAlign="center" opacity={0.7}>
+                              No validation rules found.
+                            </Text>
+                          </Td>
+                        </Tr>
+                      ) : null}
+                    </Tbody>
+                  </Table>
                 ) : (
                   <Table size="sm">
                     <Thead bg="gray.50">
                       <Tr>
-                        <Th>Rule key</Th>
+                        <Th>Advice check</Th>
                         <Th minW="56px" w="56px" maxW="56px" px={1}>
                           Type
                         </Th>
@@ -486,6 +735,15 @@ export default function ValidationRulesAlphabeticAdminScreen() {
                         <Tr key={`${row.record_type}-${row.id}`} sx={ruleRowHoverSx}>
                           <Td py={0.5} minW="360px" borderLeftWidth="3px" borderLeftColor="transparent">
                             <Text fontWeight="semibold" fontSize="sm" lineHeight="short" overflowWrap="anywhere">
+                              {ruleDisplayName(row)}
+                            </Text>
+                            <Text
+                              fontFamily="mono"
+                              fontSize="xs"
+                              opacity={0.55}
+                              lineHeight="short"
+                              overflowWrap="anywhere"
+                            >
                               {row.record_key}
                             </Text>
                           </Td>

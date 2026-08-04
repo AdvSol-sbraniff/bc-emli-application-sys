@@ -19,12 +19,12 @@ WITH code_rules_seed (
   (
     '590f2f3a-3e23-449a-a7d4-2f35c3d53021'::uuid,
     'hp_ahri_product_validation',
-    'Checks AHRI-backed heat pump product validation as one code-owned decision. Pseudocode: 1. Read hp_ahri_reference from GenAI invoice located fields. 2. Read ahri_reference from supporting product documents. 3. Search claims.v_current_ahri_products for the invoice AHRI reference. 4. Subcheck invoice_ahri_reference_present passes when hp_ahri_reference is present, otherwise warns. 5. Subcheck supporting_document_ahri_matches_invoice passes when supporting-document AHRI includes the invoice AHRI, warns when supporting AHRI is missing, and fails when supporting AHRI conflicts. 6. Subcheck ahri_product_found_in_download passes when the invoice AHRI is found in the current imported AHRI product list, warns when invoice AHRI or source rows are missing, and fails when the AHRI is searched and not found. 7. Overall result fails if any subcheck fails, warns if no subcheck fails but any subcheck warns, otherwise passes. 8. Write invoice_versions.ahri_product_id when a clean product-list match is found. 9. In calculation, list invoice product identity, supporting-document product identity, download lookup, subchecks, failed_subchecks, and warn_subchecks.',
+    'Checks AHRI-backed heat pump product validation as one code-owned decision. Pseudocode: 1. Read hp_ahri_reference from GenAI invoice located fields. 2. Read ahri_reference from supporting product documents. 3. Search claims.v_current_ahri_products for the invoice AHRI reference. 4. Subcheck invoice_ahri_reference_present passes when hp_ahri_reference is present, otherwise warns. 5. Subcheck supporting_document_ahri_matches_invoice passes when supporting-document AHRI includes the invoice AHRI, returns info when supporting AHRI is missing but invoice AHRI and product-list validation pass, and fails when supporting AHRI conflicts. 6. Subcheck ahri_product_found_in_download passes when the invoice AHRI is found in the current imported AHRI product list, warns when invoice AHRI or source rows are missing, and fails when the AHRI is searched and not found. 7. Overall result fails if any subcheck fails, warns if no subcheck fails but any subcheck warns, returns info if the only caveat is missing supporting-document AHRI corroboration, otherwise passes. 8. Write invoice_versions.ahri_product_id when a product-list match is found. 9. In calculation, list invoice product identity, supporting-document product identity, download lookup, subchecks, failed_subchecks, warn_subchecks, and info_subchecks.',
     true,
     'No follow-up is required when the invoice AHRI, supporting-document AHRI, and imported AHRI product-list row agree.',
     'Review invoice/supporting product evidence or refresh the AHRI import when one AHRI validation subcheck is incomplete.',
     'Ask the contractor for corrected product evidence when AHRI evidence conflicts or the invoice AHRI is not found in the imported product list.',
-    NULL,
+    'The invoice AHRI matched the imported product list, but no supporting-document AHRI reference was extracted. No contractor correction is requested unless admin review finds conflicting product evidence. If admin wants a fully corroborated package, ask for a heat-pump AHRI certificate, AHRI directory printout, manufacturer product submittal, or product specification sheet showing the same AHRI reference and installed heat-pump component models.',
     'Reads normal GenAI located field hp_ahri_reference, not classifier product references.',
     'have an AHRI certified reference number that references all components of the heat pump.',
     true,
@@ -589,7 +589,7 @@ Pseudo-code:
 1. Run only for ventilation upgrade types when this code rule is enabled.
 2. Read invoice-side named fields: vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
 3. Read supporting-document named fields from documents on the same invoice version: brand_and_model, model_number, product_category_or_system_type, energy_star_reference, nrcan_reference, and product_list_reference.
-4. If the named evidence clearly indicates bathroom/exhaust fan and does not indicate HRV/ERV, return info because the HRV/ERV product-list lookup is not applicable.
+4. If the named evidence clearly indicates bathroom/exhaust fan and does not indicate HRV/ERV, return pass because the HRV/ERV product-list lookup is not applicable and the bathroom-fan product-list rule owns product validation.
 5. If the named evidence does not clearly indicate HRV/ERV, return warn so admin can review vent_system_type and product evidence.
 6. Extract usable model values from invoice fields and supporting-document fields.
 7. If invoice model evidence is missing, warn because the invoice does not independently identify the installed HRV/ERV product.
@@ -605,7 +605,7 @@ Pseudo-code:
     'No follow-up is required unless the visible ventilation equipment appears inconsistent with the matched NRCan ENERGY STAR HERV product-list row.',
     'Refresh the HERV product-list import if invoice and supporting-document product evidence agree but no current imported list rows are available, or review the equipment type if HRV/ERV evidence is unclear.',
     'Ask the contractor for corrected invoice/supporting product evidence when HRV/ERV product evidence is missing, conflicting, or not found in the imported NRCan ENERGY STAR HERV product list.',
-    'This rule records information only when the visible ventilation evidence is for a bathroom/exhaust fan rather than an HRV/ERV.',
+    NULL,
     'Code-owned deterministic lookup for the ventilation requirement that heat/energy recovery ventilators be ENERGY STAR certified and listed on NRCan searchable product list.',
     'heat/energy recovery ventilators must be ENERGY STAR® certified and listed on Natural Resource’s Canada’s searchable product list.',
     true,
@@ -621,7 +621,7 @@ Pseudo-code:
 1. Run only for ventilation upgrade types when this code rule is enabled.
 2. Read invoice-side named fields: vent_system_type, vent_manufacturer, vent_model_number, vent_make_model, vent_energy_star_reference, and vent_nrcan_or_product_list_reference.
 3. Read supporting-document named fields from documents on the same invoice version: brand_and_model, model_number, product_category_or_system_type, energy_star_reference, and product_list_reference.
-4. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return info because the fan product-list lookup is not applicable.
+4. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return pass because the fan product-list lookup is not applicable and the HRV/ERV product-list rule owns product validation.
 5. If the named evidence does not clearly identify fan equipment, return warn so admin can review vent_system_type and product evidence.
 6. Extract usable model values from invoice fields and supporting-document fields.
 7. If invoice model evidence is missing, warn because the invoice does not independently identify the installed fan product.
@@ -637,7 +637,7 @@ Pseudo-code:
     'No follow-up is required unless the visible ventilation equipment appears inconsistent with the matched ENERGY STAR ventilating-fan product-list row.',
     'Refresh the ENERGY STAR fan product-list import if invoice and supporting-document product evidence agree but no current imported list rows are available, or review the equipment type if fan evidence is unclear.',
     'Ask the contractor for corrected invoice/supporting product evidence when fan product evidence is conflicting or not found in the imported ENERGY STAR certified ventilating fan product list.',
-    'This rule records information only when the visible ventilation evidence is for HRV/ERV rather than a bathroom/utility/exhaust fan.',
+    NULL,
     'Code-owned deterministic lookup for the ventilation requirement that fans be ENERGY STAR certified and listed on the EPA/DOE searchable product list.',
     'fans must be ENERGY STAR certified and listed on the US Environmental Protection Agency and US Department of Energy’s searchable product list.',
     true,
@@ -652,7 +652,7 @@ Pseudo-code:
 Pseudo-code:
 1. Run only for ventilation upgrade types when this code rule is enabled.
 2. Use the same named product identity fields as vent_fan_energy_star_product_validation to determine whether the visible ventilation equipment is a bathroom/utility/exhaust fan or HRV/ERV.
-3. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return info because this fan-capacity requirement is not applicable.
+3. If the named evidence clearly indicates HRV/ERV rather than a bathroom/utility/exhaust fan, return pass because this fan-capacity requirement is not applicable.
 4. Use supporting-document named capacity fields bathroom_fan_cfm and static_pressure from documents on the same invoice version.
 5. If visible named supporting-document capacity evidence clearly shows at least 85 cfm or 40 L/s at 50 Pa or 0.2 in. w.c., pass.
 6. If visible named supporting-document capacity evidence clearly shows less than 85 cfm or 40 L/s at 50 Pa or 0.2 in. w.c., fail.
@@ -666,7 +666,7 @@ Pseudo-code:
     'No follow-up is required when named visible evidence or the matched imported fan product-list row confirms at least 85 cfm at the required or stricter pressure.',
     'Verify a product specification sheet or ENERGY STAR row detail when capacity evidence is present but the static pressure is missing or the imported 0.25 in. w.g. airflow does not independently confirm the threshold.',
     'Ask the contractor for corrected product specification evidence when named evidence clearly shows the fan below 85 cfm at 50 Pa / 0.2 in. w.c.',
-    'Resolve the fan product-list match or request capacity/static-pressure evidence before relying on this requirement.',
+    NULL,
     'Code-owned deterministic check for the ventilation requirement that fans have capacity of at least 85 cfm (40 L/s) at static pressure of 50 Pa (0.2 in. w.c.).',
     'fans must have a capacity of at least 85 cfm (40 L/s), at static pressure of 50 pa (0.2” w.c.).',
     true,
@@ -736,7 +736,7 @@ source_quote_metadata (
   ('esu_timing_within_six_months_of_heat_pump_installation', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the service-upgrade date is within six months of the associated heat-pump installation. Upload clearer date evidence if needed.$$),
   ('first_class_invoice_fields_present', $$General Eligibility Requirements$$, $$Check that the invoice has the required invoice details, including the itemized CleanBC rebate and amount-due math. Upload a corrected invoice if needed.$$),
   ('heat_pump_northern_top_up_3000_within_cap', $$applicable heat pump requirements table$$, $$Check that the invoice and supporting documents show the northern top-up amount, location, and BC Hydro service evidence. Upload clearer documents if needed.$$),
-  ('hp_ahri_product_validation', $$applicable heat pump product requirements$$, $$Check that the AHRI reference on the invoice matches the supporting product documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),
+  ('hp_ahri_product_validation', $$applicable heat pump product requirements$$, $$Check that the AHRI reference on the invoice is correct. If program staff ask for stronger product evidence, upload an AHRI certificate, AHRI directory printout, manufacturer product submittal, or product specification sheet showing the same AHRI reference and installed heat-pump component models.$$),
   ('hp_product_efficiency_threshold', $$AIR SOURCE HEAT PUMP requirements table$$, $$Check that the invoice or product documents clearly show the required SEER/HSPF or SEER2/HSPF2 values. Upload clearer product evidence if needed.$$),
   ('hp_product_minimum_capacity_at_minus_5c', $$AIR SOURCE HEAT PUMP requirements table$$, $$Check that the invoice or product documents clearly show the 12,000 BTU minimum-capacity requirement. Upload clearer product evidence if needed.$$),
   ('hpwh_neea_product_validation', $$HEAT PUMP WATER HEATER$$, $$Check the heat pump water heater model on the invoice and supporting documents. If the product should be eligible but is not recognized, contact program staff for assistance.$$),

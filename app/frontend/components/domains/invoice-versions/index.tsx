@@ -1803,9 +1803,16 @@ export const InvoiceVersionShowScreen = () => {
     };
 
     uploadedSupportingDocuments.forEach((doc: any) => {
+      const hasKnownType =
+        String(doc?.supporting_document_type_key || '').trim() ||
+        String(doc?.supporting_document_type_description || '').trim();
       ensureSection(
-        doc?.supporting_document_type_key || doc?.supporting_document_type_description || doc?.content_type,
-        doc?.supporting_document_type_description || doc?.supporting_document_type_key || doc?.content_type,
+        hasKnownType
+          ? doc?.supporting_document_type_key || doc?.supporting_document_type_description
+          : 'other-unclassified-supporting-document',
+        hasKnownType
+          ? doc?.supporting_document_type_description || doc?.supporting_document_type_key
+          : 'Other / unclassified supporting document',
       ).documents.push(doc);
     });
 
@@ -4514,6 +4521,10 @@ export const InvoiceVersionShowScreen = () => {
             </Flex>
           </DrawerHeader>
           <DrawerBody>
+            <RuleDetailDrawerSection label="Rule Key">
+              <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_key} />
+            </RuleDetailDrawerSection>
+
             <RuleDetailDrawerSection label="Source Quote">
               {String(ruleDetailsDrawerRulecheck?.source_quote ?? '').trim() ? (
                 <>

@@ -327,10 +327,14 @@ module Claims
                 original_filename: doc.original_filename,
                 classification_status: doc.classification_status,
                 classification_confidence: doc.classification_confidence,
+                classification_reason: doc.classification_reason,
                 supporting_document_routing_quality:
                   doc.supporting_document_routing_quality,
                 supporting_document_routing_quality_reason:
                   doc.supporting_document_routing_quality_reason,
+                personal_information_review_status:
+                  doc.personal_information_review_status,
+                ocr_text_excerpt: safe_supporting_document_ocr_excerpt(doc),
                 located_fields:
                   serialize_supporting_document_located_fields(doc),
                 visual_findings:
@@ -387,6 +391,21 @@ module Claims
             .compact
             .uniq
             .sort
+        relevant_document_ids =
+          relevant_documents
+            .map do |row|
+              row[:supporting_document_id].to_s.presence ||
+                row["supporting_document_id"].to_s.presence
+            end
+            .compact
+            .uniq
+        other_documents =
+          documents.reject do |row|
+            relevant_document_ids.include?(
+              row[:supporting_document_id].to_s.presence ||
+                row["supporting_document_id"].to_s.presence
+            )
+          end
 
         {
           upgrade_type_key: invoice_upgrade_type.upgrade_type_key,
@@ -402,7 +421,8 @@ module Claims
             configured_type_keys - present_type_keys,
           present_configured_type_counts:
             count_document_types(relevant_documents),
-          configured_documents: relevant_documents
+          configured_documents: relevant_documents,
+          other_documents: other_documents
         }
       rescue StandardError
         {
@@ -415,7 +435,8 @@ module Claims
           not_present_applicable_type_keys: [],
           present_configured_type_counts: {
           },
-          configured_documents: []
+          configured_documents: [],
+          other_documents: []
         }
       end
 
@@ -441,6 +462,46 @@ module Claims
           end
           .sort
           .to_h
+      end
+
+      def self.safe_supporting_document_ocr_excerpt(document)
+        return nil if document.di_read_raw_json.blank?
+
+        if %w[high_risk review_recommended].include?(
+             document.personal_information_review_status.to_s
+           )
+          return(
+            "[OCR excerpt withheld because the document was flagged for personal-information review.]"
+          )
+        end
+
+        text = extract_ocr_text(document.di_read_raw_json)
+        return nil if text.blank?
+
+        normalized = text.to_s.gsub(/\s+/, " ").strip
+        normalized.length > 1_500 ? "#{normalized[0, 1_500]}..." : normalized
+      rescue StandardError
+        nil
+      end
+
+      def self.extract_ocr_text(raw_json)
+        raw = raw_json.is_a?(Hash) ? raw_json : {}
+        direct =
+          raw["content"] || raw.dig("analyzeResult", "content") ||
+            raw.dig("result", "content")
+        return direct.to_s if direct.present?
+
+        pages =
+          raw["pages"] || raw.dig("analyzeResult", "pages") ||
+            raw.dig("readResult", "pages")
+        Array(pages)
+          .flat_map do |page|
+            Array(page["lines"] || page[:lines]).map do |line|
+              line["content"] || line[:content] || line["text"] || line[:text]
+            end
+          end
+          .compact
+          .join("\n")
       end
 
       def self.serialize_supporting_document_located_fields(document)
