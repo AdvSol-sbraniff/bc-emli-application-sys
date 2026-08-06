@@ -288,6 +288,8 @@ Rails.application.routes.draw do
             to: "conversation_messages_admin#update"
       delete "admin/conversation_messages/:id",
              to: "conversation_messages_admin#destroy"
+      post "admin/invoices/:invoice_id/conversation_messages/read",
+           to: "conversation_messages_admin#mark_contractor_messages_read"
       get "admin/invoices/:invoice_id/revision_issues",
           to: "invoice_revision_issues_admin#index"
       post "admin/invoices/:invoice_id/revision_issues",

@@ -1,4 +1,9 @@
 import {
+  Accordion,
+  AccordionButton,
+  AccordionIcon,
+  AccordionItem,
+  AccordionPanel,
   AlertDialog,
   AlertDialogBody,
   AlertDialogContent,
@@ -8,12 +13,6 @@ import {
   Badge,
   Box,
   Button,
-  Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerHeader,
-  DrawerOverlay,
   Flex,
   FormControl,
   FormLabel,
@@ -30,7 +29,6 @@ import {
   CaretRight,
   CheckCircle,
   FloppyDiskBack,
-  Info,
   PaperPlaneTilt,
   Trash,
 } from '@phosphor-icons/react';
@@ -50,6 +48,14 @@ const ADMIN_REMEDIES = [
   ['provide_explanation', 'Provide explanation'],
 ];
 
+const CONTRACTOR_RESPONSE_METHODS = [
+  ['corrected_invoice_uploaded', 'Corrected invoice uploaded'],
+  ['supporting_document_uploaded', 'Supporting document uploaded'],
+  ['attestation_provided', 'Attestation provided'],
+  ['explanation_provided', 'Explanation provided'],
+  ['unable_to_resolve', 'Unable to resolve'],
+];
+
 const INTERNAL_CLOSE_STATUSES = [['closed_no_contractor_action_required', 'Confirmed - no contractor action required']];
 const CONTRACTOR_CLOSE_STATUSES = [
   ['closed_via_corrected_documentation', 'Corrected documentation accepted'],
@@ -57,6 +63,12 @@ const CONTRACTOR_CLOSE_STATUSES = [
   ['closed_via_exception', 'Exception granted'],
   ['closed_as_withdrawn', 'Issue withdrawn'],
 ];
+
+const dispositionStatusLabel = (status: RevisionIssue['status']): string =>
+  [...INTERNAL_CLOSE_STATUSES, ...CONTRACTOR_CLOSE_STATUSES].find(([value]) => value === status)?.[1] || pretty(status);
+
+const adminRemedyLabel = (remedy?: string | null): string =>
+  ADMIN_REMEDIES.find(([value]) => value === remedy)?.[1] || (remedy ? pretty(remedy) : '');
 
 const pretty = (value: unknown): string =>
   String(value ?? '')
@@ -71,28 +83,44 @@ const sourceValue = (value: unknown): string => {
 export const revisionIssueUnresolved = (issue: RevisionIssue): boolean =>
   issue.status === 'pending_admin_review' || issue.status === 'open';
 
-export const revisionIssueStatusLabel = (status: RevisionIssue['status']): string => {
-  if (status === 'pending_admin_review') return 'Awaiting admin decision';
-  if (status === 'open') return 'Open';
-  if (status === 'closed_no_contractor_action_required') return 'Closed internally';
-  if (status === 'closed_via_corrected_documentation') return 'Corrected documentation accepted';
-  if (status === 'closed_via_attestation') return 'Attestation accepted';
-  if (status === 'closed_via_exception') return 'Exception granted';
-  if (status === 'closed_as_withdrawn') return 'Withdrawn';
-  return pretty(status);
-};
-
-const statusColour = (issue: RevisionIssue): string => {
-  if (issue.status === 'pending_admin_review') return 'yellow';
-  if (issue.status === 'open') return 'orange';
-  if (issue.status === 'closed_via_exception') return 'purple';
-  return issue.was_sent_to_contractor ? 'green' : 'gray';
-};
-
 const formatSentDate = (value?: string | null): string => {
   if (!value) return '';
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? '' : date.toLocaleDateString();
+};
+
+const formatCommentDateTime = (value?: string | null): string => {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return 'Date unavailable';
+
+  return date.toLocaleString('en-CA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const commentChoice = (comment: RevisionIssueComment): { label: string; value: string } | null => {
+  if (comment.author_type === 'admin' && comment.admin_recommended_remedy) {
+    return {
+      label: 'Requested response',
+      value: adminRemedyLabel(comment.admin_recommended_remedy),
+    };
+  }
+
+  if (comment.author_type === 'contractor' && comment.contractor_response_method) {
+    return {
+      label: 'Response method',
+      value:
+        CONTRACTOR_RESPONSE_METHODS.find(([value]) => value === comment.contractor_response_method)?.[1] ||
+        pretty(comment.contractor_response_method),
+    };
+  }
+
+  return null;
 };
 
 const currentAdminComment = (
@@ -177,6 +205,7 @@ export type AdminInlineRevisionWorkspace = {
   setCloseDraft: (issueId: string, patch: Partial<CloseDraft>) => void;
   toggleIssue: (issueId: string) => void;
   focusIssue: (issueId: string) => void;
+  focusSource: (issueId: string) => void;
   saveIssue: (issue: RevisionIssue) => Promise<boolean>;
   resetIssue: (issue: RevisionIssue) => Promise<void>;
   deleteIssue: (issue: RevisionIssue) => Promise<void>;
@@ -185,6 +214,39 @@ export type AdminInlineRevisionWorkspace = {
   confirmSend: () => Promise<void>;
   cancelSend: () => void;
 };
+
+const revisionIssueElementId = (issueId: string): string => `admin-revision-issue-${issueId}`;
+
+const revealTarget = (target: HTMLElement | null) => {
+  if (!target) return;
+  const ancestorIds: string[] = [];
+  let ancestor = target.parentElement;
+  while (ancestor) {
+    if (ancestor.id) ancestorIds.push(ancestor.id);
+    ancestor = ancestor.parentElement;
+  }
+  const accordionButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('button[aria-controls][aria-expanded="false"]'),
+  );
+  ancestorIds.reverse().forEach((ancestorId) => {
+    accordionButtons.find((button) => button.getAttribute('aria-controls') === ancestorId)?.click();
+  });
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.focus({ preventScroll: true });
+    });
+  });
+};
+
+const revealElement = (elementId: string) => revealTarget(document.getElementById(elementId));
+
+const revealRevisionSource = (issueId: string) =>
+  revealTarget(document.querySelector<HTMLElement>(`[data-admin-revision-source-issue-id="${issueId}"]`));
+
+export const AdminRevisionSourceAnchor = ({ issueId }: { issueId: string }) => (
+  <Box data-admin-revision-source-issue-id={issueId} tabIndex={-1} h={0} gridColumn="1 / -1" scrollMarginTop="16px" />
+);
 
 type WorkspaceArgs = {
   invoiceId: string;
@@ -357,24 +419,11 @@ export const useAdminInlineRevisionWorkspace = ({
 
   const focusIssue = useCallback((issueId: string) => {
     setExpandedIssueIds((current) => new Set(current).add(issueId));
-    window.setTimeout(() => {
-      const target = document.getElementById(`admin-revision-issue-${issueId}`);
-      if (!target) return;
-      const ancestorIds: string[] = [];
-      let ancestor = target.parentElement;
-      while (ancestor) {
-        if (ancestor.id) ancestorIds.push(ancestor.id);
-        ancestor = ancestor.parentElement;
-      }
-      const accordionButtons = Array.from(
-        document.querySelectorAll<HTMLButtonElement>('button[aria-controls][aria-expanded="false"]'),
-      );
-      ancestorIds.reverse().forEach((ancestorId) => {
-        accordionButtons.find((button) => button.getAttribute('aria-controls') === ancestorId)?.click();
-      });
-      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      target?.focus({ preventScroll: true });
-    }, 60);
+    window.setTimeout(() => revealElement(revisionIssueElementId(issueId)), 60);
+  }, []);
+
+  const focusSource = useCallback((issueId: string) => {
+    window.setTimeout(() => revealRevisionSource(issueId), 60);
   }, []);
 
   const fail = useCallback(
@@ -526,6 +575,7 @@ export const useAdminInlineRevisionWorkspace = ({
     setCloseDraft,
     toggleIssue,
     focusIssue,
+    focusSource,
     saveIssue,
     resetIssue,
     deleteIssue,
@@ -547,7 +597,7 @@ const issueState = (issue: RevisionIssue, workspace: AdminInlineRevisionWorkspac
   const comment = currentAdminComment(issue, workspace.data);
   if (comment?.can_edit && draft.remedy && draft.text.trim()) return { label: 'Ready to send', colour: 'blue' };
   if (issue.status === 'open' && issue.comments.some((candidate) => candidate.author_type === 'contractor')) {
-    return { label: 'Contractor replied', colour: 'purple' };
+    return { label: 'Contractor response received', colour: 'purple' };
   }
   return { label: 'Recommendation required', colour: 'orange' };
 };
@@ -570,58 +620,95 @@ const sentHistoryLabel = (issue: RevisionIssue, data: RevisionTrackerData | null
 export const AdminInlineRevisionIssue = ({
   issue,
   workspace,
+  sourceAvailable = false,
 }: {
   issue?: RevisionIssue;
   workspace: AdminInlineRevisionWorkspace;
+  sourceAvailable?: boolean;
 }) => {
   if (!issue) return null;
   const expanded = workspace.expandedIssueIds.has(issue.id);
   const draft = workspace.draftFor(issue);
   const closeDraft = workspace.closeDraftFor(issue);
   const state = issueState(issue, workspace);
+  const showStateBadge = state && state.label !== 'Ready to send' && state.label !== 'Recommendation required';
+  const selectedRecommendation = adminRemedyLabel(draft.remedy);
+  const hasUnsavedChanges = workspace.unsavedIssueIds.includes(issue.id);
   const editableComment = currentAdminComment(issue, workspace.data);
   const visibleComments = editableComment?.can_edit
     ? issue.comments.filter((comment) => comment.id !== editableComment.id)
     : issue.comments;
+  const conversationRounds = Array.from(
+    visibleComments
+      .reduce((rounds, comment) => {
+        const existing = rounds.get(comment.revision_round_id);
+        if (existing) {
+          existing.comments.push(comment);
+        } else {
+          rounds.set(comment.revision_round_id, {
+            id: comment.revision_round_id,
+            number: comment.round_number,
+            comments: [comment],
+          });
+        }
+        return rounds;
+      }, new Map<string, { id: string; number: number; comments: RevisionIssueComment[] }>())
+      .values(),
+  ).sort((left, right) => left.number - right.number);
   const value = sourceValue(issue.source.value);
 
   return (
     <Box
-      id={`admin-revision-issue-${issue.id}`}
+      id={revisionIssueElementId(issue.id)}
       tabIndex={-1}
       mt="6px"
       mb="8px"
       borderWidth="1px"
+      borderLeftWidth={hasUnsavedChanges ? '4px' : '1px'}
       borderColor={expanded ? 'blue.300' : 'gray.200'}
+      borderLeftColor={hasUnsavedChanges ? 'yellow.400' : undefined}
       borderRadius="md"
       bg={revisionIssueUnresolved(issue) ? 'blue.50' : 'gray.50'}
       boxShadow={expanded ? '0 0 0 2px rgba(49, 130, 206, 0.10)' : undefined}
       _focus={{ outline: 'none', borderColor: 'blue.400' }}
     >
-      <Button
-        variant="ghost"
-        w="100%"
-        h="auto"
-        minH="38px"
-        px="9px"
-        py="6px"
-        justifyContent="flex-start"
-        textAlign="left"
-        whiteSpace="normal"
-        onClick={() => workspace.toggleIssue(issue.id)}
-      >
-        <Flex w="100%" align="center" gap="7px" wrap="wrap">
-          {expanded ? <CaretDown size={15} /> : <CaretRight size={15} />}
-          <Text fontSize="sm" fontWeight="700" flex="1" minW="160px">
-            {issue.source.friendly_label || pretty(issue.issue_type)}
-          </Text>
-          <Badge colorScheme={statusColour(issue)}>{revisionIssueStatusLabel(issue.status)}</Badge>
-          {state ? <Badge colorScheme={state.colour}>{state.label}</Badge> : null}
-          <Text fontSize="xs" color="gray.600">
-            {sentHistoryLabel(issue, workspace.data)}
-          </Text>
-        </Flex>
-      </Button>
+      <Flex align="center" gap="4px">
+        <Button
+          variant="ghost"
+          flex="1"
+          h="auto"
+          minH="38px"
+          px="9px"
+          py="6px"
+          justifyContent="flex-start"
+          textAlign="left"
+          whiteSpace="normal"
+          onClick={() => workspace.toggleIssue(issue.id)}
+        >
+          <Flex w="100%" align="center" gap="7px" wrap="wrap">
+            {expanded ? <CaretDown size={15} /> : <CaretRight size={15} />}
+            <Text fontSize="sm" fontWeight="700" flex="1" minW="160px">
+              {issue.source.friendly_label || pretty(issue.issue_type)}
+            </Text>
+            {selectedRecommendation ? (
+              <Text fontSize="xs" color="gray.700">
+                Recommendation: {selectedRecommendation}
+              </Text>
+            ) : null}
+            {showStateBadge ? <Badge colorScheme={showStateBadge.colour}>{showStateBadge.label}</Badge> : null}
+            {issue.was_sent_to_contractor ? (
+              <Text fontSize="xs" color="gray.600">
+                {sentHistoryLabel(issue, workspace.data)}
+              </Text>
+            ) : null}
+          </Flex>
+        </Button>
+        {sourceAvailable ? (
+          <Button size="xs" variant="outline" mr="7px" onClick={() => workspace.focusSource(issue.id)}>
+            Focus
+          </Button>
+        ) : null}
+      </Flex>
 
       {expanded ? (
         <Box px="10px" pb="10px">
@@ -634,34 +721,61 @@ export const AdminInlineRevisionIssue = ({
             </Text>
           ) : null}
 
-          {visibleComments.length ? (
-            <Box borderLeftWidth="2px" borderColor="gray.200" pl="10px" mb="10px">
-              {visibleComments.map((comment) => (
-                <Box key={comment.id} mb="9px">
-                  <Flex gap="6px" align="center" mb="2px" wrap="wrap">
-                    <Badge colorScheme={comment.author_type === 'admin' ? 'blue' : 'green'}>
-                      {comment.author_type === 'admin' ? 'Admin' : 'Contractor'}
-                    </Badge>
-                    <Text fontSize="xs" color="gray.600">
-                      Exchange {comment.round_number}
+          {conversationRounds.length ? (
+            <Box ml={{ base: 2, md: 4 }} mb="12px" py="4px">
+              {conversationRounds.map((round) => (
+                <Box key={round.id} mb="14px" _last={{ mb: 0 }}>
+                  <Flex align="center" gap="7px" mb="7px">
+                    <Text fontSize="sm" fontWeight="700" color="gray.800">
+                      Round {round.number}
                     </Text>
-                    {comment.admin_recommended_remedy ? (
-                      <Text fontSize="xs" fontWeight="600">
-                        {pretty(comment.admin_recommended_remedy)}
-                      </Text>
-                    ) : null}
-                    {comment.contractor_response_method ? (
-                      <Text fontSize="xs" fontWeight="600">
-                        {pretty(comment.contractor_response_method)}
-                      </Text>
+                    {round.id === workspace.data?.latest_round_id ? (
+                      <Badge colorScheme="blue" variant="subtle">
+                        Current
+                      </Badge>
                     ) : null}
                   </Flex>
-                  <Text fontSize="sm" whiteSpace="pre-wrap">
-                    {comment.comment_text}
-                  </Text>
-                  {comment.contractor_asserted_value ? (
-                    <Text fontSize="sm">Asserted value: {comment.contractor_asserted_value}</Text>
-                  ) : null}
+                  <Flex direction="column" ml="4px" borderLeftWidth="4px" borderLeftColor="orange.200">
+                    {round.comments.map((comment) => {
+                      const choice = commentChoice(comment);
+
+                      return (
+                        <Box key={comment.id} position="relative" pl="18px" pb="14px" _last={{ pb: '2px' }}>
+                          <Box
+                            aria-hidden="true"
+                            position="absolute"
+                            top="3px"
+                            left="-7px"
+                            w="10px"
+                            h="10px"
+                            bg="orange.200"
+                            borderRadius="full"
+                          />
+                          <Flex gap="7px" align="center" mb="3px" wrap="wrap">
+                            <Badge bg="#F7F9FC" borderWidth="1px" borderColor="#053662" color="#2D2D2D">
+                              {comment.author_type === 'admin' ? 'Admin' : 'Contractor'}
+                            </Badge>
+                            <Text fontSize="xs" color="gray.600">
+                              {formatCommentDateTime(comment.created_at)}
+                            </Text>
+                          </Flex>
+                          {choice ? (
+                            <Text fontSize="sm" fontWeight="600" color="gray.800" mb="2px">
+                              {choice.label}: {choice.value}
+                            </Text>
+                          ) : null}
+                          <Text fontSize="sm" whiteSpace="pre-wrap">
+                            {comment.comment_text}
+                          </Text>
+                          {comment.contractor_asserted_value ? (
+                            <Text fontSize="sm" mt="2px">
+                              Attested value: <strong>{comment.contractor_asserted_value}</strong>
+                            </Text>
+                          ) : null}
+                        </Box>
+                      );
+                    })}
+                  </Flex>
                 </Box>
               ))}
             </Box>
@@ -682,7 +796,16 @@ export const AdminInlineRevisionIssue = ({
                   <Badge colorScheme="gray">Closed internally — never sent</Badge>
                 ) : null}
               </Flex>
+              <Text fontSize="sm" mb="3px">
+                <Text as="span" fontWeight="700">
+                  Outcome:{' '}
+                </Text>
+                {dispositionStatusLabel(issue.status)}
+              </Text>
               <Text fontSize="sm" whiteSpace="pre-wrap">
+                <Text as="span" fontWeight="700">
+                  Admin note:{' '}
+                </Text>
                 {issue.disposition_comment}
               </Text>
             </Box>
@@ -690,8 +813,11 @@ export const AdminInlineRevisionIssue = ({
 
           {issue.can_admin_comment ? (
             <Box bg="white" borderWidth="1px" borderColor="blue.100" borderRadius="md" p="9px" mb="10px">
-              <Text fontSize="xs" fontWeight="700" mb="7px">
-                Contractor request
+              <Text fontSize="sm" fontWeight="700">
+                Your decision
+              </Text>
+              <Text fontSize="xs" color="gray.600" mb="7px">
+                Send another request to the contractor, or close the issue below.
               </Text>
               <FormControl mb="7px">
                 <FormLabel fontSize="xs" mb="2px">
@@ -804,11 +930,60 @@ export const AdminInlineRevisionIssue = ({
   );
 };
 
-export const AdminRevisionWorkspaceToolbar = ({ workspace }: { workspace: AdminInlineRevisionWorkspace }) => {
+export const AdminRevisionWorkspace = ({
+  workspace,
+  sourceIssueIds,
+}: {
+  workspace: AdminInlineRevisionWorkspace;
+  sourceIssueIds: Set<string>;
+}) => {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const [decisionSavedSort, setDecisionSavedSort] = useState<'alphabetic' | 'recommendation_type'>('alphabetic');
   const unresolved = workspace.issues.filter(revisionIssueUnresolved);
-  const pending = unresolved.filter((issue) => issue.status === 'pending_admin_review').length;
-  const open = unresolved.length - pending;
+  const isWithContractor = workspace.data?.invoice_status === 'contractor_revision_inbox';
+  const readyToSendIssueIds = new Set(
+    isWithContractor
+      ? []
+      : unresolved
+          .filter((issue) => {
+            const comment = currentAdminComment(issue, workspace.data);
+            return !!comment?.can_edit && !!comment.admin_recommended_remedy && !!comment.comment_text.trim();
+          })
+          .map((issue) => issue.id),
+  );
+  const needsDecision = isWithContractor ? [] : unresolved.filter((issue) => !readyToSendIssueIds.has(issue.id));
+  const decisionComplete = isWithContractor
+    ? []
+    : unresolved
+        .filter((issue) => readyToSendIssueIds.has(issue.id))
+        .sort((left, right) => {
+          const leftIssueLabel = left.source.friendly_label || pretty(left.issue_type);
+          const rightIssueLabel = right.source.friendly_label || pretty(right.issue_type);
+          if (decisionSavedSort === 'recommendation_type') {
+            const recommendationComparison = adminRemedyLabel(workspace.draftFor(left).remedy).localeCompare(
+              adminRemedyLabel(workspace.draftFor(right).remedy),
+            );
+            if (recommendationComparison !== 0) return recommendationComparison;
+          }
+          return leftIssueLabel.localeCompare(rightIssueLabel);
+        });
+  const withContractor = isWithContractor ? unresolved : [];
+  const closed = workspace.issues.filter((issue) => !revisionIssueUnresolved(issue));
+  const categories = isWithContractor
+    ? [
+        { label: 'Awaiting contractor response', issues: withContractor, colour: 'orange' },
+        { label: 'Closed', issues: closed, colour: 'green' },
+      ]
+    : [
+        { label: 'Needs decision', issues: needsDecision, colour: 'yellow' },
+        {
+          label: 'Decision saved - pending send',
+          issues: decisionComplete,
+          colour: 'blue',
+          showDecisionSort: true,
+        },
+        { label: 'Closed', issues: closed, colour: 'green' },
+      ];
   const sendIssues = unresolved.filter((issue) => {
     const draft = workspace.draftFor(issue);
     const comment = currentAdminComment(issue, workspace.data);
@@ -819,25 +994,28 @@ export const AdminRevisionWorkspaceToolbar = ({ workspace }: { workspace: AdminI
     <>
       <Box bg="blue.50" borderWidth="1px" borderColor="blue.200" borderRadius="md" p="10px" mb="12px">
         <Flex align="center" justify="space-between" gap="8px" wrap="wrap">
-          <Box>
+          <Flex align="center" gap="7px" wrap="wrap">
             <Text fontWeight="700">Revision workspace</Text>
-            <Flex gap="6px" mt="3px" wrap="wrap">
-              <Badge colorScheme="yellow">{pending} awaiting decision</Badge>
-              <Badge colorScheme="orange">{open} open</Badge>
-              {workspace.unsavedIssueIds.length ? (
-                <Badge colorScheme="yellow">{workspace.unsavedIssueIds.length} unsaved</Badge>
-              ) : null}
-            </Flex>
-          </Box>
-          <Button
-            size="sm"
-            colorScheme="blue"
-            leftIcon={<PaperPlaneTilt size={17} />}
-            isDisabled={!unresolved.length || workspace.busy}
-            onClick={workspace.requestSend}
-          >
-            Send to contractor
-          </Button>
+            {workspace.unsavedIssueIds.length ? (
+              <Badge colorScheme="yellow">
+                {workspace.unsavedIssueIds.length}{' '}
+                {workspace.unsavedIssueIds.length === 1 ? 'unsaved change' : 'unsaved changes'}
+              </Badge>
+            ) : null}
+          </Flex>
+          {workspace.data?.invoice_status === 'admin_review_inbox' ? (
+            <Button
+              size="sm"
+              colorScheme="blue"
+              leftIcon={<PaperPlaneTilt size={17} />}
+              isDisabled={
+                !workspace.data?.capabilities?.can_send_issues || !!workspace.unsavedIssueIds.length || workspace.busy
+              }
+              onClick={workspace.requestSend}
+            >
+              Send to contractor
+            </Button>
+          ) : null}
         </Flex>
         {workspace.loading ? (
           <Flex align="center" gap="7px" mt="8px">
@@ -857,6 +1035,64 @@ export const AdminRevisionWorkspaceToolbar = ({ workspace }: { workspace: AdminI
             ))}
           </Box>
         ) : null}
+
+        <Accordion allowMultiple defaultIndex={categories.map((_, index) => index)} mt="10px">
+          {categories.map((category) => (
+            <AccordionItem key={category.label} borderColor="blue.200">
+              {category.issues.length ? (
+                <>
+                  <h3>
+                    <AccordionButton px="4px" py="8px" _hover={{ bg: 'blue.100' }}>
+                      <Text flex="1" textAlign="left" fontSize="sm" fontWeight="700">
+                        {category.label}
+                      </Text>
+                      <Badge colorScheme={category.colour} mr="8px">
+                        {category.issues.length}
+                      </Badge>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h3>
+                  <AccordionPanel px="4px" pt="4px" pb="8px">
+                    {'showDecisionSort' in category && category.showDecisionSort ? (
+                      <Flex justify="flex-end" mb="8px">
+                        <FormControl w={{ base: 'full', sm: '240px' }}>
+                          <FormLabel fontSize="xs" mb="2px">
+                            Sort issues
+                          </FormLabel>
+                          <Select
+                            size="sm"
+                            value={decisionSavedSort}
+                            onChange={(event) =>
+                              setDecisionSavedSort(event.target.value as 'alphabetic' | 'recommendation_type')
+                            }
+                          >
+                            <option value="alphabetic">Alphabetic</option>
+                            <option value="recommendation_type">Recommendation type</option>
+                          </Select>
+                        </FormControl>
+                      </Flex>
+                    ) : null}
+                    {category.issues.map((issue) => (
+                      <AdminInlineRevisionIssue
+                        key={issue.id}
+                        issue={issue}
+                        workspace={workspace}
+                        sourceAvailable={sourceIssueIds.has(issue.id)}
+                      />
+                    ))}
+                  </AccordionPanel>
+                </>
+              ) : (
+                <Flex as="h3" align="center" px="4px" py="8px">
+                  <Text flex="1" textAlign="left" fontSize="sm" fontWeight="700">
+                    {category.label}
+                  </Text>
+                  <Badge colorScheme={category.colour}>0</Badge>
+                </Flex>
+              )}
+            </AccordionItem>
+          ))}
+        </Accordion>
       </Box>
 
       <AlertDialog
@@ -895,185 +1131,5 @@ export const AdminRevisionWorkspaceToolbar = ({ workspace }: { workspace: AdminI
         </AlertDialogOverlay>
       </AlertDialog>
     </>
-  );
-};
-
-type SnapshotProps = {
-  workspace: AdminInlineRevisionWorkspace;
-  matchedIssueIds: Set<string>;
-};
-
-export const AdminRevisionSnapshot = ({ workspace, matchedIssueIds }: SnapshotProps) => {
-  const [historyIssueId, setHistoryIssueId] = useState<string | null>(null);
-  const readyToSend = workspace.issues.filter((issue) => {
-    if (issue.status !== 'pending_admin_review') return false;
-    const comment = currentAdminComment(issue, workspace.data);
-    return !!comment?.can_edit && !!comment.admin_recommended_remedy && !!comment.comment_text.trim();
-  });
-  const visible = workspace.issues.filter(
-    (issue) =>
-      readyToSend.some((candidate) => candidate.id === issue.id) ||
-      issue.status === 'open' ||
-      (!revisionIssueUnresolved(issue) && issue.was_sent_to_contractor),
-  );
-  const historyIssue = visible.find((issue) => issue.id === historyIssueId);
-  const openIssues = visible.filter((issue) => issue.status === 'open');
-  const withContractor = workspace.data?.invoice_status === 'contractor_revision_inbox' ? openIssues : [];
-  const returnedForReview = workspace.data?.invoice_status === 'admin_review_inbox' ? openIssues : [];
-  const otherOpen = openIssues.filter(
-    (issue) =>
-      !withContractor.some((candidate) => candidate.id === issue.id) &&
-      !returnedForReview.some((candidate) => candidate.id === issue.id),
-  );
-  const resolved = visible.filter((issue) => !revisionIssueUnresolved(issue));
-  const groups = [
-    ['Ready to send', readyToSend, 'blue'],
-    ['With contractor', withContractor, 'orange'],
-    ['Returned for review', returnedForReview, 'purple'],
-    ['Open issues', otherOpen, 'orange'],
-    ['Resolved after contractor', resolved, 'green'],
-  ] as const;
-
-  return (
-    <>
-      <Box bg="gray.50" borderWidth="1px" borderColor="gray.200" borderRadius="md" p="12px">
-        <Flex align="center" justify="space-between" mb="4px">
-          <Text fontWeight="700">Revision snapshot</Text>
-          <Badge colorScheme="blue">Read only</Badge>
-        </Flex>
-        <Text fontSize="xs" color="gray.600" mb="10px">
-          Requests ready to send and issues that were previously sent to the contractor.
-        </Text>
-        {workspace.loading ? (
-          <Flex minH="120px" align="center" justify="center">
-            <Spinner />
-          </Flex>
-        ) : !visible.length ? (
-          <Text fontSize="sm" color="gray.600" py="12px">
-            No contractor-facing revisions are ready or have been sent.
-          </Text>
-        ) : (
-          groups.map(([label, issues, colour]) =>
-            issues.length ? (
-              <Box key={label} mb="12px">
-                <Flex align="center" gap="6px" mb="6px">
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" color="gray.600">
-                    {label}
-                  </Text>
-                  <Badge colorScheme={colour}>{issues.length}</Badge>
-                </Flex>
-                {issues.map((issue) => (
-                  <Box
-                    key={issue.id}
-                    bg="white"
-                    borderWidth="1px"
-                    borderColor="gray.200"
-                    borderRadius="md"
-                    p="8px"
-                    mb="6px"
-                  >
-                    <Flex align="start" gap="6px">
-                      <Box flex="1" minW={0}>
-                        <Text fontSize="sm" fontWeight="700" noOfLines={2}>
-                          {issue.source.friendly_label || pretty(issue.issue_type)}
-                        </Text>
-                        <Flex gap="5px" mt="4px" wrap="wrap">
-                          {issue.was_sent_to_contractor ? (
-                            <Text fontSize="xs" color="gray.600">
-                              {sentHistoryLabel(issue, workspace.data)}
-                            </Text>
-                          ) : null}
-                        </Flex>
-                      </Box>
-                      {matchedIssueIds.has(issue.id) ? (
-                        <Button size="xs" variant="outline" onClick={() => workspace.focusIssue(issue.id)}>
-                          Focus
-                        </Button>
-                      ) : null}
-                      <IconButton
-                        aria-label="View revision history"
-                        icon={<Info size={17} />}
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => setHistoryIssueId(issue.id)}
-                      />
-                    </Flex>
-                  </Box>
-                ))}
-              </Box>
-            ) : null,
-          )
-        )}
-      </Box>
-
-      <Drawer isOpen={!!historyIssue} placement="right" size="md" onClose={() => setHistoryIssueId(null)}>
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerHeader>{historyIssue?.source.friendly_label || 'Revision issue history'}</DrawerHeader>
-          <DrawerBody>
-            {historyIssue?.comments.map((comment) => (
-              <Box key={comment.id} borderBottomWidth="1px" borderColor="gray.200" py="10px">
-                <Flex align="center" gap="6px" mb="4px" wrap="wrap">
-                  <Badge colorScheme={comment.author_type === 'admin' ? 'blue' : 'green'}>
-                    {comment.author_type === 'admin' ? 'Admin' : 'Contractor'}
-                  </Badge>
-                  <Text fontSize="xs" color="gray.600">
-                    Exchange {comment.round_number}
-                  </Text>
-                </Flex>
-                {comment.admin_recommended_remedy ? (
-                  <Text fontSize="xs" fontWeight="600">
-                    {pretty(comment.admin_recommended_remedy)}
-                  </Text>
-                ) : null}
-                {comment.contractor_response_method ? (
-                  <Text fontSize="xs" fontWeight="600">
-                    {pretty(comment.contractor_response_method)}
-                  </Text>
-                ) : null}
-                <Text fontSize="sm" whiteSpace="pre-wrap">
-                  {comment.comment_text}
-                </Text>
-              </Box>
-            ))}
-            {historyIssue?.disposition_comment ? (
-              <Box py="10px">
-                <Badge colorScheme="green" mb="4px">
-                  Final disposition
-                </Badge>
-                <Text fontSize="sm" whiteSpace="pre-wrap">
-                  {historyIssue.disposition_comment}
-                </Text>
-              </Box>
-            ) : null}
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
-    </>
-  );
-};
-
-export const AdminUnmatchedRevisionIssues = ({
-  issues,
-  workspace,
-}: {
-  issues: RevisionIssue[];
-  workspace: AdminInlineRevisionWorkspace;
-}) => {
-  if (!issues.length) return null;
-  return (
-    <Box mt="14px" borderTopWidth="2px" borderColor="orange.200" pt="10px">
-      <Flex align="center" gap="7px" mb="6px">
-        <Text fontWeight="700">Unmatched open revisions</Text>
-        <Badge colorScheme="orange">{issues.length}</Badge>
-      </Flex>
-      <Text fontSize="xs" color="gray.600" mb="8px">
-        These open issues no longer have one unambiguous source in the current package version. They remain editable.
-      </Text>
-      {issues.map((issue) => (
-        <AdminInlineRevisionIssue key={issue.id} issue={issue} workspace={workspace} />
-      ))}
-    </Box>
   );
 };

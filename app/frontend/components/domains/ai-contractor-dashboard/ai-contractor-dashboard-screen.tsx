@@ -20,6 +20,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { observer } from 'mobx-react-lite';
+import { ChatDots } from '@phosphor-icons/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMst, useServerAPI } from '../../../setup/root';
@@ -37,6 +38,7 @@ import { ContractorProgramResourcesScreen } from '../contractor-management/contr
 
 type ContractorPortalRow = {
   invoiceId: string;
+  unreadMessageCount?: number;
   referenceNumber: number | string;
   sessionId: string;
   status: string;
@@ -99,12 +101,16 @@ function lastUpdatedAt(row: ContractorPortalRow) {
   return row.statusUpdatedAt || row.latestInvoiceVersionUpdatedAt || row.invoiceUpdatedAt || row.invoiceCreatedAt || '';
 }
 
-const contractorStatusFilterOptions = INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
-  label: group.label,
-  value: group.statuses.join(','),
-}));
+const ALL_STATUSES_FILTER_VALUE = '__all_statuses__';
+const contractorStatusFilterOptions = [
+  { label: 'All statuses', value: ALL_STATUSES_FILTER_VALUE },
+  ...INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
+    label: group.label,
+    value: group.statuses.join(','),
+  })),
+];
 
-const DEFAULT_CONTRACTOR_STATUS_FILTER = 'genai_complete,contractor_revision_inbox';
+const DEFAULT_CONTRACTOR_STATUS_FILTER = '';
 
 const STATUS_COMPLETION_RANK: Record<string, number> = {
   approved_paid: 0,
@@ -138,22 +144,30 @@ const selectedStatusGroupValuesFor = (statusFilter: string) => {
       .filter(Boolean),
   );
 
-  if (!selectedStatuses.size) return [];
+  if (!selectedStatuses.size) return [ALL_STATUSES_FILTER_VALUE];
 
   return contractorStatusFilterOptions
-    .filter((option) => option.value.split(',').every((status) => selectedStatuses.has(status)))
+    .filter(
+      (option) =>
+        option.value !== ALL_STATUSES_FILTER_VALUE &&
+        option.value.split(',').every((status) => selectedStatuses.has(status)),
+    )
     .map((option) => option.value);
 };
 
-const statusFilterFromGroupValues = (values: string[]) =>
-  Array.from(
+const statusFilterFromGroupValues = (values: string[]) => {
+  if (!values.length || values[values.length - 1] === ALL_STATUSES_FILTER_VALUE) return '';
+
+  return Array.from(
     new Set(
       values
+        .filter((value) => value !== ALL_STATUSES_FILTER_VALUE)
         .flatMap((value) => value.split(','))
         .map((value) => value.trim())
         .filter(Boolean),
     ),
   ).join(',');
+};
 
 const statusMatchesFilter = (status: string, filter: string) => {
   if (!filter) return true;
@@ -205,6 +219,7 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
   const statusHint = `${statusCopy.hint} Technical status: ${row.status || 'unknown'}.`;
   const isPrecheckContinuation = row.status === 'genai_complete' && !row.invoiceSubmittedAt;
   const actionLabel = isPrecheckContinuation ? 'Continue' : 'View';
+  const hasUnreadMessages = Number(row.unreadMessageCount || 0) > 0;
   const ocrFacts = [
     row.latestDiOcrInvoiceId ? ['Invoice #', row.latestDiOcrInvoiceId] : null,
     row.latestDiOcrCustomerName ? ['Customer', row.latestDiOcrCustomerName] : null,
@@ -312,6 +327,21 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
         </Flex>
 
         <Flex direction="column" align={{ base: 'flex-start', md: 'flex-end' }} gap={4} flexShrink={0}>
+          {hasUnreadMessages ? (
+            <Tooltip label="The program team has sent a message that has not yet been read." hasArrow>
+              <Badge
+                px={2}
+                py={1}
+                colorScheme="blue"
+                borderRadius="md"
+                fontWeight="bold"
+                textTransform="uppercase"
+                whiteSpace="nowrap"
+              >
+                Unread message
+              </Badge>
+            </Tooltip>
+          ) : null}
           <Tooltip label={statusHint} hasArrow>
             <Badge
               p={1}
@@ -442,6 +472,7 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
   }, [query, rows, sort, statusFilter]);
 
   const totalCount = filteredRows.length;
+  const unreadInvoiceCount = rows.filter((row) => Number(row.unreadMessageCount || 0) > 0).length;
   const totalPages = Math.max(1, Math.ceil(totalCount / countPerPage));
   const pagedRows = filteredRows.slice((currentPage - 1) * countPerPage, currentPage * countPerPage);
   const selectedStatusGroupValues = useMemo(() => selectedStatusGroupValuesFor(statusFilter), [statusFilter]);
@@ -509,48 +540,55 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
           <TabPanels flex="1" minH="500px">
             <TabPanel px={0} pt={0} h="full">
               <Flex as="section" direction="column" p={6} gap={6} flex={1}>
-                <Flex
-                  gap={6}
-                  align={{ base: 'flex-start', md: 'flex-end' }}
-                  justify="space-between"
-                  direction={{ base: 'column', md: 'row' }}
-                >
-                  <RouterLinkButton
-                    to={'/contractor/upload-invoices'}
-                    variant="primary"
-                    w={{ base: 'full', md: 'fit-content' }}
-                    aria-label={
-                      isSubmitInvoiceDisabled
-                        ? t('contractor.suspended.buttonDisabled')
-                        : 'Upload invoice PDFs for AI review'
-                    }
-                    isDisabled={isSubmitInvoiceDisabled}
-                  >
-                    Upload invoice
-                  </RouterLinkButton>
-
+                <Flex gap={4} direction="column" w="full">
                   <Flex
-                    align={{ md: 'end' }}
-                    gap={4}
+                    align={{ base: 'stretch', md: 'center' }}
+                    justify="space-between"
                     direction={{ base: 'column', md: 'row' }}
-                    w={{ base: 'full', md: 'fit-content' }}
+                    gap={3}
                   >
-                    <Flex direction={{ base: 'column', md: 'row' }} alignItems={{ md: 'end', base: 'stretch' }} gap={4}>
-                      <FormControl w={{ base: 'full', md: '200px' }}>
-                        <FormLabel fontSize="md" color="#2D2D2D">
-                          Filter By Status
-                        </FormLabel>
-                        <MultiCheckSelect
-                          selectedValues={selectedStatusGroupValues}
-                          setSelectedValues={(values) => setStatusFilter(statusFilterFromGroupValues(values))}
-                          allItems={contractorStatusFilterOptions}
-                          placeholder="Choose statuses"
-                          menuListMinW="360px"
-                          showSelectedValues={false}
-                        />
-                      </FormControl>
+                    <RouterLinkButton
+                      to={'/contractor/upload-invoices'}
+                      variant="primary"
+                      w={{ base: 'full', md: 'fit-content' }}
+                      aria-label={
+                        isSubmitInvoiceDisabled
+                          ? t('contractor.suspended.buttonDisabled')
+                          : 'Upload invoice PDFs for AI review'
+                      }
+                      isDisabled={isSubmitInvoiceDisabled}
+                    >
+                      Upload invoice
+                    </RouterLinkButton>
 
-                      <FormControl w={{ base: 'full', md: '240px' }}>
+                    <Flex
+                      role="status"
+                      aria-live="polite"
+                      align="center"
+                      gap={2}
+                      minH="40px"
+                      px={unreadInvoiceCount > 0 ? 3 : 0}
+                      py={unreadInvoiceCount > 0 ? 2 : 0}
+                      borderWidth={unreadInvoiceCount > 0 ? '1px' : '0'}
+                      borderColor="blue.300"
+                      borderRadius="md"
+                      bg={unreadInvoiceCount > 0 ? 'blue.50' : 'transparent'}
+                      color={unreadInvoiceCount > 0 ? 'blue.800' : 'gray.600'}
+                      whiteSpace="nowrap"
+                      fontWeight={unreadInvoiceCount > 0 ? 'bold' : 'normal'}
+                    >
+                      <ChatDots size={20} weight={unreadInvoiceCount > 0 ? 'fill' : 'regular'} />
+                      <Text fontSize="sm">
+                        {unreadInvoiceCount > 0
+                          ? `${unreadInvoiceCount} ${unreadInvoiceCount === 1 ? 'invoice' : 'invoices'} with unread messages`
+                          : 'No unread messages'}
+                      </Text>
+                    </Flex>
+                  </Flex>
+
+                  <Flex justify="flex-start" w="full">
+                    <Flex direction={{ base: 'column', md: 'row' }} alignItems={{ md: 'end', base: 'stretch' }} gap={3}>
+                      <FormControl w={{ base: 'full', md: '440px' }}>
                         <FormLabel fontSize="md" color="#2D2D2D">
                           {t('ui.search')}
                         </FormLabel>
@@ -562,7 +600,20 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
                         />
                       </FormControl>
 
-                      <FormControl w={{ base: 'full', md: '300px' }}>
+                      <FormControl w={{ base: 'full', md: '260px' }}>
+                        <FormLabel fontSize="md" color="#2D2D2D">
+                          Filter By Status
+                        </FormLabel>
+                        <MultiCheckSelect
+                          selectedValues={selectedStatusGroupValues}
+                          setSelectedValues={(values) => setStatusFilter(statusFilterFromGroupValues(values))}
+                          allItems={contractorStatusFilterOptions}
+                          placeholder="All statuses"
+                          menuListMinW="360px"
+                        />
+                      </FormControl>
+
+                      <FormControl w={{ base: 'full', md: '260px' }}>
                         <FormLabel fontSize="md" color="#2D2D2D">
                           Sort
                         </FormLabel>

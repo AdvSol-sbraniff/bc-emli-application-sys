@@ -35,15 +35,15 @@ import {
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
 import { invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
-import { ViewerPanelMode, ViewerPanelModeSelector } from '../../shared/claims/viewer-panel-mode-selector';
 import {
-  AdminInlineRevisionIssue,
-  AdminRevisionSnapshot,
-  AdminRevisionWorkspaceToolbar,
-  AdminUnmatchedRevisionIssues,
+  AdminConversationPanel,
+  AdminInternalNotesPanel,
+} from '../../shared/claims/admin-invoice-communication-panels';
+import {
+  AdminRevisionSourceAnchor,
+  AdminRevisionWorkspace,
   diFieldRevisionIdentityKey,
   invoiceFieldRevisionIdentityKey,
-  revisionIssueUnresolved,
   revisionSourceIdentityKey,
   rulecheckRevisionIdentityKey,
   supportingFieldRevisionIdentityKey,
@@ -58,10 +58,12 @@ import {
   ChatDots,
   CheckCircle,
   CornersOut,
+  FilePdf,
   FrameCorners,
   Info,
   MagnifyingGlassMinus,
   MagnifyingGlassPlus,
+  NotePencil,
   PaperPlaneTilt,
   PlusCircle,
   XCircle,
@@ -271,6 +273,24 @@ const ruleConfidenceLabel = (rulecheck: any, label = 'confidence') => {
 const ruleDefinitionLabel = (rulecheck: any) => {
   const sourceEngine = String(rulecheck?.source_engine ?? '').toLowerCase();
   return sourceEngine === 'code' ? 'Code description' : 'GenAI prompt';
+};
+
+const contractorVisibilityLabel = (value: unknown): string => {
+  if (value === 'hidden') return 'Hidden / non-impacting';
+  if (value === 'fail_only') return 'Visible for errors only';
+  if (value === 'warn_and_fail') return 'Visible for warnings and errors';
+  return fmtText(value);
+};
+
+const contractorBlockingPolicyLabel = (value: unknown): string =>
+  value === 'block_on_fail' ? 'Blocks submission on error' : 'Does not block submission';
+
+const adminWorkflowPolicyLabel = (value: unknown): string => {
+  if (value === 'not_managed') return 'Not workflow-managed';
+  if (value === 'fail_only') return 'Workflow-managed for errors only';
+  if (value === 'warn_and_fail') return 'Workflow-managed for warnings and errors';
+  if (value === 'all_results') return 'Workflow-managed for all results';
+  return fmtText(value);
 };
 
 const ContractorAdviceMarkdown = ({ value }: { value?: unknown }) => {
@@ -790,7 +810,14 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
 
   const [bannerHidden, setBannerHidden] = useState<boolean>(false);
-  const [rightPanelMode, setRightPanelMode] = useState<ViewerPanelMode>('revision');
+  const [documentVisible, setDocumentVisible] = useState(true);
+  const [auxiliaryPanel, setAuxiliaryPanel] = useState<'conversation' | 'internal_notes' | null>(null);
+  const [mountedAuxiliaryPanels, setMountedAuxiliaryPanels] = useState({
+    conversation: false,
+    internal_notes: false,
+  });
+  const [auxiliaryPanelWidth, setAuxiliaryPanelWidth] = useState(420);
+  const auxiliaryResizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
 
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
   const [readData, setReadData] = useState<any>(null);
@@ -919,9 +946,14 @@ export const InvoiceVersionShowScreen = () => {
   }, []);
 
   const revisionInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
+  const revisionInvoiceStatus = String(readData?.invoice_status || '').trim();
+  const showRevisionWorkspace =
+    canRunWorkflowActions &&
+    !!revisionInvoiceId &&
+    ['admin_review_inbox', 'contractor_revision_inbox'].includes(revisionInvoiceStatus);
   const revisionWorkspace = useAdminInlineRevisionWorkspace({
     invoiceId: revisionInvoiceId,
-    enabled: canRunWorkflowActions && !!revisionInvoiceId,
+    enabled: showRevisionWorkspace,
     onTrackerChange: handleRevisionTrackerChange,
   });
   const revisionTrackerData = revisionWorkspace.data;
@@ -1247,7 +1279,7 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
   useEffect(() => {
     // If PDF is hidden, do nothing (and importantly: detach any prior observer).
-    if (rightPanelMode !== 'document') return;
+    if (!documentVisible) return;
 
     const el = pdfWrapRef.current;
     if (!el) return;
@@ -1275,29 +1307,14 @@ export const InvoiceVersionShowScreen = () => {
     }
 
     return () => ro.disconnect();
-  }, [rightPanelMode]);
+  }, [documentVisible]);
 
-  const openRevisionMessages = () => {
-    const params = new URLSearchParams();
-    const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
-    if (!invoiceRecordId) {
-      setStatusActionError('Could not determine invoice_id for messages.');
-      return;
+  useEffect(() => {
+    const storedWidth = Number(window.localStorage.getItem('claims-admin-auxiliary-panel-width'));
+    if (Number.isFinite(storedWidth) && storedWidth >= 340 && storedWidth <= 640) {
+      setAuxiliaryPanelWidth(storedWidth);
     }
-
-    params.set('invoice_id', invoiceRecordId);
-    if (sessionId || readData?.session_id) params.set('context_session_id', String(sessionId || readData.session_id));
-    if (readData?.session_created_at) params.set('context_session_created_at', String(readData.session_created_at));
-    if (readData?.invoice_status) params.set('context_invoice_status', String(readData.invoice_status));
-    if (readData?.contractor_business_name)
-      params.set('context_contractor_business_name', String(readData.contractor_business_name));
-    if (readData?.di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(readData.di_ocr_invoice_id));
-    if (readData?.id) params.set('latest_invoice_version_id', String(readData.id));
-    if (readData?.invoice_versionno !== null && readData?.invoice_versionno !== undefined) {
-      params.set('latest_invoice_versionno', String(readData.invoice_versionno));
-    }
-    window.open(`/conversation-messages-admin?${params.toString()}`, '_blank', 'noopener,noreferrer');
-  };
+  }, []);
 
   const openSupportingDocumentFile = async (doc: any) => {
     const docId = String(doc?.id || '').trim();
@@ -1369,7 +1386,7 @@ export const InvoiceVersionShowScreen = () => {
 
     if (viewerFile?.source === 'supporting_document' && viewerFile.documentId === docId && viewerFile.url) {
       setSupportingDocumentHighlight();
-      setRightPanelMode('document');
+      setDocumentVisible(true);
       return;
     }
 
@@ -1395,7 +1412,7 @@ export const InvoiceVersionShowScreen = () => {
       });
 
       setSupportingDocumentHighlight();
-      setRightPanelMode('document');
+      setDocumentVisible(true);
     } catch (e: any) {
       toast({
         title: 'Could not show supporting document',
@@ -1832,7 +1849,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [uploadedSupportingDocuments]);
   const revisionIssueForSupportingField = (document: any, field: any) => {
     const key = supportingFieldRevisionIdentityKey(document?.supporting_document_type_key, field?.field_key);
-    return supportingFieldIdentityCounts.get(key) === 1 ? revisionIssueByIdentity.get(key) : undefined;
+    return supportingFieldIdentityCounts.get(key) ? revisionIssueByIdentity.get(key) : undefined;
   };
   const renderedRevisionIdentityKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -1842,7 +1859,7 @@ export const InvoiceVersionShowScreen = () => {
     );
     filteredGenAiRulechecks.forEach((rulecheck) => keys.add(rulecheckRevisionIdentityKey(rulecheck)));
     supportingFieldIdentityCounts.forEach((count, key) => {
-      if (count === 1) keys.add(key);
+      if (count > 0) keys.add(key);
     });
     return keys;
   }, [classifierFields, codeFields, filteredGenAiRulechecks, genAiFields, supportingFieldIdentityCounts]);
@@ -1854,14 +1871,28 @@ export const InvoiceVersionShowScreen = () => {
     });
     return ids;
   }, [renderedRevisionIdentityKeys, revisionWorkspace.issues]);
-  const unmatchedOpenRevisionIssues = useMemo(
-    () =>
-      revisionWorkspace.issues.filter(
-        (issue) => revisionIssueUnresolved(issue) && !matchedRevisionIssueIds.has(issue.id),
-      ),
-    [matchedRevisionIssueIds, revisionWorkspace.issues],
-  );
-  const canOpenRevisionMessages = canRunWorkflowActions && !!readData?.invoice_id;
+  const canOpenCommunicationPanels = canRunWorkflowActions && !!readData?.invoice_id;
+  const toggleAuxiliaryPanel = (panel: 'conversation' | 'internal_notes') => {
+    if (!canOpenCommunicationPanels) return;
+    setMountedAuxiliaryPanels((current) => ({ ...current, [panel]: true }));
+    setAuxiliaryPanel((current) => (current === panel ? null : panel));
+  };
+  const resizeAuxiliaryPanel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = auxiliaryResizeStartRef.current;
+    if (!start) return;
+    setAuxiliaryPanelWidth(Math.min(640, Math.max(340, start.width + start.pointerX - event.clientX)));
+  };
+  const finishAuxiliaryPanelResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = auxiliaryResizeStartRef.current;
+    if (!start) return;
+    const nextWidth = Math.min(640, Math.max(340, start.width + start.pointerX - event.clientX));
+    setAuxiliaryPanelWidth(nextWidth);
+    auxiliaryResizeStartRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    window.localStorage.setItem('claims-admin-auxiliary-panel-width', String(nextWidth));
+  };
 
   // ============================================================
   // SECTION 07.01 - MAIN RETURN
@@ -1890,7 +1921,58 @@ export const InvoiceVersionShowScreen = () => {
         ============================================================ */}
             <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap" px="0" py="2px">
               {isVersionSnapshotRoute && <Badge colorScheme="purple">Fixed version bookmark</Badge>}
-              <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} />
+              <Tooltip label={documentVisible ? 'Hide the PDF document panel.' : 'Show the PDF document panel.'}>
+                <Button
+                  aria-pressed={documentVisible}
+                  leftIcon={<FilePdf size={18} weight="bold" />}
+                  size="sm"
+                  colorScheme="blue"
+                  variant={documentVisible ? 'solid' : 'outline'}
+                  onClick={() => setDocumentVisible((current) => !current)}
+                >
+                  Document
+                </Button>
+              </Tooltip>
+              <Tooltip
+                label={
+                  canOpenCommunicationPanels
+                    ? 'Show or hide the contractor-visible conversation.'
+                    : 'Conversation is available from the current invoice review bookmark.'
+                }
+                shouldWrapChildren
+              >
+                <Button
+                  aria-pressed={auxiliaryPanel === 'conversation'}
+                  leftIcon={<ChatDots size={18} weight="bold" />}
+                  size="sm"
+                  colorScheme="cyan"
+                  variant={auxiliaryPanel === 'conversation' ? 'solid' : 'outline'}
+                  onClick={() => toggleAuxiliaryPanel('conversation')}
+                  isDisabled={!canOpenCommunicationPanels}
+                >
+                  Conversation
+                </Button>
+              </Tooltip>
+              <Tooltip
+                label={
+                  canOpenCommunicationPanels
+                    ? 'Show or hide admin-only internal notes.'
+                    : 'Internal notes are available from the current invoice review bookmark.'
+                }
+                shouldWrapChildren
+              >
+                <Button
+                  aria-pressed={auxiliaryPanel === 'internal_notes'}
+                  leftIcon={<NotePencil size={18} weight="bold" />}
+                  size="sm"
+                  colorScheme="purple"
+                  variant={auxiliaryPanel === 'internal_notes' ? 'solid' : 'outline'}
+                  onClick={() => toggleAuxiliaryPanel('internal_notes')}
+                  isDisabled={!canOpenCommunicationPanels}
+                >
+                  Internal Notes
+                </Button>
+              </Tooltip>
 
               {readData ? (
                 <Tooltip
@@ -1954,28 +2036,6 @@ export const InvoiceVersionShowScreen = () => {
                 </Tooltip>
               )}
 
-              <Tooltip
-                label={
-                  canOpenRevisionMessages
-                    ? 'Open invoice messages and internal notes. Use messages for the back-and-forth with the contractor about requested changes; use internal notes for admin-only context.'
-                    : isVersionSnapshotRoute
-                      ? 'Messages and internal notes are disabled for fixed invoice-version snapshots. Open the invoice-level current PDF viewer to act on the latest version.'
-                      : 'Messages and internal notes are only available on the invoice-level current PDF viewer.'
-                }
-              >
-                <IconButton
-                  aria-label="Open invoice messages and internal notes"
-                  size="md"
-                  colorScheme="cyan"
-                  variant={canOpenRevisionMessages ? 'solid' : 'outline'}
-                  borderRadius="full"
-                  boxShadow={canOpenRevisionMessages ? '0 8px 18px rgba(8, 145, 178, 0.18)' : 'none'}
-                  icon={<ChatDots size={25} weight="bold" />}
-                  onClick={openRevisionMessages}
-                  isDisabled={!canOpenRevisionMessages}
-                />
-              </Tooltip>
-
               {ruleFilterMenu}
             </Box>
             {statusActionError && (
@@ -1989,7 +2049,7 @@ export const InvoiceVersionShowScreen = () => {
         SECTION 07.04 - MAIN SPLIT VIEW
         PURPOSE: Left fields + Right PDF viewer
         ============================================================ */}
-            <Box display="flex" gap="16px" flex="1" minH={0}>
+            <Box display="flex" gap="16px" flex="1" minH={0} overflowX="auto">
               {/* ============================================================
     SECTION 07.05 - LEFT PANEL (ACCORDION WRAPPER)
     PURPOSE: Put header fields inside a collapsible accordion
@@ -2007,8 +2067,8 @@ export const InvoiceVersionShowScreen = () => {
                 w="auto"
                 flex="1 1 auto"
               >
-                {canRunWorkflowActions && readData?.invoice_id ? (
-                  <AdminRevisionWorkspaceToolbar workspace={revisionWorkspace} />
+                {showRevisionWorkspace ? (
+                  <AdminRevisionWorkspace workspace={revisionWorkspace} sourceIssueIds={matchedRevisionIssueIds} />
                 ) : null}
                 {/* ============================================================
       SECTION 07.05.01 - FIELDS ACCORDION
@@ -2086,7 +2146,7 @@ export const InvoiceVersionShowScreen = () => {
                                 onClick={
                                   clickable
                                     ? () => {
-                                        setRightPanelMode('document');
+                                        setDocumentVisible(true);
                                         setActiveHighlightKey(f.key);
                                       }
                                     : undefined
@@ -2094,7 +2154,7 @@ export const InvoiceVersionShowScreen = () => {
                               />
                               {issue ? (
                                 <Box gridColumn="1 / -1">
-                                  <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                  <AdminRevisionSourceAnchor issueId={issue.id} />
                                 </Box>
                               ) : null}
                             </React.Fragment>
@@ -2183,7 +2243,7 @@ export const InvoiceVersionShowScreen = () => {
                                           pageNumber: Number(li.ocr_description_page),
                                           polygon: li.ocr_description_polygon,
                                         });
-                                        setRightPanelMode('document');
+                                        setDocumentVisible(true);
                                         setActiveHighlightKey(highlightKey);
                                       }
                                     : undefined
@@ -2280,7 +2340,7 @@ export const InvoiceVersionShowScreen = () => {
                                             pageNumber: Number(r.page),
                                             polygon: r.polygon ?? null,
                                           });
-                                          setRightPanelMode('document');
+                                          setDocumentVisible(true);
                                         }
                                       : undefined
                                   }
@@ -2312,7 +2372,7 @@ export const InvoiceVersionShowScreen = () => {
                                 </Box>
                                 {issue ? (
                                   <Box gridColumn="1 / -1">
-                                    <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                    <AdminRevisionSourceAnchor issueId={issue.id} />
                                   </Box>
                                 ) : null}
                               </React.Fragment>
@@ -2372,7 +2432,7 @@ export const InvoiceVersionShowScreen = () => {
                                           pageNumber: Number(r.page),
                                           polygon: r.polygon ?? null,
                                         });
-                                        setRightPanelMode('document');
+                                        setDocumentVisible(true);
                                       }
                                     : undefined
                                 }
@@ -2600,7 +2660,7 @@ export const InvoiceVersionShowScreen = () => {
                                           />
                                           {issue ? (
                                             <Box gridColumn="1 / -1">
-                                              <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                              <AdminRevisionSourceAnchor issueId={issue.id} />
                                             </Box>
                                           ) : null}
                                         </React.Fragment>
@@ -2873,25 +2933,6 @@ export const InvoiceVersionShowScreen = () => {
                       </AccordionPanel>
                     </AccordionItem>
                   )}
-
-                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                    <h2>
-                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                        <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
-                            Contractor Advice
-                          </Text>
-                        </Box>
-                        <AccordionIcon />
-                      </AccordionButton>
-                    </h2>
-
-                    <AccordionPanel px="0" pt="6px">
-                      <Box px="10px" py="3px">
-                        <ContractorAdviceMarkdown value={readData?.contractor_advice} />
-                      </Box>
-                    </AccordionPanel>
-                  </AccordionItem>
 
                   {ahriProduct && (
                     <AccordionItem borderTopWidth="1px" borderColor="gray.200">
@@ -3299,7 +3340,7 @@ export const InvoiceVersionShowScreen = () => {
                                 />
                                 {issue ? (
                                   <Box gridColumn="1 / -1">
-                                    <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                    <AdminRevisionSourceAnchor issueId={issue.id} />
                                   </Box>
                                 ) : null}
                               </React.Fragment>
@@ -3414,7 +3455,7 @@ export const InvoiceVersionShowScreen = () => {
                                                           pageNumber: Number(r.page),
                                                           polygon: r.polygon ?? null,
                                                         });
-                                                        setRightPanelMode('document');
+                                                        setDocumentVisible(true);
                                                         setActiveHighlightKey(highlightKey);
                                                       }
                                                     : undefined
@@ -3422,10 +3463,7 @@ export const InvoiceVersionShowScreen = () => {
                                               />
                                               {issue ? (
                                                 <Box gridColumn="1 / -1">
-                                                  <AdminInlineRevisionIssue
-                                                    issue={issue}
-                                                    workspace={revisionWorkspace}
-                                                  />
+                                                  <AdminRevisionSourceAnchor issueId={issue.id} />
                                                 </Box>
                                               ) : null}
                                             </React.Fragment>
@@ -3538,7 +3576,7 @@ export const InvoiceVersionShowScreen = () => {
                                                   </Text>
                                                 </Box>
                                               )}
-                                              <AdminInlineRevisionIssue issue={issue} workspace={revisionWorkspace} />
+                                              {issue ? <AdminRevisionSourceAnchor issueId={issue.id} /> : null}
                                             </Box>
                                           );
                                         })}
@@ -3617,7 +3655,7 @@ export const InvoiceVersionShowScreen = () => {
                                               pageNumber: Number(opts.page),
                                               polygon: opts.polygon,
                                             });
-                                            setRightPanelMode('document');
+                                            setDocumentVisible(true);
                                             setActiveHighlightKey(`lineitem_${seq}_${opts.subKey}`);
                                           }
                                         : undefined
@@ -3745,7 +3783,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
-                                    setRightPanelMode('document');
+                                    setDocumentVisible(true);
                                   }}
                                 >
                                   <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
@@ -3834,7 +3872,7 @@ export const InvoiceVersionShowScreen = () => {
                                             pageNumber: Number(r.page),
                                             polygon: r.polygon ?? null,
                                           });
-                                          setRightPanelMode('document');
+                                          setDocumentVisible(true);
                                         }
                                       : undefined
                                   }
@@ -3924,7 +3962,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
-                                    setRightPanelMode('document');
+                                    setDocumentVisible(true);
                                   }}
                                 >
                                   <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
@@ -4140,9 +4178,6 @@ export const InvoiceVersionShowScreen = () => {
                     </AccordionPanel>
                   </AccordionItem>
                 </Accordion>
-                {canRunWorkflowActions ? (
-                  <AdminUnmatchedRevisionIssues issues={unmatchedOpenRevisionIssues} workspace={revisionWorkspace} />
-                ) : null}
               </Box>
 
               {/* ============================================================
@@ -4150,7 +4185,7 @@ export const InvoiceVersionShowScreen = () => {
         PURPOSE: PDF viewer + overlay highlight + toolbar
         ============================================================ */}
 
-              {rightPanelMode === 'document' ? (
+              {documentVisible ? (
                 <Box
                   ref={pdfWrapRef}
                   flex="0 0 640px"
@@ -4458,15 +4493,84 @@ export const InvoiceVersionShowScreen = () => {
                   </Box>{' '}
                   {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
                 </Box>
-              ) : rightPanelMode === 'revision' && canRunWorkflowActions && readData?.invoice_id ? (
-                <Box flex="0 0 640px" w="640px" maxW="640px" minW="640px" alignSelf="flex-start" overflow="hidden">
-                  <AdminRevisionSnapshot workspace={revisionWorkspace} matchedIssueIds={matchedRevisionIssueIds} />
-                </Box>
-              ) : rightPanelMode === 'revision' ? (
-                <Box flex="0 0 640px" w="640px" p={6} borderWidth="1px" borderRadius="md" bg="gray.50">
-                  <Text fontSize="sm" color="gray.600">
-                    Revision tracking is available from the current invoice review bookmark.
-                  </Text>
+              ) : null}
+              {canOpenCommunicationPanels ? (
+                <Box
+                  display={auxiliaryPanel ? 'block' : 'none'}
+                  position="relative"
+                  flex={`0 0 ${auxiliaryPanelWidth}px`}
+                  w={`${auxiliaryPanelWidth}px`}
+                  minW={`${auxiliaryPanelWidth}px`}
+                  maxW={`${auxiliaryPanelWidth}px`}
+                  alignSelf="flex-start"
+                  maxH="calc(100vh - 150px)"
+                  overflowY="auto"
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                  borderRadius="xl"
+                  bg="white"
+                  boxShadow="sm"
+                >
+                  <Box
+                    role="separator"
+                    aria-label="Resize communication panel"
+                    aria-orientation="vertical"
+                    aria-valuemin={340}
+                    aria-valuemax={640}
+                    aria-valuenow={auxiliaryPanelWidth}
+                    tabIndex={0}
+                    position="absolute"
+                    top={0}
+                    bottom={0}
+                    left={0}
+                    w="8px"
+                    cursor="col-resize"
+                    zIndex={2}
+                    sx={{ touchAction: 'none' }}
+                    _hover={{ bg: 'blue.100' }}
+                    _focusVisible={{ bg: 'blue.200', outline: '2px solid', outlineColor: 'blue.500' }}
+                    onPointerDown={(event) => {
+                      auxiliaryResizeStartRef.current = {
+                        pointerX: event.clientX,
+                        width: auxiliaryPanelWidth,
+                      };
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerMove={resizeAuxiliaryPanel}
+                    onPointerUp={finishAuxiliaryPanelResize}
+                    onPointerCancel={finishAuxiliaryPanelResize}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                      event.preventDefault();
+                      const nextWidth = Math.min(
+                        640,
+                        Math.max(340, auxiliaryPanelWidth + (event.key === 'ArrowLeft' ? 20 : -20)),
+                      );
+                      setAuxiliaryPanelWidth(nextWidth);
+                      window.localStorage.setItem('claims-admin-auxiliary-panel-width', String(nextWidth));
+                    }}
+                  />
+                  {mountedAuxiliaryPanels.conversation ? (
+                    <Box display={auxiliaryPanel === 'conversation' ? 'block' : 'none'}>
+                      <AdminConversationPanel
+                        invoiceId={revisionInvoiceId}
+                        latestInvoiceVersionId={String(readData?.id || '')}
+                        contractorBusinessName={String(readData?.contractor_business_name || '')}
+                        diOcrInvoiceId={String(readData?.di_ocr_invoice_id || '')}
+                        onClose={() => setAuxiliaryPanel(null)}
+                      />
+                    </Box>
+                  ) : null}
+                  {mountedAuxiliaryPanels.internal_notes ? (
+                    <Box display={auxiliaryPanel === 'internal_notes' ? 'block' : 'none'}>
+                      <AdminInternalNotesPanel
+                        invoiceId={revisionInvoiceId}
+                        contractorBusinessName={String(readData?.contractor_business_name || '')}
+                        diOcrInvoiceId={String(readData?.di_ocr_invoice_id || '')}
+                        onClose={() => setAuxiliaryPanel(null)}
+                      />
+                    </Box>
+                  ) : null}
                 </Box>
               ) : null}
             </Box>{' '}
@@ -4525,22 +4629,35 @@ export const InvoiceVersionShowScreen = () => {
               <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_key} />
             </RuleDetailDrawerSection>
 
+            <RuleDetailDrawerSection label="Rule policies">
+              <Box display="grid" gridTemplateColumns={{ base: '1fr', md: 'repeat(3, minmax(0, 1fr))' }} gap="10px">
+                {[
+                  [
+                    'Contractor visibility',
+                    contractorVisibilityLabel(ruleDetailsDrawerRulecheck?.contractor_visibility),
+                  ],
+                  [
+                    'Submission blocking',
+                    contractorBlockingPolicyLabel(ruleDetailsDrawerRulecheck?.contractor_blocking_policy),
+                  ],
+                  [
+                    'Admin workflow management',
+                    adminWorkflowPolicyLabel(ruleDetailsDrawerRulecheck?.admin_workflow_policy),
+                  ],
+                ].map(([label, value]) => (
+                  <Box key={label} borderWidth="1px" borderColor="gray.200" borderRadius="md" p="10px" bg="gray.50">
+                    <Text fontSize="xs" fontWeight="700" color="gray.600" mb="3px">
+                      {label}
+                    </Text>
+                    <Text fontSize="sm">{value}</Text>
+                  </Box>
+                ))}
+              </Box>
+            </RuleDetailDrawerSection>
+
             <RuleDetailDrawerSection label="Source Quote">
               {String(ruleDetailsDrawerRulecheck?.source_quote ?? '').trim() ? (
-                <>
-                  <SourceQuoteMarkdown value={ruleDetailsDrawerRulecheck?.source_quote} />
-                  <Text fontSize="xs" opacity={0.65} mt="4px">
-                    {ruleDetailsDrawerRulecheck?.contractor_visibility === 'warn_and_fail'
-                      ? 'Visible to contractors for warnings and errors'
-                      : ruleDetailsDrawerRulecheck?.contractor_visibility === 'fail_only'
-                        ? 'Visible to contractors for errors only'
-                        : 'Hidden from contractors'}
-                    {' · '}
-                    {ruleDetailsDrawerRulecheck?.contractor_blocking_policy === 'block_on_fail'
-                      ? 'Errors block submission'
-                      : 'Does not block submission'}
-                  </Text>
-                </>
+                <SourceQuoteMarkdown value={ruleDetailsDrawerRulecheck?.source_quote} />
               ) : (
                 <RuleDetailText value="" />
               )}

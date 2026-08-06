@@ -609,6 +609,7 @@ module Api
               "COALESCE(gr.contractor_action, cr.contractor_action) AS contractor_action",
               "COALESCE(gr.contractor_visibility, cr.contractor_visibility, 'hidden') AS effective_contractor_visibility",
               "COALESCE(gr.contractor_blocking_policy, cr.contractor_blocking_policy, 'non_blocking') AS effective_contractor_blocking_policy",
+              "COALESCE(gr.admin_workflow_policy, cr.admin_workflow_policy, 'fail_only') AS effective_admin_workflow_policy",
               "CASE WHEN claims.invoice_version_rulechecks.source_engine = 'genai' THEN gr.prompt_text ELSE cr.description END AS rule_definition_text"
             ].join(", ")
           )
@@ -689,6 +690,8 @@ module Api
               row.read_attribute("effective_contractor_visibility"),
             "contractor_blocking_policy" =>
               row.read_attribute("effective_contractor_blocking_policy"),
+            "admin_workflow_policy" =>
+              row.read_attribute("effective_admin_workflow_policy"),
             "rule_definition_text" => row.read_attribute("rule_definition_text")
           )
         end

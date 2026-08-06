@@ -13,6 +13,7 @@ module Claims
       DEFAULT_PRODUCT_SEGMENT = "ASHP3_OHPA"
       DEFAULT_LANG = "en-US"
       DOWNLOAD_TAKE = 100_000
+      INSERT_BATCH_SIZE = 250
 
       def self.call(
         ohpa_source_id:,
@@ -89,25 +90,26 @@ module Claims
           raise "No matchable OHPA product rows were parsed from #{source_label}"
         end
 
-        Claims::OhpaProduct.transaction do
-          Claims::OhpaProduct.insert_all!(product_rows)
-          run.update!(
-            status: "succeeded",
-            completed_at: Time.current,
-            records_imported: product_rows.size,
-            storage_provider: "azure_blob",
-            storage_key: storage_key,
-            content_type: "text/csv",
-            byte_size: node_resp["byte_size"] || File.size(@csv_path),
-            file_sha256: Digest::SHA256.file(@csv_path).hexdigest,
-            metadata_json:
-              (run.metadata_json || {}).merge(
-                csv_path: @csv_path.to_s,
-                raw_rows_downloaded: rows.size
-              ),
-            updated_at: Time.current
-          )
+        product_rows.each_slice(INSERT_BATCH_SIZE) do |slice|
+          Claims::OhpaProduct.insert_all!(slice)
         end
+        run.update!(
+          status: "succeeded",
+          completed_at: Time.current,
+          records_imported: product_rows.size,
+          storage_provider: "azure_blob",
+          storage_key: storage_key,
+          content_type: "text/csv",
+          byte_size: node_resp["byte_size"] || File.size(@csv_path),
+          file_sha256: Digest::SHA256.file(@csv_path).hexdigest,
+          metadata_json:
+            (run.metadata_json || {}).merge(
+              csv_path: @csv_path.to_s,
+              raw_rows_downloaded: rows.size,
+              inserted_in_batches_of: INSERT_BATCH_SIZE
+            ),
+          updated_at: Time.current
+        )
 
         {
           ok: true,

@@ -23,6 +23,34 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 17. `3_insert_genai_normalized.sql`
 18. `4_create_views.sql`
 
+## Operational notes for Gold/dev rebuilds
+
+- Stop `hesp-sidekiq-claims` before running the rebuild and keep it stopped until the six product downloads are repopulated. This prevents uploads or background validation jobs from running against a half-built `claims` schema or empty product-list views.
+- Run every SQL file with `ON_ERROR_STOP=1`. A failed `4_create_views.sql` can leave earlier views dropped and not recreated; for example, the admin ingest-run screen requires `claims.v_ingest_runs`.
+- After `4_create_views.sql`, verify at least:
+  - `claims.v_ingest_runs` exists.
+  - `claims.v_ingest_step_runs` exists.
+  - `claims.ingest_step_runs.completed_at` exists.
+  - The total `claims` view count is non-zero and includes the admin/grid views.
+- Repopulate all six product download families after the schema rebuild:
+  - AHRI / BC Hydro heat pump products.
+  - NEEA heat pump water heater products.
+  - Air-to-Water and Combined Heat Pump qualifying products.
+  - OHPA products.
+  - NRCan HERV/ERV products.
+  - ENERGY STAR ventilating fan products.
+- Verify the current product views after imports. A healthy rebuild should have non-zero counts in:
+  - `claims.v_current_ahri_products`
+  - `claims.v_current_neea_products`
+  - `claims.v_current_awhp_products`
+  - `claims.v_current_ohpa_products`
+  - `claims.v_current_herv_products`
+  - `claims.v_current_vent_fan_products`
+- OHPA is large. The importer should insert rows in small batches; a single giant insert can destabilize the Gold database connection and leave a failed/running zero-record OHPA import run.
+- Restart `hesp-app` after the claims schema rebuild. Rails caches table columns at boot; if web pods stay up across a drop/recreate, upload endpoints can keep trying to write columns from the old schema.
+- Restore or restart `hesp-sidekiq-claims` after the schema, views, and six downloads are complete.
+- Any invoice uploaded during a claims-schema rebuild window should be uploaded again after the rebuild, because the `claims` schema is intentionally dropped and recreated.
+
 ## Optional local test data
 
 - `testdata_20260616/`

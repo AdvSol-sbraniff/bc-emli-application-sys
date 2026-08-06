@@ -31,6 +31,7 @@ import {
   Tr,
   VStack,
   useDisclosure,
+  useToast,
 } from '@chakra-ui/react';
 import { ClockCounterClockwise, Info, PencilSimple, Plus } from '@phosphor-icons/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -214,6 +215,7 @@ export default function ValidationRulesAdminScreen() {
   const infoDrawer = useDisclosure();
   const auditDrawer = useDisclosure();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedUpgradeTypeId = searchParams.get('invoice_upgrade_type_id') || '';
@@ -643,6 +645,7 @@ export default function ValidationRulesAdminScreen() {
 
     setSaving(true);
     setError('');
+    let requestId = '';
 
     try {
       const mappings = editor.mappings
@@ -705,13 +708,34 @@ export default function ValidationRulesAdminScreen() {
         credentials: 'include',
         body: JSON.stringify(body),
       });
+      requestId = res.headers.get('X-Request-Id') || '';
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
+      if (body.contractor_visibility && data?.detail?.contractor_visibility !== body.contractor_visibility) {
+        throw new Error('The server response did not confirm the selected contractor visibility.');
+      }
+
       await fetchRows();
-      closeEditorScreen();
+      openEdit(data as ValidationRow);
+      toast({
+        title: 'Validation record saved',
+        description: requestId ? `Request ID: ${requestId}` : undefined,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
     } catch (e: any) {
-      setError(e?.message || 'Failed to save validation record.');
+      const message = e?.message || 'Failed to save validation record.';
+      const description = requestId ? `${message} Request ID: ${requestId}` : message;
+      setError(description);
+      toast({
+        title: 'Validation record not saved',
+        description,
+        status: 'error',
+        duration: 7000,
+        isClosable: true,
+      });
     } finally {
       setSaving(false);
     }

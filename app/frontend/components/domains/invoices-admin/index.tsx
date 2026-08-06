@@ -1,6 +1,7 @@
 // /app/frontend/components/domains/invoices-admin/index.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Badge,
   Box,
   Container,
   Divider,
@@ -26,6 +27,7 @@ import {
   Tr,
   useDisclosure,
 } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import {
   ArrowsClockwise,
   CaretLeft,
@@ -46,6 +48,7 @@ import {
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
 import { INVOICE_STATUS_FILTER_GROUPS, invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
+import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
 
 type DetectedUpgradeType = {
   confidence?: number | null;
@@ -60,6 +63,9 @@ type UpgradeTypeOption = {
 
 type InvoiceGridRow = {
   invoice_id?: string | null;
+  reference_number?: number | string | null;
+  unread_by_contractor_count?: number | null;
+  unread_by_admin_count?: number | null;
 
   session_id: string;
   session_created_at?: string | null;
@@ -92,7 +98,7 @@ type InvoiceGridRow = {
   latest_di_ocr_vendor_name?: string | null;
   latest_di_ocr_invoice_total?: string | number | null;
 
-  latest_genai_result?: 'pass' | 'warn' | 'fail' | string | null;
+  latest_genai_result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
   latest_genai_overall_confidence?: number | null;
   latest_detected_upgrade_type_keys?: string[] | null;
   latest_detected_upgrade_types_json?: DetectedUpgradeType[] | null;
@@ -107,6 +113,8 @@ type ApiResp = {
     page?: number;
     per?: number;
     sort?: string;
+    unread_by_admin_filtered_invoice_count?: number;
+    unread_by_admin_overall_invoice_count?: number;
     filters?: any;
   };
 };
@@ -129,12 +137,19 @@ const fmtMoney = (v?: string | number | null) => {
   return n.toLocaleString(undefined, { style: 'currency', currency: 'CAD' });
 };
 
-const normalizeResult = (result: unknown): 'pass' | 'warn' | 'fail' | null => {
+type AiResult = 'pass' | 'info' | 'warn' | 'fail';
+
+const normalizeResult = (result: unknown): AiResult | null => {
   const value = String(result ?? '')
     .trim()
     .toLowerCase();
-  return value === 'pass' || value === 'warn' || value === 'fail' ? value : null;
+  return value === 'pass' || value === 'info' || value === 'warn' || value === 'fail' ? value : null;
 };
+
+const claimsAiSignalPulse = keyframes`
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.18; transform: scale(1.65); }
+`;
 
 const rowActionButtonProps = {
   h: '38px',
@@ -150,33 +165,42 @@ function ResultDot({ val }: { val: unknown }) {
   const result = normalizeResult(val);
   const visual =
     result === 'pass'
-      ? { bg: 'green.400', glow: 'rgba(72, 187, 120, 0.45)' }
-      : result === 'warn'
-        ? { bg: 'yellow.400', glow: 'rgba(236, 201, 75, 0.5)' }
-        : result === 'fail'
-          ? { bg: 'red.400', glow: 'rgba(245, 101, 101, 0.55)' }
-          : { bg: 'gray.300', glow: 'transparent' };
+      ? 'green.400'
+      : result === 'info'
+        ? 'blue.400'
+        : result === 'warn'
+          ? 'yellow.400'
+          : result === 'fail'
+            ? 'red.400'
+            : 'gray.300';
 
   return (
     <Box
       w="14px"
       h="14px"
       borderRadius="full"
-      bg={visual.bg}
+      color={visual}
+      bg="currentColor"
       display="inline-block"
-      boxShadow={result ? `0 0 0 4px ${visual.glow}, 0 0 14px ${visual.glow}` : 'none'}
+      position="relative"
       sx={
         result
           ? {
-              '@keyframes claimsAiSignalPulse': {
-                '0%, 100%': {
-                  boxShadow: `0 0 0 3px ${visual.glow}, 0 0 10px ${visual.glow}`,
-                },
-                '50%': {
-                  boxShadow: `0 0 0 6px ${visual.glow}, 0 0 18px ${visual.glow}`,
+              '&::after': {
+                content: '""',
+                position: 'absolute',
+                inset: 0,
+                borderRadius: 'inherit',
+                boxShadow: '0 0 0 3px currentColor, 0 0 10px currentColor',
+                pointerEvents: 'none',
+                animation: `${claimsAiSignalPulse} 2.8s ease-in-out infinite`,
+              },
+              '@media (prefers-reduced-motion: reduce)': {
+                '&::after': {
+                  animation: 'none',
+                  opacity: 0.3,
                 },
               },
-              animation: 'claimsAiSignalPulse 2.8s ease-in-out infinite',
             }
           : undefined
       }
@@ -184,9 +208,37 @@ function ResultDot({ val }: { val: unknown }) {
   );
 }
 
+function UnreadMessageStatus({
+  count,
+  audience,
+  colorScheme,
+}: {
+  count: unknown;
+  audience: 'contractor' | 'admin';
+  colorScheme: string;
+}) {
+  const isUnread = Math.max(0, Number(count) || 0) > 0;
+  return (
+    <Tooltip
+      label={isUnread ? `Messages have not been read by any ${audience}.` : `No messages are unread by ${audience}.`}
+    >
+      <Badge
+        minW="58px"
+        textAlign="center"
+        colorScheme={isUnread ? colorScheme : 'gray'}
+        variant={isUnread ? 'solid' : 'subtle'}
+        borderRadius="full"
+      >
+        {isUnread ? 'Unread' : 'Read'}
+      </Badge>
+    </Tooltip>
+  );
+}
+
 const aiResultHint = (result: unknown) => {
   const normalized = normalizeResult(result);
   if (normalized === 'pass') return 'AI Advice says the latest checks pass.';
+  if (normalized === 'info') return 'AI advice includes informational notes that do not require contractor correction.';
   if (normalized === 'warn')
     return 'AI advice includes warnings that may need contractor pre-check or admin attention.';
   if (normalized === 'fail') return 'AI Advice includes failing checks that need attention.';
@@ -247,6 +299,21 @@ const INVOICE_STATUS_FILTER_ITEMS = [
     label: group.label,
     value: statusGroupValue(group.statuses),
   })),
+];
+
+const INVOICE_SORT_OPTIONS = [
+  { value: 'latest_invoice_version_updated_at:desc', label: 'Recently updated' },
+  { value: 'latest_invoice_version_updated_at:asc', label: 'Least recently updated' },
+  { value: 'unread_by_admin_count:desc', label: 'Unread by admin first' },
+  { value: 'unread_by_admin_count:asc', label: 'Read by admin first' },
+  { value: 'unread_by_contractor_count:desc', label: 'Unread by contractor first' },
+  { value: 'unread_by_contractor_count:asc', label: 'Read by contractor first' },
+  { value: 'contractor_business_name:asc', label: 'Contractor A–Z' },
+  { value: 'contractor_business_name:desc', label: 'Contractor Z–A' },
+  { value: 'invoice_status:asc', label: 'Status A–Z' },
+  { value: 'invoice_status:desc', label: 'Status Z–A' },
+  { value: 'reference_number:asc', label: 'Reference # low–high' },
+  { value: 'reference_number:desc', label: 'Reference # high–low' },
 ];
 
 function SortableHeader({
@@ -330,6 +397,8 @@ export function InvoicesAdminScreen() {
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string>('');
   const [rows, setRows] = useState<InvoiceGridRow[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [unreadByAdminFilteredInvoiceCount, setUnreadByAdminFilteredInvoiceCount] = useState<number>(0);
+  const [unreadByAdminOverallInvoiceCount, setUnreadByAdminOverallInvoiceCount] = useState<number>(0);
   const [upgradeTypeOptions, setUpgradeTypeOptions] = useState<UpgradeTypeOption[]>([]);
 
   // drawer
@@ -457,9 +526,13 @@ export function InvoicesAdminScreen() {
 
       setRows(Array.isArray(data?.rows) ? data.rows : []);
       setTotal(Number(data?.meta?.total || 0));
+      setUnreadByAdminFilteredInvoiceCount(Number(data?.meta?.unread_by_admin_filtered_invoice_count || 0));
+      setUnreadByAdminOverallInvoiceCount(Number(data?.meta?.unread_by_admin_overall_invoice_count || 0));
     } catch (e: any) {
       setRows([]);
       setTotal(0);
+      setUnreadByAdminFilteredInvoiceCount(0);
+      setUnreadByAdminOverallInvoiceCount(0);
       setError(e?.message || 'Failed to load invoice grid.');
     } finally {
       setLoading(false);
@@ -569,22 +642,6 @@ export function InvoicesAdminScreen() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleOpenRevisions = (row: InvoiceGridRow) => {
-    const params = new URLSearchParams();
-    if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
-    if (row.session_id) params.set('context_session_id', String(row.session_id));
-    if (row.session_created_at) params.set('context_session_created_at', String(row.session_created_at));
-    if (row.invoice_status) params.set('context_invoice_status', String(row.invoice_status));
-    if (row.contractor_business_name)
-      params.set('context_contractor_business_name', String(row.contractor_business_name));
-    if (row.latest_di_ocr_invoice_id) params.set('context_di_ocr_invoice_id', String(row.latest_di_ocr_invoice_id));
-    if (row.latest_invoice_version_id) params.set('latest_invoice_version_id', String(row.latest_invoice_version_id));
-    if (row.latest_invoice_versionno !== null && row.latest_invoice_versionno !== undefined)
-      params.set('latest_invoice_versionno', String(row.latest_invoice_versionno));
-    const url = `/conversation-messages-admin?${params.toString()}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
   const handleDeleteInvoice = async (invoiceId: string) => {
     const confirmed = window.confirm(
       'Delete this invoice and all child records (invoice versions, revision requests, lineitems, step runs, and related artifacts)? This cannot be undone.',
@@ -647,7 +704,7 @@ export function InvoicesAdminScreen() {
         <Box p={5} bg="white">
           {/* Filters */}
           <Flex gap={3} align="end" wrap="wrap" mb={4}>
-            <Box flex="1" minW="260px">
+            <Box flex="0 1 300px" minW="220px" maxW="300px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
                 search
               </Text>
@@ -665,6 +722,30 @@ export function InvoicesAdminScreen() {
                 bg="white"
               />
             </Box>
+
+            <Flex
+              role="status"
+              aria-live="polite"
+              align="center"
+              gap={2}
+              minH="40px"
+              px={3}
+              py={2}
+              borderWidth="1px"
+              borderColor={unreadByAdminOverallInvoiceCount > 0 ? 'purple.300' : 'gray.200'}
+              borderRadius="md"
+              bg={unreadByAdminOverallInvoiceCount > 0 ? 'purple.50' : 'gray.50'}
+              color={unreadByAdminOverallInvoiceCount > 0 ? 'purple.800' : 'gray.600'}
+              whiteSpace="nowrap"
+              fontWeight={unreadByAdminOverallInvoiceCount > 0 ? 'bold' : 'normal'}
+              flexShrink={0}
+            >
+              <ChatDots size={20} weight={unreadByAdminOverallInvoiceCount > 0 ? 'fill' : 'regular'} />
+              <Text fontSize="sm">
+                Unread by admin: {unreadByAdminFilteredInvoiceCount} current · {unreadByAdminOverallInvoiceCount}{' '}
+                overall
+              </Text>
+            </Flex>
 
             <Box minW="260px" maxW="360px">
               <Text fontSize="xs" opacity={0.7} mb={1}>
@@ -709,6 +790,28 @@ export function InvoicesAdminScreen() {
                 placeholder="All upgrade types"
                 menuListMinW="420px"
               />
+            </Box>
+
+            <Box minW="220px" maxW="250px">
+              <Text fontSize="xs" opacity={0.7} mb={1}>
+                sort
+              </Text>
+              <Select
+                value={sort}
+                onChange={(event) => {
+                  const nextSort = event.target.value;
+                  setSort(nextSort);
+                  setPage(1);
+                  pushUrl({ sort: nextSort, page: 1 });
+                }}
+                bg="white"
+              >
+                {INVOICE_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
             </Box>
 
             <Box minW="100px" maxW="120px">
@@ -819,10 +922,33 @@ export function InvoicesAdminScreen() {
                       onSort={handleHeaderSort}
                     />
                   </Th>
+                  <Th w="150px">
+                    <SortableHeader
+                      field="reference_number"
+                      label="Reference #"
+                      sort={sort}
+                      onSort={handleHeaderSort}
+                    />
+                  </Th>
                   <Th w="220px">Invoice #</Th>
                   <Th w="190px"></Th>
-                  <Th w="46px">AI</Th>
-                  <Th w="270px" textAlign="right"></Th>
+                  <Th w="160px" textAlign="center">
+                    <SortableHeader
+                      field="unread_by_contractor_count"
+                      label="Unread by contractor"
+                      sort={sort}
+                      onSort={handleHeaderSort}
+                    />
+                  </Th>
+                  <Th w="140px" textAlign="center">
+                    <SortableHeader
+                      field="unread_by_admin_count"
+                      label="Unread by admin"
+                      sort={sort}
+                      onSort={handleHeaderSort}
+                    />
+                  </Th>
+                  <Th w="225px" textAlign="right"></Th>
                 </Tr>
               </Thead>
 
@@ -893,15 +1019,27 @@ export function InvoicesAdminScreen() {
                         )}
                       </Td>
 
+                      <Td fontSize="sm" whiteSpace="nowrap">
+                        {r.reference_number !== null && r.reference_number !== undefined
+                          ? formatClaimsReferenceNumber(r.reference_number)
+                          : '—'}
+                      </Td>
+
                       <Td fontSize="sm" minW={0}>
                         <Text noOfLines={1}>{r.latest_di_ocr_invoice_id || '—'}</Text>
                       </Td>
 
                       <Td whiteSpace="nowrap">
-                        {Array.isArray(r.latest_detected_upgrade_types_json) &&
-                        r.latest_detected_upgrade_types_json.length > 0 ? (
-                          <Flex gap={2} wrap="nowrap" align="center" minW={0} overflow="hidden">
-                            {r.latest_detected_upgrade_types_json.map((upgradeType) => {
+                        <Flex gap={2} wrap="nowrap" align="center" minW={0} overflow="hidden">
+                          <Tooltip label={aiResultHint(r.latest_genai_result)}>
+                            <Box as="span" display="inline-flex" alignItems="center" flexShrink={0}>
+                              <ResultDot val={r.latest_genai_result} />
+                            </Box>
+                          </Tooltip>
+
+                          {Array.isArray(r.latest_detected_upgrade_types_json) &&
+                          r.latest_detected_upgrade_types_json.length > 0 ? (
+                            r.latest_detected_upgrade_types_json.map((upgradeType) => {
                               const label =
                                 upgradeType.description ||
                                 getInvoiceUpgradeTypeMeta(upgradeType.upgrade_type_key).label;
@@ -923,21 +1061,25 @@ export function InvoicesAdminScreen() {
                                   </Box>
                                 </Tooltip>
                               );
-                            })}
-                          </Flex>
-                        ) : (
-                          <Text fontSize="xs" opacity={0.55}>
-                            none
-                          </Text>
-                        )}
+                            })
+                          ) : (
+                            <Text fontSize="xs" opacity={0.55}>
+                              none
+                            </Text>
+                          )}
+                        </Flex>
                       </Td>
 
-                      <Td>
-                        <Tooltip label={aiResultHint(r.latest_genai_result)}>
-                          <Box as="span" display="inline-flex" alignItems="center">
-                            <ResultDot val={r.latest_genai_result} />
-                          </Box>
-                        </Tooltip>
+                      <Td textAlign="center">
+                        <UnreadMessageStatus
+                          count={r.unread_by_contractor_count}
+                          audience="contractor"
+                          colorScheme="blue"
+                        />
+                      </Td>
+
+                      <Td textAlign="center">
+                        <UnreadMessageStatus count={r.unread_by_admin_count} audience="admin" colorScheme="purple" />
                       </Td>
 
                       <Td whiteSpace="nowrap">
@@ -948,16 +1090,6 @@ export function InvoicesAdminScreen() {
                               {...rowActionButtonProps}
                               icon={<Info size={rowActionIconSize} />}
                               onClick={() => handleOpenDrawer(r)}
-                              isDisabled={!hasInvoice}
-                            />
-                          </Tooltip>
-
-                          <Tooltip label="Open invoice messages and internal notes. Use messages for the back-and-forth with the contractor about requested changes; use internal notes for admin-only context.">
-                            <IconButton
-                              aria-label="Open invoice messages and internal notes"
-                              {...rowActionButtonProps}
-                              icon={<ChatDots size={rowActionIconSize} />}
-                              onClick={() => handleOpenRevisions(r)}
                               isDisabled={!hasInvoice}
                             />
                           </Tooltip>
@@ -1017,7 +1149,7 @@ export function InvoicesAdminScreen() {
 
                 {!loading && rows.length === 0 && (
                   <Tr>
-                    <Td colSpan={7}>
+                    <Td colSpan={10}>
                       <Text fontSize="sm" opacity={0.7}>
                         No rows. Adjust filters or click Refresh.
                       </Text>

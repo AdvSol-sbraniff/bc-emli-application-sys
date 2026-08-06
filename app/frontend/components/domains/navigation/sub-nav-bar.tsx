@@ -133,7 +133,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/users-admin': [{ href: '/users-admin', title: 'Create Test Users' }],
       '/conversation-messages-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/conversation-messages-admin', title: 'Invoice Messages & Notes' },
+        { href: '/conversation-messages-admin', title: 'Contractor Conversation' },
       ],
       '/invoice-versions-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },

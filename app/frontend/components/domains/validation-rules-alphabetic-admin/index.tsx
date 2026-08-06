@@ -342,7 +342,7 @@ export default function ValidationRulesAlphabeticAdminScreen() {
       <ThinBlueTitleBar title="Advice Checks at a Glance" />
       <Container maxW="container.2xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
-          <Box w="full" maxW="1320px" mx="auto">
+          <Box w="full">
             <Flex justify="flex-end" align={{ base: 'start', lg: 'center' }} gap={4} mb={5} flexWrap="wrap">
               <Button colorScheme="blue" variant="outline" onClick={() => navigate('/validation-rules-admin')}>
                 Fields and Advice Editor

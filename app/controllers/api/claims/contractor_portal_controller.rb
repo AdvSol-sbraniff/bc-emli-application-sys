@@ -58,6 +58,17 @@ module Api
             end
             .compact
 
+        invoice_ids = invoices.map(&:invoice_id)
+        unread_message_count_by_invoice =
+          ::Claims::ConversationMessage
+            .where(
+              invoice_id: invoice_ids,
+              message_type: "admin_message",
+              recipient_read_at: nil
+            )
+            .group(:invoice_id)
+            .count
+
         card_facts_by_version =
           ::Claims::InvoiceVersion
             .where(id: latest_version_ids)
@@ -75,6 +86,8 @@ module Api
           invoices.map do |invoice|
             {
               invoice_id: invoice.invoice_id,
+              unread_message_count:
+                unread_message_count_by_invoice.fetch(invoice.invoice_id, 0),
               reference_number: invoice.reference_number,
               session_id: invoice.session_id,
               status: invoice.invoice_status,

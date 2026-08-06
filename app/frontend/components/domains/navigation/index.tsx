@@ -507,7 +507,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/requirement-templates': 'Requirement Templates',
   '/requirement-templates/new-template': 'New Requirement Template',
   '/requirements-library': 'Requirements Library',
-  '/conversation-messages-admin': 'Invoice Messages & Notes',
+  '/conversation-messages-admin': 'Contractor Conversation',
   '/submission-inbox': 'Submission Inbox',
   '/submission-simulator-admin': 'New Invoice Simulator',
   '/supported-applications': 'Supported Applications',

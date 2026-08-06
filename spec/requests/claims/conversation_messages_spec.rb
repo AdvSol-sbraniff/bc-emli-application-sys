@@ -95,6 +95,36 @@ RSpec.describe "Claims conversation messages API", type: :request do
     expect(response).to have_http_status(:ok)
     expect(json_response.fetch("unread_count")).to eq(0)
 
+    get "/api/claims/admin/invoices",
+        params: {
+          q: invoice.reload.reference_number.to_s
+        }
+    expect(response).to have_http_status(:ok)
+    admin_grid_row =
+      json_response
+        .fetch("rows")
+        .find { |candidate| candidate.fetch("invoice_id") == invoice.id }
+    expect(admin_grid_row).to include(
+      "reference_number" => invoice.reference_number,
+      "unread_by_contractor_count" => 0,
+      "unread_by_admin_count" => 1
+    )
+    expect(json_response.fetch("meta")).to include(
+      "unread_by_admin_filtered_invoice_count" => 1,
+      "unread_by_admin_overall_invoice_count" => 1
+    )
+
+    post "/api/claims/admin/invoices/#{invoice.id}/conversation_messages/read",
+         params: {
+           through_seqno: 2
+         },
+         as: :json
+    expect(response).to have_http_status(:ok)
+    expect(json_response.fetch("unread_count")).to eq(0)
+    expect(
+      Claims::ConversationMessage.find(contractor_message_id).recipient_read_at
+    ).to be_present
+
     patch "/api/claims/contractor/invoices/#{invoice.id}/conversation_messages/#{contractor_message_id}",
           params: {
             request_text: "Here is the corrected additional context."
@@ -140,6 +170,17 @@ RSpec.describe "Claims conversation messages API", type: :request do
     expect(response).to have_http_status(:ok)
     expect(json_response.fetch("unread_count")).to eq(1)
     expect(json_response.fetch("latest_admin_seqno")).to eq(3)
+
+    get "/api/claims/admin/invoices",
+        params: {
+          q: invoice.reference_number.to_s
+        }
+    expect(response).to have_http_status(:ok)
+    admin_grid_row = json_response.fetch("rows").sole
+    expect(admin_grid_row).to include(
+      "unread_by_contractor_count" => 1,
+      "unread_by_admin_count" => 1
+    )
 
     post "/api/claims/contractor/invoices/#{invoice.id}/conversation_messages/read",
          params: {
@@ -213,5 +254,61 @@ RSpec.describe "Claims conversation messages API", type: :request do
     get "/api/claims/contractor/invoices/#{invoice.id}/conversation_messages"
     expect(response).to have_http_status(:ok)
     expect(json_response.fetch("unread_count")).to eq(0)
+  end
+
+  it "sorts the complete admin grid by directional unread status" do
+    host! "localhost"
+    user = create(:user, :submitter)
+    contractor = Contractor.create!(business_name: "Unread Sort Test")
+    session = Claims::Session.create!
+    admin_unread_invoice =
+      Claims::Invoice.create!(
+        session_id: session.id,
+        contractor_id: contractor.id,
+        status: "in_review"
+      )
+    contractor_unread_invoice =
+      Claims::Invoice.create!(
+        session_id: session.id,
+        contractor_id: contractor.id,
+        status: "in_review"
+      )
+
+    Claims::ConversationMessage.create!(
+      invoice_id: admin_unread_invoice.id,
+      requester_id: user.id,
+      message_type: "contractor_note",
+      request_text: "Unread by the admin"
+    )
+    Claims::ConversationMessage.create!(
+      invoice_id: contractor_unread_invoice.id,
+      requester_id: user.id,
+      message_type: "admin_message",
+      request_text: "Unread by the contractor"
+    )
+
+    get "/api/claims/admin/invoices",
+        params: {
+          session_id: session.id,
+          sort: "unread_by_admin_count:desc",
+          per: 1
+        }
+    expect(response).to have_http_status(:ok)
+    expect(json_response.fetch("rows").sole).to include(
+      "invoice_id" => admin_unread_invoice.id,
+      "unread_by_admin_count" => 1
+    )
+
+    get "/api/claims/admin/invoices",
+        params: {
+          session_id: session.id,
+          sort: "unread_by_contractor_count:desc",
+          per: 1
+        }
+    expect(response).to have_http_status(:ok)
+    expect(json_response.fetch("rows").sole).to include(
+      "invoice_id" => contractor_unread_invoice.id,
+      "unread_by_contractor_count" => 1
+    )
   end
 end

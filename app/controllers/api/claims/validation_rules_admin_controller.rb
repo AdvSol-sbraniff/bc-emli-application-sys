@@ -12,6 +12,11 @@ module Api
         genai_located_field
       ].freeze
       CREATEABLE_RECORD_TYPES = %w[genai_rule genai_located_field].freeze
+      LOGGABLE_CONTRACTOR_VISIBILITIES = %w[
+        hidden
+        fail_only
+        warn_and_fail
+      ].freeze
 
       skip_after_action :verify_authorized,
                         only: %i[index create update history upgrade_types]
@@ -114,7 +119,14 @@ module Api
       end
 
       def update
+        started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @validation_rule_update_committed = false
         type = record_type_param
+        log_validation_rule_update(
+          outcome: "started",
+          record_type: type,
+          started_at: started_at
+        )
 
         row =
           case type
@@ -127,15 +139,53 @@ module Api
           when "genai_located_field"
             update_genai_located_field!
           end
+        @validation_rule_update_committed = true
 
+        log_validation_rule_update(
+          outcome: "succeeded",
+          record_type: type,
+          started_at: started_at,
+          row: row,
+          http_status: 200,
+          committed: true
+        )
         render json: serialize_row(row, type), status: :ok
       rescue ActiveRecord::RecordInvalid => e
+        log_validation_rule_update(
+          outcome: "validation_failed",
+          record_type: type,
+          started_at: started_at,
+          http_status: 422,
+          committed: false,
+          error: e
+        )
         render json: {
                  error: e.record.errors.full_messages.join(", ")
                },
                status: :unprocessable_entity
       rescue ActiveRecord::RecordNotUnique => e
+        log_validation_rule_update(
+          outcome: "conflict",
+          record_type: type,
+          started_at: started_at,
+          http_status: 422,
+          committed: false,
+          error: e
+        )
         render json: { error: e.message }, status: :unprocessable_entity
+      rescue StandardError => e
+        log_validation_rule_update(
+          outcome: "exception",
+          record_type: type,
+          started_at: started_at,
+          http_status:
+            ActionDispatch::ExceptionWrapper.status_code_for_exception(
+              e.class.name
+            ),
+          committed: @validation_rule_update_committed,
+          error: e
+        )
+        raise
       end
 
       def history
@@ -305,6 +355,7 @@ module Api
       def update_code_rule!
         ::Claims::CodeRule.transaction do
           row = ::Claims::CodeRule.lock.find(params[:id])
+          capture_validation_rule_update_before(row)
           row.update!(code_rule_params)
           sync_code_rule_mappings!(row)
           row.reload
@@ -320,6 +371,7 @@ module Api
       def update_code_located_field!
         ::Claims::CodeLocatedField.transaction do
           row = ::Claims::CodeLocatedField.lock.find(params[:id])
+          capture_validation_rule_update_before(row)
           row.update!(code_located_field_params)
           row.reload
         end
@@ -336,6 +388,7 @@ module Api
       def update_genai_rule!
         ::Claims::GenaiRule.transaction do
           row = ::Claims::GenaiRule.lock.find(params[:id])
+          capture_validation_rule_update_before(row)
           row.update!(genai_rule_params)
           sync_genai_rule_mappings!(row)
           row.reload
@@ -353,6 +406,7 @@ module Api
       def update_genai_located_field!
         ::Claims::GenaiLocatedField.transaction do
           row = ::Claims::GenaiLocatedField.lock.find(params[:id])
+          capture_validation_rule_update_before(row)
           row.update!(genai_located_field_params)
           sync_genai_located_field_mappings!(row)
           row.reload
@@ -479,6 +533,122 @@ module Api
 
         row.errors.add(:base, "At least one upgrade type mapping is required.")
         raise ActiveRecord::RecordInvalid, row
+      end
+
+      def capture_validation_rule_update_before(row)
+        @validation_rule_update_before = {
+          contractor_visibility:
+            (
+              if row.respond_to?(:contractor_visibility)
+                row.contractor_visibility
+              else
+                nil
+              end
+            )
+        }
+      end
+
+      def log_validation_rule_update(
+        outcome:,
+        record_type:,
+        started_at:,
+        row: nil,
+        http_status: nil,
+        committed: nil,
+        error: nil
+      )
+        event = {
+          event: "claims.validation_rule_admin.update",
+          outcome: outcome,
+          request_id: request.request_id,
+          user_id: current_user&.id,
+          record_type:
+            (
+              if RECORD_TYPES.include?(record_type.to_s)
+                record_type.to_s
+              else
+                "unsupported"
+              end
+            ),
+          record_id: params[:id].to_s,
+          changed_fields: loggable_changed_fields(record_type),
+          requested_contractor_visibility:
+            loggable_requested_contractor_visibility,
+          previous_contractor_visibility:
+            @validation_rule_update_before&.dig(:contractor_visibility),
+          saved_contractor_visibility:
+            (
+              if row.respond_to?(:contractor_visibility)
+                row.contractor_visibility
+              else
+                nil
+              end
+            ),
+          http_status: http_status,
+          committed: committed,
+          duration_ms:
+            (
+              (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) *
+                1000
+            ).round(1),
+          error_class: error&.class&.name,
+          validation_errors: loggable_validation_errors(error)
+        }.compact
+
+        level =
+          case outcome
+          when "started", "succeeded"
+            :info
+          when "validation_failed", "conflict"
+            :warn
+          else
+            :error
+          end
+        Rails.logger.public_send(level, event.to_json)
+      rescue StandardError => logging_error
+        Rails.logger.error(
+          {
+            event: "claims.validation_rule_admin.update_logging_failed",
+            request_id: request.request_id,
+            error_class: logging_error.class.name
+          }.to_json
+        )
+      end
+
+      def loggable_changed_fields(record_type)
+        permitted_fields =
+          case record_type.to_s
+          when "code_rule"
+            code_rule_params.keys
+          when "code_located_field"
+            code_located_field_params.keys
+          when "genai_rule"
+            genai_rule_params.keys
+          when "genai_located_field"
+            genai_located_field_params.keys
+          else
+            []
+          end
+        permitted_fields << "mappings" if params.key?(:mappings)
+        permitted_fields.sort
+      end
+
+      def loggable_requested_contractor_visibility
+        return unless params.key?(:contractor_visibility)
+
+        value = params[:contractor_visibility].to_s
+        LOGGABLE_CONTRACTOR_VISIBILITIES.include?(value) ? value : "invalid"
+      end
+
+      def loggable_validation_errors(error)
+        return unless error.is_a?(ActiveRecord::RecordInvalid)
+
+        error.record.errors.map do |validation_error|
+          {
+            field: validation_error.attribute.to_s,
+            type: validation_error.type.to_s
+          }
+        end
       end
 
       def code_rule_params

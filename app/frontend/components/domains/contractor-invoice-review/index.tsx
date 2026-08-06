@@ -347,6 +347,32 @@ const supportingFieldIdentityKey = (typeKey: unknown, fieldKey: unknown): string
 
 const diFieldIdentityKey = (fieldKey: unknown): string => `di_field:${String(fieldKey || '')}`;
 
+const revisionAttentionElementId = (issueId: string): string => `contractor-revision-attention-${issueId}`;
+const revisionSourceElementId = (issueId: string): string => `contractor-revision-source-${issueId}`;
+
+const revealRevisionElement = (elementId: string) => {
+  const target = document.getElementById(elementId);
+  if (!target) return;
+  const ancestorIds: string[] = [];
+  let ancestor = target.parentElement;
+  while (ancestor) {
+    if (ancestor.id) ancestorIds.push(ancestor.id);
+    ancestor = ancestor.parentElement;
+  }
+  const accordionButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('button[aria-controls][aria-expanded="false"]'),
+  );
+  ancestorIds.reverse().forEach((ancestorId) => {
+    accordionButtons.find((button) => button.getAttribute('aria-controls') === ancestorId)?.click();
+  });
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.focus({ preventScroll: true });
+    });
+  });
+};
+
 export default function ContractorInvoiceReviewScreen() {
   const { sessionId, invoiceId } = useParams();
   const navigate = useNavigate();
@@ -830,6 +856,21 @@ export default function ContractorInvoiceReviewScreen() {
       return true;
     });
   }, [contractorActionableRulechecks, genAiRulechecks, revisionIssueByIdentity, suppressedRuleIdentityKeys]);
+  const currentRevisionAttentionIssues = useMemo(
+    () =>
+      currentStatus === 'contractor_revision_inbox'
+        ? visibleRevisionIssues.filter((issue) => issue.status === 'open' && issue.in_latest_round)
+        : [],
+    [currentStatus, visibleRevisionIssues],
+  );
+  const currentRevisionAttentionIssueIds = useMemo(
+    () => new Set(currentRevisionAttentionIssues.map((issue) => issue.id)),
+    [currentRevisionAttentionIssues],
+  );
+  const attentionIssueCount =
+    currentStatus === 'contractor_revision_inbox'
+      ? currentRevisionAttentionIssues.length
+      : programRequirementRulechecks.length;
   const renderedRevisionIdentityKeys = useMemo(() => {
     const keys = new Set<string>();
     programRequirementRulechecks.forEach((row: any) => keys.add(rulecheckIdentityKey(row)));
@@ -842,6 +883,17 @@ export default function ContractorInvoiceReviewScreen() {
     });
     return keys;
   }, [classifierFields, genAiFields, programRequirementRulechecks, supportingFieldIdentityCounts]);
+  const inlineRevisionSourceIdentityKeys = useMemo(() => {
+    const keys = new Set<string>();
+    DI_FIELDS.forEach((field) => keys.add(diFieldIdentityKey(field.key)));
+    [...genAiFields, ...classifierFields]
+      .filter(hasLocatedFieldValue)
+      .forEach((row: any) => keys.add(locatedFieldIdentityKey(row)));
+    supportingFieldIdentityCounts.forEach((count, key) => {
+      if (count === 1) keys.add(key);
+    });
+    return keys;
+  }, [classifierFields, genAiFields, supportingFieldIdentityCounts]);
   const unmatchedRevisionIssues = useMemo(
     () =>
       visibleRevisionIssues.filter((issue) => {
@@ -861,6 +913,10 @@ export default function ContractorInvoiceReviewScreen() {
   const programRequirementDefaultIndices = programRequirementRulechecks.flatMap((row: any, index: number) => {
     const issue = revisionIssueForRulecheck(row);
     if (!issue) return [];
+    const state = contractorRevisionPresentationState(issue, revisionWorkspace.data);
+    return state.key === 'action_required' || state.key === 'upload_required' ? [index] : [];
+  });
+  const currentRevisionDefaultIndices = currentRevisionAttentionIssues.flatMap((issue, index) => {
     const state = contractorRevisionPresentationState(issue, revisionWorkspace.data);
     return state.key === 'action_required' || state.key === 'upload_required' ? [index] : [];
   });
@@ -1115,6 +1171,35 @@ export default function ContractorInvoiceReviewScreen() {
     );
   };
 
+  const renderRevisionIssueAtSource = (issue: RevisionIssue) => {
+    if (!currentRevisionAttentionIssueIds.has(issue.id)) {
+      return (
+        <ContractorInlineRevisionIssueCard
+          issue={issue}
+          workspace={revisionWorkspace}
+          compactHeading
+          attention={revisionAttentionIssueIds.includes(issue.id)}
+        />
+      );
+    }
+
+    const presentation = contractorRevisionPresentationState(issue, revisionWorkspace.data);
+    const needsResponse = presentation.key === 'action_required' || presentation.key === 'upload_required';
+    return (
+      <Box id={revisionSourceElementId(issue.id)} tabIndex={-1} mt={3} _focus={{ outline: 'none' }}>
+        <Button
+          size="sm"
+          variant="outline"
+          colorScheme="orange"
+          leftIcon={<Warning size={16} aria-hidden="true" />}
+          onClick={() => revealRevisionElement(revisionAttentionElementId(issue.id))}
+        >
+          {needsResponse ? 'Respond in Attention Required' : 'View response in Attention Required'}
+        </Button>
+      </Box>
+    );
+  };
+
   const renderLocatedFieldRow = (row: any, key: React.Key) => {
     const highlightKey = `found_${row.source_engine || 'field'}_${row.id}`;
     const clickable = row.page != null;
@@ -1145,14 +1230,7 @@ export default function ContractorInvoiceReviewScreen() {
               : undefined
           }
         />
-        {issue ? (
-          <ContractorInlineRevisionIssueCard
-            issue={issue}
-            workspace={revisionWorkspace}
-            compactHeading
-            attention={revisionAttentionIssueIds.includes(issue.id)}
-          />
-        ) : null}
+        {issue ? renderRevisionIssueAtSource(issue) : null}
       </Box>
     );
   };
@@ -1293,17 +1371,123 @@ export default function ContractorInvoiceReviewScreen() {
               <Flex align="center" gap="4px" color="gray.700">
                 <Warning size={17} weight="regular" color="#D69E2E" aria-hidden="true" />
                 <Text fontSize="md" fontWeight="semibold">
-                  {programRequirementRulechecks.length} {programRequirementRulechecks.length === 1 ? 'issue' : 'issues'}
+                  {attentionIssueCount} {attentionIssueCount === 1 ? 'issue' : 'issues'}
                 </Text>
               </Flex>
               <ContractorInlineRevisionStatus workspace={revisionWorkspace} />
             </Flex>
             <Text fontSize="md" color="gray.700" mb="10px">
-              Follow the below recommendation to ensure your submission is processed promptly. Correct invoice and
-              re-upload where recommended. Chat with an admin if clarifications are required. Submit when all
-              recommendations have been actioned.
+              {currentStatus === 'contractor_revision_inbox'
+                ? 'Review and respond to every request below. Chat with an admin if clarification is required, then submit when every response has been saved.'
+                : 'Follow the recommendations below to ensure your submission is processed promptly. Correct and re-upload the invoice where recommended.'}
             </Text>
-            {revisionWorkspace.loading ? null : programRequirementRulechecks.length > 0 ? (
+            {revisionWorkspace.loading ? null : currentStatus === 'contractor_revision_inbox' ? (
+              currentRevisionAttentionIssues.length > 0 ? (
+                <Accordion
+                  allowMultiple
+                  defaultIndex={currentRevisionDefaultIndices}
+                  display="flex"
+                  flexDirection="column"
+                  gap="8px"
+                >
+                  {currentRevisionAttentionIssues.map((issue) => {
+                    const revisionStatus = contractorRevisionPresentationState(issue, revisionWorkspace.data);
+                    const identityKey = revisionIssueIdentityKey(issue);
+                    const sourceAvailable = inlineRevisionSourceIdentityKeys.has(identityKey);
+                    const rulecheck =
+                      issue.source_identity?.kind === 'rule'
+                        ? genAiRulechecks.find((row: any) => rulecheckIdentityKey(row) === identityKey)
+                        : undefined;
+                    const title = String(issue.source.friendly_label || 'Requested change');
+                    const recommendation = rulecheck
+                      ? String(rulecheck?.contractor_action ?? '').trim() || 'No recommendation has been provided.'
+                      : undefined;
+
+                    return (
+                      <AccordionItem
+                        key={issue.id}
+                        id={revisionAttentionElementId(issue.id)}
+                        tabIndex={-1}
+                        bg="orange.50"
+                        borderWidth="1px"
+                        borderColor="orange.200"
+                        borderRadius="lg"
+                        overflow="hidden"
+                        boxShadow="none"
+                        _focus={{ outline: 'none', borderColor: 'orange.400' }}
+                      >
+                        <h2>
+                          <AccordionButton
+                            px="10px"
+                            py="8px"
+                            borderBottomWidth="1px"
+                            borderBottomColor="#D8D8D8"
+                            boxShadow="none"
+                            _hover={{ bg: 'orange.100' }}
+                          >
+                            <Flex flex="1" minW={0} align="center" gap="8px" wrap="wrap" textAlign="left">
+                              <Text fontSize="lg" fontWeight="bold" noOfLines={2}>
+                                Issue: {title}
+                              </Text>
+                              <Badge colorScheme={revisionStatus.colorScheme} flexShrink={0} fontSize="md">
+                                {revisionStatus.label}
+                              </Badge>
+                            </Flex>
+                            <AccordionIcon />
+                          </AccordionButton>
+                        </h2>
+                        <AccordionPanel px="10px" pt="8px" pb="12px">
+                          {sourceAvailable ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              mb="8px"
+                              onClick={() => revealRevisionElement(revisionSourceElementId(issue.id))}
+                            >
+                              View source in uploaded information
+                            </Button>
+                          ) : null}
+                          <ContractorInlineRevisionIssueCard
+                            issue={issue}
+                            workspace={revisionWorkspace}
+                            compactHeading
+                            integratedConversation
+                            recommendation={recommendation}
+                            recommendationAt={recommendation ? readData?.created_at : undefined}
+                            recommendationSource={
+                              rulecheck ? (
+                                <Link
+                                  as="button"
+                                  type="button"
+                                  color="blue.700"
+                                  fontWeight="normal"
+                                  textDecoration="underline"
+                                  onClick={() =>
+                                    setProgramRequirementsModal({
+                                      title,
+                                      sourceQuote: rulecheck?.source_quote,
+                                    })
+                                  }
+                                >
+                                  Please read the program eligibility source.
+                                </Link>
+                              ) : undefined
+                            }
+                            attention={revisionAttentionIssueIds.includes(issue.id)}
+                          />
+                        </AccordionPanel>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              ) : (
+                <Box px="10px" py="3px">
+                  <Text fontSize="md" opacity={0.7}>
+                    No issues currently require action.
+                  </Text>
+                </Box>
+              )
+            ) : programRequirementRulechecks.length > 0 ? (
               <Accordion
                 allowMultiple
                 defaultIndex={programRequirementDefaultIndices}
@@ -1426,12 +1610,7 @@ export default function ContractorInvoiceReviewScreen() {
             Uploaded Information
           </Text>
           <Box display="flex" alignItems="center" gap="10px" mb="12px" flexWrap="wrap">
-            <ViewerPanelModeSelector
-              value={rightPanelMode}
-              onChange={setRightPanelMode}
-              includeRevision={false}
-              showTooltips={false}
-            />
+            <ViewerPanelModeSelector value={rightPanelMode} onChange={setRightPanelMode} showTooltips={false} />
           </Box>
 
           <Box display="flex" gap="16px" flex="1" minH={0}>
@@ -1527,14 +1706,7 @@ export default function ContractorInvoiceReviewScreen() {
                               inline
                               onClick={clickable ? () => setActiveHighlightKey(field.key) : undefined}
                             />
-                            {issue ? (
-                              <ContractorInlineRevisionIssueCard
-                                issue={issue}
-                                workspace={revisionWorkspace}
-                                compactHeading
-                                attention={revisionAttentionIssueIds.includes(issue.id)}
-                              />
-                            ) : null}
+                            {issue ? renderRevisionIssueAtSource(issue) : null}
                           </Box>
                         );
                       })}
@@ -1763,12 +1935,7 @@ export default function ContractorInvoiceReviewScreen() {
                                         </Text>
                                         {issue ? (
                                           <Box gridColumn="1 / -1" mb="6px">
-                                            <ContractorInlineRevisionIssueCard
-                                              issue={issue}
-                                              workspace={revisionWorkspace}
-                                              compactHeading
-                                              attention={revisionAttentionIssueIds.includes(issue.id)}
-                                            />
+                                            {renderRevisionIssueAtSource(issue)}
                                           </Box>
                                         ) : null}
                                       </React.Fragment>
@@ -1948,14 +2115,7 @@ export default function ContractorInvoiceReviewScreen() {
                                     : undefined
                                 }
                               />
-                              {issue ? (
-                                <ContractorInlineRevisionIssueCard
-                                  issue={issue}
-                                  workspace={revisionWorkspace}
-                                  compactHeading
-                                  attention={revisionAttentionIssueIds.includes(issue.id)}
-                                />
-                              ) : null}
+                              {issue ? renderRevisionIssueAtSource(issue) : null}
                             </Box>
                           );
                         })}
@@ -2104,8 +2264,11 @@ export default function ContractorInvoiceReviewScreen() {
                   />
                 )}
 
-                {unmatchedRevisionIssues.filter((issue) => ['pending_admin_review', 'open'].includes(issue.status))
-                  .length > 0 && (
+                {unmatchedRevisionIssues.filter(
+                  (issue) =>
+                    ['pending_admin_review', 'open'].includes(issue.status) &&
+                    !currentRevisionAttentionIssueIds.has(issue.id),
+                ).length > 0 && (
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                     <h2>
                       <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
@@ -2119,7 +2282,11 @@ export default function ContractorInvoiceReviewScreen() {
                     </h2>
                     <AccordionPanel px="0" pt="8px">
                       {unmatchedRevisionIssues
-                        .filter((issue) => ['pending_admin_review', 'open'].includes(issue.status))
+                        .filter(
+                          (issue) =>
+                            ['pending_admin_review', 'open'].includes(issue.status) &&
+                            !currentRevisionAttentionIssueIds.has(issue.id),
+                        )
                         .map((issue) => (
                           <ContractorInlineRevisionIssueCard
                             key={issue.id}

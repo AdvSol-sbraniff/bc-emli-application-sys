@@ -6,13 +6,41 @@ module Api
       include Api::Claims::Concerns::AdminAuthorization
 
       skip_before_action :authenticate_user!,
-                         only: %i[index show create update destroy]
+                         only: %i[
+                           index
+                           show
+                           create
+                           update
+                           destroy
+                           mark_contractor_messages_read
+                         ]
       skip_before_action :require_confirmation,
-                         only: %i[index show create update destroy]
+                         only: %i[
+                           index
+                           show
+                           create
+                           update
+                           destroy
+                           mark_contractor_messages_read
+                         ]
       skip_after_action :verify_authorized,
-                        only: %i[index show create update destroy]
+                        only: %i[
+                          index
+                          show
+                          create
+                          update
+                          destroy
+                          mark_contractor_messages_read
+                        ]
       skip_after_action :verify_policy_scoped, only: %i[index]
-      skip_forgery_protection only: %i[index show create update destroy]
+      skip_forgery_protection only: %i[
+                                index
+                                show
+                                create
+                                update
+                                destroy
+                                mark_contractor_messages_read
+                              ]
 
       # GET /api/claims/admin/conversation_messages
       def index
@@ -149,6 +177,50 @@ module Api
         record.destroy!
 
         render json: { id: record.id, deleted: true }, status: :ok
+      end
+
+      # POST /api/claims/admin/invoices/:invoice_id/conversation_messages/read
+      def mark_contractor_messages_read
+        invoice = ::Claims::Invoice.find(params[:invoice_id])
+        requested_seqno = Integer(params[:through_seqno], exception: false)
+        if requested_seqno.nil? || requested_seqno.negative?
+          render json: {
+                   error: "A non-negative through_seqno is required."
+                 },
+                 status: :unprocessable_entity
+          return
+        end
+
+        message_scope =
+          ::Claims::ConversationMessage.where(invoice_id: invoice.id)
+        latest_contractor_seqno =
+          message_scope
+            .where(message_type: "contractor_note")
+            .maximum(:revreq_seqno)
+            .to_i
+        through_seqno = [requested_seqno, latest_contractor_seqno].min
+        message_scope
+          .where(message_type: "contractor_note", recipient_read_at: nil)
+          .where("revreq_seqno <= ?", through_seqno)
+          .update_all(recipient_read_at: Time.current)
+        unread_count =
+          message_scope.where(
+            message_type: "contractor_note",
+            recipient_read_at: nil
+          ).count
+
+        render json: {
+                 unread_count: unread_count,
+                 latest_contractor_seqno: latest_contractor_seqno
+               },
+               status: :ok
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Invoice not found" }, status: :not_found
+      rescue StandardError => e
+        Rails.logger.error(
+          "[claims][conversation_messages_admin][mark_read] ERROR: #{e.class}: #{e.message}"
+        )
+        render json: { error: e.message }, status: :unprocessable_entity
       end
 
       private

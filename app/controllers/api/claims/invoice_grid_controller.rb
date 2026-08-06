@@ -116,9 +116,30 @@ module Api
         # Text search (safe against missing columns)
         rel = apply_text_search(rel, params[:q])
 
+        unread_by_admin_scope =
+          ::Claims::ConversationMessage.where(
+            message_type: "contractor_note",
+            recipient_read_at: nil
+          )
+        unread_by_admin_filtered_invoice_count =
+          unread_by_admin_scope
+            .where(invoice_id: rel.reorder(nil).select(:invoice_id))
+            .distinct
+            .count(:invoice_id)
+        unread_by_admin_overall_invoice_count =
+          unread_by_admin_scope
+            .where(invoice_id: ::Claims::InvoiceGrid.select(:invoice_id))
+            .distinct
+            .count(:invoice_id)
+
         # Sort (safe against missing columns)
         sort_field, sort_dir = parse_sort(params[:sort])
-        rel = rel.order(Arel.sql("#{sort_field} #{sort_dir}"))
+        rel =
+          rel.order(
+            Arel.sql(
+              "#{invoice_grid_sort_expression(sort_field)} #{sort_dir}, latest_invoice_version_updated_at DESC NULLS LAST"
+            )
+          )
 
         # Pagination
         page = to_int(params[:page], 1)
@@ -127,14 +148,37 @@ module Api
 
         total = rel.count
         rows = rel.offset(offset).limit(per)
+        rows_json = rows.as_json
+        invoice_ids = rows_json.filter_map { |row| row["invoice_id"] }.uniq
+        unread_counts =
+          ::Claims::ConversationMessage
+            .where(invoice_id: invoice_ids, recipient_read_at: nil)
+            .group(:invoice_id, :message_type)
+            .count
+
+        rows_json.each do |row|
+          invoice_id = row["invoice_id"]
+          row["unread_by_contractor_count"] = unread_counts.fetch(
+            [invoice_id, "admin_message"],
+            0
+          )
+          row["unread_by_admin_count"] = unread_counts.fetch(
+            [invoice_id, "contractor_note"],
+            0
+          )
+        end
 
         render json: {
-                 rows: rows.as_json,
+                 rows: rows_json,
                  meta: {
                    total: total,
                    page: page,
                    per: per,
                    sort: "#{sort_field}:#{sort_dir}",
+                   unread_by_admin_filtered_invoice_count:
+                     unread_by_admin_filtered_invoice_count,
+                   unread_by_admin_overall_invoice_count:
+                     unread_by_admin_overall_invoice_count,
                    filters: {
                      session_id: params[:session_id].presence,
                      invoice_status: params[:invoice_status].presence,
@@ -327,6 +371,7 @@ module Api
           contractor_business_name
           contractor_number
           contractor_email
+          reference_number
           submitter_email
           submitter_name
           latest_di_ocr_invoice_id
@@ -342,13 +387,25 @@ module Api
 
         clauses =
           fields
-            .map { |f| "#{f} ILIKE :p ESCAPE '#{escape_char}'" }
+            .map do |field|
+              expression =
+                if field == "reference_number"
+                  "CAST(reference_number AS text)"
+                else
+                  field
+                end
+              "#{expression} ILIKE :p ESCAPE '#{escape_char}'"
+            end
             .join(" OR ")
         rel.where(clauses, p: pattern)
       end
 
       def parse_sort(raw)
         cols = ::Claims::InvoiceGrid.column_names
+        unread_sort_fields = %w[
+          unread_by_admin_count
+          unread_by_contractor_count
+        ]
 
         default_field =
           (
@@ -366,10 +423,32 @@ module Api
         field = field.to_s.strip
         dir = dir.to_s.strip.downcase
 
-        field = default_field unless cols.include?(field)
+        field = default_field unless (cols + unread_sort_fields).include?(field)
         dir = %w[asc desc].include?(dir) ? dir : default_dir
 
         [field, dir]
+      end
+
+      def invoice_grid_sort_expression(field)
+        message_type =
+          case field
+          when "unread_by_admin_count"
+            "contractor_note"
+          when "unread_by_contractor_count"
+            "admin_message"
+          end
+        return field unless message_type
+
+        quoted_message_type = ActiveRecord::Base.connection.quote(message_type)
+        <<~SQL.squish
+          CASE WHEN EXISTS (
+            SELECT 1
+            FROM claims.conversation_messages AS unread_messages
+            WHERE unread_messages.invoice_id = claims.v_invoice_grid.invoice_id
+              AND unread_messages.message_type = #{quoted_message_type}
+              AND unread_messages.recipient_read_at IS NULL
+          ) THEN 1 ELSE 0 END
+        SQL
       end
 
       def parse_upgrade_type_keys(raw)
