@@ -451,7 +451,6 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
       <MenuGroup title={t('home.claimsAdminSectionTitle')}>
         <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
         <NavMenuItem label={'Reports'} to={'/reports-volume-value'} />
-        <NavMenuItem label={'Contractor Draft Simulator'} to={'/submission-simulator-admin'} />
         <NavMenuItem label={'Fields and Advice Editor'} to={'/validation-rules-admin'} />
         <NavMenuItem label={'Advice Checks at a Glance'} to={'/validation-rules-alphabetic-admin'} />
         <NavMenuItem label={'Supporting Document Types'} to={'/supporting-document-types-admin'} />
@@ -465,6 +464,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
       </MenuGroup>
       <MenuDivider my={0} borderColor="border.light" />
       <MenuGroup title="Create Test Data">
+        <NavMenuItem label="Contractor Simulator" to={'/submission-simulator-admin'} />
         <NavMenuItem label="Create Test Contractors" to={'/contractors-admin'} />
         <NavMenuItem label="Create Test Users" to={'/users-admin'} />
         <NavMenuItem label="Create Test Eligibility Codes" to={'/eligibilitycodes-admin'} />

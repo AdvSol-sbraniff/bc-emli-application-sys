@@ -90,7 +90,7 @@ module Claims
             For v1, create these rulechecks from the OCR/DI JSON and supplied database values.
             #{result_rubric}
             Use the supplied supporting-document summaries and located fields when a common rule asks about application attachments, utility/account documents, income documents, landlord consent, labels, photos, permits, or other non-invoice evidence.
-            Use other_documents[] only as optional corroborating context for unusual or unclassified attachments; do not treat other_documents[] as a replacement for a clearly required configured supporting-document type unless its OCR excerpt or classification reason directly supports the rule.
+            Use other_documents[] only as optional corroborating context for unusual or unclassified attachments; do not treat other_documents[] as a replacement for a clearly required configured supporting-document type unless its OCR text or classification reason directly supports the rule.
             For shared database facts such as invoices.submitted_at, classifier.eligibility_code, and users_eligibilitycodes.*, use the supplied database values exactly as provided.
             For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
             Show the date math in calculation when a date rule is evaluated.
@@ -98,7 +98,7 @@ module Claims
             Use the OCR/DI JSON, supplied database values, and supporting_document_summary_for_upgrade_type for this upgrade type.
             #{result_rubric}
             When a rule asks about photos, labels, product specs, permits, preapproval, WETT reports, heat-load calculations, utility bills/invoices, fossil-fuel removal/modification, or other supporting documents, inspect configured_documents[].located_fields before warning or failing for missing evidence.
-            Use other_documents[] only as optional corroborating context for unusual or unclassified attachments; do not treat other_documents[] as a replacement for a clearly required configured supporting-document type unless its OCR excerpt or classification reason directly supports the rule.
+            Use other_documents[] only as optional corroborating context for unusual or unclassified attachments; do not treat other_documents[] as a replacement for a clearly required configured supporting-document type unless its OCR text or classification reason directly supports the rule.
             For invoice dates, use the best-supported invoice date visible in the OCR/DI JSON.
             Show the date math in calculation when a date rule is evaluated.
           TEXT

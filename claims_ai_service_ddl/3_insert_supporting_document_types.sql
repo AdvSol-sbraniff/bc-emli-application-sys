@@ -18,6 +18,7 @@ VALUES
   ('0d67f495-bf0f-4aa4-8e63-1519d4200013'::uuid, 'landlord_consent_form', 'Landlord Consent Form', true, NOW(), NOW()),
   ('0d67f495-bf0f-4aa4-8e63-1519d4200014'::uuid, 'manufacturer_label_photo', 'Manufacturer Label Photo', true, NOW(), NOW()),
   ('0d67f495-bf0f-4aa4-8e63-1519d4200016'::uuid, 'oil_removal_proof', 'Oil Removal Proof', true, NOW(), NOW()),
+  ('0d67f495-bf0f-4aa4-8e63-1519d4200026'::uuid, 'other_supporting_document', 'Other Supporting Document', true, NOW(), NOW()),
   ('0d67f495-bf0f-4aa4-8e63-1519d4200017'::uuid, 'permit_document', 'Permit Document', true, NOW(), NOW()),
   ('0d67f495-bf0f-4aa4-8e63-1519d4200018'::uuid, 'preapproval_notice', 'Preapproval Notice', true, NOW(), NOW()),
   ('0d67f495-bf0f-4aa4-8e63-1519d4200020'::uuid, 'product_spec_sheet', 'Product Spec Sheet', true, NOW(), NOW()),

@@ -232,10 +232,13 @@ module Claims
         the authoritative source for textual evidence and polygons, and use the
         attached file for visual and document context. If it is an invoice, detect
         upgrade types and the eligibility code. If it is a supporting document,
-        classify its type and routing quality. Do not extract official supporting-
-        document evidence in this call; that happens in the downstream supporting-
-        document extraction step. Also assess this individual file for unnecessary
-        or high-risk personal information using the supplied PI type configuration.
+        classify its type and routing quality. Use other_supporting_document when
+        the file is clearly supplementary evidence but no more specific allowed
+        supporting-document type applies; do not use unknown solely for that reason.
+        Do not extract official supporting-document evidence in this call; that
+        happens in the downstream supporting-document extraction step. Also assess
+        this individual file for unnecessary or high-risk personal information using
+        the supplied PI type configuration.
       TEXT
     end
 

@@ -130,6 +130,7 @@ Rails.application.routes.draw do
       get "admin/reports/volume_value/trend", to: "reports_volume_value#trend"
       get "admin/reports/volume_value/detail", to: "reports_volume_value#detail"
       get "admin/ingest_runs", to: "ingest_runs_admin#index"
+      get "admin/ingest_runs/:ingest_run_id", to: "ingest_runs_admin#show"
       get "admin/ingest_runs/:ingest_run_id/steps",
           to: "ingest_runs_admin#steps"
       get "admin/ingest_step_runs/:id", to: "ingest_runs_admin#show_step"

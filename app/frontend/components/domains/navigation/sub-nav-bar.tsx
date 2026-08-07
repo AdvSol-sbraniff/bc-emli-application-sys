@@ -157,7 +157,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       ],
       '/submission-simulator-admin': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/submission-simulator-admin', title: 'Contractor Draft Simulator' },
+        { href: '/submission-simulator-admin', title: 'Contractor Simulator' },
       ],
       '/contractor/upload-invoices': [
         { href: '/ai-contractor-dashboard', title: 'AI contractor portal' },

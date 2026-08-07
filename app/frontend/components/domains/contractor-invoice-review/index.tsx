@@ -380,6 +380,11 @@ export default function ContractorInvoiceReviewScreen() {
   const pdfWrapRef = useRef<HTMLDivElement | null>(null);
   const { isOpen: isSubmitWarningOpen, onOpen: onSubmitWarningOpen, onClose: onSubmitWarningClose } = useDisclosure();
   const { isOpen: isWithdrawOpen, onOpen: onWithdrawOpen, onClose: onWithdrawClose } = useDisclosure();
+  const {
+    isOpen: isFixUploadWarningOpen,
+    onOpen: onFixUploadWarningOpen,
+    onClose: onFixUploadWarningClose,
+  } = useDisclosure();
 
   const [rightPanelMode, setRightPanelMode] = useState<ViewerPanelMode>('document');
   const [readData, setReadData] = useState<any>(null);
@@ -420,6 +425,7 @@ export default function ContractorInvoiceReviewScreen() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submissionSuccess, setSubmissionSuccess] = useState<{ referenceNumber: string } | null>(null);
   const [finishLaterLoading, setFinishLaterLoading] = useState(false);
+  const [fixUploadLoading, setFixUploadLoading] = useState(false);
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
   const [revisionRefreshToken, setRevisionRefreshToken] = useState(0);
   const [revisionAttentionIssueIds, setRevisionAttentionIssueIds] = useState<string[]>([]);
@@ -1162,13 +1168,41 @@ export default function ContractorInvoiceReviewScreen() {
     }
   };
 
-  const openFixUpload = () => {
+  const fixUploadPath = () => {
     if (!sessionId || !currentInvoiceId) return;
-    window.open(
-      `/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(currentInvoiceId)}/fix`,
-      '_blank',
-      'noopener,noreferrer',
-    );
+    return `/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(currentInvoiceId)}/fix`;
+  };
+
+  const continueToFixUpload = () => {
+    const path = fixUploadPath();
+    if (!path) return;
+    navigate(path);
+  };
+
+  const requestFixUpload = () => {
+    if (!fixUploadPath() || fixUploadLoading) return;
+    if (contractorDraftState?.hasUnsavedChanges) {
+      onFixUploadWarningOpen();
+      return;
+    }
+    continueToFixUpload();
+  };
+
+  const saveAndContinueToFixUpload = async () => {
+    if (fixUploadLoading) return;
+    setFixUploadLoading(true);
+    try {
+      const saved = await revisionWorkspace.saveAll();
+      if (!saved) {
+        onFixUploadWarningClose();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      onFixUploadWarningClose();
+      continueToFixUpload();
+    } finally {
+      setFixUploadLoading(false);
+    }
   };
 
   const renderRevisionIssueAtSource = (issue: RevisionIssue) => {
@@ -1296,7 +1330,9 @@ export default function ContractorInvoiceReviewScreen() {
             <Tooltip
               label={
                 canUploadFix
-                  ? 'Open the fix upload screen in a new tab.'
+                  ? contractorDraftState?.hasUnsavedChanges
+                    ? 'Save your changed responses before uploading corrected files.'
+                    : 'Upload corrected invoice or supporting files.'
                   : 'Fix upload is available after the pre-check finishes, or when the program team has requested a revision.'
               }
               hasArrow
@@ -1311,8 +1347,17 @@ export default function ContractorInvoiceReviewScreen() {
                 px={6}
                 _hover={{ bg: 'whiteAlpha.200' }}
                 _active={{ bg: 'whiteAlpha.300' }}
-                isDisabled={!canUploadFix || !sessionId || !currentInvoiceId}
-                onClick={openFixUpload}
+                isDisabled={
+                  !canUploadFix ||
+                  !sessionId ||
+                  !currentInvoiceId ||
+                  finishLaterLoading ||
+                  revisionWorkspace.loading ||
+                  submitLoading
+                }
+                isLoading={fixUploadLoading}
+                loadingText="Saving"
+                onClick={requestFixUpload}
               >
                 Upload
               </Button>
@@ -2898,6 +2943,41 @@ export default function ContractorInvoiceReviewScreen() {
                     Submit
                   </Button>
                 )}
+              </Flex>
+            </Flex>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={isFixUploadWarningOpen}
+        onClose={fixUploadLoading ? () => undefined : onFixUploadWarningClose}
+        closeOnEsc={!fixUploadLoading}
+        closeOnOverlayClick={!fixUploadLoading}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Save responses before uploading?</ModalHeader>
+          <ModalCloseButton isDisabled={fixUploadLoading} />
+          <ModalBody pb={6}>
+            <Flex direction="column" gap={5}>
+              <Text fontSize="sm">
+                You have changed one or more revision responses. Save those responses before opening the corrected-file
+                upload.
+              </Text>
+              <Flex gap={3} flexWrap="wrap">
+                <Button variant="outline" isDisabled={fixUploadLoading} onClick={onFixUploadWarningClose}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  isLoading={fixUploadLoading}
+                  loadingText="Saving"
+                  onClick={() => void saveAndContinueToFixUpload()}
+                >
+                  Save and continue to upload
+                </Button>
               </Flex>
             </Flex>
           </ModalBody>

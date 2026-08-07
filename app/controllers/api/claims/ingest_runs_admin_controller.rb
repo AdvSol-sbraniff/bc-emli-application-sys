@@ -5,7 +5,7 @@ module Api
     class IngestRunsAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
 
-      skip_after_action :verify_authorized, only: %i[index steps show_step]
+      skip_after_action :verify_authorized, only: %i[index show steps show_step]
       skip_after_action :verify_policy_scoped, only: %i[index]
 
       # GET /api/claims/admin/ingest_runs
@@ -48,6 +48,15 @@ module Api
                    }
                  }
                },
+               status: :ok
+      end
+
+      # GET /api/claims/admin/ingest_runs/:ingest_run_id
+      def show
+        row = ::Claims::VIngestRun.find(params[:ingest_run_id])
+        primary_failure = primary_failures_by_run_id([row.id])[row.id.to_s]
+
+        render json: serialize_run(row, primary_failure: primary_failure),
                status: :ok
       end
 

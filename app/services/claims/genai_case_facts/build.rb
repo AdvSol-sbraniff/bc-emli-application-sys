@@ -334,7 +334,7 @@ module Claims
                   doc.supporting_document_routing_quality_reason,
                 personal_information_review_status:
                   doc.personal_information_review_status,
-                ocr_text_excerpt: safe_supporting_document_ocr_excerpt(doc),
+                ocr_text: supporting_document_ocr_text(doc),
                 located_fields:
                   serialize_supporting_document_located_fields(doc),
                 visual_findings:
@@ -464,22 +464,11 @@ module Claims
           .to_h
       end
 
-      def self.safe_supporting_document_ocr_excerpt(document)
+      def self.supporting_document_ocr_text(document)
         return nil if document.di_read_raw_json.blank?
 
-        if %w[high_risk review_recommended].include?(
-             document.personal_information_review_status.to_s
-           )
-          return(
-            "[OCR excerpt withheld because the document was flagged for personal-information review.]"
-          )
-        end
-
         text = extract_ocr_text(document.di_read_raw_json)
-        return nil if text.blank?
-
-        normalized = text.to_s.gsub(/\s+/, " ").strip
-        normalized.length > 1_500 ? "#{normalized[0, 1_500]}..." : normalized
+        text.to_s.presence
       rescue StandardError
         nil
       end

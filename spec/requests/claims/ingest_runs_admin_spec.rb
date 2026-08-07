@@ -93,6 +93,22 @@ RSpec.describe "Claims admin ingest runs", type: :request do
       )
       expect(json_response.fetch("rows").first).not_to have_key("messages")
       expect(json_response.dig("meta", "total")).to eq(1)
+
+      get "/api/claims/admin/ingest_runs/#{run.id}"
+
+      expect(response).to have_http_status(:ok)
+      expect(json_response).to include(
+        "id" => run.id,
+        "contractor_id" => contractor.id,
+        "contractor_business_name" => "Readable Ingest Contractor",
+        "contractor_number" => "ING-42",
+        "status" => "failed",
+        "pipeline_error_code" => "genai_input_image_invalid"
+      )
+      expect(json_response.fetch("primary_failure")).to include(
+        "error_code" => "genai_input_image_invalid",
+        "diagnostic_id" => "diag-admin-grid"
+      )
     end
 
     it "returns only step runs belonging to the selected ingest run" do

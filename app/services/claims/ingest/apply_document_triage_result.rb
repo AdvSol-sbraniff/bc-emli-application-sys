@@ -4,6 +4,7 @@ module Claims
   module Ingest
     class ApplyDocumentTriageResult
       ALLOWED_DOCUMENT_KINDS = %w[invoice supporting_document unknown].freeze
+      OTHER_SUPPORTING_DOCUMENT_TYPE_KEY = "other_supporting_document"
 
       def self.call(ingest_document_id:, triage_payload:)
         new(
@@ -25,9 +26,17 @@ module Claims
             classifier_payload: @triage_payload
           )
         type =
-          ::Claims::SupportingDocumentType.find_by(
-            type_key: type_key
-          ) if type_key.present?
+          if type_key.present?
+            ::Claims::SupportingDocumentType.find_by(type_key: type_key)
+          end
+        if document_kind == "supporting_document" && type.blank?
+          type =
+            ::Claims::SupportingDocumentType.find_by(
+              type_key: OTHER_SUPPORTING_DOCUMENT_TYPE_KEY,
+              enabled: true
+            )
+          type_key = type&.type_key
+        end
 
         ingest_document = ::Claims::IngestDocument.find(@ingest_document_id)
         ingest_document.update!(

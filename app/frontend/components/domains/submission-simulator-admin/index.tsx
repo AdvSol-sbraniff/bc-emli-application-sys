@@ -211,7 +211,7 @@ export default function SubmissionSimulatorAdminScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Contractor Draft Simulator" />
+      <ThinBlueTitleBar title="Contractor Simulator" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">
@@ -219,7 +219,7 @@ export default function SubmissionSimulatorAdminScreen() {
             <HStack spacing={2}>
               <Tooltip label="Help: staged contractor draft processing and run tracking">
                 <IconButton
-                  aria-label="Open contractor draft simulator help"
+                  aria-label="Open contractor simulator help"
                   icon={<Question size={18} />}
                   variant="outline"
                   onClick={onHelpOpen}
@@ -240,10 +240,7 @@ export default function SubmissionSimulatorAdminScreen() {
           <VStack spacing={4} align="stretch" mb={5}>
             <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
               <Text fontSize="sm" fontWeight="bold" mb={3}>
-                Step 1: Run Context
-              </Text>
-              <Text fontSize="xs" opacity={0.75} mb={3}>
-                A fresh session id is created automatically when the staged batch is submitted.
+                Step 1: Choose Contractor
               </Text>
               <HStack spacing={3} wrap="wrap" align="end">
                 <Box>
@@ -349,7 +346,7 @@ export default function SubmissionSimulatorAdminScreen() {
             <Box p={4} borderWidth="1px" borderColor="greys.grey20" borderRadius="md" bg="gray.50">
               <Flex justify="space-between" align="center" wrap="wrap" gap={2} mb={3}>
                 <Text fontSize="sm" fontWeight="bold">
-                  Step 3: Submit and Monitor
+                  Step 3: Upload and Monitor
                 </Text>
                 <HStack>
                   <Button
@@ -359,7 +356,7 @@ export default function SubmissionSimulatorAdminScreen() {
                     loadingText="Starting..."
                     isDisabled={!selectedFiles.length || !contractorId}
                   >
-                    Create Contractor Drafts
+                    Upload Package
                   </Button>
                   <Tooltip label="Refresh run context and grids">
                     <IconButton
@@ -393,7 +390,7 @@ export default function SubmissionSimulatorAdminScreen() {
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
-          <DrawerHeader>Contractor Draft Simulator Help</DrawerHeader>
+          <DrawerHeader>Contractor Simulator Help</DrawerHeader>
           <DrawerBody>
             <VStack align="stretch" spacing={4}>
               <Box>
@@ -405,7 +402,7 @@ export default function SubmissionSimulatorAdminScreen() {
                   invoices.
                 </Text>
                 <Text fontSize="sm" mt={1}>
-                  Files are staged in browser memory until you click Create Contractor Drafts.
+                  Files are staged in browser memory until you click Upload Package.
                 </Text>
                 <Text fontSize="sm" mt={1}>
                   Created invoices stop at genai_complete after OCR and GenAI. They do not get a submitter_id or
@@ -415,11 +412,11 @@ export default function SubmissionSimulatorAdminScreen() {
 
               <Box>
                 <Text fontSize="sm" fontWeight="bold" mb={1}>
-                  Overall tab
+                  Ingest Run tab
                 </Text>
                 <Text fontSize="sm">
-                  One row per ingest bundle shell invoice in the selected run. Click it to inspect both staged-file and
-                  resolved invoice step history.
+                  Shows the parent ingest run record, including its status, file counts, timing, pipeline error, and
+                  related invoice context.
                 </Text>
                 <Text fontSize="sm" mt={1}>
                   Progress indicator: spinner means active, green means complete, red means failed.
@@ -428,10 +425,11 @@ export default function SubmissionSimulatorAdminScreen() {
 
               <Box>
                 <Text fontSize="sm" fontWeight="bold" mb={1}>
-                  Step History tab
+                  Ingest Step Runs tab
                 </Text>
                 <Text fontSize="sm">
-                  Shows both staged-file steps and the later resolved invoice steps for the selected bundle invoice.
+                  Shows every persisted child step directly by ingest run ID, including document, invoice, upgrade-type
+                  and supporting-document targets.
                 </Text>
                 <Text fontSize="sm" mt={1}>
                   State values: queued, in progress, succeeded, failed.

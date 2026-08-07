@@ -22,7 +22,12 @@ import {
 type RunHeader = {
   id: string;
   session_id: string;
+  contractor_id?: string | null;
+  contractor_business_name?: string | null;
+  contractor_number?: string | null;
+  resolved_invoice_version_id?: string | null;
   status: string;
+  cleanup_failed_invoice_artifacts?: boolean;
   total_files: number;
   completed_files: number;
   failed_files: number;
@@ -34,6 +39,7 @@ type RunHeader = {
   created_at?: string | null;
   updated_at?: string | null;
   completed_at?: string | null;
+  duration_seconds?: number | null;
 };
 
 type StepDiagnostics = {
@@ -68,8 +74,11 @@ type StepRow = StepDiagnostics & {
   id: string;
   ingest_run_id?: string | null;
   ingest_document_id?: string | null;
+  ingest_document_original_filename?: string | null;
   invoice_id?: string | null;
   invoice_version_id?: string | null;
+  invoice_upgrade_type_id?: string | null;
+  supporting_document_type_id?: string | null;
   invoice_versionno?: number | null;
   original_filename?: string | null;
   document_kind?: string | null;
@@ -81,6 +90,8 @@ type StepRow = StepDiagnostics & {
   error_text?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  completed_at?: string | null;
+  duration_seconds?: number | null;
 };
 
 type FailedAttemptDisplay = 'retrying' | 'retried';
@@ -106,6 +117,20 @@ type IngestRunMonitorTabsProps = {
 
 function fmtTs(s?: string | null) {
   return s ? String(s).replace('T', ' ').replace('Z', '') : '-';
+}
+
+function fmtDuration(value?: number | null) {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return '-';
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds - minutes * 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds.toFixed(1)}s`;
+
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 function statusColor(status?: string | null) {
@@ -202,8 +227,8 @@ function stepAttemptKey(step: StepRow) {
     step.step_type || '',
     step.ingest_document_id || '',
     step.invoice_version_id || '',
-    step.original_filename || '',
-    step.document_kind || '',
+    step.invoice_upgrade_type_id || '',
+    step.supporting_document_type_id || '',
   ].join('|');
 }
 
@@ -289,20 +314,20 @@ export function IngestRunMonitorTabs({
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState('');
   const [invoiceRows, setInvoiceRows] = useState<RunInvoiceRow[]>([]);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
   const [stepsLoading, setStepsLoading] = useState(false);
   const [stepsError, setStepsError] = useState('');
   const [steps, setSteps] = useState<StepRow[]>([]);
   const [classifierResults, setClassifierResults] = useState<ClassifierResultRow[]>([]);
   const currentRunIdRef = useRef(runIdValue);
-  const invoiceStepsRequestSeq = useRef(0);
+  const stepsRequestSeq = useRef(0);
+  const classifierRequestSeq = useRef(0);
   const seenRefreshToken = useRef(refreshToken);
 
   const loadRunHeader = useCallback(async (id: string) => {
     if (!id) return;
     setRunError('');
     try {
-      const res = await fetch(`/api/claims/ingest/runs/${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/claims/admin/ingest_runs/${encodeURIComponent(id)}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',
@@ -319,8 +344,8 @@ export function IngestRunMonitorTabs({
     }
   }, []);
 
-  const loadRunInvoices = useCallback(async (id: string) => {
-    if (!id) return;
+  const loadRunInvoices = useCallback(async (id: string): Promise<RunInvoiceRow[]> => {
+    if (!id) return [];
     setRowsLoading(true);
     setRowsError('');
     try {
@@ -332,79 +357,105 @@ export function IngestRunMonitorTabs({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-      if (String(id).trim() !== currentRunIdRef.current) return;
+      if (String(id).trim() !== currentRunIdRef.current) return [];
       const rows = Array.isArray(data?.rows) ? data.rows : [];
       setInvoiceRows(rows);
-      setSelectedInvoiceId((current) => {
-        if (current && rows.some((row: RunInvoiceRow) => String(row.invoice_id) === current)) return current;
-        return rows[0]?.invoice_id ? String(rows[0].invoice_id) : '';
-      });
+      return rows;
     } catch (e: any) {
-      if (String(id).trim() !== currentRunIdRef.current) return;
+      if (String(id).trim() !== currentRunIdRef.current) return [];
       setRowsError(e?.message || 'Failed to load run invoices.');
       setInvoiceRows([]);
+      return [];
     } finally {
       if (String(id).trim() === currentRunIdRef.current) setRowsLoading(false);
     }
   }, []);
 
-  const loadInvoiceSteps = useCallback(
-    async (invoiceId: string) => {
-      if (!invoiceId) return;
-      const requestRunId = runIdValue;
-      const requestSeq = invoiceStepsRequestSeq.current + 1;
-      invoiceStepsRequestSeq.current = requestSeq;
-      setStepsLoading(true);
-      setStepsError('');
-      try {
-        const params = new URLSearchParams({ limit: '500' });
-        if (runIdValue) params.set('ingest_run_id', runIdValue);
+  const loadRunSteps = useCallback(async (id: string) => {
+    if (!id) return;
+    const requestRunId = String(id).trim();
+    const requestSeq = stepsRequestSeq.current + 1;
+    stepsRequestSeq.current = requestSeq;
+    setStepsLoading(true);
+    setStepsError('');
+    try {
+      const params = new URLSearchParams({ page: '1', per: '500', sort: 'created_at:asc' });
 
-        const res = await fetch(
-          `/api/claims/ingest/invoices/${encodeURIComponent(invoiceId)}/steps?${params.toString()}`,
-          {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-            credentials: 'include',
-          },
-        );
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
-        if (requestRunId !== currentRunIdRef.current) return;
-        if (requestSeq !== invoiceStepsRequestSeq.current) return;
-        setSteps(Array.isArray(data?.rows) ? data.rows : []);
-        setClassifierResults(Array.isArray(data?.classifier_results) ? data.classifier_results : []);
-      } catch (e: any) {
-        if (requestRunId !== currentRunIdRef.current) return;
-        if (requestSeq !== invoiceStepsRequestSeq.current) return;
-        setStepsError(e?.message || 'Failed to load step history.');
-        setSteps([]);
-        setClassifierResults([]);
-      } finally {
-        if (requestRunId === currentRunIdRef.current && requestSeq === invoiceStepsRequestSeq.current) {
-          setStepsLoading(false);
-        }
+      const res = await fetch(
+        `/api/claims/admin/ingest_runs/${encodeURIComponent(requestRunId)}/steps?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          credentials: 'include',
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      if (requestRunId !== currentRunIdRef.current) return;
+      if (requestSeq !== stepsRequestSeq.current) return;
+      setSteps(Array.isArray(data?.rows) ? data.rows : []);
+    } catch (e: any) {
+      if (requestRunId !== currentRunIdRef.current) return;
+      if (requestSeq !== stepsRequestSeq.current) return;
+      setStepsError(e?.message || 'Failed to load ingest step runs.');
+      setSteps([]);
+    } finally {
+      if (requestRunId === currentRunIdRef.current && requestSeq === stepsRequestSeq.current) {
+        setStepsLoading(false);
       }
-    },
-    [runIdValue],
-  );
+    }
+  }, []);
+
+  const loadClassifierResults = useCallback(async (invoiceId: string, id: string) => {
+    if (!invoiceId || !id) {
+      setClassifierResults([]);
+      return;
+    }
+    const requestRunId = String(id).trim();
+    const requestSeq = classifierRequestSeq.current + 1;
+    classifierRequestSeq.current = requestSeq;
+    try {
+      const params = new URLSearchParams({ ingest_run_id: requestRunId, limit: '1' });
+      const res = await fetch(
+        `/api/claims/ingest/invoices/${encodeURIComponent(invoiceId)}/steps?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          credentials: 'include',
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      if (requestRunId !== currentRunIdRef.current || requestSeq !== classifierRequestSeq.current) return;
+      setClassifierResults(Array.isArray(data?.classifier_results) ? data.classifier_results : []);
+    } catch {
+      if (requestRunId !== currentRunIdRef.current || requestSeq !== classifierRequestSeq.current) return;
+      setClassifierResults([]);
+    }
+  }, []);
 
   const refreshAll = useCallback(async () => {
     if (!runIdValue) return;
-    await Promise.all([loadRunHeader(runIdValue), loadRunInvoices(runIdValue)]);
-    if (selectedInvoiceId) await loadInvoiceSteps(selectedInvoiceId);
-  }, [loadInvoiceSteps, loadRunHeader, loadRunInvoices, runIdValue, selectedInvoiceId]);
+    const [, nextInvoiceRows] = await Promise.all([
+      loadRunHeader(runIdValue),
+      loadRunInvoices(runIdValue),
+      loadRunSteps(runIdValue),
+    ]);
+    const relatedInvoiceId = nextInvoiceRows[0]?.invoice_id ? String(nextInvoiceRows[0].invoice_id) : '';
+    await loadClassifierResults(relatedInvoiceId, runIdValue);
+  }, [loadClassifierResults, loadRunHeader, loadRunInvoices, loadRunSteps, runIdValue]);
 
   useEffect(() => {
     currentRunIdRef.current = runIdValue;
-    invoiceStepsRequestSeq.current += 1;
+    stepsRequestSeq.current += 1;
+    classifierRequestSeq.current += 1;
     setRunHeader(null);
     setRunError('');
     setRowsLoading(false);
     setRowsError('');
     setInvoiceRows([]);
-    setSelectedInvoiceId('');
     setStepsLoading(false);
     setStepsError('');
     setSteps([]);
@@ -413,14 +464,8 @@ export function IngestRunMonitorTabs({
 
   useEffect(() => {
     if (!runIdValue) return;
-    void loadRunHeader(runIdValue);
-    void loadRunInvoices(runIdValue);
-  }, [loadRunHeader, loadRunInvoices, runIdValue]);
-
-  useEffect(() => {
-    if (!selectedInvoiceId) return;
-    void loadInvoiceSteps(selectedInvoiceId);
-  }, [loadInvoiceSteps, selectedInvoiceId, runIdValue]);
+    void refreshAll();
+  }, [refreshAll, runIdValue]);
 
   useEffect(() => {
     if (refreshToken === seenRefreshToken.current) return;
@@ -494,11 +539,96 @@ export function IngestRunMonitorTabs({
 
       <Tabs variant="line" isFitted colorScheme="gray">
         <TabList>
-          <Tab>Overall</Tab>
-          <Tab>Step History for Selected Bundle</Tab>
+          <Tab>Ingest Run</Tab>
+          <Tab>Ingest Step Runs</Tab>
         </TabList>
         <TabPanels>
           <TabPanel px={0}>
+            <Box borderWidth="1px" borderRadius="md" overflow="auto">
+              <Table size="sm" minW="1500px">
+                <Thead bg="gray.50">
+                  <Tr>
+                    <Th>start</Th>
+                    <Th>end</Th>
+                    <Th>duration</Th>
+                    <Th>contractor</Th>
+                    <Th>status</Th>
+                    <Th>files</Th>
+                    <Th>root error</Th>
+                    <Th>run ID</Th>
+                    <Th>session ID</Th>
+                    <Th>resolved invoice version</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {runHeader ? (
+                    <Tr>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {fmtTs(runHeader.created_at)}
+                      </Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {fmtTs(runHeader.completed_at)}
+                      </Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {fmtDuration(runHeader.duration_seconds)}
+                      </Td>
+                      <Td fontSize="xs">
+                        <Text fontWeight="semibold">
+                          {runHeader.contractor_business_name || 'System / no contractor'}
+                        </Text>
+                        <Text opacity={0.7}>{runHeader.contractor_number || runHeader.contractor_id || '-'}</Text>
+                      </Td>
+                      <Td>
+                        <Badge colorScheme={statusColor(runHeader.status)}>{runHeader.status || '-'}</Badge>
+                      </Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {runHeader.completed_files}/{runHeader.total_files}
+                        {runHeader.failed_files > 0 ? (
+                          <Text color="red.700" fontSize="xs">
+                            {runHeader.failed_files} failed
+                          </Text>
+                        ) : null}
+                      </Td>
+                      <Td fontSize="xs">
+                        {runHeader.primary_failure?.error_code || runHeader.pipeline_error_code ? (
+                          <Tooltip label={runHeader.pipeline_error_description || runHeader.pipeline_error_code || ''}>
+                            <Badge colorScheme="red">
+                              {runHeader.primary_failure?.error_code || runHeader.pipeline_error_code}
+                            </Badge>
+                          </Tooltip>
+                        ) : (
+                          '-'
+                        )}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {runHeader.id}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {runHeader.session_id || '-'}
+                      </Td>
+                      <Td fontFamily="mono" fontSize="xs">
+                        {runHeader.resolved_invoice_version_id || '-'}
+                      </Td>
+                    </Tr>
+                  ) : (
+                    <Tr>
+                      <Td colSpan={10}>
+                        <HStack py={2}>
+                          {runIdValue ? <Spinner size="xs" /> : null}
+                          <Text fontSize="sm" opacity={0.7}>
+                            {runIdValue ? 'Loading ingest run…' : emptyMessage}
+                          </Text>
+                        </HStack>
+                      </Td>
+                    </Tr>
+                  )}
+                </Tbody>
+              </Table>
+            </Box>
+
+            <Text fontSize="sm" fontWeight="bold" mt={5} mb={2}>
+              Related invoice
+            </Text>
             {rowsError && (
               <Text fontSize="sm" color="red.700" mb={2}>
                 {rowsError}
@@ -510,6 +640,7 @@ export function IngestRunMonitorTabs({
                   <Tr>
                     <Th>invoice_id</Th>
                     <Th>filename</Th>
+                    <Th>invoice version</Th>
                     <Th>invoice status</Th>
                     <Th>invoice substatus</Th>
                     <Th>stage</Th>
@@ -520,20 +651,16 @@ export function IngestRunMonitorTabs({
                 </Thead>
                 <Tbody>
                   {invoiceRows.map((r) => {
-                    const isSelected = String(r.invoice_id) === String(selectedInvoiceId);
                     const substatusHint = String(r.invoice_status_subtype_hint || '').trim();
                     return (
-                      <Tr
-                        key={`${r.invoice_version_id}-${r.invoice_id}`}
-                        cursor="pointer"
-                        bg={isSelected ? 'blue.50' : 'transparent'}
-                        _hover={{ bg: isSelected ? 'blue.100' : 'gray.50' }}
-                        onClick={() => setSelectedInvoiceId(String(r.invoice_id))}
-                      >
+                      <Tr key={`${r.invoice_version_id}-${r.invoice_id}`}>
                         <Td fontFamily="mono" fontSize="xs">
                           {r.invoice_id}
                         </Td>
                         <Td fontSize="xs">{r.original_filename || '-'}</Td>
+                        <Td fontFamily="mono" fontSize="xs">
+                          {r.invoice_version_id || '-'}
+                        </Td>
                         <Td fontSize="xs">
                           <Badge colorScheme={statusColor(r.invoice_status)}>{r.invoice_status || '-'}</Badge>
                         </Td>
@@ -556,9 +683,13 @@ export function IngestRunMonitorTabs({
 
                   {!rowsLoading && invoiceRows.length === 0 && (
                     <Tr>
-                      <Td colSpan={8}>
+                      <Td colSpan={9}>
                         <Text fontSize="sm" opacity={0.7}>
-                          {runIdValue ? 'No invoice rows for this run yet.' : emptyMessage}
+                          {rowsLoading
+                            ? 'Loading related invoice…'
+                            : runIdValue
+                              ? 'No related invoice yet.'
+                              : emptyMessage}
                         </Text>
                       </Td>
                     </Tr>
@@ -566,27 +697,10 @@ export function IngestRunMonitorTabs({
                 </Tbody>
               </Table>
             </Box>
-          </TabPanel>
 
-          <TabPanel px={0}>
-            <HStack mb={3} spacing={3}>
-              <Text fontSize="sm" fontWeight="bold">
-                Selected invoice_id:
-              </Text>
-              <Text fontSize="sm" fontFamily="mono">
-                {selectedInvoiceId || '-'}
-              </Text>
-            </HStack>
-
-            {stepsError && (
-              <Text fontSize="sm" color="red.700" mb={2}>
-                {stepsError}
-              </Text>
-            )}
-
-            <Box mb={4}>
+            <Box mt={5}>
               <Text fontSize="sm" fontWeight="bold" mb={2}>
-                Classifier results
+                Related invoice classifier results
               </Text>
               <Box borderWidth="1px" borderRadius="md" overflow="auto">
                 <Table size="sm" minW="900px">
@@ -616,11 +730,11 @@ export function IngestRunMonitorTabs({
                         <Td fontSize="xs">{fmtTs(r.updated_at)}</Td>
                       </Tr>
                     ))}
-                    {!stepsLoading && classifierResults.length === 0 && (
+                    {!rowsLoading && classifierResults.length === 0 && (
                       <Tr>
                         <Td colSpan={5}>
                           <Text fontSize="sm" opacity={0.7}>
-                            No classifier rows yet for this invoice.
+                            No classifier rows yet for the related invoice.
                           </Text>
                         </Td>
                       </Tr>
@@ -629,16 +743,28 @@ export function IngestRunMonitorTabs({
                 </Table>
               </Box>
             </Box>
+          </TabPanel>
+
+          <TabPanel px={0}>
+            {stepsError && (
+              <Text fontSize="sm" color="red.700" mb={2}>
+                {stepsError}
+              </Text>
+            )}
 
             <Box borderWidth="1px" borderRadius="md" overflow="auto">
-              <Table size="sm" minW="1350px">
+              <Table size="sm" minW="2300px">
                 <Thead bg="gray.50">
                   <Tr>
-                    <Th>created</Th>
-                    <Th>filename</Th>
-                    <Th>document kind</Th>
+                    <Th>start</Th>
+                    <Th>end</Th>
+                    <Th>duration</Th>
                     <Th>step</Th>
-                    <Th>state</Th>
+                    <Th>status</Th>
+                    <Th>invoice version</Th>
+                    <Th>ingest document / filename</Th>
+                    <Th>upgrade type</Th>
+                    <Th>supporting type</Th>
                     <Th>error code</Th>
                     <Th>provider</Th>
                     <Th>diagnostic</Th>
@@ -648,11 +774,32 @@ export function IngestRunMonitorTabs({
                 <Tbody>
                   {steps.map((s) => (
                     <Tr key={s.id}>
-                      <Td fontSize="xs">{fmtTs(s.created_at)}</Td>
-                      <Td fontSize="xs">{s.original_filename || '-'}</Td>
-                      <Td fontSize="xs">{s.document_kind || '-'}</Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {fmtTs(s.created_at)}
+                      </Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {fmtTs(s.completed_at)}
+                      </Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {fmtDuration(s.duration_seconds)}
+                      </Td>
                       <Td fontSize="xs">{s.step_type || '-'}</Td>
                       <Td fontSize="xs">{renderStepState(s, failedAttemptDisplayById[s.id])}</Td>
+                      <Td fontSize="xs" fontFamily="mono">
+                        {s.invoice_version_id || '-'}
+                      </Td>
+                      <Td fontSize="xs">
+                        <Text fontWeight="semibold">{s.ingest_document_original_filename || '-'}</Text>
+                        <Text fontFamily="mono" opacity={0.7}>
+                          {s.ingest_document_id || '-'}
+                        </Text>
+                      </Td>
+                      <Td fontSize="xs" fontFamily="mono">
+                        {s.invoice_upgrade_type_id || '-'}
+                      </Td>
+                      <Td fontSize="xs" fontFamily="mono">
+                        {s.supporting_document_type_id || '-'}
+                      </Td>
                       <Td fontSize="xs">{s.error_code ? <Badge colorScheme="red">{s.error_code}</Badge> : '-'}</Td>
                       <Td fontSize="xs">
                         {s.provider_status ? (
@@ -673,10 +820,20 @@ export function IngestRunMonitorTabs({
 
                   {!stepsLoading && steps.length === 0 && (
                     <Tr>
-                      <Td colSpan={9}>
+                      <Td colSpan={13}>
                         <Text fontSize="sm" opacity={0.7}>
-                          {runIdValue ? 'No step rows for current selection.' : emptyMessage}
+                          {runIdValue ? 'No ingest step runs recorded yet.' : emptyMessage}
                         </Text>
+                      </Td>
+                    </Tr>
+                  )}
+                  {stepsLoading && steps.length === 0 && (
+                    <Tr>
+                      <Td colSpan={13}>
+                        <HStack py={2}>
+                          <Spinner size="xs" />
+                          <Text fontSize="sm">Loading ingest step runs…</Text>
+                        </HStack>
                       </Td>
                     </Tr>
                   )}

@@ -97,4 +97,13 @@ RSpec.describe Claims::RunIngestTriageJob do
       job.perform(context[:document].id, context[:run].id)
     end.to raise_error(Claims::Genai::NodeClient::Error)
   end
+
+  it "directs unusual but clearly supporting evidence to the catchall type" do
+    ask = described_class.new.send(:classifier_actual_ask)
+
+    expect(ask).to include(
+      "Use other_supporting_document when the file is clearly supplementary evidence"
+    )
+    expect(ask).to include("do not use unknown solely for that reason")
+  end
 end

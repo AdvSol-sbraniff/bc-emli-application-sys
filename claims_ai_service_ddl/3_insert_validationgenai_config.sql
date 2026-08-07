@@ -64,7 +64,7 @@ Rules:
 - Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn unless the specific rule identifies the missing evidence as a mandatory supporting-document requirement and instructs fail.
 - For identity and record-matching rules, visible invoice values that clearly identify a different contractor, homeowner/customer, eligibility-code owner, property, claimant, or other matched party than the supplied database record should be fail, not warn.
 - Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice because it has a meaningful non-blocking caveat, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
-- Set overall.overall_result to "fail" if any material rule fails, "warn" if there are warnings but no failures, "info" if there are info notes but no warnings/failures, and "pass" only when all rulechecks are pass.
+- Set overall.overall_result to "fail" if any material rule fails, "warn" if there are warnings but no failures, "info" if there are info results but no warnings/failures, and "pass" only when all rulechecks are pass.
 - reason_and_likely_causes is mandatory for every rulecheck. Never leave it blank. Write at least 5 complete sentences for every rulecheck, including pass rules.
 - For pass rules, explain why the supplied evidence satisfies the rule and why no extra admin verification is needed unless the rule depends on facts outside the supplied evidence.
 - For info rules, explain what passed, what specific caveat makes the result not fully squeaky clean, why no contractor correction is requested, and what the admin/contractor should understand.
@@ -84,7 +84,7 @@ Rules:
 
 Rule result examples:
 - PASS: Standard warranty or insurance terms are visible but no warranty-paid, insurance-paid, credited, or no-charge costs appear. Admin can skim.
-- INFO: A rule passes, but the invoice includes useful context worth surfacing, such as clearly split rebate amounts by upgrade type, arithmetic that reconciles under a specific acceptable model, or strong documentation that helps explain why review should be easy. This may appear in advice as a helpful note, not a requested fix.
+- INFO: The requirement is satisfied enough that no contractor correction is requested, but a specific evidence caveat, limitation, or imperfection prevents a clean pass. State that concrete caveat and why it is non-blocking. Do not use info for trivia, merely interesting context, unusually strong evidence, or generic helpful commentary.
 - WARN: Invoice date is before 2026-04-01, so the prior RER version may apply. Admin should confirm the correct requirements vintage; this is not an invoice eligibility failure by itself.
 - WARN: A supporting document is present but the extracted fields are incomplete, ambiguous, visually limited, or illegible. Admin should verify that specific supporting-document file only.
 - FAIL: A mandatory supporting document required by the rule, such as required photos, WETT/removal proof, utility bill/invoice, permit/inspection/removal invoice, approved heat-load calculation, or manufacturer-label photo, is missing from the supplied supporting-document summary.
@@ -128,6 +128,7 @@ Allowed supporting_document_type_key values:
 - landlord_consent_form
 - manufacturer_label_photo
 - oil_removal_proof
+- other_supporting_document
 - permit_document
 - preapproval_notice
 - product_spec_sheet
@@ -181,7 +182,9 @@ Rules:
 - Classify document_kind first.
 - Use document_kind="invoice" only when the document appears to be the primary contractor invoice, estimate, sales invoice, or invoice-like claim document containing billed work, pricing, totals, or rebate-claimed work scope.
 - Use document_kind="supporting_document" for supporting documents such as utility bills, landlord consent, product labels, spec sheets, permits, preapproval notices, WETT reports, photos, and other non-invoice attachments.
-- Use document_kind="unknown" when the OCR does not provide enough evidence to decide between invoice and supporting document.
+- Use supporting_document_type_key="other_supporting_document" when a readable file is clearly supplementary evidence rather than the primary claim invoice but does not fit a more specific allowed supporting-document type. Examples include completion records, commissioning or start-up reports, attestations, certificates, work records, correspondence, and other unusual evidence.
+- Do not use other_supporting_document when a more specific allowed supporting-document type clearly applies.
+- Use document_kind="unknown" only when the available evidence does not reliably establish whether the file is the primary invoice, a supporting document, or unrelated/unusable material. Do not return unknown merely because a clearly supplementary document does not fit a specific named type; use other_supporting_document instead.
 - If an image has little OCR text but visible evidence shows before/after work, classify it as document_kind="supporting_document", supporting_document_type_key="before_after_photo_set", and supporting_document_routing_quality="requires_visual_review".
 - If an image has little OCR text but visible evidence shows a product/nameplate/label, classify it as document_kind="supporting_document", supporting_document_type_key="manufacturer_label_photo", and supporting_document_routing_quality="requires_visual_review".
 - Do not classify a readable image as unknown merely because DI-read has little text. Use the attached file itself to decide whether it is an invoice, supporting document, or genuinely unknown.

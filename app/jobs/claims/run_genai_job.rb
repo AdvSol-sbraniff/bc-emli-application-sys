@@ -1120,7 +1120,7 @@ module Claims
           result_label =
             case result
             when "info"
-              "Helpful note"
+              "Info"
             when "warn"
               "Please verify"
             when "fail"

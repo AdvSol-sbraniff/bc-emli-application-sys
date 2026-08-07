@@ -474,7 +474,7 @@ export default function SessionsAdminScreen() {
               onClick={() => selectedSessionForUpload && openContractorDraftSimulator(selectedSessionForUpload)}
               isDisabled={!selectedSessionForUpload?.id}
             >
-              Open contractor draft simulator
+              Open contractor simulator
             </Button>
             {selectedSessionForUpload?.id && (
               <Text fontSize="xs" opacity={0.7}>

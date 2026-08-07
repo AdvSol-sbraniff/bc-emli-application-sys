@@ -6,12 +6,6 @@ module Claims
       class ApplyTiming
         ESU_UPGRADE_TYPE_KEY = "electrical_service_upgrade"
         HP_INSTALL_DATE_FIELD_KEY = "esu_heat_pump_installation_date_reference"
-        ASSOCIATED_HP_FIELD_KEY = "esu_associated_heat_pump_or_hpwh_reference"
-        SERVICE_DATE_FIELD_KEY = "service_completion_or_invoice_date"
-        SERVICE_DOCUMENT_TYPE_KEYS = %w[
-          electrical_utility_upgrade_document
-          utility_bill
-        ].freeze
 
         RULE = {
           key: "esu_timing_within_six_months_of_heat_pump_installation"
@@ -44,7 +38,7 @@ module Claims
           replace_rulechecks!([row])
 
           { ok: true, skipped: false, rule_result: row.fetch(:rule_result) }
-        rescue => e
+        rescue StandardError => e
           { ok: false, error: e.message, error_class: e.class.name }
         end
 
@@ -88,46 +82,16 @@ module Claims
         end
 
         def timing_evaluation
-          service_date_values = service_date_candidates
+          service_date = invoice_version.di_ocr_invoice_date
           hp_install_date_values = date_values_from_field(hp_install_date_field)
-          service_date = service_date_values.first
           hp_install_date = hp_install_date_values.first
 
           if service_date && hp_install_date
             return(
               actual_date_comparison(
                 service_date: service_date,
-                hp_install_date: hp_install_date
-              )
-            )
-          end
-
-          if same_invoice_association_available?
-            invoice_date = invoice_version.di_ocr_invoice_date
-            if service_date && hp_install_date.blank?
-              return(
-                actual_date_comparison(
-                  service_date: service_date,
-                  hp_install_date: invoice_date,
-                  hp_install_date_source: "invoice_date_proxy"
-                )
-              )
-            end
-
-            if service_date.blank? && hp_install_date
-              return(
-                actual_date_comparison(
-                  service_date: invoice_date,
-                  hp_install_date: hp_install_date,
-                  service_date_source: "invoice_date_proxy"
-                )
-              )
-            end
-
-            return(
-              same_invoice_proxy_result(
-                missing_service_date: service_date.blank?,
-                missing_hp_install_date: hp_install_date.blank?
+                hp_install_date: hp_install_date,
+                service_date_source: "invoice_date_proxy"
               )
             )
           end
@@ -141,7 +105,7 @@ module Claims
         def actual_date_comparison(
           service_date:,
           hp_install_date:,
-          service_date_source: "located_field",
+          service_date_source:,
           hp_install_date_source: "located_field"
         )
           window_start = hp_install_date.advance(months: -6)
@@ -163,90 +127,44 @@ module Claims
             evidence_text,
             (
               if pass
-                "The ESU service date and associated heat pump installation date are both present and within six months."
+                "The invoice date used as the ESU installation-date proxy is within six months of the associated heat pump installation date."
               else
-                "The ESU service date is outside the six-month window around the associated heat pump installation date."
+                "The invoice date used as the ESU installation-date proxy is outside the six-month window around the associated heat pump installation date."
               end
             )
           ]
         end
 
-        def same_invoice_proxy_result(
-          missing_service_date:,
-          missing_hp_install_date:
-        )
-          invoice_date = invoice_version.di_ocr_invoice_date
-
-          [
-            "pass",
-            80,
-            [
-              "same_invoice_proxy=true",
-              "invoice_date=#{invoice_date.iso8601}",
-              "esu_associated_heat_pump_or_hpwh_reference=present",
-              "missing_service_date=#{missing_service_date}",
-              "missing_heat_pump_installation_date=#{missing_hp_install_date}"
-            ].join("; "),
-            evidence_text,
-            "The invoice visibly associates the ESU with a heat pump or heat pump water heater on the same invoice, so the invoice date is used as the shared timing proxy."
-          ]
-        end
-
         def warning_result(service_date:, hp_install_date:)
           missing = []
-          missing << "ESU service upgrade date" if service_date.blank?
+          if service_date.blank?
+            missing << "invoice date used as the ESU installation-date proxy"
+          end
           missing << "heat pump installation date" if hp_install_date.blank?
+          service_date_value = service_date&.iso8601 || "(missing)"
+          service_date_source =
+            service_date.present? ? "invoice_date_proxy" : "(missing)"
+          hp_install_date_value = hp_install_date&.iso8601 || "(missing)"
+          hp_install_date_source =
+            hp_install_date.present? ? "located_field" : "(missing)"
+          missing_description = missing.join(" and ")
 
           [
             "warn",
             0,
             [
-              "esu_service_upgrade_date=#{service_date&.iso8601 || "(missing)"}",
-              "heat_pump_installation_date=#{hp_install_date&.iso8601 || "(missing)"}",
-              "same_invoice_proxy_available=false"
+              "esu_service_upgrade_date=#{service_date_value}",
+              "esu_service_upgrade_date_source=#{service_date_source}",
+              "heat_pump_installation_date=#{hp_install_date_value}",
+              "heat_pump_installation_date_source=#{hp_install_date_source}"
             ].join("; "),
             evidence_text,
-            "Code could not confidently compare ESU timing because #{missing.join(" and ")} is missing or not parseable."
+            "Code could not compare ESU timing because #{missing_description} is missing or not parseable."
           ]
-        end
-
-        def service_date_candidates
-          supporting_service_date_fields
-            .flat_map do |field|
-              date_values_from_text(field.value_text) +
-                date_values_from_text(field.evidence_text)
-            end
-            .uniq
-        end
-
-        def supporting_service_date_fields
-          ::Claims::SupportingDocumentLocatedField
-            .joins(supporting_document: :supporting_document_type)
-            .where(
-              ::Claims::SupportingDocument.table_name => {
-                invoice_version_id: invoice_version.id
-              },
-              ::Claims::SupportingDocumentType.table_name => {
-                type_key: SERVICE_DOCUMENT_TYPE_KEYS
-              },
-              :field_key => SERVICE_DATE_FIELD_KEY
-            )
-            .where.not(value_text: [nil, ""])
-            .where(
-              "#{::Claims::SupportingDocument.table_name}.supporting_document_routing_quality IS NULL OR " \
-                "#{::Claims::SupportingDocument.table_name}.supporting_document_routing_quality <> ?",
-              "unusable"
-            )
-            .order(confidence: :desc, created_at: :desc)
-            .to_a
         end
 
         def hp_install_date_field
           @hp_install_date_field ||= best_genai_field(HP_INSTALL_DATE_FIELD_KEY)
-        end
-
-        def associated_hp_field
-          @associated_hp_field ||= best_genai_field(ASSOCIATED_HP_FIELD_KEY)
         end
 
         def best_genai_field(field_key)
@@ -260,12 +178,6 @@ module Claims
             .where.not(value_text: [nil, ""])
             .order(confidence: :desc, created_at: :desc)
             .first
-        end
-
-        def same_invoice_association_available?
-          invoice_version.di_ocr_invoice_date.present? &&
-            associated_hp_field.present? &&
-            associated_hp_field.value_text.present?
         end
 
         def date_values_from_field(field)
@@ -292,12 +204,12 @@ module Claims
 
           Array(
             text.scan(
-              /
-              \b\d{4}[-\/]\d{1,2}[-\/]\d{1,2}\b |
-              \b\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}\b |
+              %r{
+              \b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b |
+              \b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b |
               \b(?:#{month_names})\.?\s+\d{1,2},?\s+\d{4}\b |
               \b\d{1,2}\s+(?:#{month_names})\.?,?\s+\d{4}\b
-            /ix
+            }ix
             )
           ).flatten.compact.presence || []
         end
@@ -309,19 +221,21 @@ module Claims
         end
 
         def evidence_text
-          (
-            supporting_service_date_fields +
-              [hp_install_date_field, associated_hp_field].compact
-          )
-            .filter_map do |field|
+          evidence = []
+          if invoice_version.di_ocr_invoice_date.present?
+            evidence << "invoice_date_proxy: #{invoice_version.di_ocr_invoice_date.iso8601}"
+          end
+
+          evidence.concat(
+            [hp_install_date_field].compact.filter_map do |field|
               text = field.evidence_text.presence || field.value_text.presence
               next if text.blank?
 
               "#{field.field_key}: #{text}"
             end
-            .uniq
-            .join("; ")
-            .presence
+          )
+
+          evidence.uniq.join("; ").presence
         end
 
         def replace_rulechecks!(rows)

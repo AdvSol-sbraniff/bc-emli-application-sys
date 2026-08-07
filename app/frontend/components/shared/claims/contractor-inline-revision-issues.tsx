@@ -317,8 +317,8 @@ export const useContractorInlineRevisionWorkspace = ({
     if (incompleteIssues.length > 0) {
       const message =
         incompleteIssues.length === 1
-          ? 'Complete the response you started before finishing later.'
-          : 'Complete the responses you started before finishing later.';
+          ? 'Complete the response you started before continuing.'
+          : 'Complete the responses you started before continuing.';
       setError(message);
       toast({ title: 'Responses not saved', description: message, status: 'error', duration: 5000, isClosable: true });
       return false;

@@ -109,4 +109,78 @@ RSpec.describe Claims::GenaiCaseFacts::Build do
       expect(invoice_version.participant_user_id).to be_nil
     end
   end
+
+  describe ".supporting_document_context_for_upgrade_type" do
+    it "includes complete OCR text for a PI-flagged supporting document" do
+      contractor = Contractor.create!(business_name: "Evidence Contractor")
+      session = Claims::Session.create!
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "genai_in_progress"
+        )
+      invoice_version =
+        Claims::InvoiceVersion.create!(
+          invoice_id: invoice.id,
+          invoice_versionno: 1,
+          storage_key: "invoice.pdf"
+        )
+      upgrade_type =
+        Claims::InvoiceUpgradeType.find_or_create_by!(
+          upgrade_type_key: "electrical_service_upgrade"
+        ) { |row| row.description = "Electrical service upgrade" }
+      document_type =
+        Claims::SupportingDocumentType.find_or_create_by!(
+          type_key: "other_supporting_document"
+        ) do |row|
+          row.description = "Other Supporting Document"
+          row.enabled = true
+        end
+      pi_type =
+        Claims::PersonalInformationType.find_or_create_by!(
+          type_key: "government_identifier"
+        ) do |row|
+          row.display_name = "Government identifier"
+          row.description = "Government identification."
+          row.enabled = true
+          row.sort_order = 20
+        end
+      ocr_text = [
+        "Electrical upgrade evidence.",
+        "A" * 1_600,
+        "Heat pump installation completed 2026-03-15 on page two."
+      ].join("\n")
+      Claims::SupportingDocument.create!(
+        invoice_version_id: invoice_version.id,
+        supporting_document_type_id: document_type.id,
+        storage_key: "flagged-utility-document.pdf",
+        classification_status: "classified",
+        personal_information_review_status: "high_risk",
+        personal_information_type_id: pi_type.id,
+        personal_information_review_reason:
+          "A possible government identifier requires admin review.",
+        di_read_raw_json: {
+          "content" => ocr_text
+        }
+      )
+
+      context =
+        described_class.supporting_document_context_for_upgrade_type(
+          invoice_version: invoice_version,
+          invoice_upgrade_type: upgrade_type
+        )
+      expect(context.fetch(:configured_documents)).to be_empty
+      document = context.fetch(:other_documents).sole
+
+      expect(document.fetch(:ocr_text)).to eq(ocr_text)
+      expect(document.fetch(:ocr_text)).to end_with(
+        "Heat pump installation completed 2026-03-15 on page two."
+      )
+      expect(document).to include(
+        personal_information_review_status: "high_risk"
+      )
+      expect(document).not_to have_key(:ocr_text_excerpt)
+    end
+  end
 end

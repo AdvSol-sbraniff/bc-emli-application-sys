@@ -13,7 +13,7 @@ export const AdminHomeScreen = () => {
           <Flex direction="column" align="center" w="full" gap={6}>
             <HomeScreenBox title="AI Invoices" description="" icon={<Tray size={24} />} href="/invoices-admin" />
             <HomeScreenBox
-              title="AI Contractor Draft Simulator"
+              title="AI Contractor Simulator"
               description=""
               icon={<NotePencil size={24} />}
               href="/submission-simulator-admin"

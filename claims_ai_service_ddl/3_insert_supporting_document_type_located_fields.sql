@@ -65,6 +65,14 @@ WITH field_seed (
   ('fossil_backup_system_document', 'contractor_or_authority_name', 4, 'Locate the contractor, fuel supplier, inspection authority, permit authority, or heat-pump installation company name if visible.', true),
   ('fossil_backup_system_document', 'backup_system_scope_or_description', 5, 'Locate the description of fossil-fuel system removal, modification, retained/limited backup setup, controls, switchover, capping, disconnection, piping, appliance, vent, fuel container, tank, or by-law/compliance wording.', true),
 
+  ('other_supporting_document', 'document_purpose_or_evidence_type', 1, 'Identify what this supporting document appears to be and what evidence or work it is intended to support.', true),
+  ('other_supporting_document', 'relevant_dates_and_date_meanings', 2, 'Locate relevant dates and explain what each date represents, such as installation, completion, commissioning, inspection, approval, attestation, invoice, payment, scheduled work, shipment, or document creation.', true),
+  ('other_supporting_document', 'property_or_service_address', 3, 'Locate the property, installation, service, or participant address if visible.', true),
+  ('other_supporting_document', 'issuer_contractor_or_signer', 4, 'Locate the issuing organization, contractor, authority, author, signer, or attesting person if visible.', true),
+  ('other_supporting_document', 'work_equipment_or_program_reference', 5, 'Locate the work scope, equipment, upgrade, program, application, permit, invoice, work-order, or other identifying reference supported by the document.', true),
+  ('other_supporting_document', 'status_completion_or_attestation_evidence', 6, 'Locate wording showing whether work was installed, completed, commissioned, inspected, approved, paid, planned, scheduled, or attested, including any limitation or conflicting status.', true),
+  ('other_supporting_document', 'document_reference', 7, 'Locate a document, invoice, work-order, permit, inspection, application, certificate, or other reference number if visible.', true),
+
   ('electrical_utility_upgrade_document', 'utility_provider', 1, 'Locate the electrical utility provider name, especially BC Hydro or FortisBC, if visible.', true),
   ('electrical_utility_upgrade_document', 'previous_service_size', 2, 'Locate previous electrical service size if visible.', true),
   ('electrical_utility_upgrade_document', 'new_service_size', 3, 'Locate new/upgraded electrical service size if visible.', true),

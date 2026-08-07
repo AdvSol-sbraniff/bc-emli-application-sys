@@ -3274,6 +3274,7 @@ Current supporting-document type keys:
 - `landlord_consent_form`: landlord consent form.
 - `manufacturer_label_photo`: photo of manufacturer label/nameplate.
 - `oil_removal_proof`: oil system removal proof.
+- `other_supporting_document`: readable supplementary evidence that does not fit a more specific supporting-document type.
 - `permit_document`: permit, inspection, or authority-having-jurisdiction evidence.
 - `preapproval_notice`: preapproval notice.
 - `preapproval_quote`: preapproval quote.
@@ -3284,6 +3285,8 @@ Current supporting-document type keys:
 - `wett_report`: WETT report.
 
 These keys are registry-world definitions. A specific uploaded PDF becomes evidence only after it is classified and promoted into `claims.supporting_documents`.
+
+`other_supporting_document` is an optional catchall, not a required-document mapping. It prevents clearly supplementary but unusual evidence from being rejected merely because no specific type fits. `unknown` remains reserved for files that cannot be reliably distinguished as a primary invoice, supporting evidence, or unrelated/unusable material.
 
 ### 15.5 Upgrade type key glossary
 
