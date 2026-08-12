@@ -34,7 +34,6 @@ RSpec.describe "Claims advice refresh", type: :request do
           },
           genai_overall_confidence: 88,
           genai_result: "fail",
-          genai_admin_advice: "Old advice",
           created_at: now,
           updated_at: now
         )
@@ -174,7 +173,6 @@ RSpec.describe "Claims advice refresh", type: :request do
       expect(new_version.genai_raw_json).to be_nil
       expect(new_version.genai_overall_confidence).to eq(0)
       expect(new_version.genai_result).to be_nil
-      expect(new_version.genai_admin_advice).to be_nil
       expect(new_version.users_eligibilitycode_id).to be_nil
       expect(new_version.participant_user_id).to be_nil
 

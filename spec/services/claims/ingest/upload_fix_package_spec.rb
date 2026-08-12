@@ -161,23 +161,24 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         )
 
       expect(result.ok).to be(true)
-      replacement_version =
-        Claims::InvoiceVersion.find(result.invoice_version_id)
       documents =
         Claims::IngestDocument.where(ingest_run_id: result.ingest_run_id).order(
           :created_at,
           :id
         )
 
-      expect(replacement_version.invoice_versionno).to eq(2)
-      expect(replacement_version.storage_key).to start_with("PENDING/")
-      expect(replacement_version.original_filename).to be_nil
-      expect(replacement_version.content_type).to be_nil
+      expect(result.invoice_version_id).to be_nil
+      expect(
+        Claims::InvoiceVersion.where(invoice_id: invoice.id).pluck(
+          :invoice_versionno
+        )
+      ).to eq([1])
       expect(documents.pluck(:original_filename)).to match_array(
         files.map(&:original_filename)
       )
       expect(documents.pluck(:document_kind).uniq).to eq([nil])
       expect(documents.pluck(:classification_status).uniq).to eq(["pending"])
+      expect(documents.pluck(:resolved_invoice_version_id).uniq).to eq([nil])
       expect(uploaded_scopes).to match_array(documents.pluck(:id))
       expect(
         Claims::IngestStepRun.where(
@@ -260,7 +261,17 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
           files: [fake_upload("new-label.jpeg")]
         )
 
-      cloned_version = Claims::InvoiceVersion.find(result.invoice_version_id)
+      cloned_invoice_document =
+        Claims::IngestDocument.find_by!(
+          ingest_run_id: result.ingest_run_id,
+          document_kind: "invoice"
+        )
+      cloned_version_id =
+        Claims::Ingest::PromoteFixPackage.call(
+          ingest_run: Claims::IngestRun.find(result.ingest_run_id),
+          resolved_document: cloned_invoice_document
+        )
+      cloned_version = Claims::InvoiceVersion.find(cloned_version_id)
       cloned_document =
         Claims::SupportingDocument.find_by!(
           invoice_version_id: cloned_version.id,

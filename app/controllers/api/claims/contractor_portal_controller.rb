@@ -580,6 +580,8 @@ module Api
                    failure_payload[:failure_status_subtype],
                  failure_message: failure_payload[:failure_message],
                  retry_guidance: failure_payload[:retry_guidance],
+                 upgrade_type_scope_change:
+                   contractor_ingest_upgrade_type_scope_change(run),
                  total_files: run.total_files,
                  completed_files: run.completed_files,
                  failed_files: run.failed_files,
@@ -984,6 +986,24 @@ module Api
         end
 
         {}
+      end
+
+      def contractor_ingest_upgrade_type_scope_change(run)
+        message =
+          Array(run.messages).reverse.find do |entry|
+            entry.is_a?(Hash) &&
+              entry["code"] ==
+                ::Claims::Ingest::FixUpgradeTypeScopeGuard::ERROR_CODE
+          end
+        return nil if message.blank?
+
+        message.slice(
+          "current_upgrade_types",
+          "replacement_upgrade_types",
+          "added_upgrade_types",
+          "removed_upgrade_types",
+          "replacement_filename"
+        )
       end
     end
   end

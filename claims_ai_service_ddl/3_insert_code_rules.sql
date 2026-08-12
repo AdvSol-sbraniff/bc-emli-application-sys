@@ -792,7 +792,7 @@ SELECT
     ELSE 'hidden'
   END AS contractor_visibility,
   'non_blocking' AS contractor_blocking_policy,
-  'fail_only' AS admin_workflow_policy,
+  'warn_and_fail' AS admin_workflow_policy,
   created_at,
   updated_at
 FROM code_rules_seed

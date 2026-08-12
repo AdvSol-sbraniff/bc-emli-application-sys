@@ -171,11 +171,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
   end
 
   def create_final_steps(run:, invoice_version:)
-    %w[
-      case_facts
-      product_lookup_enrichment
-      aggregate_advice
-    ].each do |step_type|
+    %w[case_facts aggregate_advice].each do |step_type|
       create_step(
         run: run,
         invoice_version: invoice_version,

@@ -90,6 +90,18 @@ type RunHeader = {
   invoice_versionno?: number | null;
   original_filename?: string | null;
   can_continue?: boolean;
+  upgrade_type_scope_change?: {
+    current_upgrade_types?: UpgradeTypeSummary[];
+    replacement_upgrade_types?: UpgradeTypeSummary[];
+    added_upgrade_types?: UpgradeTypeSummary[];
+    removed_upgrade_types?: UpgradeTypeSummary[];
+    replacement_filename?: string | null;
+  } | null;
+};
+
+type UpgradeTypeSummary = {
+  upgrade_type_key?: string | null;
+  description?: string | null;
 };
 
 function makeClientId(prefix: string) {
@@ -277,9 +289,14 @@ export default function ContractorFixUploadScreen() {
   const hasProcessingRows =
     invoiceStatus.includes('queued') || invoiceStatus.includes('progress') || invoiceStatus === 'ocr_complete';
   const canContinue = runHeader?.can_continue === true;
+  const upgradeTypeScopeChange = runHeader?.upgrade_type_scope_change;
+  const upgradeTypeScopeChangeDetected =
+    runHeader?.failure_status_subtype === 'package_replacement_upgrade_types_changed' && !!upgradeTypeScopeChange;
   const isProcessing =
     submitLoading ||
-    (!failureMessage &&
+    (!submitError &&
+      !runError &&
+      !failureMessage &&
       !!runId &&
       !canContinue &&
       !runTerminal &&
@@ -394,6 +411,7 @@ export default function ContractorFixUploadScreen() {
     setRunError('');
     setRunErrorStatus(null);
     setRunFailureStatus('');
+    setRunId('');
     setRunHeader(null);
 
     try {
@@ -463,6 +481,13 @@ export default function ContractorFixUploadScreen() {
       )}/review?source=fix`,
     );
   };
+
+  const returnToInvoice = () => {
+    navigate(`/contractor/sessions/${encodeURIComponent(sessionId)}/invoices/${encodeURIComponent(invoiceId)}/review`);
+  };
+
+  const upgradeTypeLabel = (upgradeType?: UpgradeTypeSummary | null) =>
+    String(upgradeType?.description || upgradeType?.upgrade_type_key || 'Unknown upgrade');
 
   const resetToCurrentVersion = () => {
     if (controlsLocked) return;
@@ -736,8 +761,20 @@ export default function ContractorFixUploadScreen() {
         <Modal
           isOpen={uploadModalOpen && (submitLoading || isProcessing || !!displayFailureMessage || canContinue)}
           onClose={closeUploadModal}
-          closeOnOverlayClick={!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue}
-          closeOnEsc={!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue}
+          closeOnOverlayClick={
+            !upgradeTypeScopeChangeDetected &&
+            !!displayFailureMessage &&
+            !submitLoading &&
+            !isProcessing &&
+            !canContinue
+          }
+          closeOnEsc={
+            !upgradeTypeScopeChangeDetected &&
+            !!displayFailureMessage &&
+            !submitLoading &&
+            !isProcessing &&
+            !canContinue
+          }
           size="2xl"
           isCentered
         >
@@ -750,16 +787,80 @@ export default function ContractorFixUploadScreen() {
               bg="linear-gradient(135deg, rgba(239,248,255,0.98), rgba(255,255,255,0.98))"
             >
               <Text fontSize="lg" fontWeight="800">
-                Upload Package Fix
+                {upgradeTypeScopeChangeDetected
+                  ? 'This replacement changes the claimed upgrades'
+                  : 'Upload Package Fix'}
               </Text>
               <Text mt={1} fontSize="sm" color="gray.600" fontWeight="500">
-                We are preparing the corrected package for updated AI Advice.
+                {upgradeTypeScopeChangeDetected
+                  ? 'The replacement was not applied.'
+                  : 'We are preparing the corrected package for updated AI Advice.'}
               </Text>
             </ModalHeader>
-            {!!displayFailureMessage && !submitLoading && !isProcessing && !canContinue ? <ModalCloseButton /> : null}
+            {!upgradeTypeScopeChangeDetected &&
+            !!displayFailureMessage &&
+            !submitLoading &&
+            !isProcessing &&
+            !canContinue ? (
+              <ModalCloseButton />
+            ) : null}
             <ModalBody px={7} py={7}>
               {submitLoading || isProcessing ? (
                 <ContractorProcessingGraphic label={processingStoryLabel} />
+              ) : upgradeTypeScopeChangeDetected ? (
+                <VStack align="stretch" spacing={5}>
+                  <Text fontSize="sm" color="gray.700">
+                    Replacement invoices can correct an existing claim, but they cannot add or remove claimed upgrade
+                    types.
+                  </Text>
+
+                  <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
+                    <Box flex="1" p={4} borderWidth="1px" borderColor="gray.200" borderRadius="xl" bg="gray.50">
+                      <Text fontSize="xs" fontWeight="800" textTransform="uppercase" color="gray.600" mb={2}>
+                        Current invoice claims
+                      </Text>
+                      <VStack align="stretch" spacing={2}>
+                        {(upgradeTypeScopeChange?.current_upgrade_types || []).map((upgradeType) => (
+                          <Text key={upgradeType.upgrade_type_key || upgradeTypeLabel(upgradeType)} fontSize="sm">
+                            • {upgradeTypeLabel(upgradeType)}
+                          </Text>
+                        ))}
+                      </VStack>
+                    </Box>
+
+                    <Box flex="1" p={4} borderWidth="1px" borderColor="orange.200" borderRadius="xl" bg="orange.50">
+                      <Text fontSize="xs" fontWeight="800" textTransform="uppercase" color="orange.700" mb={2}>
+                        Detected changes
+                      </Text>
+                      <VStack align="stretch" spacing={2}>
+                        {(upgradeTypeScopeChange?.added_upgrade_types || []).map((upgradeType) => (
+                          <Text
+                            key={`added-${upgradeType.upgrade_type_key || upgradeTypeLabel(upgradeType)}`}
+                            fontSize="sm"
+                          >
+                            Added: {upgradeTypeLabel(upgradeType)}
+                          </Text>
+                        ))}
+                        {(upgradeTypeScopeChange?.removed_upgrade_types || []).map((upgradeType) => (
+                          <Text
+                            key={`removed-${upgradeType.upgrade_type_key || upgradeTypeLabel(upgradeType)}`}
+                            fontSize="sm"
+                          >
+                            Removed: {upgradeTypeLabel(upgradeType)}
+                          </Text>
+                        ))}
+                      </VStack>
+                    </Box>
+                  </Flex>
+
+                  <Box p={4} borderRadius="xl" bg="blue.50" borderWidth="1px" borderColor="blue.100">
+                    <Text fontSize="sm" color="gray.700">
+                      Use the <strong>Chat with admins</strong> button in the bottom-right corner of the invoice screen
+                      for guidance. If this change is intentional, an admin may ask you to withdraw this invoice and
+                      submit a new package.
+                    </Text>
+                  </Box>
+                </VStack>
               ) : displayFailureMessage ? (
                 <Flex
                   align="flex-start"
@@ -804,7 +905,13 @@ export default function ContractorFixUploadScreen() {
                 </Flex>
               ) : null}
             </ModalBody>
-            {displayFailureMessage && !submitLoading && !isProcessing ? (
+            {upgradeTypeScopeChangeDetected && !submitLoading && !isProcessing ? (
+              <ModalFooter px={7} pt={0} pb={7}>
+                <Button colorScheme="blue" size="lg" borderRadius="full" onClick={returnToInvoice}>
+                  Return to invoice
+                </Button>
+              </ModalFooter>
+            ) : displayFailureMessage && !submitLoading && !isProcessing ? (
               <ModalFooter px={7} pt={0} pb={7} gap={3}>
                 <Button
                   leftIcon={<XCircle size={17} />}

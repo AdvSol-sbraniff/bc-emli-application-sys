@@ -131,6 +131,9 @@ const currentAdminComment = (
     .reverse()
     .find((comment) => comment.author_type === 'admin' && comment.revision_round_id === data?.latest_round_id);
 
+const latestRoundAwaitingContractor = (data: RevisionTrackerData | null): boolean =>
+  data?.rounds.find((round) => round.id === data.latest_round_id)?.state === 'awaiting_contractor';
+
 const draftBaseline = (issue: RevisionIssue, data: RevisionTrackerData | null): AdminDraft => {
   const editable = currentAdminComment(issue, data);
   if (editable?.can_edit) {
@@ -588,7 +591,7 @@ export const useAdminInlineRevisionWorkspace = ({
 
 const issueState = (issue: RevisionIssue, workspace: AdminInlineRevisionWorkspace) => {
   if (!revisionIssueUnresolved(issue)) return null;
-  if (workspace.data?.invoice_status === 'contractor_revision_inbox') {
+  if (latestRoundAwaitingContractor(workspace.data)) {
     return { label: 'With contractor', colour: 'orange' };
   }
   const draft = workspace.draftFor(issue);
@@ -631,7 +634,8 @@ export const AdminInlineRevisionIssue = ({
   const draft = workspace.draftFor(issue);
   const closeDraft = workspace.closeDraftFor(issue);
   const state = issueState(issue, workspace);
-  const showStateBadge = state && state.label !== 'Ready to send' && state.label !== 'Recommendation required';
+  const showStateBadge =
+    state && state.label !== 'Ready to send' && state.label !== 'Recommendation required' ? state : null;
   const selectedRecommendation = adminRemedyLabel(draft.remedy);
   const hasUnsavedChanges = workspace.unsavedIssueIds.includes(issue.id);
   const editableComment = currentAdminComment(issue, workspace.data);
@@ -940,7 +944,7 @@ export const AdminRevisionWorkspace = ({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [decisionSavedSort, setDecisionSavedSort] = useState<'alphabetic' | 'recommendation_type'>('alphabetic');
   const unresolved = workspace.issues.filter(revisionIssueUnresolved);
-  const isWithContractor = workspace.data?.invoice_status === 'contractor_revision_inbox';
+  const isWithContractor = latestRoundAwaitingContractor(workspace.data);
   const readyToSendIssueIds = new Set(
     isWithContractor
       ? []

@@ -78,7 +78,9 @@ module Claims
         @clone_supporting_document_ids =
           Array(clone_supporting_document_ids).flatten.compact.map(&:to_s)
         @clone_all_current_supporting_documents =
-          !clone_all_current_supporting_documents.nil?
+          ActiveModel::Type::Boolean.new.cast(
+            clone_all_current_supporting_documents
+          )
         @files = Array(files).flatten.compact
       end
 
@@ -87,6 +89,8 @@ module Claims
 
         invoice = ::Claims::Invoice.find(@invoice_id)
         source_invoice_version = source_invoice_version_for(invoice)
+        retained_supporting_document_ids =
+          clone_supporting_document_ids_for(source_invoice_version)
 
         now = Time.current
         ingest_run =
@@ -94,7 +98,21 @@ module Claims
             session_id: invoice.session_id,
             contractor_id: invoice.contractor_id,
             status: "queued",
-            total_files: total_file_count(source_invoice_version),
+            messages: [
+              {
+                code: "fix_upload_context",
+                level: "info",
+                invoice_id: invoice.id,
+                source_invoice_version_id: source_invoice_version&.id,
+                source_invoice_versionno:
+                  source_invoice_version&.invoice_versionno,
+                clone_invoice_version_id: @clone_invoice_version_id,
+                clone_supporting_document_ids: retained_supporting_document_ids,
+                prior_invoice_status: invoice.status,
+                prior_invoice_status_subtype: invoice.status_subtype
+              }.compact
+            ],
+            total_files: total_file_count(retained_supporting_document_ids),
             completed_files: 0,
             failed_files: 0,
             created_at: now,
@@ -110,62 +128,32 @@ module Claims
             created_at: now,
             updated_at: now
           )
-        new_invoice_version = nil
         new_file_documents = []
 
-        ::Claims::Invoice.transaction do
-          locked_invoice = ::Claims::Invoice.lock.find(invoice.id)
-          next_versionno = next_invoice_versionno(locked_invoice.id)
-
-          new_invoice_version =
-            if @clone_invoice_version_id.present?
-              clone_invoice_version!(
-                source_invoice_version: source_invoice_version,
-                next_versionno: next_versionno,
-                now: now
-              )
-            else
-              create_pending_invoice_version!(
-                invoice: locked_invoice,
-                next_versionno: next_versionno,
-                now: now
-              )
-            end
-          ingest_run.update!(
-            resolved_invoice_version_id: new_invoice_version.id,
-            updated_at: now
-          )
-
+        ::Claims::IngestDocument.transaction do
           if @clone_invoice_version_id.present?
-            clone_invoice_document!(
+            stage_cloned_invoice_document!(
               ingest_run: ingest_run,
-              invoice: locked_invoice,
+              invoice: invoice,
               source_invoice_version: source_invoice_version,
-              new_invoice_version: new_invoice_version,
               now: now
             )
           end
 
-          clone_supporting_documents!(
+          stage_cloned_supporting_documents!(
             ingest_run: ingest_run,
-            invoice: locked_invoice,
+            invoice: invoice,
             source_invoice_version: source_invoice_version,
-            new_invoice_version: new_invoice_version,
+            retained_supporting_document_ids: retained_supporting_document_ids,
             now: now
           )
 
           new_file_documents =
             build_new_file_documents!(
               ingest_run: ingest_run,
-              invoice: locked_invoice,
-              new_invoice_version: new_invoice_version,
+              invoice: invoice,
               now: now
             )
-
-          locked_invoice.set_workflow_status_columns!(
-            "upload_in_progress",
-            now: Time.current
-          )
         end
 
         upload_new_files!(new_file_documents: new_file_documents)
@@ -173,16 +161,18 @@ module Claims
         stage_step.update!(status: "succeeded", updated_at: Time.current)
         enqueue_new_file_ocr!(new_file_documents)
 
-        invoice.set_workflow_status!("ocr_in_progress")
         ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload
+        if ingest_run.status == "failed"
+          return failed_run_result(invoice: invoice, ingest_run: ingest_run)
+        end
 
         Result.new(
           true,
           "upload_fix_package",
           invoice.id,
-          new_invoice_version.id,
-          new_invoice_version.invoice_versionno,
+          ingest_run.resolved_invoice_version_id,
+          nil,
           invoice.session_id,
           ingest_run.id,
           ingest_run.status,
@@ -230,11 +220,8 @@ module Claims
           false,
           "upload_fix_package",
           invoice&.id,
-          persisted_invoice_version_value(new_invoice_version, :id),
-          persisted_invoice_version_value(
-            new_invoice_version,
-            :invoice_versionno
-          ),
+          ingest_run&.resolved_invoice_version_id,
+          nil,
           invoice&.session_id,
           ingest_run&.id,
           safe_ingest_run_status(ingest_run),
@@ -249,6 +236,37 @@ module Claims
       end
 
       private
+
+      def failed_run_result(invoice:, ingest_run:)
+        failure_status =
+          ingest_run.failure_status.presence || "technical_failure"
+        failure_subtype =
+          ingest_run.failure_status_subtype.presence ||
+            "unknown_runtime_failure"
+        safe_error =
+          ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
+            failure_status,
+            failure_subtype
+          ).presence || ::Claims::Ingest::UploadErrors::SAFE_TECHNICAL_MESSAGE
+
+        Result.new(
+          false,
+          "upload_fix_package",
+          invoice.id,
+          ingest_run.resolved_invoice_version_id,
+          nil,
+          invoice.session_id,
+          ingest_run.id,
+          ingest_run.status,
+          nil,
+          safe_error,
+          failure_status,
+          failure_subtype,
+          ingest_run.pipeline_error_code.presence || failure_subtype,
+          false,
+          nil
+        )
+      end
 
       def finalize_upload_fix_failure!(
         stage_step:,
@@ -292,18 +310,6 @@ module Claims
             failure_subtype
           ).presence || failure_subtype
         safely_finalize_upload_fix!(
-          label: "invoice",
-          diagnostic_id: diagnostic_id
-        ) do
-          invoice&.update_columns(
-            status: failure_status,
-            status_subtype: normalized_subtype,
-            status_updated_at: now,
-            updated_at: now
-          )
-        end
-
-        safely_finalize_upload_fix!(
           label: "ingest run",
           diagnostic_id: diagnostic_id
         ) do
@@ -326,13 +332,6 @@ module Claims
         )
       end
 
-      def persisted_invoice_version_value(invoice_version, attribute)
-        return nil unless invoice_version&.id
-        return nil unless ::Claims::InvoiceVersion.exists?(invoice_version.id)
-
-        invoice_version.public_send(attribute)
-      end
-
       def source_invoice_version_for(invoice)
         if @clone_invoice_version_id.present?
           return(
@@ -349,10 +348,9 @@ module Claims
           .first
       end
 
-      def total_file_count(source_invoice_version)
+      def total_file_count(retained_supporting_document_ids)
         (@clone_invoice_version_id.present? ? 1 : 0) +
-          clone_supporting_document_ids_for(source_invoice_version).size +
-          @files.size
+          retained_supporting_document_ids.size + @files.size
       end
 
       def clone_supporting_document_ids_for(source_invoice_version)
@@ -368,137 +366,10 @@ module Claims
           .map(&:to_s)
       end
 
-      def next_invoice_versionno(invoice_id)
-        (
-          ::Claims::InvoiceVersion.where(invoice_id: invoice_id).maximum(
-            :invoice_versionno
-          ) || 0
-        ) + 1
-      end
-
-      def clone_invoice_version!(source_invoice_version:, next_versionno:, now:)
-        clone = source_invoice_version.dup
-        clone.invoice_versionno = next_versionno
-        clone.genai_raw_json = nil
-        clone.genai_overall_confidence = 0
-        clone.genai_result = nil
-        clone.ahri_product_id = nil
-        clone.neea_product_id = nil
-        clone.awhp_product_id = nil
-        clone.ohpa_product_id = nil
-        clone.herv_product_id = nil
-        clone.vent_fan_product_id = nil
-        clone.created_at = now
-        clone.updated_at = now
-        clone.save!
-
-        clone_lineitems!(
-          source_invoice_version_id: source_invoice_version.id,
-          new_invoice_version_id: clone.id,
-          now: now
-        )
-        clone_classifier_invoice_evidence!(
-          source_invoice_version_id: source_invoice_version.id,
-          new_invoice_version_id: clone.id,
-          now: now
-        )
-
-        clone
-      end
-
-      def create_pending_invoice_version!(invoice:, next_versionno:, now:)
-        ::Claims::InvoiceVersion.create!(
-          invoice_id: invoice.id,
-          invoice_versionno: next_versionno,
-          storage_provider: "azure_blob",
-          storage_key:
-            pending_invoice_storage_key(
-              invoice: invoice,
-              next_versionno: next_versionno,
-              filename: "pending-invoice.pdf",
-              content_type: "application/pdf"
-            ),
-          original_filename: nil,
-          content_type: nil,
-          byte_size: nil,
-          created_at: now,
-          updated_at: now
-        )
-      end
-
-      def clone_lineitems!(
-        source_invoice_version_id:,
-        new_invoice_version_id:,
-        now:
-      )
-        rows =
-          ::Claims::Lineitem
-            .where(invoice_version_id: source_invoice_version_id)
-            .order(:lineitem_seqno, :id)
-            .map do |row|
-              row
-                .attributes
-                .except("id", "invoice_version_id", "created_at", "updated_at")
-                .merge(
-                  "invoice_version_id" => new_invoice_version_id,
-                  "created_at" => now,
-                  "updated_at" => now
-                )
-            end
-        ::Claims::Lineitem.insert_all!(rows) if rows.any?
-      end
-
-      def clone_classifier_invoice_evidence!(
-        source_invoice_version_id:,
-        new_invoice_version_id:,
-        now:
-      )
-        located_rows =
-          ::Claims::InvoiceVersionLocatedField
-            .where(
-              invoice_version_id: source_invoice_version_id,
-              source_engine: "classifier"
-            )
-            .map do |row|
-              row
-                .attributes
-                .except("id", "invoice_version_id", "created_at", "updated_at")
-                .merge(
-                  "invoice_version_id" => new_invoice_version_id,
-                  "created_at" => now,
-                  "updated_at" => now
-                )
-            end
-        if located_rows.any?
-          ::Claims::InvoiceVersionLocatedField.insert_all!(located_rows)
-        end
-
-        upgrade_rows =
-          ::Claims::InvoiceVersionUpgradeType
-            .where(
-              invoice_version_id: source_invoice_version_id,
-              source_engine: "classifier"
-            )
-            .map do |row|
-              row
-                .attributes
-                .except("id", "invoice_version_id", "created_at", "updated_at")
-                .merge(
-                  "invoice_version_id" => new_invoice_version_id,
-                  "created_at" => now,
-                  "updated_at" => now
-                )
-            end
-        if upgrade_rows.any?
-          ::Claims::InvoiceVersionUpgradeType.insert_all!(upgrade_rows)
-        end
-      end
-
-      def clone_invoice_document!(
+      def stage_cloned_invoice_document!(
         ingest_run:,
         invoice:,
         source_invoice_version:,
-        new_invoice_version:,
         now:
       )
         ::Claims::IngestDocument.create!(
@@ -507,13 +378,13 @@ module Claims
           contractor_id: invoice.contractor_id,
           invoice_id: invoice.id,
           resolved_invoice_id: invoice.id,
-          resolved_invoice_version_id: new_invoice_version.id,
-          storage_provider: new_invoice_version.storage_provider,
-          storage_key: new_invoice_version.storage_key,
-          original_filename: new_invoice_version.original_filename,
-          content_type: new_invoice_version.content_type,
-          byte_size: new_invoice_version.byte_size,
-          sha256: new_invoice_version.sha256,
+          resolved_invoice_version_id: nil,
+          storage_provider: source_invoice_version.storage_provider,
+          storage_key: source_invoice_version.storage_key,
+          original_filename: source_invoice_version.original_filename,
+          content_type: source_invoice_version.content_type,
+          byte_size: source_invoice_version.byte_size,
+          sha256: source_invoice_version.sha256,
           di_read_raw_json: source_invoice_version.di_raw_json,
           classifier_raw_json: nil,
           document_kind: "invoice",
@@ -528,103 +399,41 @@ module Claims
         )
       end
 
-      def clone_supporting_documents!(
+      def stage_cloned_supporting_documents!(
         ingest_run:,
         invoice:,
         source_invoice_version:,
-        new_invoice_version:,
+        retained_supporting_document_ids:,
         now:
       )
-        clone_ids = clone_supporting_document_ids_for(source_invoice_version)
-
         docs =
           ::Claims::SupportingDocument
-            .where(id: clone_ids, invoice_version_id: source_invoice_version.id)
-            .includes(
-              :supporting_document_located_fields,
-              :supporting_document_visual_findings
+            .where(
+              id: retained_supporting_document_ids,
+              invoice_version_id: source_invoice_version.id
             )
             .order(:created_at, :id)
             .to_a
-        missing_ids = clone_ids - docs.map { |doc| doc.id.to_s }
+        missing_ids =
+          retained_supporting_document_ids - docs.map { |doc| doc.id.to_s }
         if missing_ids.any?
           raise "One or more cloned supporting documents do not belong to the current invoice version."
         end
 
         docs.each do |source_doc|
-          new_doc =
-            ::Claims::SupportingDocument.create!(
-              source_doc
-                .attributes
-                .except("id", "invoice_version_id", "created_at", "updated_at")
-                .merge(
-                  "invoice_version_id" => new_invoice_version.id,
-                  "created_at" => now,
-                  "updated_at" => now
-                )
-            )
-          clone_supporting_document_children!(
-            source_doc: source_doc,
-            new_doc: new_doc,
-            now: now
-          )
-          clone_supporting_document_ingest_row!(
+          stage_cloned_supporting_document!(
             ingest_run: ingest_run,
             invoice: invoice,
             source_doc: source_doc,
-            new_doc: new_doc,
             now: now
           )
         end
       end
 
-      def clone_supporting_document_children!(source_doc:, new_doc:, now:)
-        located_rows =
-          source_doc.supporting_document_located_fields.map do |row|
-            row
-              .attributes
-              .except(
-                "id",
-                "supporting_document_id",
-                "created_at",
-                "updated_at"
-              )
-              .merge(
-                "supporting_document_id" => new_doc.id,
-                "created_at" => now,
-                "updated_at" => now
-              )
-          end
-        if located_rows.any?
-          ::Claims::SupportingDocumentLocatedField.insert_all!(located_rows)
-        end
-
-        finding_rows =
-          source_doc.supporting_document_visual_findings.map do |row|
-            row
-              .attributes
-              .except(
-                "id",
-                "supporting_document_id",
-                "created_at",
-                "updated_at"
-              )
-              .merge(
-                "supporting_document_id" => new_doc.id,
-                "created_at" => now,
-                "updated_at" => now
-              )
-          end
-        if finding_rows.any?
-          ::Claims::SupportingDocumentVisualFinding.insert_all!(finding_rows)
-        end
-      end
-
-      def clone_supporting_document_ingest_row!(
+      def stage_cloned_supporting_document!(
         ingest_run:,
         invoice:,
         source_doc:,
-        new_doc:,
         now:
       )
         ::Claims::IngestDocument.create!(
@@ -633,39 +442,34 @@ module Claims
           contractor_id: invoice.contractor_id,
           invoice_id: invoice.id,
           resolved_invoice_id: invoice.id,
-          resolved_invoice_version_id: new_doc.invoice_version_id,
-          promoted_supporting_document_id: new_doc.id,
-          storage_provider: new_doc.storage_provider,
-          storage_key: new_doc.storage_key,
-          original_filename: new_doc.original_filename,
-          content_type: new_doc.content_type,
-          byte_size: new_doc.byte_size,
-          sha256: new_doc.sha256,
-          di_read_raw_json: new_doc.di_read_raw_json,
-          classifier_raw_json: new_doc.classifier_raw_json,
+          resolved_invoice_version_id: nil,
+          promoted_supporting_document_id: nil,
+          storage_provider: source_doc.storage_provider,
+          storage_key: source_doc.storage_key,
+          original_filename: source_doc.original_filename,
+          content_type: source_doc.content_type,
+          byte_size: source_doc.byte_size,
+          sha256: source_doc.sha256,
+          di_read_raw_json: source_doc.di_read_raw_json,
+          classifier_raw_json: source_doc.classifier_raw_json,
           document_kind: "supporting_document",
           document_kind_confidence: 100,
           document_kind_reason: "Cloned from prior invoice version.",
-          supporting_document_type_id: new_doc.supporting_document_type_id,
-          classification_status: new_doc.classification_status,
-          classification_confidence: new_doc.classification_confidence,
-          classification_reason: new_doc.classification_reason,
+          supporting_document_type_id: source_doc.supporting_document_type_id,
+          classification_status: source_doc.classification_status,
+          classification_confidence: source_doc.classification_confidence,
+          classification_reason: source_doc.classification_reason,
           supporting_document_routing_quality:
-            new_doc.supporting_document_routing_quality,
+            source_doc.supporting_document_routing_quality,
           supporting_document_routing_quality_reason:
-            new_doc.supporting_document_routing_quality_reason,
+            source_doc.supporting_document_routing_quality_reason,
           classified_at: now,
           created_at: now,
           updated_at: now
         )
       end
 
-      def build_new_file_documents!(
-        ingest_run:,
-        invoice:,
-        new_invoice_version:,
-        now:
-      )
+      def build_new_file_documents!(ingest_run:, invoice:, now:)
         @files.map do |file|
           name =
             ::Claims::Ingest::EvidenceFile.original_filename(
@@ -688,7 +492,7 @@ module Claims
               contractor_id: invoice.contractor_id,
               invoice_id: invoice.id,
               resolved_invoice_id: invoice.id,
-              resolved_invoice_version_id: new_invoice_version.id,
+              resolved_invoice_version_id: nil,
               storage_provider: "azure_blob",
               storage_key:
                 pending_ingest_storage_key(
@@ -757,20 +561,6 @@ module Claims
             "fix_ocr_read"
           )
         end
-      end
-
-      def pending_invoice_storage_key(
-        invoice:,
-        next_versionno:,
-        filename:,
-        content_type:
-      )
-        extension =
-          ::Claims::Ingest::EvidenceFile.storage_extension_for(
-            filename: filename,
-            content_type: content_type
-          )
-        "PENDING/session=#{invoice.session_id}/invoice=#{invoice.id}/v=#{next_versionno}/#{SecureRandom.uuid}#{extension}"
       end
 
       def pending_ingest_storage_key(session_id:, filename:, content_type:)

@@ -5,6 +5,11 @@ class AwsCredentialHealthCheckJob < ApplicationJob
   discard_on StandardError
 
   def perform
+    unless s3_storage_enabled?
+      Rails.logger.info "Skipping AWS credential health check because S3 storage is disabled"
+      return { skipped: true, reason: "s3_storage_disabled" }
+    end
+
     Rails.logger.info "Starting AWS credential health check"
 
     service = AwsCredentialRefreshService.new
@@ -110,6 +115,11 @@ class AwsCredentialHealthCheckJob < ApplicationJob
   end
 
   private
+
+  def s3_storage_enabled?
+    defined?(DynamicS3Storage) &&
+      Shrine.storages.values.any? { |storage| storage.is_a?(DynamicS3Storage) }
+  end
 
   def log_health_status(status)
     Rails.logger.info "AWS Credential Health Check Results:"

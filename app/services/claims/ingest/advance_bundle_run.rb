@@ -218,36 +218,112 @@ module Claims
           )
         end
 
+        resolved_document = invoice_docs.first
         if fix_run?(run)
-          mark_clone_existing_evidence_succeeded!(
+          legacy_resolved_version_id =
+            run.resolved_invoice_version_id.presence ||
+              resolved_document.resolved_invoice_version_id.presence
+          if legacy_resolved_version_id.present?
+            mark_run_resolved_invoice_version!(
+              run: run,
+              resolved_invoice_version_id: legacy_resolved_version_id
+            )
+            resolved_invoice_version_id =
+              ensure_resolved_invoice!(
+                run: run,
+                resolved_document: resolved_document
+              )
+            scope_guard =
+              ::Claims::Ingest::FixUpgradeTypeScopeGuard.call(
+                ingest_run: run,
+                replacement_invoice_version_id: resolved_invoice_version_id
+              )
+            return if scope_guard.changed
+          else
+            scope_guard =
+              ::Claims::Ingest::FixUpgradeTypeScopeGuard.call(
+                ingest_run: run,
+                replacement_document: resolved_document
+              )
+            return if scope_guard.changed
+
+            unless fix_document_has_supported_upgrade_type?(
+                     run: run,
+                     document: resolved_document
+                   )
+              return(
+                update_failed!(
+                  run: run,
+                  total_files: total_files,
+                  failed_files: 1,
+                  shell_invoice_id: shell_invoice_id,
+                  shell_invoice_status: "package_needs_correction",
+                  shell_invoice_status_subtype:
+                    "package_no_supported_upgrade_type",
+                  fallback_error_code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE
+                )
+              )
+            end
+
+            resolved_invoice_version_id =
+              ::Claims::Ingest::PromoteFixPackage.call(
+                ingest_run: run,
+                resolved_document: resolved_document
+              )
+          end
+
+          unless supported_upgrade_type_detected?(resolved_invoice_version_id)
+            return(
+              update_failed!(
+                run: run,
+                total_files: total_files,
+                failed_files: 1,
+                shell_invoice_id: shell_invoice_id,
+                shell_invoice_status: "package_needs_correction",
+                shell_invoice_status_subtype:
+                  "package_no_supported_upgrade_type",
+                fallback_error_code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE
+              )
+            )
+          end
+        else
+          resolved_invoice_version_id =
+            ensure_resolved_invoice!(
+              run: run,
+              resolved_document: resolved_document
+            )
+          mark_run_resolved_invoice_version!(
             run: run,
-            documents: documents
+            resolved_invoice_version_id: resolved_invoice_version_id
           )
+          resolved_invoice_id = resolved_document.reload.resolved_invoice_id
+
+          unless supported_upgrade_type_detected?(resolved_invoice_version_id)
+            return(
+              update_failed!(
+                run: run,
+                total_files: total_files,
+                failed_files: 1,
+                shell_invoice_id: resolved_invoice_id || shell_invoice_id,
+                shell_invoice_status: "package_needs_correction",
+                shell_invoice_status_subtype:
+                  "package_no_supported_upgrade_type",
+                fallback_error_code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE
+              )
+            )
+          end
         end
 
-        resolved_document = invoice_docs.first
-        resolved_invoice_version_id =
-          ensure_resolved_invoice!(
-            run: run,
-            resolved_document: resolved_document
-          )
         mark_run_resolved_invoice_version!(
           run: run,
           resolved_invoice_version_id: resolved_invoice_version_id
         )
         resolved_invoice_id = resolved_document.reload.resolved_invoice_id
 
-        unless supported_upgrade_type_detected?(resolved_invoice_version_id)
-          return(
-            update_failed!(
-              run: run,
-              total_files: total_files,
-              failed_files: 1,
-              shell_invoice_id: resolved_invoice_id || shell_invoice_id,
-              shell_invoice_status: "package_needs_correction",
-              shell_invoice_status_subtype: "package_no_supported_upgrade_type",
-              fallback_error_code: BUNDLE_NO_SUPPORTED_UPGRADE_ERROR_CODE
-            )
+        if fix_run?(run)
+          mark_clone_existing_evidence_succeeded!(
+            run: run,
+            documents: documents.reload
           )
         end
 
@@ -1096,6 +1172,44 @@ module Claims
           .exists?
       end
 
+      def fix_document_has_supported_upgrade_type?(run:, document:)
+        if reused_ingest_document?(document)
+          source_id =
+            fix_upload_context(run)["source_invoice_version_id"].presence
+          return false if source_id.blank?
+
+          return supported_upgrade_type_detected?(source_id)
+        end
+
+        rows =
+          if document.classifier_raw_json.is_a?(Hash)
+            document.classifier_raw_json["detected_upgrade_types"] ||
+              document.classifier_raw_json[:detected_upgrade_types]
+          end
+        keys =
+          Array(rows)
+            .filter_map do |row|
+              next unless row.respond_to?(:[])
+
+              key =
+                (row["upgrade_type_key"] || row[:upgrade_type_key]).to_s.strip
+              key.presence unless key == "common"
+            end
+            .uniq
+        return false if keys.empty?
+
+        ::Claims::InvoiceUpgradeType.where(upgrade_type_key: keys).exists?
+      end
+
+      def fix_upload_context(run)
+        Array(run.messages).reverse_each do |message|
+          payload =
+            message.respond_to?(:to_h) ? message.to_h.stringify_keys : {}
+          return payload if payload["code"] == "fix_upload_context"
+        end
+        {}
+      end
+
       def invoice_status_for(invoice_version_id)
         ::Claims::InvoiceVersion
           .joins(
@@ -1179,7 +1293,8 @@ module Claims
         shell_invoice_status: "ocr_in_progress",
         shell_invoice_status_subtype: nil
       )
-        sync_shell_invoice_status!(
+        sync_run_invoice_status!(
+          run: run,
           shell_invoice_id: shell_invoice_id,
           status: shell_invoice_status,
           status_subtype: shell_invoice_status_subtype
@@ -1207,7 +1322,8 @@ module Claims
         shell_invoice_status: "technical_failure",
         shell_invoice_status_subtype: nil
       )
-        sync_shell_invoice_status!(
+        sync_run_invoice_status!(
+          run: run,
           shell_invoice_id: shell_invoice_id,
           status: shell_invoice_status,
           status_subtype: shell_invoice_status_subtype
@@ -1297,6 +1413,21 @@ module Claims
         invoice.set_workflow_status!(status, status_subtype: status_subtype)
       rescue StandardError
         nil
+      end
+
+      def sync_run_invoice_status!(
+        run:,
+        shell_invoice_id:,
+        status:,
+        status_subtype: nil
+      )
+        return if fix_run?(run) && run.resolved_invoice_version_id.blank?
+
+        sync_shell_invoice_status!(
+          shell_invoice_id: shell_invoice_id,
+          status: status,
+          status_subtype: status_subtype
+        )
       end
 
       def running_shell_invoice_status_for(resolved_invoice_status:)

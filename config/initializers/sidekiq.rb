@@ -12,6 +12,10 @@ SHARED_QUEUES = %w[
   model_callbacks
   default
 ].freeze
+AWS_CREDENTIAL_CRON_NAMES = %w[
+  aws_credential_refresh
+  aws_credential_health_check
+].freeze
 
 def sidekiq_queues_from_env
   raw = ENV["SIDEKIQ_QUEUES"].to_s
@@ -43,6 +47,26 @@ def configure_sidekiq_server(config, redis_cfg = nil, concurrency = nil)
   SidekiqUniqueJobs::Server.configure(config)
 end
 
+def aws_credential_cron_enabled?
+  !(
+    Rails.env.test? || ENV["IS_DOCKER_BUILD"].present? ||
+      ENV["BCGOV_OBJECT_STORAGE_ACCESS_KEY_ID"].blank?
+  )
+end
+
+def load_sidekiq_cron_schedule(schedule_file)
+  return unless File.exist?(schedule_file)
+
+  schedule = YAML.load_file(schedule_file)
+  unless aws_credential_cron_enabled?
+    AWS_CREDENTIAL_CRON_NAMES.each do |name|
+      Sidekiq::Cron::Job.find(name)&.destroy
+      schedule.delete(name)
+    end
+  end
+  Sidekiq::Cron::Job.load_from_hash(schedule)
+end
+
 # Environment-specific configuration
 if Rails.env.production? && ENV["IS_DOCKER_BUILD"].blank? # skip this during precompilation in the docker build stage
   redis_cfg = {
@@ -68,9 +92,7 @@ if Rails.env.production? && ENV["IS_DOCKER_BUILD"].blank? # skip this during pre
 
   # Load cron schedule in production only
   schedule_file = "config/sidekiq_cron_schedule.yml"
-  if File.exist?(schedule_file)
-    Sidekiq::Cron::Job.load_from_hash YAML.load_file(schedule_file)
-  end
+  load_sidekiq_cron_schedule(schedule_file)
 elsif Rails.env.development?
   # Development configuration uses default Redis connection
   dev_concurrency = ENV["SIDEKIQ_CONCURRENCY"].to_i
@@ -84,7 +106,5 @@ elsif Rails.env.development?
 
   # Load cron schedule in development for testing
   schedule_file = "config/sidekiq_cron_schedule.yml"
-  if File.exist?(schedule_file)
-    Sidekiq::Cron::Job.load_from_hash YAML.load_file(schedule_file)
-  end
+  load_sidekiq_cron_schedule(schedule_file)
 end

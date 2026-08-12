@@ -12,6 +12,7 @@ module Claims
         package_invoice_not_pdf
         package_replacement_not_invoice
         package_replacement_multiple_files
+        package_replacement_upgrade_types_changed
         package_unsupported_file_type
         package_unreadable_file
         package_duplicate_file_conflict
@@ -63,6 +64,8 @@ module Claims
           "The replacement file was not recognized as an invoice. Upload one corrected invoice PDF.",
         "package_replacement_multiple_files" =>
           "Upload exactly one corrected invoice PDF for an invoice replacement.",
+        "package_replacement_upgrade_types_changed" =>
+          "The replacement invoice adds or removes a claimed upgrade type and was not applied.",
         "package_unsupported_file_type" =>
           "One or more files use an unsupported file type. Upload PDFs or supported image files only.",
         "package_unreadable_file" =>

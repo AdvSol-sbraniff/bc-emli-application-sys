@@ -947,16 +947,18 @@ export const InvoiceVersionShowScreen = () => {
 
   const revisionInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
   const revisionInvoiceStatus = String(readData?.invoice_status || '').trim();
-  const showRevisionWorkspace =
-    canRunWorkflowActions &&
-    !!revisionInvoiceId &&
-    ['admin_review_inbox', 'contractor_revision_inbox'].includes(revisionInvoiceStatus);
+  const canLoadRevisionWorkspace = canRunWorkflowActions && !!revisionInvoiceId;
   const revisionWorkspace = useAdminInlineRevisionWorkspace({
     invoiceId: revisionInvoiceId,
-    enabled: showRevisionWorkspace,
+    enabled: canLoadRevisionWorkspace,
     onTrackerChange: handleRevisionTrackerChange,
   });
   const revisionTrackerData = revisionWorkspace.data;
+  const hasRevisionHistory =
+    !!revisionTrackerData && (revisionTrackerData.rounds.length > 0 || revisionTrackerData.issues.length > 0);
+  const showRevisionWorkspace =
+    canLoadRevisionWorkspace &&
+    (hasRevisionHistory || ['admin_review_inbox', 'contractor_revision_inbox'].includes(revisionInvoiceStatus));
   const revisionIssueByIdentity = useMemo(() => {
     const index = new Map<string, RevisionIssue>();
     revisionWorkspace.issues.forEach((issue) => {

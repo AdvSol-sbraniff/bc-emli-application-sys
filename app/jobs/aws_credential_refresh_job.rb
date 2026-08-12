@@ -5,6 +5,11 @@ class AwsCredentialRefreshJob < ApplicationJob
   retry_on StandardError, wait: :exponentially_longer, attempts: 3
 
   def perform
+    unless s3_storage_enabled?
+      Rails.logger.info "Skipping AWS credential refresh because S3 storage is disabled"
+      return
+    end
+
     Rails.logger.info "Starting scheduled AWS credential refresh job"
 
     service = AwsCredentialRefreshService.new
@@ -34,6 +39,11 @@ class AwsCredentialRefreshJob < ApplicationJob
   end
 
   private
+
+  def s3_storage_enabled?
+    defined?(DynamicS3Storage) &&
+      Shrine.storages.values.any? { |storage| storage.is_a?(DynamicS3Storage) }
+  end
 
   def ensure_credentials_exist!(service)
     current_creds = AwsCredential.current_s3_credentials

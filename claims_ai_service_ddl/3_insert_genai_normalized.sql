@@ -202,25 +202,18 @@ Set rule_result="warn" when control equipment is referenced but the setpoint is 
 Set rule_result="fail" when the named evidence clearly shows the setpoint is above the required threshold for the visible region, or clearly shows no thermostat/switch-over/control-board setup for the dual-fuel ducted heat pump.
 In calculation, state the visible region, required threshold, visible setpoint, whether the evidence came from dfhp_switchover_setpoint_evidence or dual_fuel_control_document, and whether the setpoint is within threshold.
 In evidence_text, cite the exact named-field wording that supports the region, setpoint, and control-equipment decision.', true, 'Southern Interior and Northern B.C. regions: ≤2°C', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('esu_contractor_utility_billed_work_on_one_invoice', 'Check whether the electrician and/or heat pump contractor managed the electrical utility line upgrade with BC Hydro or FortisBC, and whether the one-invoice condition is satisfied when the contractor was billed by the utility for the line upgrade.
+  ('esu_contractor_utility_billed_work_on_one_invoice', 'Assess whether the electrical service upgrade meets the utility-management and billing requirements.
 
-Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
-- esu_contractor_utility_management_evidence: visible evidence that the electrician or heat pump contractor managed/coordinated the line upgrade with the electrical utility.
-- esu_utility_billing_reference: visible evidence showing whether the contractor or participant was billed by the utility for the line/service upgrade.
-- esu_utility_reference: visible BC Hydro, FortisBC, utility connection, line upgrade, or utility bill/invoice references.
-- esu_eligible_expense_lines and esu_line_amount: visible contractor and utility service-upgrade charges or references on the invoice.
-- utility_bill and electrical_utility_upgrade_document located fields when available, including utility_provider, previous_service_size, new_service_size, service_address, service_completion_or_invoice_date, and utility_upgrade_cost_or_reference.
+The electrician or heat pump contractor must manage the line upgrade with BC Hydro or FortisBC. Either the participant or contractor may be billed. The one-invoice condition applies only when the contractor is billed.
 
-Set rule_result="pass" when the named evidence shows the contractor/electrician managed or coordinated the line upgrade with BC Hydro or FortisBC and either:
-1. the participant appears to have been billed directly by the utility, so the contractor-billed one-invoice condition is not triggered;
-2. the contractor appears to have been billed by the utility and the invoice itself includes both contractor work and utility line/service-upgrade charges or references clearly enough to treat them as one invoice package; or
-3. utility involvement and contractor/electrician management are clear, and no contractor-billed utility charge is visible, so the contractor-billed one-invoice condition is not triggered by the supplied evidence.
+Consider the complete package and all relevant located fields. Named fields are evidence aids, not mandatory checklist items. Use reasonable document-supported inference; exact "managed" or "coordinated" wording and a separate utility document are not required.
 
-Set rule_result="info" only when utility involvement and contractor/electrician management are clear, no contradiction is visible, and the only caveat is that the evidence does not identify whether the contractor or participant was billed by the utility.
-Set rule_result="warn" when contractor/electrician utility-management evidence is missing or ambiguous; when contractor-billed utility work may be present but the invoice/supporting-document relationship is too ambiguous to confirm one-invoice treatment; or when utility charges appear only in a separate supporting document without enough invoice linkage.
-Set rule_result="fail" when the named evidence clearly shows no contractor/electrician management of the line upgrade with BC Hydro/FortisBC, or clearly shows the contractor was billed by the utility for the line upgrade and contractor work and utility work are split across separate invoices in conflict with the one-invoice requirement.
-In calculation, state esu_contractor_utility_management_evidence, esu_utility_billing_reference, esu_utility_reference, utility provider, billing path classified as participant_billed, contractor_billed, unclear, or not_visible, and whether contractor and utility work appear on one invoice.
-In evidence_text, cite the exact named-field wording that supports the utility-management, billing-path, and one-invoice decision.', true, 'To be eligible for the electrical service upgrade the electrician and/or heat pump contractor completing the electrical service upgrade must manage the line upgrade with the electrical utility (BC Hydro or FortisBC) that the home is connected to. Either the contractor or the participant can be billed by the utility for the line upgrade. If the contractor is being billed by the utility for the line upgrade, then all work completed by the contractor and the utility must be on one invoice. See the sample invoice or contact betterhomesESP@clearesult.com.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
+Set rule_result="pass" when contractor/electrician management is reasonably supported and the applicable billing condition is satisfied.
+Set rule_result="info" when management is strongly implied, nothing contradicts it, and no correction is warranted.
+Set rule_result="warn" when a specific material fact genuinely requires admin verification.
+Set rule_result="fail" only when visible evidence clearly contradicts contractor/electrician management or shows contractor-billed utility work improperly split across invoices.
+
+Do not request additional documentation solely because explicit management wording is absent. In calculation and evidence_text, identify the document-supported facts used for the utility-management, billing-path, and one-invoice decision.', true, 'To be eligible for the electrical service upgrade the electrician and/or heat pump contractor completing the electrical service upgrade must manage the line upgrade with the electrical utility (BC Hydro or FortisBC) that the home is connected to. Either the contractor or the participant can be billed by the utility for the line upgrade. If the contractor is being billed by the utility for the line upgrade, then all work completed by the contractor and the utility must be on one invoice. See the sample invoice or contact betterhomesESP@clearesult.com.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('esu_eligible_expense_lines_present', 'Check whether the visible electrical service upgrade charge lines are for eligible electrical service upgrade expenses.
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
@@ -571,7 +564,7 @@ contractor_display_name_metadata (
   ('dfhp_switchover_setpoint_specific', 'Dual-fuel heat pump switchover temperature'),
   ('esu_contractor_utility_billed_work_on_one_invoice', 'Electrical and utility work billed correctly'),
   ('esu_eligible_expense_lines_present', 'Eligible electrical service upgrade costs'),
-  ('esu_heat_pump_conversion_context_present', 'Electrical upgrade associated with a heat pump'),
+  ('esu_heat_pump_conversion_context_present', 'Eligible fossil-to-heat-pump conversion'),
   ('esu_not_panel_only_or_connection_only', 'Complete electrical service upgrade'),
   ('esu_service_size_present', 'Electrical service size'),
   ('esu_utility_upgrade_supporting_document_attached', 'Utility electrical upgrade documents'),
@@ -618,7 +611,7 @@ source_quote_metadata (
   ('dfhp_switchover_setpoint_specific', $$DUAL FUEL DUCTED HEAT PUMP$$, $$Check that the invoice or supporting documents show the required switchover control settings for the applicable region. Upload clearer controls evidence if needed.$$),
   ('esu_contractor_utility_billed_work_on_one_invoice', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or supporting documents show the BC Hydro/FortisBC line upgrade path and that contractor-billed utility work appears on one invoice when applicable.$$),
   ('esu_eligible_expense_lines_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the claimed electrical service upgrade charges are from the eligible expense categories listed here. Upload a corrected invoice if needed.$$),
-  ('esu_heat_pump_conversion_context_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or supporting documents tie the service upgrade to a qualifying fossil-fuel-to-heat-pump conversion. Upload clearer evidence if needed.$$),
+  ('esu_heat_pump_conversion_context_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Provide evidence showing that the heat pump replaced an oil, propane, or natural-gas primary space- or water-heating system. This may be an updated invoice, work order, removal or decommissioning record, or another supporting document identifying the previous system.$$),
   ('esu_not_panel_only_or_connection_only', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice shows a utility service/new-wire upgrade, not only a panel/sub-panel upgrade or heat-pump panel connection. Upload a corrected invoice if needed.$$),
   ('esu_service_size_present', $$ELECTRICAL SERVICE UPGRADE$$, $$Check that the invoice or utility evidence shows the new service size is 100, 200, or 400 amps. Upload clearer evidence if needed.$$),
   ('esu_utility_upgrade_supporting_document_attached', $$ELECTRICAL SERVICE UPGRADE$$, $$Upload evidence showing the electric service/new wire was upgraded by BC Hydro or FortisBC.$$),
@@ -672,7 +665,7 @@ SELECT
     ELSE 'hidden'
   END AS contractor_visibility,
   'non_blocking' AS contractor_blocking_policy,
-  'fail_only' AS admin_workflow_policy,
+  'warn_and_fail' AS admin_workflow_policy,
   created_at,
   updated_at
 FROM genai_rules_seed
