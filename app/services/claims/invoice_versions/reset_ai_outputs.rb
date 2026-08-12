@@ -42,7 +42,6 @@ module Claims
           ).delete_all
 
           invoice_version.update!(
-            genai_overall_confidence: 0,
             genai_result: nil,
             ahri_product_id: nil,
             neea_product_id: nil,

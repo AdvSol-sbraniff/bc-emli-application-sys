@@ -32,7 +32,6 @@ RSpec.describe "Claims advice refresh", type: :request do
           genai_raw_json: {
             "old" => "advice"
           },
-          genai_overall_confidence: 88,
           genai_result: "fail",
           created_at: now,
           updated_at: now
@@ -120,7 +119,6 @@ RSpec.describe "Claims advice refresh", type: :request do
         invoice_upgrade_type_id: upgrade_type.id,
         source_engine: "genai",
         call_status: "succeeded",
-        confidence: 75,
         result: "fail",
         created_at: now,
         updated_at: now
@@ -171,7 +169,6 @@ RSpec.describe "Claims advice refresh", type: :request do
       expect(ingest_run.resolved_invoice_version_id).to eq(new_version.id)
       expect(new_version.di_raw_json).to eq("invoice" => "di")
       expect(new_version.genai_raw_json).to be_nil
-      expect(new_version.genai_overall_confidence).to eq(0)
       expect(new_version.genai_result).to be_nil
       expect(new_version.users_eligibilitycode_id).to be_nil
       expect(new_version.participant_user_id).to be_nil

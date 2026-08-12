@@ -60,7 +60,7 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
       rule_key: key,
       contractor_display_name: "Confirm installation detail",
       rule_result: "fail",
-      confidence: 88,
+      compliance_score: 14,
       reason_and_likely_causes: "A required detail is ambiguous.",
       evidence_text: "The invoice has abbreviated wording.",
       created_at: now,

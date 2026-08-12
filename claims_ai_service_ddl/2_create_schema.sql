@@ -1132,7 +1132,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
 
   -- from the genai
   genai_raw_json jsonb NULL,
-  genai_overall_confidence  smallint NOT NULL DEFAULT 0,
   genai_result text NULL,
 
   -- any parent level genai outputs such as overall conf and overall pass flags
@@ -1765,7 +1764,7 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   contractor_display_name text NOT NULL,
 
   rule_result text NOT NULL DEFAULT 'fail',
-  confidence smallint NOT NULL DEFAULT 0,  -- 0..100
+  compliance_score smallint NULL,  -- GenAI only: 0..100 noncompliant-to-compliant position
 
   expected_text text NULL,
   calculation text NULL,
@@ -1794,8 +1793,8 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   CONSTRAINT invoice_version_rulechecks_rule_result_chk
     CHECK (rule_result IN ('pass','info','warn','fail')),
 
-  CONSTRAINT invoice_version_rulechecks_confidence_chk
-    CHECK (confidence BETWEEN 0 AND 100),
+  CONSTRAINT invoice_version_rulechecks_compliance_score_chk
+    CHECK (compliance_score IS NULL OR compliance_score BETWEEN 0 AND 100),
 
   CONSTRAINT invoice_version_rulechecks_uniq
     UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine, rule_key)
@@ -2716,6 +2715,7 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
   admin_advice_closing character varying NULL,
+  show_admin_field_revision_plus boolean NOT NULL DEFAULT true,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
@@ -2994,7 +2994,8 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   source_engine text NOT NULL DEFAULT 'classifier',
   call_status text NOT NULL DEFAULT 'classified',
 
-  confidence smallint NOT NULL DEFAULT 0,
+  -- Meaningful for classifier rows. GenAI manifest rows leave this NULL.
+  confidence smallint NULL,
   result text NULL,
   admin_advice text NULL,
   evidence_text text NULL,
@@ -3024,7 +3025,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
     CHECK (call_status IN ('classified','queued','in_progress','succeeded','failed','skipped')),
 
   CONSTRAINT invoice_version_upgrade_types_confidence_chk
-    CHECK (confidence BETWEEN 0 AND 100),
+    CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 100),
 
   CONSTRAINT invoice_version_upgrade_types_page_chk
     CHECK (page IS NULL OR page >= 1),

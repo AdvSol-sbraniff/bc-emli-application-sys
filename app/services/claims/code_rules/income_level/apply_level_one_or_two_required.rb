@@ -59,7 +59,7 @@ module Claims
 
         def rulecheck_row
           now = Time.current
-          rule_result, confidence, calculation, evidence_text, reason_text =
+          rule_result, calculation, evidence_text, reason_text =
             income_level_evaluation
 
           {
@@ -68,7 +68,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text:
               "Participant must be registered and approved as Income Level 1 or 2 for this upgrade type.",
             calculation: calculation,
@@ -102,7 +101,6 @@ module Claims
           if raw_income_level.blank?
             return [
               "warn",
-              0,
               "No matched users_eligibilitycode_id or stored users_eligibilitycodes.income_level code-located field was available for this invoice version.",
               evidence_text,
               "The deterministic enrichment step did not populate a matched eligibility-code record, and no fallback income_level fact was available. Code cannot safely decide the Income Level 1/2 requirement without that database fact. Admin should confirm the eligibility-code match and rerun enrichment if the record exists."
@@ -112,7 +110,6 @@ module Claims
           unless income_level
             return [
               "warn",
-              0,
               "Matched users_eligibilitycodes.income_level value could not be parsed as 1, 2, or 3: #{raw_income_level}.",
               evidence_text,
               "The matched income_level value is present but not parseable as a supported ESP income level. Admin should correct the eligibility-code record or investigate why the fallback code-located field contains an unexpected value."
@@ -122,7 +119,6 @@ module Claims
           if [1, 2].include?(income_level)
             return [
               "pass",
-              100,
               "income_level=#{income_level}; income_level IN (1, 2) => true.",
               evidence_text,
               "The matched eligibility-code record shows Income Level #{income_level}, which satisfies the program requirement that this upgrade type is limited to participants registered and approved as Income Level 1 or 2."
@@ -131,7 +127,6 @@ module Claims
 
           [
             "fail",
-            100,
             "income_level=#{income_level}; income_level IN (1, 2) => false.",
             evidence_text,
             "The matched eligibility-code record shows Income Level 3. The current ESP requirements limit this upgrade type to participants registered and approved as Income Level 1 or 2, so this deterministic check fails unless the eligibility-code record is incorrect."

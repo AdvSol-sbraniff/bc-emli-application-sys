@@ -57,8 +57,7 @@ module Claims
 
         def rulecheck_row
           now = Time.current
-          result, confidence, calculation, evidence_text, reason_text =
-            timing_evaluation
+          result, calculation, evidence_text, reason_text = timing_evaluation
 
           {
             invoice_version_id: invoice_version.id,
@@ -66,7 +65,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: result,
-            confidence: confidence,
             expected_text:
               "The electrical service upgrade must be installed within six months of the associated heat pump or heat pump water heater installation.",
             calculation: calculation,
@@ -115,7 +113,6 @@ module Claims
 
           [
             result,
-            100,
             [
               "esu_service_upgrade_date=#{service_date.iso8601}",
               "esu_service_upgrade_date_source=#{service_date_source}",
@@ -151,7 +148,6 @@ module Claims
 
           [
             "warn",
-            0,
             [
               "esu_service_upgrade_date=#{service_date_value}",
               "esu_service_upgrade_date_source=#{service_date_source}",

@@ -151,7 +151,6 @@ module Claims
         clone = source_invoice_version.dup
         clone.invoice_versionno = next_versionno
         clone.genai_raw_json = nil
-        clone.genai_overall_confidence = 0
         clone.genai_result = nil
         clone.ahri_product_id = nil
         clone.neea_product_id = nil

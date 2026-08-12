@@ -104,7 +104,7 @@ module Claims
 
         def rulecheck_row
           now = Time.current
-          rule_result, confidence, calculation, evidence_text, reason_text =
+          rule_result, calculation, evidence_text, reason_text =
             rebate_cap_evaluation
 
           {
@@ -113,7 +113,6 @@ module Claims
             source_engine: "code",
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text:
               "For a #{config.fetch(:display_name)}, the claimed base rebate must be no more than 100% of the eligible upgrade cost and no more than the source-fuel maximum for the matched income level.",
             calculation: calculation,
@@ -172,7 +171,6 @@ module Claims
 
           [
             result,
-            result == "warn" ? 0 : 100,
             [
               "#{REBATE_FIELD_KEY}=#{money(rebate_amount) || "(missing)"}",
               "#{line_amount_field_key}=#{money(upgrade_amount) || "(missing)"}",

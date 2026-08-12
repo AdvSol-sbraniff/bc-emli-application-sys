@@ -380,8 +380,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
             rule_result: result,
-            confidence:
-              product_list_confidence(result: result, product: product),
             expected_text:
               "For HRV/ERV ventilation upgrades, the invoice and supporting document should both identify the same product, and that product should match a row in the imported NRCan ENERGY STAR heat/energy recovery ventilator product list.",
             calculation:
@@ -403,7 +401,6 @@ module Claims
         def base_rulecheck_row(
           rule:,
           rule_result:,
-          confidence:,
           expected_text:,
           calculation:,
           evidence_text:,
@@ -417,7 +414,6 @@ module Claims
             source_engine: "code",
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text: expected_text,
             calculation: calculation,
             evidence_text: evidence_text,
@@ -455,14 +451,6 @@ module Claims
           else
             "fail"
           end
-        end
-
-        def product_list_confidence(result:, product:)
-          return 100 if result == "pass" && product.present?
-          return 100 if result == "pass"
-          return 100 if result == "fail"
-
-          0
         end
 
         def product_list_calculation_text(field_bundle:, status:, product:)

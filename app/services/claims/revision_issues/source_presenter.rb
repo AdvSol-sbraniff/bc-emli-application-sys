@@ -66,7 +66,7 @@ module Claims
               row&.rule_key.to_s.humanize,
           source_engine: row&.source_engine,
           rule_result: row&.rule_result,
-          confidence: row&.confidence,
+          compliance_score: row&.compliance_score,
           reason: row&.reason_and_likely_causes,
           evidence_text: row&.evidence_text,
           expected_text: row&.expected_text,

@@ -74,7 +74,7 @@ module Claims
 
         def rulecheck_row
           now = Time.current
-          rule_result, confidence, calculation, evidence_text, reason_text =
+          rule_result, calculation, evidence_text, reason_text =
             rebate_cap_evaluation
 
           {
@@ -83,7 +83,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text:
               "For a heat pump water heater, the claimed rebate must be no more than 100% of the eligible HPWH upgrade cost and no more than the source-fuel maximum for the matched income level.",
             calculation: calculation,
@@ -142,7 +141,6 @@ module Claims
 
           [
             result,
-            result == "warn" ? 0 : 100,
             [
               "#{REBATE_FIELD_KEY}=#{money(rebate_amount) || "(missing)"}",
               "#{HPWH_LINE_AMOUNT_FIELD_KEY}=#{money(upgrade_amount) || "(missing)"}",

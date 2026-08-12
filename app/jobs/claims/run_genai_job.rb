@@ -412,7 +412,6 @@ module Claims
         status: "succeeded",
         genai_results_json: {
           genai_result: invoice_version.genai_result,
-          genai_overall_confidence: invoice_version.genai_overall_confidence,
           contractor_advice_present:
             Claims::InvoiceVersions::BuildContractorAdvice
               .call(invoice_version_id: invoice_version.id)
@@ -950,10 +949,7 @@ module Claims
         )
       row.assign_attributes(
         call_status: call_status,
-        confidence:
-          coerce_confidence(
-            overall["overall_confidence"] || overall[:overall_confidence]
-          ),
+        confidence: nil,
         raw_json: payload,
         admin_advice:
           payload ? advice_from_rulechecks(payload) : row.admin_advice,
@@ -1033,12 +1029,6 @@ module Claims
       overall_rows =
         payloads.map { |payload| payload["overall"] || payload[:overall] || {} }
 
-      confidences =
-        overall_rows.map do |overall|
-          coerce_confidence(
-            overall["overall_confidence"] || overall[:overall_confidence]
-          )
-        end
       result_values =
         overall_rows.map { |overall| coerce_overall_result(overall) }.compact
       code_result_values =
@@ -1054,7 +1044,6 @@ module Claims
               }
             end
         },
-        genai_overall_confidence: confidences.compact.min || 0,
         genai_result: combined_result(result_values + code_result_values)
       )
     end
@@ -1172,20 +1161,6 @@ module Claims
           row["evidence_text"] || row[:evidence_text]
         ].map { |value| value.to_s.strip }.find(&:present?)
       end
-    end
-
-    def coerce_confidence(value)
-      n =
-        begin
-          raw = value || 0
-          numeric = Float(raw)
-          numeric *= 100 if numeric.positive? && numeric <= 1
-          numeric.round
-        rescue StandardError
-          0
-        end
-
-      [[n, 0].max, 100].min
     end
 
     def coerce_overall_result(overall)

@@ -291,7 +291,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:rebate_cap),
             rule_result: result,
-            confidence: result == "pass" || result == "fail" ? 100 : 0,
             expected_text:
               "For ASHP convert-from-electric/wood, the claimed rebate must be no more than 100% of the eligible ASHP upgrade cost and no more than the Income Level 1/2 maximum shown in the requirements table.",
             calculation: [
@@ -339,7 +338,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:product_specs),
             rule_result: result,
-            confidence: result == "pass" || result == "fail" ? 100 : 0,
             expected_text:
               "Ductless mini-split, ductless multi-split, and central ducted ASHPs must meet the SEER/HSPF or SEER2/HSPF2 threshold, use a variable speed compressor, and have minimum capacity of 12,000 BTU.",
             calculation:
@@ -368,7 +366,6 @@ module Claims
               base_rulecheck_row(
                 rule: RULES.fetch(:multisplit_heads),
                 rule_result: "pass",
-                confidence: 100,
                 expected_text:
                   "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
                 calculation:
@@ -387,7 +384,6 @@ module Claims
               base_rulecheck_row(
                 rule: RULES.fetch(:multisplit_heads),
                 rule_result: "fail",
-                confidence: 100,
                 expected_text:
                   "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
                 calculation:
@@ -406,7 +402,6 @@ module Claims
               base_rulecheck_row(
                 rule: RULES.fetch(:multisplit_heads),
                 rule_result: "pass",
-                confidence: 100,
                 expected_text:
                   "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
                 calculation:
@@ -423,7 +418,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:multisplit_heads),
             rule_result: product_multisplit_source?(product) ? "pass" : "warn",
-            confidence: product_multisplit_source?(product) ? 100 : 0,
             expected_text:
               "Ductless multi-split ASHPs must install a minimum of two indoor head units.",
             calculation:
@@ -727,7 +721,6 @@ module Claims
           base_rulecheck_row(
             rule: rule,
             rule_result: "info",
-            confidence: 0,
             expected_text: expected_text,
             calculation:
               "No matched product row was available from #{source_product_pointer}.",
@@ -740,7 +733,6 @@ module Claims
         def base_rulecheck_row(
           rule:,
           rule_result:,
-          confidence:,
           expected_text:,
           calculation:,
           evidence_text:,
@@ -754,7 +746,6 @@ module Claims
             source_engine: "code",
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text: expected_text,
             calculation: calculation,
             evidence_text: evidence_text,

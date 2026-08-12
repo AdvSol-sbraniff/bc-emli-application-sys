@@ -477,6 +477,12 @@ module Api
           "contractor_advice" =>
             ::Claims::InvoiceVersions::BuildContractorAdvice.call(
               invoice_version_id: invoice_version.id
+            ),
+          "show_admin_field_revision_plus" =>
+            (
+              ::Claims::ValidationgenaiConfig.order(:created_at).pick(
+                :show_admin_field_revision_plus
+              ) != false
             )
         )
       end
@@ -672,7 +678,7 @@ module Api
               rule_key
               contractor_display_name
               rule_result
-              confidence
+              compliance_score
               expected_text
               calculation
               evidence_text

@@ -37,6 +37,7 @@ module Api
             user_record0: "",
             admin_advice_intro: "",
             admin_advice_closing: "",
+            show_admin_field_revision_plus: true,
             created_at: Time.current,
             updated_at: Time.current
           )
@@ -51,6 +52,7 @@ module Api
           user_record0
           admin_advice_intro
           admin_advice_closing
+          show_admin_field_revision_plus
         ].each { |key| attrs[key] = params[key] if params.key?(key) }
         attrs
       end
@@ -65,6 +67,7 @@ module Api
           user_record0: config.user_record0,
           admin_advice_intro: config.admin_advice_intro,
           admin_advice_closing: config.admin_advice_closing,
+          show_admin_field_revision_plus: config.show_admin_field_revision_plus,
           created_at: config.created_at,
           updated_at: config.updated_at
         }

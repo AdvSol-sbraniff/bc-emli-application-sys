@@ -202,7 +202,7 @@ If the package contains exactly one resolved invoice PDF, the system promotes th
 
 Supporting files are promoted into `claims.supporting_documents`, typed with `supporting_document_type_id`, and enriched with `claims.supporting_document_located_fields` when the system can extract typed facts from them.
 
-GenAI and code-rule processing then evaluates the invoice version. GenAI produces located fields and rulechecks. Deterministic code produces code-owned facts, product-list matches, and rulechecks. The combined result is summarized on the invoice version through fields such as `genai_result`, `genai_overall_confidence`, and `genai_admin_advice`, while detailed evidence remains in located-field, rulecheck, step-run, line-item, supporting-document, and product-list rows.
+GenAI and code-rule processing then evaluates the invoice version. GenAI produces located fields and rulechecks. Deterministic code produces code-owned facts, product-list matches, and rulechecks. The combined result is summarized on the invoice version through fields such as `genai_result` and `genai_admin_advice`, while detailed evidence remains in located-field, rulecheck, step-run, line-item, supporting-document, and product-list rows. GenAI rulechecks also retain a 0-100 `compliance_score` that positions the evidence from clearly noncompliant to clearly and completely compliant.
 
 The claim-level invoice status moves through processing states such as `upload_in_progress`, `ocr_in_progress`, `genai_in_progress`, `genai_complete`, and failure states such as `ocr_failed` or `genai_failed`. After AI processing, business workflow statuses such as `admin_review_inbox`, `contractor_revision_inbox`, `in_review`, `approved_pending`, `approved_paid`, and `ineligible` describe review outcomes rather than OCR or GenAI execution.
 
@@ -330,7 +330,7 @@ Important column groups include:
 - Parent/version identity: `invoice_id`, `invoice_versionno`.
 - PDF storage metadata: `storage_provider`, `storage_key`, `original_filename`, `content_type`, `byte_size`, `sha256`.
 - Document Intelligence output: `di_raw_json`, `di_page_map`, first-class OCR fields such as `di_ocr_invoice_id`, `di_ocr_invoice_date`, `di_ocr_vendor_name`, `di_ocr_customer_name`, `di_ocr_invoice_total`, and their page/polygon evidence columns.
-- GenAI summary output: `genai_raw_json`, `genai_overall_confidence`, `genai_result`, `genai_admin_advice`.
+- GenAI summary output: `genai_raw_json`, `genai_result`, `genai_admin_advice`.
 - Product-list match links: `ahri_product_id`, `neea_product_id`, `awhp_product_id`, `ohpa_product_id`.
 
 `storage_key` is the canonical blob path inside the storage container, not a full signed URL. For example, a key might look like `sessions/11111111-1111-1111-1111-111111111111/pdfs/22222222-2222-2222-2222-222222222222/original.pdf`. The account host, container name, and temporary SAS query string are not stored in this column.
@@ -1123,7 +1123,7 @@ The normal validation flow is:
 5. Upgrade-specific code checks run where the enabled code rule has an executor implementation.
 6. Outputs are persisted as rulechecks and summarized on `claims.invoice_versions` and `claims.invoice_version_upgrade_types`.
 
-The detailed evidence remains in `claims.invoice_version_rulechecks`. Summary fields such as `claims.invoice_versions.genai_result`, `genai_overall_confidence`, and `genai_admin_advice` are convenience fields for the current processed version; they do not replace the rulecheck rows.
+The detailed evidence remains in `claims.invoice_version_rulechecks`, including the model-generated `compliance_score` on GenAI rules. Summary fields such as `claims.invoice_versions.genai_result` and `genai_admin_advice` are convenience fields for the current processed version; they do not replace the rulecheck rows.
 
 ### 7.2 `claims.code_rules`
 
@@ -2409,7 +2409,7 @@ Validation and advice evaluate the resolved invoice version. The invoice status 
 | `product_lookup_enrichment`      | `genai_in_progress`          | `invoice_version_id`                            | Searches downloaded product lists and writes product match foreign keys such as `ahri_product_id`, `neea_product_id`, `awhp_product_id`, or `ohpa_product_id` on `claims.invoice_versions`. These IDs support deterministic checks and PDF-viewer product accordions. |
 | `code_common`                    | `genai_in_progress`          | `invoice_version_id` plus `common` upgrade type | Runs deterministic common rules, such as eligibility-code and invoice-date checks. Results are stored in `claims.invoice_version_rulechecks` with `source_engine = 'code'`.                                                                                           |
 | `code_upgrade`                   | `genai_in_progress`          | `invoice_version_id` plus detected upgrade type | Runs deterministic rules for each detected upgrade type with enabled code rules. This includes product-list and upgrade-specific database/document comparisons.                                                                                                       |
-| `aggregate_advice`               | `genai_in_progress`          | `invoice_version_id`                            | Combines GenAI and code outputs into final invoice-version summary fields such as `genai_result`, `genai_overall_confidence`, and `genai_admin_advice`.                                                                                                               |
+| `aggregate_advice`               | `genai_in_progress`          | `invoice_version_id`                            | Combines GenAI and code outputs into final invoice-version summary fields such as `genai_result` and `genai_admin_advice`.                                                                                                                                            |
 
 Some step types are plural by nature. `ocr_read`, `triage_classifier`, and `supporting_document_extraction` can run once per staged document. `genai_upgrade` and `code_upgrade` can run once per detected upgrade type. `genai_common`, `code_common`, `product_lookup_enrichment`, and `aggregate_advice` are normally one row per validation pass.
 

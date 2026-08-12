@@ -66,7 +66,7 @@ module Claims
 
         def rulecheck_row
           now = Time.current
-          rule_result, confidence, calculation, evidence_text, reason_text =
+          rule_result, calculation, evidence_text, reason_text =
             rebate_cap_evaluation
 
           {
@@ -75,7 +75,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text:
               "For an electrical service upgrade, the claimed rebate must be no more than 100% of the eligible ESU upgrade cost and no more than the income-level maximum.",
             calculation: calculation,
@@ -127,7 +126,6 @@ module Claims
 
           [
             result,
-            result == "warn" ? 0 : 100,
             [
               "#{REBATE_FIELD_KEY}=#{money(rebate_amount) || "(missing)"}",
               "#{ESU_LINE_AMOUNT_FIELD_KEY}=#{money(upgrade_amount) || "(missing)"}",

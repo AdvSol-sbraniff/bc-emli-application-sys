@@ -5,6 +5,7 @@ import {
   Heading,
   IconButton,
   Spinner,
+  Switch,
   Tab,
   TabList,
   TabPanel,
@@ -26,6 +27,7 @@ type ConfigDto = {
   user_record0: string | null;
   admin_advice_intro: string | null;
   admin_advice_closing: string | null;
+  show_admin_field_revision_plus: boolean;
   updated_at?: string | null;
 };
 
@@ -40,6 +42,7 @@ export default function RulesetConfigEditorScreen() {
   const [userRecord0, setUserRecord0] = useState<string>('');
   const [adminAdviceIntro, setAdminAdviceIntro] = useState<string>('');
   const [adminAdviceClosing, setAdminAdviceClosing] = useState<string>('');
+  const [showAdminFieldRevisionPlus, setShowAdminFieldRevisionPlus] = useState<boolean>(true);
   const [initialValues, setInitialValues] = useState({
     systemRecord: '',
     documentTriageSystemRecord: '',
@@ -47,6 +50,7 @@ export default function RulesetConfigEditorScreen() {
     userRecord0: '',
     adminAdviceIntro: '',
     adminAdviceClosing: '',
+    showAdminFieldRevisionPlus: true,
   });
 
   const isDirty =
@@ -55,7 +59,8 @@ export default function RulesetConfigEditorScreen() {
     supportingDocumentExtractionSystemRecord !== initialValues.supportingDocumentExtractionSystemRecord ||
     userRecord0 !== initialValues.userRecord0 ||
     adminAdviceIntro !== initialValues.adminAdviceIntro ||
-    adminAdviceClosing !== initialValues.adminAdviceClosing;
+    adminAdviceClosing !== initialValues.adminAdviceClosing ||
+    showAdminFieldRevisionPlus !== initialValues.showAdminFieldRevisionPlus;
 
   function applyConfig(data: ConfigDto) {
     const values = {
@@ -65,6 +70,7 @@ export default function RulesetConfigEditorScreen() {
       userRecord0: data.user_record0 ?? '',
       adminAdviceIntro: data.admin_advice_intro ?? '',
       adminAdviceClosing: data.admin_advice_closing ?? '',
+      showAdminFieldRevisionPlus: data.show_admin_field_revision_plus !== false,
     };
 
     setConfig(data);
@@ -74,6 +80,7 @@ export default function RulesetConfigEditorScreen() {
     setUserRecord0(values.userRecord0);
     setAdminAdviceIntro(values.adminAdviceIntro);
     setAdminAdviceClosing(values.adminAdviceClosing);
+    setShowAdminFieldRevisionPlus(values.showAdminFieldRevisionPlus);
     setInitialValues(values);
   }
 
@@ -118,6 +125,7 @@ export default function RulesetConfigEditorScreen() {
           user_record0: userRecord0,
           admin_advice_intro: adminAdviceIntro,
           admin_advice_closing: adminAdviceClosing,
+          show_admin_field_revision_plus: showAdminFieldRevisionPlus,
         }),
       });
 
@@ -201,6 +209,7 @@ export default function RulesetConfigEditorScreen() {
                 <Tab>DI Guidance</Tab>
                 <Tab>Advice Intro</Tab>
                 <Tab>Advice Close</Tab>
+                <Tab>Admin PDF Viewer</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel px={0} pt={3}>
@@ -264,6 +273,29 @@ export default function RulesetConfigEditorScreen() {
                     onChange={(e) => setAdminAdviceClosing(e.target.value)}
                     minH="220px"
                   />
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={4}>
+                    Controls field-level revision actions in the admin PDF viewer. Rule-level revision actions are not
+                    affected.
+                  </Text>
+                  <Flex align="center" justify="space-between" gap={4} borderWidth="1px" borderRadius="md" p={4}>
+                    <Box>
+                      <Text fontSize="sm" fontWeight="semibold">
+                        Show field revision plus signs
+                      </Text>
+                      <Text fontSize="sm" opacity={0.7} mt={1}>
+                        Allow admins to start a revision issue directly from an invoice or supporting-document field.
+                      </Text>
+                    </Box>
+                    <Switch
+                      aria-label="Show field revision plus signs"
+                      colorScheme="blue"
+                      isChecked={showAdminFieldRevisionPlus}
+                      onChange={(event) => setShowAdminFieldRevisionPlus(event.target.checked)}
+                    />
+                  </Flex>
                 </TabPanel>
               </TabPanels>
             </Tabs>

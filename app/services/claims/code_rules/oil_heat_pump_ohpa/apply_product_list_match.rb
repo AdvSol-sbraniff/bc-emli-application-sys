@@ -194,7 +194,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
             rule_result: product_list_rule_result(status),
-            confidence: matched ? 100 : 0,
             expected_text:
               "After invoice AHRI evidence is present and corroborated by supporting-document AHRI evidence, the agreed AHRI should match a row in the imported NRCan Oil to Heat Pump Affordability BC qualified product list.",
             calculation:
@@ -216,7 +215,6 @@ module Claims
         def base_rulecheck_row(
           rule:,
           rule_result:,
-          confidence:,
           expected_text:,
           calculation:,
           evidence_text:,
@@ -230,7 +228,6 @@ module Claims
             source_engine: "code",
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text: expected_text,
             calculation: calculation,
             evidence_text: evidence_text,

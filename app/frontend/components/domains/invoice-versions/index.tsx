@@ -263,11 +263,11 @@ const ruleSourceLabel = (rulecheck: any) => {
   return sourceEngine || '';
 };
 
-const ruleConfidenceLabel = (rulecheck: any, label = 'confidence') => {
+const ruleComplianceScoreLabel = (rulecheck: any) => {
   const sourceEngine = String(rulecheck?.source_engine ?? '').toLowerCase();
   if (sourceEngine !== 'genai') return '';
-  if (rulecheck?.confidence == null || rulecheck.confidence === '') return '';
-  return `${label} ${Number(rulecheck.confidence).toFixed(0)}`;
+  if (rulecheck?.compliance_score == null || rulecheck.compliance_score === '') return '';
+  return `Compliance score: ${Number(rulecheck.compliance_score).toFixed(0)} / 100`;
 };
 
 const ruleDefinitionLabel = (rulecheck: any) => {
@@ -973,6 +973,7 @@ export const InvoiceVersionShowScreen = () => {
     : !canAddRevisionIssue
       ? 'Revision issues can be added while the invoice is in the first-level admin inbox.'
       : undefined;
+  const showAdminFieldRevisionPlus = readData?.show_admin_field_revision_plus === true;
 
   const revisionIssueForRulecheck = (row: any) => revisionIssueByIdentity.get(rulecheckRevisionIdentityKey(row));
   const revisionIssueForInvoiceField = (row: any) => revisionIssueByIdentity.get(invoiceFieldRevisionIdentityKey(row));
@@ -1011,6 +1012,14 @@ export const InvoiceVersionShowScreen = () => {
   };
 
   const invoiceFieldRevisionProps = (row: any) => {
+    if (!showAdminFieldRevisionPlus) {
+      return {
+        revisionChecked: undefined,
+        onAddToRevision: undefined,
+        revisionAddDisabledReason: undefined,
+      };
+    }
+
     const sourceId = String(row?.id || '').trim();
     const issue = revisionIssueForInvoiceField(row);
     return {
@@ -1025,6 +1034,14 @@ export const InvoiceVersionShowScreen = () => {
   };
 
   const diFieldRevisionProps = (fieldKey: string) => {
+    if (!showAdminFieldRevisionPlus) {
+      return {
+        revisionChecked: undefined,
+        onAddToRevision: undefined,
+        revisionAddDisabledReason: undefined,
+      };
+    }
+
     const issue = revisionIssueForDiField(fieldKey);
     return {
       revisionChecked: !!issue,
@@ -2591,7 +2608,9 @@ export const InvoiceVersionShowScreen = () => {
                                   <Box
                                     mt="3px"
                                     display="grid"
-                                    gridTemplateColumns="160px minmax(0, 1fr) 26px"
+                                    gridTemplateColumns={
+                                      showAdminFieldRevisionPlus ? '160px minmax(0, 1fr) 26px' : '160px minmax(0, 1fr)'
+                                    }
                                     columnGap="8px"
                                     rowGap="2px"
                                     alignItems="baseline"
@@ -2641,25 +2660,27 @@ export const InvoiceVersionShowScreen = () => {
                                           >
                                             {fieldValue}
                                           </Text>
-                                          <RevisionAddIconButton
-                                            label={displayLocatedFieldLabel(field)}
-                                            included={!!issue}
-                                            onAdd={
-                                              issue
-                                                ? () => revisionWorkspace.focusIssue(issue.id)
-                                                : canRunWorkflowActions && canAddRevisionIssue
-                                                  ? () =>
-                                                      void addToRevision(
-                                                        'supporting_document_field',
-                                                        'supporting_document_located_field_id',
-                                                        String(field?.id),
-                                                      )
-                                                  : undefined
-                                            }
-                                            disabledReason={
-                                              !issue && canRunWorkflowActions ? revisionAddDisabledReason : undefined
-                                            }
-                                          />
+                                          {showAdminFieldRevisionPlus ? (
+                                            <RevisionAddIconButton
+                                              label={displayLocatedFieldLabel(field)}
+                                              included={!!issue}
+                                              onAdd={
+                                                issue
+                                                  ? () => revisionWorkspace.focusIssue(issue.id)
+                                                  : canRunWorkflowActions && canAddRevisionIssue
+                                                    ? () =>
+                                                        void addToRevision(
+                                                          'supporting_document_field',
+                                                          'supporting_document_located_field_id',
+                                                          String(field?.id),
+                                                        )
+                                                    : undefined
+                                              }
+                                              disabledReason={
+                                                !issue && canRunWorkflowActions ? revisionAddDisabledReason : undefined
+                                              }
+                                            />
+                                          ) : null}
                                           {issue ? (
                                             <Box gridColumn="1 / -1">
                                               <AdminRevisionSourceAnchor issueId={issue.id} />
@@ -4009,7 +4030,6 @@ export const InvoiceVersionShowScreen = () => {
     SECTION 07.05.30.05 - GENAI OVERALL SUMMARY (from /read)
     PURPOSE: Quiet summary at top of Rule Checks panel
     REQUIRES: readData includes these invoice_versions columns:
-      ? genai_overall_confidence
       ? genai_result
       ? contractor_advice
    ============================================================ */}
@@ -4618,9 +4638,9 @@ export const InvoiceVersionShowScreen = () => {
                     {ruleSourceLabel(ruleDetailsDrawerRulecheck)}
                   </Badge>
                 )}
-                {ruleConfidenceLabel(ruleDetailsDrawerRulecheck) && (
+                {ruleComplianceScoreLabel(ruleDetailsDrawerRulecheck) && (
                   <Text fontSize="xs" opacity={0.7}>
-                    {ruleConfidenceLabel(ruleDetailsDrawerRulecheck)}
+                    {ruleComplianceScoreLabel(ruleDetailsDrawerRulecheck)}
                   </Text>
                 )}
               </Flex>

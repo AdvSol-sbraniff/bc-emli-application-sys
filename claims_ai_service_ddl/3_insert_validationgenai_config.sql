@@ -9,6 +9,7 @@ WITH config_row (
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
+  show_admin_field_revision_plus,
   created_at,
   updated_at
 ) AS (
@@ -25,9 +26,8 @@ Do not query external systems, infer unavailable database facts, or invent missi
 Output-json-schema:
 {
   "overall": {
-    "overall_confidence": 0,
     "overall_result": "pass|info|warn|fail",
-    "admin_advice": "string (SECTION-LEVEL ADVICE FOR THIS RULESET CALL ONLY. Do not write a greeting, intro, sign-off, or closing. Write directly and plainly. Use a concise bullet list. IMPORTANT: every bullet must reference a non-pass rule_key from rulechecks[] and must be consistent with that rule_result. Never mention a pass/green rule in admin_advice. If you want to mention useful context for a passed rule, set that rule_result to info instead of pass. Do not mention GenAI, OCR, source_engine, confidence scores, or internal implementation details.)"
+    "admin_advice": "string (SECTION-LEVEL ADVICE FOR THIS RULESET CALL ONLY. Do not write a greeting, intro, sign-off, or closing. Write directly and plainly. Use a concise bullet list. IMPORTANT: every bullet must reference a non-pass rule_key from rulechecks[] and must be consistent with that rule_result. Never mention a pass/green rule in admin_advice. If you want to mention useful context for a passed rule, set that rule_result to info instead of pass. Do not mention GenAI, OCR, source_engine, compliance scores, or internal implementation details.)"
   },
   "located_fields": [
     {
@@ -43,7 +43,7 @@ Output-json-schema:
     {
       "rule_key": "string",
       "rule_result": "pass|info|warn|fail",
-      "confidence": 0,
+      "compliance_score": 0,
       "expected_text": null,
       "calculation": null,
       "evidence_text": null,
@@ -61,11 +61,12 @@ Rules:
 - Use rule_result="info" only when the rule passes enough that no contractor correction is requested, but the evidence is not fully squeaky clean. Info is blue: a pass with a meaningful non-blocking caveat or limitation. It is not a clean green pass, not trivia, and not generic helpful context.
 - Use rule_result="warn" when there is no visible contradiction or material failure, but an admin should verify one specific context, supporting document, versioning question, duplicate-history question, or ambiguous value. A warning is targeted review, not a contractor failure.
 - Use rule_result="fail" when visible evidence contradicts the rule, a material requirement is clearly not met, or visible math clearly fails.
-- Do not use warn as a safe middle when supplied evidence is clear. A clear contradiction or clear mismatch is fail. Missing, incomplete, or ambiguous evidence is warn unless the specific rule identifies the missing evidence as a mandatory supporting-document requirement and instructs fail.
+- For each rule, first assign one compliance_score from 0 to 100 representing where the supplied evidence falls from clearly noncompliant to clearly and completely compliant with that specific requirement. Judge the evidence as a whole using ordinary professional judgment. Use 0-24 for fail, 25-49 for warn, 50-74 for info, and 75-100 for pass. Scores close to a boundary should reflect genuinely borderline evidence. This is a compliance position, not confidence or probability.
+- Use ordinary professional judgment and read the supplied evidence as a whole. Do not use warn as a safe middle. Warn only when a concrete, material uncertainty actually requires admin verification under the specific rule. Follow each rule's evidence standard, including when reasonable inference is allowed. A clear contradiction or clear mismatch is fail.
 - For identity and record-matching rules, visible invoice values that clearly identify a different contractor, homeowner/customer, eligibility-code owner, property, claimant, or other matched party than the supplied database record should be fail, not warn.
 - Never put a pass rule in admin_advice. If a rule is worth mentioning in admin_advice because it has a meaningful non-blocking caveat, set rule_result="info". Warn and fail rules must always be represented in admin_advice.
 - Set overall.overall_result to "fail" if any material rule fails, "warn" if there are warnings but no failures, "info" if there are info results but no warnings/failures, and "pass" only when all rulechecks are pass.
-- reason_and_likely_causes is mandatory for every rulecheck. Never leave it blank. Write at least 5 complete sentences for every rulecheck, including pass rules.
+- reason_and_likely_causes is mandatory for every rulecheck. Never leave it blank. Explain the evidence and decision clearly and concisely. Include only facts material to this specific rule.
 - For pass rules, explain why the supplied evidence satisfies the rule and why no extra admin verification is needed unless the rule depends on facts outside the supplied evidence.
 - For info rules, explain what passed, what specific caveat makes the result not fully squeaky clean, why no contractor correction is requested, and what the admin/contractor should understand.
 - For warn rules, explain the missing or ambiguous fact, the concrete admin review step, why this is a warning rather than a failure, and what evidence would turn it into pass or fail.
@@ -337,6 +338,7 @@ $intro$,
     $closing$
 If any item asks for a correction or supporting document, please upload the updated invoice or document and resubmit when you are ready.
 $closing$,
+    true,
     TIMESTAMP '2026-03-13 21:27:54.352533',
     NOW()
   )
@@ -350,8 +352,9 @@ INSERT INTO claims.validationgenai_config (
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
-    created_at,
-    updated_at
+  show_admin_field_revision_plus,
+  created_at,
+  updated_at
   )
   SELECT
     id,
@@ -361,6 +364,7 @@ INSERT INTO claims.validationgenai_config (
     user_record0,
     admin_advice_intro,
     admin_advice_closing,
+    show_admin_field_revision_plus,
     created_at,
     updated_at
   FROM config_row
@@ -371,6 +375,7 @@ INSERT INTO claims.validationgenai_config (
     user_record0 = EXCLUDED.user_record0,
     admin_advice_intro = EXCLUDED.admin_advice_intro,
     admin_advice_closing = EXCLUDED.admin_advice_closing,
+    show_admin_field_revision_plus = EXCLUDED.show_admin_field_revision_plus,
     updated_at = NOW()
   RETURNING id
 )

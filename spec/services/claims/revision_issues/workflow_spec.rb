@@ -59,7 +59,7 @@ RSpec.describe "Claims durable revision issue workflow" do
         rule_key: rule_key,
         contractor_display_name: "Invoice information is complete",
         rule_result: rule_result,
-        confidence: 91,
+        compliance_score: rule_result == "fail" ? 12 : 38,
         evidence_text: "The invoice number needs confirmation.",
         reason_and_likely_causes: "The printed value is partly obscured.",
         created_at: now,
@@ -516,7 +516,7 @@ RSpec.describe "Claims durable revision issue workflow" do
         rule_key: rule.rule_key,
         contractor_display_name: rule.contractor_display_name,
         rule_result: "fail",
-        confidence: 90,
+        compliance_score: 11,
         reason_and_likely_causes: "The same check failed in another context."
       )
 
@@ -582,7 +582,7 @@ RSpec.describe "Claims durable revision issue workflow" do
         rule_key: new_rule_key,
         contractor_display_name: "Review newly detected information",
         rule_result: "pass",
-        confidence: 95,
+        compliance_score: 93,
         reason_and_likely_causes:
           "The corrected package exposed new information."
       )

@@ -109,7 +109,6 @@ module Claims
         row(
           rule_key: "first_class_invoice_fields_present",
           rule_result: pass ? "pass" : "warn",
-          confidence: 100,
           expected_text: "OCR first-class invoice fields are present.",
           detail_text:
             (
@@ -161,7 +160,6 @@ module Claims
         row(
           rule_key: "submission_within_six_months",
           rule_result: pass ? "pass" : "fail",
-          confidence: 100,
           expected_text: "invoices.created_at <= invoice_date + 6 months.",
           detail_text:
             "invoice_date=#{invoice_date.iso8601}; program_received_date=#{program_received_date.iso8601}.",
@@ -207,7 +205,6 @@ module Claims
         row(
           rule_key: "eligibility_code_valid_for_invoice_date",
           rule_result: pass ? "pass" : "fail",
-          confidence: 100,
           expected_text:
             "Invoice date is on or after eligibility-code approval and on or before six months after approval.",
           detail_text:
@@ -246,7 +243,6 @@ module Claims
             row(
               rule_key: "eligibility_code_found_in_database",
               rule_result: "pass",
-              confidence: 100,
               expected_text:
                 "The classifier-located eligibility code resolves to a populated claims.users_eligibilitycodes record.",
               detail_text:
@@ -262,7 +258,6 @@ module Claims
         row(
           rule_key: "eligibility_code_found_in_database",
           rule_result: "fail",
-          confidence: 100,
           expected_text:
             "The classifier-located eligibility code resolves to a populated claims.users_eligibilitycodes record.",
           detail_text:
@@ -285,7 +280,6 @@ module Claims
         row(
           rule_key: MULTIPLE_SPACE_SYSTEMS_RULE_KEY,
           rule_result: pass ? "pass" : "fail",
-          confidence: 100,
           expected_text:
             "Current invoice contains no more than one primary space heating system upgrade type.",
           detail_text:
@@ -316,7 +310,6 @@ module Claims
             row(
               rule_key: PRIOR_REBATE_RULE_KEY,
               rule_result: "warn",
-              confidence: 0,
               expected_text:
                 "Matched participant is available before checking prior rebate payments.",
               detail_text:
@@ -362,7 +355,6 @@ module Claims
         row(
           rule_key: PRIOR_REBATE_RULE_KEY,
           rule_result: rule_result,
-          confidence: 100,
           expected_text:
             "Participant has no prior current invoice that is neither ineligible nor contractor-withdrawn for the same one-rebate-limited upgrade area.",
           detail_text:
@@ -546,7 +538,6 @@ module Claims
         row(
           rule_key: rule_key,
           rule_result: "warn",
-          confidence: 0,
           expected_text: expected_text,
           detail_text: detail_text,
           evidence_text: nil,
@@ -558,7 +549,6 @@ module Claims
       def row(
         rule_key:,
         rule_result:,
-        confidence:,
         expected_text:,
         detail_text:,
         calculation: nil,
@@ -573,7 +563,6 @@ module Claims
           source_engine: "code",
           rule_key: rule_key,
           rule_result: rule_result,
-          confidence: confidence,
           expected_text: expected_text,
           calculation: calculation,
           evidence_text: evidence_text.presence || detail_text,

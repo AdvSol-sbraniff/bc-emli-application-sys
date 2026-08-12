@@ -12,7 +12,7 @@ class Claims::CurrentInvoiceVersionBlueprint < Blueprinter::Base
            :invoice_versionno
 
     # ---- GenAI fields ----
-    fields :genai_overall_confidence, :genai_result
+    fields :genai_result
 
     field :contractor_advice do |invoice_version, _options|
       Claims::InvoiceVersions::BuildContractorAdvice.call(

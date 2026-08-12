@@ -475,7 +475,6 @@ module Api
               rule_key
               contractor_display_name
               rule_result
-              confidence
               expected_text
               calculation
               evidence_text

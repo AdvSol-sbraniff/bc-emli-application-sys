@@ -24,7 +24,6 @@ SELECT DISTINCT ON (iv.invoice_id)
   iv.byte_size,
   iv.sha256,
   iv.genai_raw_json,
-  iv.genai_overall_confidence,
   iv.genai_result,
   iv.di_raw_json,
   iv.di_page_map,
@@ -419,7 +418,6 @@ SELECT
   civ.di_ocr_invoice_id               AS latest_di_ocr_invoice_id,
 
   civ.genai_result  AS latest_genai_result,
-  civ.genai_overall_confidence        AS latest_genai_overall_confidence,
 
   civut.latest_detected_upgrade_type_keys AS latest_detected_upgrade_type_keys,
   civut.latest_detected_upgrade_types_json AS latest_detected_upgrade_types_json,
@@ -567,7 +565,6 @@ SELECT
   iv.byte_size                    AS invoice_version_byte_size,
   iv.sha256                       AS invoice_version_sha256,
   iv.genai_raw_json               AS invoice_version_genai_raw_json,
-  iv.genai_overall_confidence     AS invoice_version_genai_overall_confidence,
   iv.genai_result AS invoice_version_genai_result,
   iv.di_raw_json                  AS invoice_version_di_raw_json,
   iv.di_page_map                  AS invoice_version_di_page_map,

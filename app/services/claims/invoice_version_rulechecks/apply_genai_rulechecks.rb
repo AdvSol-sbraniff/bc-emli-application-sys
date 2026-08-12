@@ -62,7 +62,8 @@ module Claims
         return nil if rule_key.blank?
 
         rule_result = coerce_rule_result(r)
-        confidence = coerce_confidence(r["confidence"] || r[:confidence])
+        compliance_score =
+          coerce_compliance_score(r["compliance_score"] || r[:compliance_score])
 
         # you decided strings – we’ll accept JSON too, but stringify it safely
         expected_text =
@@ -76,7 +77,7 @@ module Claims
           source_engine: "genai",
           rule_key: rule_key,
           rule_result: rule_result,
-          confidence: confidence,
+          compliance_score: compliance_score,
           expected_text: expected_text,
           calculation: (r["calculation"] || r[:calculation]),
           evidence_text: stringify_any(r["evidence_text"] || r[:evidence_text]),
@@ -107,14 +108,18 @@ module Claims
         "fail"
       end
 
-      def coerce_confidence(v)
-        n =
-          begin
-            Integer(v || 0)
-          rescue StandardError
-            0
-          end
-        [[n, 0].max, 100].min
+      def coerce_compliance_score(value)
+        if value.nil? || value.to_s.strip.empty?
+          raise ArgumentError,
+                "compliance_score is required for every GenAI rulecheck"
+        end
+
+        score = Integer(value)
+        unless score.between?(0, 100)
+          raise ArgumentError, "compliance_score must be between 0 and 100"
+        end
+
+        score
       end
 
       def common_upgrade_type_id

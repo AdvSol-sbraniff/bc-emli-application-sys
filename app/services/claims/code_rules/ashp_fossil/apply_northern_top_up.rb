@@ -69,7 +69,7 @@ module Claims
 
         def rulecheck_row
           now = Time.current
-          rule_result, confidence, calculation, evidence_text, reason_text =
+          rule_result, calculation, evidence_text, reason_text =
             top_up_evaluation
 
           {
@@ -78,7 +78,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text:
               "A separately claimed fossil-fuel-conversion ASHP northern top-up should be for an eligible Income Level 1 or 2 home, within the equipment-category cap, north of and including the District of 100 Mile House, and connected to BC Hydro electric service.",
             calculation: calculation,
@@ -99,7 +98,6 @@ module Claims
           unless top_up_claimed?(top_up_text)
             return [
               "pass",
-              100,
               "hp_northern_top_up_evidence=(missing or no separate northern top-up visible); top_up_claimed=false.",
               field_evidence(top_up_field),
               "No separate northern top-up is visible in the named northern-top-up field, so there is no top-up amount to compare against the northern top-up caps."
@@ -149,7 +147,6 @@ module Claims
 
           [
             result,
-            result == "warn" ? 0 : 100,
             [
               "#{TOP_UP_FIELD_KEY}=#{money(amount) || "(missing)"}",
               "income_level=#{income_level || "(missing)"}",

@@ -134,7 +134,6 @@ module Claims
 
           base_rulecheck_row(
             rule_result: result,
-            confidence: %w[pass fail].include?(result) ? 100 : 0,
             expected_text:
               "The invoice should show an AHRI reference and that reference should exist in the current imported BC Hydro heat-pump product list. Supporting-document AHRI evidence is compared when present.",
             calculation:
@@ -330,7 +329,6 @@ module Claims
 
         def base_rulecheck_row(
           rule_result:,
-          confidence:,
           expected_text:,
           calculation:,
           evidence_text:,
@@ -344,7 +342,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text: expected_text,
             calculation: calculation,
             evidence_text: evidence_text,

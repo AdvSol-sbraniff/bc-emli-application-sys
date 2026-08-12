@@ -8,6 +8,9 @@ RSpec.describe "Claims contractor invoice read", type: :request do
     allow_any_instance_of(Api::Claims::InvoiceVersionsController).to receive(
       :require_claims_invoice_reader!
     )
+    allow_any_instance_of(
+      Api::Claims::InvoiceVersionsAdminController
+    ).to receive(:require_claims_admin!)
   end
 
   describe "GET /api/claims/sessions/:session_id/invoices/:invoice_id/read" do
@@ -105,7 +108,7 @@ RSpec.describe "Claims contractor invoice read", type: :request do
         rule_key: rule_key,
         contractor_display_name: "Invoice requirement test",
         rule_result: "fail",
-        confidence: 95,
+        compliance_score: 12,
         created_at: now,
         updated_at: now
       )
@@ -200,6 +203,16 @@ RSpec.describe "Claims contractor invoice read", type: :request do
         "contractor_action" =>
           "Upload a corrected invoice if the information is missing."
       )
+      expect(rulecheck).not_to have_key("compliance_score")
+
+      get "/api/claims/admin/invoice_versions/#{invoice_version.id}/read_genai"
+
+      expect(response).to have_http_status(:ok)
+      admin_rulecheck =
+        json_response
+          .fetch("rulechecks")
+          .find { |row| row.fetch("rule_key") == rule_key }
+      expect(admin_rulecheck.fetch("compliance_score")).to eq(12)
     end
   end
 end

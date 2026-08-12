@@ -408,8 +408,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:product_list_match),
             rule_result: result,
-            confidence:
-              product_list_confidence(result: result, product: product),
             expected_text:
               "For bathroom/utility/exhaust fan ventilation upgrades, the invoice and supporting document should both identify the same fan product, and that product should match a row in the imported ENERGY STAR certified ventilating fan product list.",
             calculation:
@@ -439,7 +437,6 @@ module Claims
           base_rulecheck_row(
             rule: RULES.fetch(:capacity_minimum),
             rule_result: capacity_rule_result(capacity_status),
-            confidence: capacity_rule_confidence(capacity_status),
             expected_text:
               "For bathroom/utility/exhaust fan ventilation upgrades, visible or imported product evidence should support fan capacity of at least 85 cfm (40 L/s) at 50 Pa (0.2 in. w.c.). The imported ENERGY STAR fan list field bathroom_utility_airflow_at_0_25_in_wg is treated as conservative pass evidence when it is at least 85 cfm.",
             calculation:
@@ -462,7 +459,6 @@ module Claims
         def base_rulecheck_row(
           rule:,
           rule_result:,
-          confidence:,
           expected_text:,
           calculation:,
           evidence_text:,
@@ -476,7 +472,6 @@ module Claims
             source_engine: "code",
             rule_key: rule.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text: expected_text,
             calculation: calculation,
             evidence_text: evidence_text,
@@ -516,14 +511,6 @@ module Claims
           end
         end
 
-        def product_list_confidence(result:, product:)
-          return 100 if result == "pass" && product.present?
-          return 100 if result == "pass"
-          return 100 if result == "fail"
-
-          0
-        end
-
         def capacity_rule_result(status)
           case status
           when :matched_product_pass, :visible_exact_pass
@@ -534,17 +521,6 @@ module Claims
             "fail"
           else
             "warn"
-          end
-        end
-
-        def capacity_rule_confidence(status)
-          case status
-          when :matched_product_pass, :visible_exact_pass, :visible_exact_fail
-            100
-          when :hrv_or_erv
-            100
-          else
-            50
           end
         end
 

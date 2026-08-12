@@ -40,7 +40,7 @@ import {
   XCircle,
 } from '@phosphor-icons/react';
 import { LightGradientTitleBar } from '../../shared/base/light-gradient-title-bar';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import { MultiCheckSelect } from '../../shared/select/multi-check-select';
 import {
   getInvoiceUpgradeTypeMeta,
@@ -99,7 +99,6 @@ type InvoiceGridRow = {
   latest_di_ocr_invoice_total?: string | number | null;
 
   latest_genai_result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
-  latest_genai_overall_confidence?: number | null;
   latest_detected_upgrade_type_keys?: string[] | null;
   latest_detected_upgrade_types_json?: DetectedUpgradeType[] | null;
 
@@ -606,14 +605,6 @@ export function InvoicesAdminScreen() {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleOpenDetailsWithPdf = (row: InvoiceGridRow) => {
-    const invoiceId = String(row.invoice_id || '').trim();
-    if (!invoiceId) return;
-
-    const url = `/invoices/${encodeURIComponent(invoiceId)}/review`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
   const handleOpenPackageFix = (row: InvoiceGridRow) => {
     const params = new URLSearchParams();
     if (row.invoice_id) params.set('invoice_id', String(row.invoice_id));
@@ -986,8 +977,8 @@ export function InvoicesAdminScreen() {
                         {hasInvoice ? (
                           <Tooltip label="Open Reviewer">
                             <Text
-                              as="button"
-                              type="button"
+                              as={RouterLink}
+                              to={`/invoices/${encodeURIComponent(String(r.invoice_id))}/review`}
                               fontSize="sm"
                               fontWeight="normal"
                               color="gray.800"
@@ -1003,10 +994,10 @@ export function InvoicesAdminScreen() {
                               ml={-2}
                               borderRadius="md"
                               transition="background-color 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 140ms ease"
-                              onClick={() => handleOpenDetailsWithPdf(r)}
                               _hover={{
                                 bg: 'blue.50',
                                 color: 'black',
+                                textDecoration: 'none',
                                 boxShadow: '0 8px 18px rgba(49, 130, 206, 0.14)',
                               }}
                               _focusVisible={{ boxShadow: 'outline', borderRadius: 'sm' }}

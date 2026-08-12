@@ -70,7 +70,6 @@ module Claims
             return(
               base_rulecheck_row(
                 rule_result: "info",
-                confidence: 0,
                 expected_text:
                   "The matched AHRI product row should show qualifying SEER/HSPF or SEER2/HSPF2 values and minimum capacity of 12,000 BTU for this dual-fuel ducted heat pump.",
                 calculation:
@@ -90,7 +89,6 @@ module Claims
 
           base_rulecheck_row(
             rule_result: result,
-            confidence: result == "pass" || result == "fail" ? 100 : 0,
             expected_text:
               "Dual-fuel ducted heat pumps must meet SEER >= 16.0 and HSPF >= 10.0, or SEER2 >= 15.2 and HSPF2 >= 8.5 Region IV, and must have minimum capacity of 12,000 BTU. Variable speed compressor is not required for this upgrade type.",
             calculation:
@@ -180,7 +178,6 @@ module Claims
 
         def base_rulecheck_row(
           rule_result:,
-          confidence:,
           expected_text:,
           calculation:,
           evidence_text:,
@@ -194,7 +191,6 @@ module Claims
             source_engine: "code",
             rule_key: RULE.fetch(:key),
             rule_result: rule_result,
-            confidence: confidence,
             expected_text: expected_text,
             calculation: calculation,
             evidence_text: evidence_text,
