@@ -78,14 +78,7 @@ module Api
 
         invoice_json =
           invoice&.as_json(
-            only: %i[
-              id
-              status
-              status_subtype
-              created_at
-              updated_at
-              status_updated_at
-            ]
+            only: %i[id status created_at updated_at status_updated_at]
           ) || {}
         invoice_json["session_created_at"] = invoice_grid&.session_created_at
         invoice_json[
@@ -182,7 +175,6 @@ module Api
                        id
                        session_id
                        status
-                       status_subtype
                        status_updated_at
                        created_at
                        updated_at
@@ -218,14 +210,15 @@ module Api
         classifier_located_rows = located_fields_for(iv.id, "classifier")
         rule_rows = rulechecks_for(iv.id, "genai")
         code_rule_rows = rulechecks_for(iv.id, "code")
-        upgrade_type_results = upgrade_type_results_for(iv.id)
+        detected_upgrade_types = detected_upgrade_types_for(iv.id)
 
         render json: {
                  review_mode: "invoice_current",
                  is_current_invoice_version: true,
                  invoice_version_id: iv.id,
-                 upgrade_type_results:
-                   serialize_upgrade_type_results(upgrade_type_results),
+                 validation_result: iv.validation_result,
+                 detected_upgrade_types:
+                   serialize_detected_upgrade_types(detected_upgrade_types),
                  located_fields: serialize_located_fields(located_rows),
                  code_located_fields:
                    serialize_located_fields(code_located_rows),
@@ -362,7 +355,6 @@ module Api
                        id
                        session_id
                        status
-                       status_subtype
                        status_updated_at
                        created_at
                        updated_at
@@ -395,15 +387,16 @@ module Api
         classifier_located_rows = located_fields_for(iv.id, "classifier")
         rule_rows = rulechecks_for(iv.id, "genai")
         code_rule_rows = rulechecks_for(iv.id, "code")
-        upgrade_type_results = upgrade_type_results_for(iv.id)
+        detected_upgrade_types = detected_upgrade_types_for(iv.id)
 
         render json: {
                  review_mode: "invoice_version_snapshot",
                  is_current_invoice_version:
                    current_invoice_version_for(iv.invoice_id)&.id == iv.id,
                  invoice_version_id: iv.id,
-                 upgrade_type_results:
-                   serialize_upgrade_type_results(upgrade_type_results),
+                 validation_result: iv.validation_result,
+                 detected_upgrade_types:
+                   serialize_detected_upgrade_types(detected_upgrade_types),
                  located_fields: serialize_located_fields(located_rows),
                  code_located_fields:
                    serialize_located_fields(code_located_rows),
@@ -622,7 +615,7 @@ module Api
           .order(:source_engine, :rule_key, :created_at)
       end
 
-      def upgrade_type_results_for(invoice_version_id)
+      def detected_upgrade_types_for(invoice_version_id)
         ::Claims::InvoiceVersionUpgradeType
           .joins(
             "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
@@ -633,7 +626,7 @@ module Api
           )
           .order(
             Arel.sql(
-              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key, claims.invoice_version_upgrade_types.source_engine"
+              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key"
             )
           )
       end
@@ -703,18 +696,14 @@ module Api
         end
       end
 
-      def serialize_upgrade_type_results(rows)
+      def serialize_detected_upgrade_types(rows)
         rows.map do |row|
           row.as_json(
             only: %i[
               id
               invoice_version_id
               invoice_upgrade_type_id
-              source_engine
-              call_status
               confidence
-              result
-              admin_advice
               evidence_text
               classification_explanation
               page
@@ -733,7 +722,7 @@ module Api
       def serialize_supporting_document_types_by_upgrade_type(
         invoice_version_id
       )
-        rows = upgrade_type_results_for(invoice_version_id).to_a
+        rows = detected_upgrade_types_for(invoice_version_id).to_a
         upgrade_types = []
         seen_upgrade_type_ids = {}
 
@@ -806,7 +795,6 @@ module Api
                 row.supporting_document_type&.type_key,
               supporting_document_type_description:
                 row.supporting_document_type&.description,
-              classification_status: row.classification_status,
               classification_confidence: row.classification_confidence,
               classification_reason: row.classification_reason,
               supporting_document_routing_quality:

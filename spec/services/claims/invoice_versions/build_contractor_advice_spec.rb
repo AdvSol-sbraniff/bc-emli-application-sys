@@ -9,7 +9,7 @@ RSpec.describe Claims::InvoiceVersions::BuildContractorAdvice do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "genai_complete",
+        status: "contractor_precheck",
         created_at: now,
         updated_at: now
       )
@@ -52,7 +52,6 @@ RSpec.describe Claims::InvoiceVersions::BuildContractorAdvice do
       rule_key: rule_key,
       contractor_display_name: "Required invoice information",
       rule_result: "fail",
-      confidence: 90,
       created_at: now,
       updated_at: now
     )

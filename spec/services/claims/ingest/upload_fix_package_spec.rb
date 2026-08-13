@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Claims::Ingest::UploadFixPackage do
   describe ".call" do
-    it "ignores legacy role hints and classifies every new fix file through the pipeline" do
+    it "classifies every new fix file through the pipeline" do
       now = Time.zone.parse("2026-06-22 10:07:24")
       contractor = Contractor.create!(business_name: "Test Contractor")
       session = Claims::Session.create!(created_at: now, updated_at: now)
@@ -10,7 +10,7 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -49,8 +49,7 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         described_class.call(
           invoice_id: invoice.id,
           clone_invoice_version_id: source_version.id,
-          files: files,
-          file_roles: %w[invoice invoice]
+          files: files
         )
 
       run_id = result.ingest_run_id
@@ -72,19 +71,19 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run_id,
-          step_type: "fix_ocr_invoice"
+          step_type: "extract_invoice"
         )
       ).to be_empty
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run_id,
-          step_type: "fix_clone_existing_evidence"
+          step_type: "clone_evidence"
         )
       ).to be_empty
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run_id,
-          step_type: "fix_ocr_read",
+          step_type: "read_document",
           ingest_document_id:
             Claims::IngestDocument.where(
               ingest_run_id: run_id,
@@ -104,9 +103,9 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
               "Fenestration energy tag.jpeg"
             ]
           )
-          .pluck(:document_kind, :classification_status)
+          .pluck(:document_kind)
           .uniq
-      ).to eq([[nil, "pending"]])
+      ).to eq([nil])
     end
 
     it "stages an invoice replacement without requiring a caller-selected invoice role" do
@@ -117,7 +116,7 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -177,14 +176,13 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         files.map(&:original_filename)
       )
       expect(documents.pluck(:document_kind).uniq).to eq([nil])
-      expect(documents.pluck(:classification_status).uniq).to eq(["pending"])
       expect(documents.pluck(:resolved_invoice_version_id).uniq).to eq([nil])
       expect(uploaded_scopes).to match_array(documents.pluck(:id))
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: result.ingest_run_id,
           ingest_document_id: documents.select(:id),
-          step_type: "fix_ocr_read",
+          step_type: "read_document",
           status: "queued"
         ).count
       ).to eq(2)
@@ -198,7 +196,7 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -233,7 +231,6 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
           storage_key: "source/pi-support.pdf",
           original_filename: "PI supporting document.pdf",
           content_type: "application/pdf",
-          classification_status: "classified",
           personal_information_review_status: "review_recommended",
           personal_information_type_id: pi_type.id,
           personal_information_review_reason:
@@ -300,7 +297,7 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -329,13 +326,13 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
       stage_step =
         Claims::IngestStepRun.find_by!(
           ingest_run_id: run.id,
-          step_type: "fix_upload_package_stage"
+          step_type: "stage_package"
         )
 
       expect(result).to have_attributes(
         ok: false,
-        failure_status: "technical_failure",
-        failure_status_subtype: "upload_unexpected_exception",
+        failure_category: "technical_failure",
+        failure_code: "upload_unexpected_exception",
         error_code: "upload_unexpected_exception",
         retryable: false
       )
@@ -360,7 +357,7 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -383,8 +380,8 @@ RSpec.describe Claims::Ingest::UploadFixPackage do
 
       expect(result).to have_attributes(
         ok: false,
-        failure_status: "package_needs_correction",
-        failure_status_subtype: "package_unsupported_file_type",
+        failure_category: "package_needs_correction",
+        failure_code: "package_unsupported_file_type",
         error_code: "package_unsupported_file_type",
         retryable: false,
         diagnostic_id: nil

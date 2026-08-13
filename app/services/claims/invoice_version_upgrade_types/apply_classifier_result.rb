@@ -29,8 +29,6 @@ module Claims
             {
               invoice_version_id: @invoice_version_id,
               invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: "classifier",
-              call_status: "classified",
               confidence:
                 coerce_confidence(row["confidence"] || row[:confidence]),
               evidence_text:
@@ -54,8 +52,7 @@ module Claims
 
         Claims::InvoiceVersionUpgradeType.transaction do
           Claims::InvoiceVersionUpgradeType.where(
-            invoice_version_id: @invoice_version_id,
-            source_engine: "classifier"
+            invoice_version_id: @invoice_version_id
           ).delete_all
 
           Claims::InvoiceVersionUpgradeType.insert_all!(rows) if rows.any?

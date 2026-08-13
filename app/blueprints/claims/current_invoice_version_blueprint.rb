@@ -4,15 +4,12 @@ class Claims::CurrentInvoiceVersionBlueprint < Blueprinter::Base
 
   view :read_screen do
     # ---- identifiers / linkage ----
-    fields :session_id,
-           :invoice_id,
-           :invoice_status,
-           :invoice_status_subtype,
-           :id,
-           :invoice_versionno
+    fields :session_id, :invoice_id, :invoice_status, :id, :invoice_versionno
 
     # ---- GenAI fields ----
-    fields :genai_result
+    field :validation_result do |invoice_version|
+      invoice_version.validation_result
+    end
 
     field :contractor_advice do |invoice_version, _options|
       Claims::InvoiceVersions::BuildContractorAdvice.call(

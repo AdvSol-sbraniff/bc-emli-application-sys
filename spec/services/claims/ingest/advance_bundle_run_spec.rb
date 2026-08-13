@@ -2,14 +2,6 @@ require "rails_helper"
 
 RSpec.describe Claims::Ingest::AdvanceBundleRun do
   describe ".call" do
-    around do |example|
-      previous = ENV["CLAIMS_INGEST_STEP_ATTEMPT_LIMIT"]
-      ENV["CLAIMS_INGEST_STEP_ATTEMPT_LIMIT"] = "4"
-      example.run
-    ensure
-      ENV["CLAIMS_INGEST_STEP_ATTEMPT_LIMIT"] = previous
-    end
-
     def windows_doors_upgrade_type(now)
       Claims::InvoiceUpgradeType.find_or_create_by!(
         upgrade_type_key: "windows_doors"
@@ -26,8 +18,6 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       Claims::InvoiceVersionUpgradeType.create!(
         invoice_version_id: invoice_version.id,
         invoice_upgrade_type_id: upgrade_type.id,
-        source_engine: "classifier",
-        call_status: "classified",
         confidence: 98,
         evidence_text: "Window rebate line",
         raw_json: {
@@ -61,7 +51,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       ).to eq(succeeded_step)
     end
 
-    it "binds a classifier-detected replacement invoice to the pending fix version" do
+    it "creates and binds a replacement version after fix preflight succeeds" do
       now = Time.zone.parse("2026-06-24 08:30:00")
       contractor = Contractor.create!(business_name: "Replacement Contractor")
       session = Claims::Session.create!(created_at: now, updated_at: now)
@@ -69,34 +59,28 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
-      Claims::InvoiceVersion.create!(
-        invoice_id: invoice.id,
-        invoice_versionno: 1,
-        storage_provider: "azure_blob",
-        storage_key: "source/original-invoice.pdf",
-        original_filename: "Original invoice.pdf",
-        content_type: "application/pdf",
-        created_at: now,
-        updated_at: now
-      )
-      pending_version =
+      source_version =
         Claims::InvoiceVersion.create!(
           invoice_id: invoice.id,
-          invoice_versionno: 2,
+          invoice_versionno: 1,
           storage_provider: "azure_blob",
-          storage_key: "PENDING/replacement-invoice.pdf",
+          storage_key: "source/original-invoice.pdf",
+          original_filename: "Original invoice.pdf",
+          content_type: "application/pdf",
           created_at: now,
           updated_at: now
         )
+      add_detected_windows_doors_upgrade!(source_version, now)
       run =
         Claims::IngestRun.create!(
+          run_kind: "fix_upload",
           session_id: session.id,
           contractor_id: contractor.id,
-          resolved_invoice_version_id: pending_version.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 1,
           completed_files: 0,
@@ -107,7 +91,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       Claims::IngestStepRun.create!(
         ingest_run_id: run.id,
         session_id: session.id,
-        step_type: "fix_upload_package_stage",
+        step_type: "stage_package",
         status: "succeeded",
         created_at: now,
         updated_at: now
@@ -131,7 +115,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           contractor_id: contractor.id,
           invoice_id: invoice.id,
           resolved_invoice_id: invoice.id,
-          resolved_invoice_version_id: pending_version.id,
+          resolved_invoice_version_id: nil,
           storage_provider: "azure_blob",
           storage_key: "uploaded/replacement-claim-document.pdf",
           original_filename: "Replacement claim document.pdf",
@@ -145,14 +129,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           document_kind: "invoice",
           document_kind_confidence: 99,
           document_kind_reason: "Primary replacement contractor invoice.",
-          classification_status: "classified",
           classification_confidence: 99,
           classification_reason: "Invoice content detected.",
           classified_at: now,
           created_at: now,
           updated_at: now
         )
-      %w[fix_ocr_read fix_classifier_files].each do |step_type|
+      %w[read_document classify_document].each do |step_type|
         Claims::IngestStepRun.create!(
           ingest_run_id: run.id,
           session_id: session.id,
@@ -168,27 +151,24 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
 
       described_class.call(ingest_run_id: run.id)
 
-      pending_version.reload
-      expect(pending_version.storage_key).to eq(
+      replacement_version =
+        Claims::InvoiceVersion.find(run.reload.resolved_invoice_version_id)
+      expect(replacement_version.invoice_versionno).to eq(2)
+      expect(replacement_version.storage_key).to eq(
         replacement_document.storage_key
       )
-      expect(pending_version.original_filename).to eq(
+      expect(replacement_version.original_filename).to eq(
         replacement_document.original_filename
       )
-      expect(pending_version.content_type).to eq("application/pdf")
+      expect(replacement_version.content_type).to eq("application/pdf")
       expect(
         Claims::InvoiceVersionUpgradeType.exists?(
-          invoice_version_id: pending_version.id,
-          source_engine: "classifier"
+          invoice_version_id: replacement_version.id
         )
       ).to be(true)
       expect(Claims::RunOcrJob).to have_received(:perform_async).with(
-        pending_version.id,
-        run.id,
-        "prebuilt-invoice",
-        true,
-        "use_existing_classifier",
-        "fix_ocr_invoice"
+        replacement_version.id,
+        run.id
       )
     end
 
@@ -201,14 +181,16 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
       run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 1,
           completed_files: 0,
@@ -243,7 +225,6 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           document_kind: "invoice",
           document_kind_confidence: 99,
           document_kind_reason: "Primary contractor invoice.",
-          classification_status: "classified",
           classification_confidence: 99,
           classification_reason: "Invoice with no ESP rebate upgrade.",
           classified_at: now,
@@ -255,7 +236,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "ocr_read",
+        step_type: "read_document",
         status: "succeeded",
         created_at: now - 30.seconds,
         updated_at: now - 20.seconds
@@ -264,7 +245,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "classifier_files",
+        step_type: "classify_document",
         status: "succeeded",
         created_at: now - 10.seconds,
         updated_at: now
@@ -278,8 +259,9 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       expect(run.reload.status).to eq("failed")
       expect(run.failed_files).to eq(1)
       expect(run.resolved_invoice_version_id).to be_present
-      expect(invoice.reload.status).to eq("package_needs_correction")
-      expect(invoice.status_subtype).to eq("package_no_supported_upgrade_type")
+      expect(invoice.reload.status).to eq("contractor_precheck")
+      expect(run.failure_category).to eq("package_needs_correction")
+      expect(run.failure_code).to eq("package_no_supported_upgrade_type")
       expect(
         Claims::InvoiceVersionUpgradeType.where(
           invoice_version_id: run.resolved_invoice_version_id
@@ -290,10 +272,8 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       expect(run.pipeline_error_code).to eq(
         "invoice_bundle_no_supported_upgrade_type"
       )
-      expect(run.failure_status).to eq("package_needs_correction")
-      expect(run.failure_status_subtype).to eq(
-        "package_no_supported_upgrade_type"
-      )
+      expect(run.failure_category).to eq("package_needs_correction")
+      expect(run.failure_code).to eq("package_no_supported_upgrade_type")
     end
 
     it "treats cloned invoice evidence as reused and gates fix OCR/classifier on new files" do
@@ -304,7 +284,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -322,23 +302,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           created_at: now,
           updated_at: now
         )
-      new_version =
-        Claims::InvoiceVersion.create!(
-          invoice_id: invoice.id,
-          invoice_versionno: 2,
-          storage_provider: "azure_blob",
-          storage_key: "cloned/invoice.pdf",
-          original_filename: "Fenestration invoice.pdf",
-          content_type: "application/pdf",
-          di_raw_json: source_version.di_raw_json,
-          created_at: now,
-          updated_at: now
-        )
-      add_detected_windows_doors_upgrade!(new_version, now)
+      add_detected_windows_doors_upgrade!(source_version, now)
       run =
         Claims::IngestRun.create!(
+          run_kind: "fix_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 3,
           completed_files: 0,
@@ -358,17 +328,8 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       Claims::IngestStepRun.create!(
         ingest_run_id: run.id,
         session_id: session.id,
-        step_type: "fix_upload_package_stage",
+        step_type: "stage_package",
         status: "succeeded",
-        created_at: now,
-        updated_at: now
-      )
-      Claims::IngestStepRun.create!(
-        ingest_run_id: run.id,
-        session_id: session.id,
-        invoice_version_id: new_version.id,
-        step_type: "fix_clone_existing_evidence",
-        status: "queued",
         created_at: now,
         updated_at: now
       )
@@ -379,15 +340,14 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           contractor_id: contractor.id,
           invoice_id: invoice.id,
           resolved_invoice_id: invoice.id,
-          resolved_invoice_version_id: new_version.id,
+          resolved_invoice_version_id: nil,
           storage_provider: "azure_blob",
-          storage_key: new_version.storage_key,
-          original_filename: new_version.original_filename,
-          content_type: new_version.content_type,
+          storage_key: source_version.storage_key,
+          original_filename: source_version.original_filename,
+          content_type: source_version.content_type,
           di_read_raw_json: source_version.di_raw_json,
           document_kind: "invoice",
           document_kind_reason: "Cloned from prior invoice version.",
-          classification_status: "classified",
           classification_confidence: 100,
           classification_reason: "Cloned from prior invoice version.",
           classified_at: now,
@@ -401,7 +361,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           contractor_id: contractor.id,
           invoice_id: invoice.id,
           resolved_invoice_id: invoice.id,
-          resolved_invoice_version_id: new_version.id,
+          resolved_invoice_version_id: nil,
           storage_provider: "azure_blob",
           storage_key: "uploaded/tag-1.jpg",
           original_filename: "Fenestration energy tag (1).jpeg",
@@ -415,14 +375,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           document_kind: "supporting_document",
           document_kind_reason: "Classified from new fix evidence.",
           supporting_document_type_id: type.id,
-          classification_status: "classified",
           classification_confidence: 99,
           classification_reason: "Fenestration label.",
           classified_at: now + 20.seconds,
           created_at: now,
           updated_at: now + 20.seconds
         )
-      %w[fix_ocr_read fix_classifier_files].each do |step_type|
+      %w[read_document classify_document].each do |step_type|
         Claims::IngestStepRun.create!(
           ingest_run_id: run.id,
           session_id: session.id,
@@ -439,7 +398,9 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
 
       described_class.call(ingest_run_id: run.id)
 
-      expect(run.reload.resolved_invoice_version_id).to eq(new_version.id)
+      replacement_version =
+        Claims::InvoiceVersion.find(run.reload.resolved_invoice_version_id)
+      expect(replacement_version.invoice_versionno).to eq(2)
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
@@ -449,20 +410,20 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
-          step_type: "fix_clone_existing_evidence"
+          step_type: "clone_evidence"
         ).pick(:status)
       ).to eq("succeeded")
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
-          invoice_version_id: new_version.id,
-          step_type: "fix_ocr_invoice"
+          invoice_version_id: replacement_version.id,
+          step_type: "extract_invoice"
         )
       ).to be_empty
       expect(Claims::RunOcrJob).not_to have_received(:perform_async)
       expect(Claims::RunGenaiJob).to have_received(:perform_async).with(
         session.id,
-        new_version.id,
+        replacement_version.id,
         run.id,
         "use_existing_classifier"
       )
@@ -476,7 +437,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -494,23 +455,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           created_at: now,
           updated_at: now
         )
-      new_version =
-        Claims::InvoiceVersion.create!(
-          invoice_id: invoice.id,
-          invoice_versionno: 2,
-          storage_provider: "azure_blob",
-          storage_key: "cloned/invoice.pdf",
-          original_filename: "Fenestration invoice.pdf",
-          content_type: "application/pdf",
-          di_raw_json: source_version.di_raw_json,
-          created_at: now,
-          updated_at: now
-        )
-      add_detected_windows_doors_upgrade!(new_version, now)
+      add_detected_windows_doors_upgrade!(source_version, now)
       run =
         Claims::IngestRun.create!(
+          run_kind: "fix_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 2,
           completed_files: 0,
@@ -534,11 +485,23 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         created_at: now,
         updated_at: now
       )
+      source_support_document =
+        Claims::SupportingDocument.create!(
+          invoice_version_id: source_version.id,
+          supporting_document_type_id: type.id,
+          storage_provider: "azure_blob",
+          storage_key: "source/tag-1.jpg",
+          original_filename: "Fenestration energy tag (1).jpeg",
+          content_type: "image/jpeg",
+          classification_confidence: 99,
+          created_at: now,
+          updated_at: now
+        )
 
       Claims::IngestStepRun.create!(
         ingest_run_id: run.id,
         session_id: session.id,
-        step_type: "fix_upload_package_stage",
+        step_type: "stage_package",
         status: "succeeded",
         created_at: now,
         updated_at: now
@@ -549,15 +512,14 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         contractor_id: contractor.id,
         invoice_id: invoice.id,
         resolved_invoice_id: invoice.id,
-        resolved_invoice_version_id: new_version.id,
+        resolved_invoice_version_id: nil,
         storage_provider: "azure_blob",
-        storage_key: new_version.storage_key,
-        original_filename: new_version.original_filename,
-        content_type: new_version.content_type,
+        storage_key: source_version.storage_key,
+        original_filename: source_version.original_filename,
+        content_type: source_version.content_type,
         di_read_raw_json: source_version.di_raw_json,
         document_kind: "invoice",
         document_kind_reason: "Cloned from prior invoice version.",
-        classification_status: "classified",
         classification_confidence: 100,
         classification_reason: "Cloned from prior invoice version.",
         classified_at: now,
@@ -570,11 +532,11 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         contractor_id: contractor.id,
         invoice_id: invoice.id,
         resolved_invoice_id: invoice.id,
-        resolved_invoice_version_id: new_version.id,
+        resolved_invoice_version_id: nil,
         storage_provider: "azure_blob",
-        storage_key: "cloned/tag-1.jpg",
-        original_filename: "Fenestration energy tag (1).jpeg",
-        content_type: "image/jpeg",
+        storage_key: source_support_document.storage_key,
+        original_filename: source_support_document.original_filename,
+        content_type: source_support_document.content_type,
         di_read_raw_json: {
           "read" => "tag"
         },
@@ -584,7 +546,6 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         document_kind: "supporting_document",
         document_kind_reason: "Cloned from prior supporting document.",
         supporting_document_type_id: type.id,
-        classification_status: "classified",
         classification_confidence: 99,
         classification_reason: "Cloned from prior supporting document.",
         classified_at: now,
@@ -600,31 +561,34 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
 
       described_class.call(ingest_run_id: run.id)
 
+      replacement_version =
+        Claims::InvoiceVersion.find(run.reload.resolved_invoice_version_id)
+
       expect(
         Claims::RunSupportingDocumentTypeExtractionJob
       ).not_to have_received(:perform_async)
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
-          step_type: "fix_supporting_document_extraction"
+          step_type: "extract_supporting_document"
         )
       ).to be_empty
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
-          step_type: "fix_ocr_invoice"
+          step_type: "extract_invoice"
         )
       ).to be_empty
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
-          step_type: "fix_clone_existing_evidence"
+          step_type: "clone_evidence"
         ).pick(:status)
       ).to eq("succeeded")
       expect(Claims::RunOcrJob).not_to have_received(:perform_async)
       expect(Claims::RunGenaiJob).to have_received(:perform_async).with(
         session.id,
-        new_version.id,
+        replacement_version.id,
         run.id,
         "use_existing_classifier"
       )
@@ -638,7 +602,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -656,23 +620,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           created_at: now,
           updated_at: now
         )
-      new_version =
-        Claims::InvoiceVersion.create!(
-          invoice_id: invoice.id,
-          invoice_versionno: 2,
-          storage_provider: "azure_blob",
-          storage_key: "cloned/invoice.pdf",
-          original_filename: "Fenestration invoice.pdf",
-          content_type: "application/pdf",
-          di_raw_json: source_version.di_raw_json,
-          created_at: now,
-          updated_at: now
-        )
-      add_detected_windows_doors_upgrade!(new_version, now)
+      add_detected_windows_doors_upgrade!(source_version, now)
       run =
         Claims::IngestRun.create!(
+          run_kind: "fix_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 3,
           completed_files: 0,
@@ -705,11 +659,23 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           updated_at: now
         )
       end
+      source_support_document =
+        Claims::SupportingDocument.create!(
+          invoice_version_id: source_version.id,
+          supporting_document_type_id: cloned_only_type.id,
+          storage_provider: "azure_blob",
+          storage_key: "source/cloned-only.jpg",
+          original_filename: "Prior unchanged label.jpeg",
+          content_type: "image/jpeg",
+          classification_confidence: 99,
+          created_at: now,
+          updated_at: now
+        )
 
       Claims::IngestStepRun.create!(
         ingest_run_id: run.id,
         session_id: session.id,
-        step_type: "fix_upload_package_stage",
+        step_type: "stage_package",
         status: "succeeded",
         created_at: now,
         updated_at: now
@@ -720,15 +686,14 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         contractor_id: contractor.id,
         invoice_id: invoice.id,
         resolved_invoice_id: invoice.id,
-        resolved_invoice_version_id: new_version.id,
+        resolved_invoice_version_id: nil,
         storage_provider: "azure_blob",
-        storage_key: new_version.storage_key,
-        original_filename: new_version.original_filename,
-        content_type: new_version.content_type,
+        storage_key: source_version.storage_key,
+        original_filename: source_version.original_filename,
+        content_type: source_version.content_type,
         di_read_raw_json: source_version.di_raw_json,
         document_kind: "invoice",
         document_kind_reason: "Cloned from prior invoice version.",
-        classification_status: "classified",
         classification_confidence: 100,
         classification_reason: "Cloned from prior invoice version.",
         classified_at: now,
@@ -741,11 +706,11 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         contractor_id: contractor.id,
         invoice_id: invoice.id,
         resolved_invoice_id: invoice.id,
-        resolved_invoice_version_id: new_version.id,
+        resolved_invoice_version_id: nil,
         storage_provider: "azure_blob",
-        storage_key: "cloned/cloned-only.jpg",
-        original_filename: "Prior unchanged label.jpeg",
-        content_type: "image/jpeg",
+        storage_key: source_support_document.storage_key,
+        original_filename: source_support_document.original_filename,
+        content_type: source_support_document.content_type,
         di_read_raw_json: {
           "read" => "cloned"
         },
@@ -755,7 +720,6 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         document_kind: "supporting_document",
         document_kind_reason: "Cloned from prior supporting document.",
         supporting_document_type_id: cloned_only_type.id,
-        classification_status: "classified",
         classification_confidence: 99,
         classification_reason: "Cloned from prior supporting document.",
         classified_at: now,
@@ -769,7 +733,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           contractor_id: contractor.id,
           invoice_id: invoice.id,
           resolved_invoice_id: invoice.id,
-          resolved_invoice_version_id: new_version.id,
+          resolved_invoice_version_id: nil,
           storage_provider: "azure_blob",
           storage_key: "uploaded/new-label.jpg",
           original_filename: "New fenestration label.jpeg",
@@ -783,14 +747,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           document_kind: "supporting_document",
           document_kind_reason: "Classified from new fix evidence.",
           supporting_document_type_id: changed_type.id,
-          classification_status: "classified",
           classification_confidence: 99,
           classification_reason: "New supporting document.",
           classified_at: now + 20.seconds,
           created_at: now,
           updated_at: now + 20.seconds
         )
-      %w[fix_ocr_read fix_classifier_files].each do |step_type|
+      %w[read_document classify_document].each do |step_type|
         Claims::IngestStepRun.create!(
           ingest_run_id: run.id,
           session_id: session.id,
@@ -808,18 +771,16 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
 
       described_class.call(ingest_run_id: run.id)
 
+      replacement_version =
+        Claims::InvoiceVersion.find(run.reload.resolved_invoice_version_id)
+
       expect(Claims::RunSupportingDocumentTypeExtractionJob).to have_received(
         :perform_async
-      ).once.with(
-        new_version.id,
-        changed_type.id,
-        run.id,
-        "fix_supporting_document_extraction"
-      )
+      ).once.with(replacement_version.id, changed_type.id, run.id)
       expect(
         Claims::IngestStepRun.where(
           ingest_run_id: run.id,
-          step_type: "fix_supporting_document_extraction"
+          step_type: "extract_supporting_document"
         ).pluck(:supporting_document_type_id)
       ).to eq([changed_type.id])
     end
@@ -832,14 +793,16 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
       run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 1,
           completed_files: 0,
@@ -868,7 +831,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "ocr_read",
+        step_type: "read_document",
         status: "succeeded",
         created_at: now - 30.seconds,
         updated_at: now - 20.seconds
@@ -877,7 +840,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "classifier_files",
+        step_type: "classify_document",
         status: "failed",
         error_text: "RuntimeError: Node GenAI failed 502: Request timed out.",
         created_at: now,
@@ -889,7 +852,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       expect(run.reload.status).to eq("running")
       expect(run.failed_files).to eq(0)
       expect(run.completed_at).to be_nil
-      expect(invoice.reload.status).to eq("ocr_in_progress")
+      expect(invoice.reload.status).to eq("contractor_precheck")
     end
 
     it "marks the run failed once classifier attempts for the same file are exhausted" do
@@ -900,14 +863,16 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
       run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "running",
           total_files: 1,
           completed_files: 0,
@@ -936,7 +901,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "ocr_read",
+        step_type: "read_document",
         status: "succeeded",
         created_at: now - 30.seconds,
         updated_at: now - 20.seconds
@@ -946,7 +911,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
           ingest_run_id: run.id,
           session_id: session.id,
           ingest_document_id: document.id,
-          step_type: "classifier_files",
+          step_type: "classify_document",
           status: "failed",
           error_text: "RuntimeError: Node GenAI failed 502: Request timed out.",
           created_at: now + index.seconds,
@@ -969,12 +934,13 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
       run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           contractor_id: contractor.id,
           status: "running",
@@ -1006,7 +972,7 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "ocr_read",
+        step_type: "read_document",
         status: "succeeded",
         created_at: now - 30.seconds,
         updated_at: now - 20.seconds
@@ -1015,11 +981,11 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "classifier_files",
+        step_type: "classify_document",
         status: "failed",
         error_text: "Node GenAI request failed.",
-        failure_status: "package_needs_correction",
-        failure_status_subtype: "package_unreadable_file",
+        failure_category: "package_needs_correction",
+        failure_code: "package_unreadable_file",
         error_code: "genai_input_image_invalid",
         error_category: "provider_invalid_image",
         retryable: false,
@@ -1035,56 +1001,11 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       expect(run.failed_files).to eq(1)
       expect(run.pipeline_error_code).to eq("genai_input_image_invalid")
       expect(run.pipeline_error_description).to eq(
-        "classifier_files failed; genai_input_image_invalid; provider HTTP 400; non-retryable; diagnostic diag-permanent."
+        "classify_document failed; genai_input_image_invalid; provider HTTP 400; non-retryable; diagnostic diag-permanent."
       )
-      expect(invoice.reload.status).to eq("package_needs_correction")
-      expect(invoice.status_subtype).to eq("package_unreadable_file")
-    end
-
-    it "waits for active parallel steps before cleaning failed contractor artifacts" do
-      contractor = Contractor.create!(business_name: "Parallel Cleanup")
-      session = Claims::Session.create!
-      run =
-        Claims::IngestRun.create!(
-          session_id: session.id,
-          contractor_id: contractor.id,
-          status: "failed",
-          cleanup_failed_invoice_artifacts: true,
-          total_files: 2,
-          completed_files: 0,
-          failed_files: 1
-        )
-      active_step =
-        Claims::IngestStepRun.create!(
-          ingest_run_id: run.id,
-          session_id: session.id,
-          step_type: "upload_package_stage",
-          status: "in_progress"
-        )
-      service = described_class.new(ingest_run_id: run.id)
-      allow(Claims::Ingest::CleanupFailedContractorUpload).to receive(:call)
-
-      service.send(:cleanup_failed_contractor_upload!, run)
-
-      expect(
-        Claims::Ingest::CleanupFailedContractorUpload
-      ).not_to have_received(:call)
-
-      active_step.update!(
-        status: "failed",
-        error_text: "Cancelled after another parallel step failed.",
-        failure_status: "technical_failure",
-        failure_status_subtype: "unknown_runtime_failure",
-        error_code: "pipeline_cancelled_after_failure",
-        error_category: "pipeline_cancelled",
-        retryable: false
-      )
-
-      service.send(:cleanup_failed_contractor_upload!, run)
-
-      expect(Claims::Ingest::CleanupFailedContractorUpload).to have_received(
-        :call
-      ).with(ingest_run: run)
+      expect(invoice.reload.status).to eq("contractor_precheck")
+      expect(run.failure_category).to eq("package_needs_correction")
+      expect(run.failure_code).to eq("package_unreadable_file")
     end
   end
 end

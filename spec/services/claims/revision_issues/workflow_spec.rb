@@ -426,7 +426,7 @@ RSpec.describe "Claims durable revision issue workflow" do
   it "creates required rule issues only after the current package reaches the admin inbox" do
     invoice, version, rule, field = build_package
     invoice.update_columns(
-      status: "genai_complete",
+      status: "contractor_precheck",
       status_updated_at: Time.current,
       updated_at: Time.current
     )

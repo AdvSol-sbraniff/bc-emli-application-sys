@@ -14,7 +14,7 @@ RSpec.describe Claims::Genai::NodeClient do
             provider_status: 400,
             provider_code: "invalid_value",
             provider_attempt_count: 1,
-            phase: "classifier_files",
+            phase: "classify_document",
             provider_response_snippet: "private provider detail"
           }
         )
@@ -28,7 +28,7 @@ RSpec.describe Claims::Genai::NodeClient do
         "provider_status" => 400,
         "provider_code" => "invalid_value",
         "provider_attempt_count" => 1,
-        "phase" => "classifier_files"
+        "phase" => "classify_document"
       )
       expect(error.message).not_to include("private provider detail")
     end

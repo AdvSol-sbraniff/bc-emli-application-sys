@@ -2,6 +2,18 @@ module Claims
   class IngestStepRun < ApplicationRecord
     self.table_name = "claims.ingest_step_runs"
 
+    STEP_TYPES = %w[
+      stage_package
+      read_document
+      classify_document
+      extract_supporting_document
+      extract_invoice
+      clone_evidence
+      case_facts
+      evaluate_genai_ruleset
+      evaluate_code_ruleset
+      finalize_validation
+    ].freeze
     TERMINAL_STATUSES = %w[succeeded failed].freeze
 
     belongs_to :ingest_run,

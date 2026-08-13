@@ -221,7 +221,7 @@ export default function RulesetConfigEditorScreen() {
 
                 <TabPanel px={0} pt={3}>
                   <Text fontSize="sm" opacity={0.75} mb={3}>
-                    Document-routing prompt used by the classifier_files step for PDFs and images. It identifies
+                    Document-routing prompt used by the classify_document step for PDFs and images. It identifies
                     invoice/supporting/unknown documents and leaves supporting-document evidence extraction to its
                     downstream step.
                   </Text>

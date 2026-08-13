@@ -35,8 +35,8 @@ RSpec.describe "Claims contractor upload errors", type: :request do
     expect(json_response).to include(
       "ok" => false,
       "error" => Claims::Ingest::UploadErrors::SAFE_TECHNICAL_MESSAGE,
-      "failure_status" => "technical_failure",
-      "failure_status_subtype" => "upload_unexpected_exception",
+      "failure_category" => "technical_failure",
+      "failure_code" => "upload_unexpected_exception",
       "error_code" => "upload_unexpected_exception",
       "retryable" => false,
       "diagnostic_id" => diagnostic_id

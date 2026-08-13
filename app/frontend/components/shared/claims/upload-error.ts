@@ -2,8 +2,8 @@ export type ClaimsUploadErrorPayload = {
   error?: unknown;
   message?: unknown;
   error_code?: unknown;
-  failure_status?: unknown;
-  failure_status_subtype?: unknown;
+  failure_category?: unknown;
+  failure_code?: unknown;
   retryable?: unknown;
   diagnostic_id?: unknown;
 };
@@ -19,7 +19,7 @@ export class ClaimsUploadRequestError extends Error {
     this.name = 'ClaimsUploadRequestError';
     this.status = status;
     this.errorCode = typeof payload.error_code === 'string' ? payload.error_code : '';
-    this.failureStatus = typeof payload.failure_status === 'string' ? payload.failure_status : '';
+    this.failureStatus = typeof payload.failure_category === 'string' ? payload.failure_category : '';
     this.diagnosticId = typeof payload.diagnostic_id === 'string' ? payload.diagnostic_id : '';
   }
 }
@@ -51,7 +51,7 @@ export function claimsUploadRequestError(
     message = 'The upload service is busy right now. Please wait a moment and try again.';
   } else if (
     response.status >= 500 ||
-    payload.failure_status === 'technical_failure' ||
+    payload.failure_category === 'technical_failure' ||
     technicalErrorPattern.test(message)
   ) {
     message =

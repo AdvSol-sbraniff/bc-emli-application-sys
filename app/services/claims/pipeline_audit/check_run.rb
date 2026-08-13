@@ -14,65 +14,56 @@ module Claims
 
       Failure = Struct.new(:code, :description, keyword_init: true)
 
-      BRANCH_ROOT_STEPS = {
-        "upload_package_stage" => "new_upload",
-        "fix_upload_package_stage" => "fix",
-        "ruleclone_clone_existing_evidence" => "rule_change_only"
+      PIPELINE_KIND_BY_RUN_KIND = {
+        "initial_upload" => "new_upload",
+        "fix_upload" => "fix",
+        "rules_rerun" => "rule_change_only"
       }.freeze
 
-      NEW_BRANCH_FORBIDDEN_STEPS = %w[
-        fix_upload_package_stage
-        fix_ocr_read
-        fix_classifier_files
-        fix_clone_existing_evidence
-        fix_supporting_document_extraction
-        fix_ocr_invoice
-        ruleclone_clone_existing_evidence
-      ].freeze
+      ALLOWED_STEPS_BY_RUN_KIND = {
+        "initial_upload" => %w[
+          stage_package
+          read_document
+          classify_document
+          extract_supporting_document
+          extract_invoice
+          case_facts
+          evaluate_genai_ruleset
+          evaluate_code_ruleset
+          finalize_validation
+        ],
+        "fix_upload" => %w[
+          stage_package
+          read_document
+          classify_document
+          extract_supporting_document
+          extract_invoice
+          clone_evidence
+          case_facts
+          evaluate_genai_ruleset
+          evaluate_code_ruleset
+          finalize_validation
+        ],
+        "rules_rerun" => %w[
+          clone_evidence
+          case_facts
+          evaluate_genai_ruleset
+          evaluate_code_ruleset
+          finalize_validation
+        ]
+      }.transform_values(&:freeze).freeze
 
-      FIX_BRANCH_FORBIDDEN_STEPS = %w[
-        upload_package_stage
-        ocr_read
-        classifier_files
-        supporting_document_extraction
-        ocr_invoice
-        ruleclone_clone_existing_evidence
-      ].freeze
+      PRE_RESOLUTION_DOCUMENT_STEPS = %w[read_document classify_document].freeze
 
-      RULE_CHANGE_FORBIDDEN_STEPS = %w[
-        upload_package_stage
-        fix_upload_package_stage
-        ocr_read
-        fix_ocr_read
-        classifier_files
-        fix_classifier_files
-        supporting_document_extraction
-        fix_supporting_document_extraction
-        ocr_invoice
-        fix_ocr_invoice
-        fix_clone_existing_evidence
-      ].freeze
+      PACKAGE_STEPS = %w[stage_package].freeze
 
-      PRE_RESOLUTION_DOCUMENT_STEPS = %w[
-        ocr_read
-        fix_ocr_read
-        classifier_files
-        fix_classifier_files
-      ].freeze
+      TYPE_STEPS = %w[extract_supporting_document].freeze
 
-      PACKAGE_STEPS = %w[upload_package_stage fix_upload_package_stage].freeze
+      RULESET_STEPS = %w[evaluate_genai_ruleset evaluate_code_ruleset].freeze
 
-      TYPE_STEPS = %w[
-        supporting_document_extraction
-        fix_supporting_document_extraction
-      ].freeze
+      REQUIRED_FINAL_STEPS = %w[case_facts finalize_validation].freeze
 
-      REQUIRED_FINAL_STEPS = %w[case_facts aggregate_advice].freeze
-
-      FIX_REPROCESS_DOCUMENT_STEPS = %w[
-        fix_ocr_read
-        fix_classifier_files
-      ].freeze
+      FIX_REPROCESS_DOCUMENT_STEPS = %w[read_document classify_document].freeze
 
       def self.call(ingest_run_id:)
         new(ingest_run_id: ingest_run_id).call
@@ -134,28 +125,10 @@ module Claims
           )
         end
 
-        branch_failure || resolved_invoice_failure || wrong_invoice_failure ||
+        resolved_invoice_failure || wrong_invoice_failure ||
           target_shape_failure || branch_purity_failure ||
           active_step_failure || final_step_failure || fix_reuse_failure ||
           rule_change_shape_failure
-      end
-
-      def branch_failure
-        roots = present_branch_roots
-        if roots.empty?
-          return(
-            failure(
-              "pipeline_kind_unknown",
-              "Could not classify ingest_run_id=#{@run.id}; expected one root step from #{BRANCH_ROOT_STEPS.keys.join(", ")}."
-            )
-          )
-        end
-        return nil if roots.one?
-
-        failure(
-          "pipeline_kind_ambiguous",
-          "ingest_run_id=#{@run.id} has multiple pipeline root steps: #{roots.join(", ")}."
-        )
       end
 
       def resolved_invoice_failure
@@ -231,6 +204,22 @@ module Claims
             )
           end
 
+          if RULESET_STEPS.include?(step.step_type)
+            if step.invoice_version_id.present? &&
+                 step.invoice_upgrade_type_id.present? &&
+                 step.ingest_document_id.blank? &&
+                 step.supporting_document_type_id.blank?
+              next
+            end
+
+            return(
+              failure(
+                "ruleset_step_target_invalid",
+                "#{step.step_type} should target an invoice version and upgrade type only. #{describe_step(step)}"
+              )
+            )
+          end
+
           if step.invoice_version_id.present? &&
                step.ingest_document_id.blank? &&
                step.supporting_document_type_id.blank?
@@ -249,18 +238,8 @@ module Claims
       end
 
       def branch_purity_failure
-        forbidden =
-          case pipeline_kind
-          when "new_upload"
-            NEW_BRANCH_FORBIDDEN_STEPS
-          when "fix"
-            FIX_BRANCH_FORBIDDEN_STEPS
-          when "rule_change_only"
-            RULE_CHANGE_FORBIDDEN_STEPS
-          else
-            []
-          end
-        bad_step = @steps.find { |step| forbidden.include?(step.step_type) }
+        allowed = ALLOWED_STEPS_BY_RUN_KIND.fetch(@run.run_kind)
+        bad_step = @steps.find { |step| !allowed.include?(step.step_type) }
         return nil unless bad_step
 
         failure(
@@ -321,18 +300,18 @@ module Claims
         cloned_invoice =
           cloned_documents.find { |doc| doc.document_kind == "invoice" }
         if cloned_invoice &&
-             @steps.any? { |step| step.step_type == "fix_ocr_invoice" }
+             @steps.any? { |step| step.step_type == "extract_invoice" }
           return(
             failure(
-              "fix_ocr_invoice_for_cloned_invoice",
-              "Fix run cloned invoice evidence, so no fix_ocr_invoice work row should exist. cloned_ingest_document_id=#{cloned_invoice.id}, ingest_run_id=#{@run.id}."
+              "extract_invoice_for_cloned_invoice",
+              "Fix run cloned invoice evidence, so no extract_invoice work row should exist. cloned_ingest_document_id=#{cloned_invoice.id}, ingest_run_id=#{@run.id}."
             )
           )
         end
 
         bad_type_step =
           @steps.find do |step|
-            step.step_type == "fix_supporting_document_extraction" &&
+            step.step_type == "extract_supporting_document" &&
               !changed_supporting_document_type_ids.include?(
                 step.supporting_document_type_id.to_s
               )
@@ -351,13 +330,13 @@ module Claims
             doc.document_kind == "invoice" && !cloned_document?(doc)
           end
         if new_invoice_present
-          step = latest_invoice_step("fix_ocr_invoice")
+          step = latest_invoice_step("extract_invoice")
           return nil if step&.status == "succeeded"
 
           return(
             failure(
-              "fix_new_invoice_missing_ocr_invoice",
-              "Fix run has a new/replaced invoice document but latest fix_ocr_invoice is not succeeded. Found: #{step ? describe_step(step) : "no step row"}."
+              "fix_new_invoice_missing_extract_invoice",
+              "Fix run has a new/replaced invoice document but latest extract_invoice is not succeeded. Found: #{step ? describe_step(step) : "no step row"}."
             )
           )
         end
@@ -375,20 +354,8 @@ module Claims
         )
       end
 
-      def present_branch_roots
-        return [] unless @steps
-
-        @present_branch_roots ||=
-          BRANCH_ROOT_STEPS.keys.select do |step_type|
-            @steps.any? { |step| step.step_type == step_type }
-          end
-      end
-
       def pipeline_kind
-        roots = present_branch_roots
-        return nil unless roots.one?
-
-        BRANCH_ROOT_STEPS.fetch(roots.first)
+        PIPELINE_KIND_BY_RUN_KIND[@run&.run_kind]
       end
 
       def latest_invoice_step(step_type)

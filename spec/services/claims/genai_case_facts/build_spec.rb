@@ -31,7 +31,7 @@ RSpec.describe Claims::GenaiCaseFacts::Build do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       invoice_version =
         Claims::InvoiceVersion.create!(
@@ -83,7 +83,7 @@ RSpec.describe Claims::GenaiCaseFacts::Build do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       invoice_version =
         Claims::InvoiceVersion.create!(
@@ -118,7 +118,7 @@ RSpec.describe Claims::GenaiCaseFacts::Build do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       invoice_version =
         Claims::InvoiceVersion.create!(
@@ -155,7 +155,6 @@ RSpec.describe Claims::GenaiCaseFacts::Build do
         invoice_version_id: invoice_version.id,
         supporting_document_type_id: document_type.id,
         storage_key: "flagged-utility-document.pdf",
-        classification_status: "classified",
         personal_information_review_status: "high_risk",
         personal_information_type_id: pi_type.id,
         personal_information_review_reason:

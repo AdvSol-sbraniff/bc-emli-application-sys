@@ -6,39 +6,32 @@ require "net/http"
 module Claims
   class RunSupportingDocumentTypeExtractionJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 3
+    sidekiq_options queue: :claims_genai,
+                    retry: ::Claims::Ingest::RetryPolicy.sidekiq_retries
 
-    def perform(
-      invoice_version_id,
-      supporting_document_type_id,
-      ingest_run_id,
-      requested_step_type = nil
-    )
+    def perform(invoice_version_id, supporting_document_type_id, ingest_run_id)
       if ingest_run_id.blank?
         raise "Missing ingest_run_id for supporting document extraction."
       end
+      return if terminal_run?(ingest_run_id)
 
       invoice_version = ::Claims::InvoiceVersion.find(invoice_version_id)
       invoice = invoice_version.invoice
       type = ::Claims::SupportingDocumentType.find(supporting_document_type_id)
+      step =
+        ::Claims::Ingest::StepClaim.call(
+          ingest_run_id: ingest_run_id,
+          session_id: invoice.session_id,
+          invoice_version_id: invoice_version.id,
+          supporting_document_type_id: type.id,
+          step_type: "extract_supporting_document"
+        )
+      return unless step
+
       documents = documents_for(invoice_version: invoice_version, type: type)
       if documents.empty?
         raise "No supporting documents found for #{type.type_key}"
       end
-
-      step =
-        find_or_create_step!(
-          ingest_run_id: ingest_run_id,
-          invoice_version: invoice_version,
-          invoice: invoice,
-          supporting_document_type: type,
-          step_type: extraction_step_type_for(requested_step_type)
-        )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
 
       contextwindowjson =
         build_contextwindowjson(type: type, documents: documents)
@@ -75,38 +68,31 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-
-      advance_run!(ingest_run_id: ingest_run_id)
     rescue StandardError => e
-      failure_status = ::Claims::Invoices::FailureSubtypes.genai_status(e)
-      status_subtype = ::Claims::Invoices::FailureSubtypes.genai(e)
+      failure_category = ::Claims::Ingest::FailureClassifier.genai_status(e)
+      failure_code = ::Claims::Ingest::FailureClassifier.genai(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
         genai_results_json: nil,
-        **::Claims::Invoices::FailureSubtypes.step_attributes(
-          status: failure_status,
-          status_subtype: status_subtype,
+        **::Claims::Ingest::FailureClassifier.step_attributes(
+          failure_category: failure_category,
+          failure_code: failure_code,
           error: e
         ),
         updated_at: Time.current
       )
+      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+    ensure
       advance_run!(ingest_run_id: ingest_run_id)
-      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     private
 
-    def extraction_step_type_for(requested_step_type)
-      requested = requested_step_type.to_s
-      if %w[
-           supporting_document_extraction
-           fix_supporting_document_extraction
-         ].include?(requested)
-        return requested
-      end
-
-      "supporting_document_extraction"
+    def terminal_run?(ingest_run_id)
+      ::Claims::Ingest::RunTransition::TERMINAL_STATUSES.include?(
+        ::Claims::IngestRun.find(ingest_run_id).status
+      )
     end
 
     def documents_for(invoice_version:, type:)
@@ -115,43 +101,6 @@ module Claims
         .where(supporting_document_type_id: type.id)
         .order(:created_at, :id)
         .to_a
-    end
-
-    def find_or_create_step!(
-      ingest_run_id:,
-      invoice_version:,
-      invoice:,
-      supporting_document_type:,
-      step_type:
-    )
-      step = nil
-
-      if ingest_run_id.present?
-        step =
-          ::Claims::IngestStepRun
-            .where(
-              ingest_run_id: ingest_run_id,
-              invoice_version_id: invoice_version.id,
-              supporting_document_type_id: supporting_document_type.id,
-              step_type: step_type
-            )
-            .where(status: %w[queued in_progress])
-            .order(created_at: :asc)
-            .first
-      end
-
-      step ||=
-        ::Claims::IngestStepRun.create!(
-          ingest_run_id: ingest_run_id,
-          session_id: invoice.session_id,
-          invoice_version_id: invoice_version.id,
-          supporting_document_type_id: supporting_document_type.id,
-          step_type: step_type,
-          status: "queued",
-          error_text: nil,
-          created_at: Time.current,
-          updated_at: Time.current
-        )
     end
 
     def build_contextwindowjson(type:, documents:)
@@ -199,7 +148,6 @@ module Claims
           supporting_document_id: document.id,
           original_filename: document.original_filename,
           content_type: document.content_type,
-          classification_status: document.classification_status,
           classification_confidence: document.classification_confidence,
           classification_reason: document.classification_reason,
           supporting_document_routing_quality:
@@ -259,9 +207,7 @@ module Claims
     def advance_run!(ingest_run_id:)
       return if ingest_run_id.blank?
 
-      ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
-    rescue StandardError
-      nil
+      ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
     end
   end
 end

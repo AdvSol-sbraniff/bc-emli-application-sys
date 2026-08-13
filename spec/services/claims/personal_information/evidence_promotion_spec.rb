@@ -20,7 +20,7 @@ RSpec.describe "Personal-information evidence promotion" do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "ocr_in_progress",
+        status: "contractor_precheck",
         created_at: now,
         updated_at: now
       )
@@ -34,6 +34,7 @@ RSpec.describe "Personal-information evidence promotion" do
       )
     run =
       Claims::IngestRun.create!(
+        run_kind: "initial_upload",
         session_id: session.id,
         contractor_id: contractor.id,
         resolved_invoice_version_id: version.id,
@@ -64,7 +65,6 @@ RSpec.describe "Personal-information evidence promotion" do
         document_kind: "supporting_document",
         document_kind_confidence: 99,
         document_kind_reason: "Supporting image.",
-        classification_status: "classified",
         classification_confidence: 99,
         classification_reason: "Energy label.",
         classified_at: now,

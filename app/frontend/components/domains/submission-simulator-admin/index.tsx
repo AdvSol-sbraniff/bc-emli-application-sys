@@ -28,6 +28,11 @@ import { ArrowsClockwise, Question, XCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { IngestRunMonitorTabs } from '../../shared/claims/ingest-run-monitor-tabs';
+import {
+  CLAIMS_EVIDENCE_FILE_ACCEPT,
+  mergeUniqueClaimsEvidenceFiles,
+  supportedClaimsEvidenceFiles,
+} from '../../shared/claims/claims-evidence-files';
 
 type ContractorRow = {
   id: string;
@@ -151,26 +156,11 @@ export default function SubmissionSimulatorAdminScreen() {
   };
 
   const mergeStagedFiles = (files: File[]) => {
-    const supportedEvidenceFiles = files.filter((f) => {
-      const type = String(f.type || '').toLowerCase();
-      const name = String(f.name || '').toLowerCase();
-      const byType = type === 'application/pdf' || type === 'image/jpeg' || type === 'image/png';
-      const byExt = name.endsWith('.pdf') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png');
-      return byType || byExt;
-    });
+    const supportedEvidenceFiles = supportedClaimsEvidenceFiles(files);
 
     if (!supportedEvidenceFiles.length) return;
 
-    setSelectedFiles((prev: File[]) => {
-      const next = [...prev];
-      supportedEvidenceFiles.forEach((f: File) => {
-        const alreadyStaged = next.some(
-          (p) => p.name === f.name && p.size === f.size && p.lastModified === f.lastModified,
-        );
-        if (!alreadyStaged) next.push(f);
-      });
-      return next;
-    });
+    setSelectedFiles((previous) => mergeUniqueClaimsEvidenceFiles(previous, supportedEvidenceFiles));
   };
 
   const handleFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,7 +222,7 @@ export default function SubmissionSimulatorAdminScreen() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+            accept={CLAIMS_EVIDENCE_FILE_ACCEPT}
             style={{ display: 'none' }}
             onChange={handleFilesPicked}
           />
@@ -405,7 +395,7 @@ export default function SubmissionSimulatorAdminScreen() {
                   Files are staged in browser memory until you click Upload Package.
                 </Text>
                 <Text fontSize="sm" mt={1}>
-                  Created invoices stop at genai_complete after OCR and GenAI. They do not get a submitter_id or
+                  Created invoices stop at contractor_precheck after validation. They do not get a submitter_id or
                   submitted_at until the contractor submits them to admin.
                 </Text>
               </Box>

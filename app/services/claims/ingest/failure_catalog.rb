@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 module Claims
-  module Invoices
-    module StatusSubtypes
+  module Ingest
+    module FailureCatalog
       PACKAGE_NEEDS_CORRECTION = "package_needs_correction"
       TECHNICAL_FAILURE = "technical_failure"
 
@@ -177,31 +177,12 @@ module Claims
         end
       end
 
-      def self.invoice_row_copy(status, subtype)
-        subtype = subtype.to_s.strip
-        return {} if subtype.blank?
-
-        record = subtype_record(status, subtype)
-        return {} if record.nil?
-
-        hint_parts = [
-          record.contractor_message.presence,
-          record.retry_guidance.presence
-        ].compact
-
-        {
-          invoice_status_subtype_admin_label: record.admin_label.presence,
-          invoice_status_subtype_hint: hint_parts.join(" ").presence,
-          invoice_status_subtype_retry_guidance: record.retry_guidance.presence
-        }.compact
-      end
-
       def self.subtype_record(status, subtype)
         return nil if subtype.blank?
 
-        ::Claims::InvoiceStatusSubtype.active.find_by(
-          status: status.to_s,
-          status_subtype: subtype.to_s
+        ::Claims::IngestFailureSubtype.active.find_by(
+          failure_category: status.to_s,
+          failure_code: subtype.to_s
         )
       rescue ActiveRecord::StatementInvalid,
              ActiveRecord::ConnectionNotEstablished

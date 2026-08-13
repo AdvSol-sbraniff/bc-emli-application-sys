@@ -4,11 +4,11 @@ require "net/http"
 require "timeout"
 
 module Claims
-  module Invoices
-    module FailureSubtypes
+  module Ingest
+    module FailureClassifier
       STEP_DIAGNOSTIC_COLUMNS = %i[
-        failure_status
-        failure_status_subtype
+        failure_category
+        failure_code
         error_code
         error_category
         error_phase
@@ -97,12 +97,15 @@ module Claims
         "unknown_runtime_failure"
       end
 
-      def payload(status:, status_subtype:, error: nil)
+      def payload(failure_category:, failure_code:, error: nil)
         normalized =
-          ::Claims::Invoices::StatusSubtypes.normalize(status, status_subtype)
+          ::Claims::Ingest::FailureCatalog.normalize(
+            failure_category,
+            failure_code
+          )
         base = {
-          "failure_status" => status.to_s,
-          "failure_status_subtype" => normalized || status_subtype.to_s,
+          "failure_category" => failure_category.to_s,
+          "failure_code" => normalized || failure_code.to_s,
           "error_class" => error&.class&.name,
           "error_message" => error&.message.to_s
         }.compact
@@ -111,7 +114,7 @@ module Claims
             error.analytics_payload
           else
             {
-              "error_code" => normalized || status_subtype.to_s,
+              "error_code" => normalized || failure_code.to_s,
               "retryable" => retryable?(error)
             }
           end
@@ -119,16 +122,19 @@ module Claims
         base.merge(analytics)
       end
 
-      def step_attributes(status:, status_subtype:, error: nil)
+      def step_attributes(failure_category:, failure_code:, error: nil)
         values =
-          payload(status: status, status_subtype: status_subtype, error: error)
+          payload(
+            failure_category: failure_category,
+            failure_code: failure_code,
+            error: error
+          )
 
         {
-          failure_status: values["failure_status"],
-          failure_status_subtype: values["failure_status_subtype"],
+          failure_category: values["failure_category"],
+          failure_code: values["failure_code"],
           error_code:
-            values["error_code"].presence ||
-              values["failure_status_subtype"].presence,
+            values["error_code"].presence || values["failure_code"].presence,
           error_category: values["error_category"],
           error_phase: values["phase"],
           retryable: values["retryable"],
@@ -145,13 +151,12 @@ module Claims
       end
 
       def from_step(step, fallback:)
-        scalar_subtype =
-          normalized_step_value(step, :failure_status_subtype).presence
+        scalar_subtype = normalized_step_value(step, :failure_code).presence
         scalar_status =
-          normalized_step_value(step, :failure_status).presence ||
+          normalized_step_value(step, :failure_category).presence ||
             "technical_failure"
         normalized =
-          ::Claims::Invoices::StatusSubtypes.normalize(
+          ::Claims::Ingest::FailureCatalog.normalize(
             scalar_status,
             scalar_subtype
           )
@@ -161,23 +166,20 @@ module Claims
         payloads.each do |payload|
           next unless payload.is_a?(Hash)
 
-          subtype =
-            payload["failure_status_subtype"] ||
-              payload[:failure_status_subtype] || payload["status_subtype"] ||
-              payload[:status_subtype]
+          subtype = payload["failure_code"] || payload[:failure_code]
           status =
-            payload["failure_status"] || payload[:failure_status] ||
+            payload["failure_category"] || payload[:failure_category] ||
               "technical_failure"
           normalized =
-            ::Claims::Invoices::StatusSubtypes.normalize(status, subtype)
+            ::Claims::Ingest::FailureCatalog.normalize(status, subtype)
           return normalized if normalized.present?
         end
 
         fallback
       end
 
-      def status_from_step(step, fallback: "technical_failure")
-        scalar_status = normalized_step_value(step, :failure_status)
+      def category_from_step(step, fallback: "technical_failure")
+        scalar_status = normalized_step_value(step, :failure_category)
         if %w[package_needs_correction technical_failure].include?(
              scalar_status
            )
@@ -188,7 +190,7 @@ module Claims
         payloads.each do |payload|
           next unless payload.is_a?(Hash)
 
-          status = payload["failure_status"] || payload[:failure_status]
+          status = payload["failure_category"] || payload[:failure_category]
           if %w[package_needs_correction technical_failure].include?(
                status.to_s
              )
@@ -209,9 +211,8 @@ module Claims
           "provider_code" => normalized_step_value(step, :provider_code),
           "provider_attempt_count" => step_value(step, :provider_attempt_count),
           "phase" => normalized_step_value(step, :error_phase),
-          "failure_status" => normalized_step_value(step, :failure_status),
-          "failure_status_subtype" =>
-            normalized_step_value(step, :failure_status_subtype)
+          "failure_category" => normalized_step_value(step, :failure_category),
+          "failure_code" => normalized_step_value(step, :failure_code)
         }.compact
         return scalar if scalar["error_code"].present?
 
@@ -237,8 +238,8 @@ module Claims
             "provider_code",
             "provider_attempt_count",
             "phase",
-            "failure_status",
-            "failure_status_subtype"
+            "failure_category",
+            "failure_code"
           )
           .compact
       end
@@ -295,6 +296,9 @@ module Claims
              error.is_a?(ActiveRecord::ConnectionNotEstablished)
           return true
         end
+
+        message = error_message(error)
+        return true if message.match?(/\b(?:429|5\d\d)\b/)
 
         false
       end

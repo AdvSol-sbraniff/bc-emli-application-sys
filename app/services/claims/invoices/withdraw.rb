@@ -14,12 +14,7 @@ module Claims
 
       WITHDRAWN_STATUS = "contractor_withdrawn"
       WITHDRAWABLE_STATUSES = %w[
-        upload_failed
-        ocr_failed
-        genai_failed
-        genai_complete
-        package_needs_correction
-        technical_failure
+        contractor_precheck
         admin_review_inbox
         contractor_revision_inbox
         in_review

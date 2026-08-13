@@ -105,7 +105,7 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
   it "creates managed issues when the contractor hands the analyzed package to admins" do
     rule
     invoice.update_columns(
-      status: "genai_complete",
+      status: "contractor_precheck",
       status_updated_at: now,
       updated_at: now
     )
@@ -159,7 +159,6 @@ RSpec.describe "Claims revision issue workflow API", type: :request do
     expect(response).to have_http_status(:ok)
     expect(json_response.dig("invoice", "status")).to eq("contractor_withdrawn")
     expect(invoice.reload.status).to eq("contractor_withdrawn")
-    expect(invoice.status_subtype).to be_nil
     expect(invoice.revision_issues.first.reload.status).to eq(
       "closed_as_withdrawn"
     )

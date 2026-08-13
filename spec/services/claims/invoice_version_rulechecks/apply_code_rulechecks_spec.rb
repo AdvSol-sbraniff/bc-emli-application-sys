@@ -33,7 +33,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
     participant:,
     contractor:,
     invoice: nil,
-    status: "genai_in_progress",
+    status: "contractor_precheck",
     version_number: 1
   )
     unless invoice
@@ -62,8 +62,6 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
     Claims::InvoiceVersionUpgradeType.create!(
       invoice_version_id: invoice_version.id,
       invoice_upgrade_type_id: invoice_upgrade_type(upgrade_type_key).id,
-      source_engine: "classifier",
-      call_status: "classified",
       confidence: 100,
       created_at: now,
       updated_at: now
@@ -88,7 +86,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
                 updated_at: program_received_at
               ).id,
             contractor_id: contractor.id,
-            status: "genai_in_progress",
+            status: "contractor_precheck",
             submitted_at: submitted_at,
             created_at: program_received_at,
             updated_at: program_received_at
@@ -183,7 +181,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_in_progress",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -222,14 +220,14 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_complete"
+          status: "contractor_precheck"
         )
       add_upgrade_type(prior_version, "dual_fuel_ducted_heat_pump")
       current_version =
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       add_upgrade_type(current_version, "air_source_heat_pump_electric")
 
@@ -266,7 +264,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       add_upgrade_type(current_version, "air_source_heat_pump_electric")
 
@@ -295,14 +293,14 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_complete"
+          status: "contractor_precheck"
         )
       add_upgrade_type(prior_version, "electrical_service_upgrade")
       current_version =
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       add_upgrade_type(current_version, "electrical_service_upgrade")
 
@@ -334,7 +332,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       add_upgrade_type(current_version, "air_source_heat_pump_electric")
       add_upgrade_type(current_version, "dual_fuel_ducted_heat_pump")
@@ -364,7 +362,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       add_upgrade_type(current_version, "air_source_heat_pump_electric")
       add_upgrade_type(current_version, "heat_pump_water_heater")
@@ -393,7 +391,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
           session_id:
             Claims::Session.create!(created_at: now, updated_at: now).id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -417,7 +415,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
         create_invoice_version(
           participant: participant,
           contractor: contractor,
-          status: "genai_in_progress"
+          status: "contractor_precheck"
         )
       add_upgrade_type(current_version, "air_source_heat_pump_electric")
 

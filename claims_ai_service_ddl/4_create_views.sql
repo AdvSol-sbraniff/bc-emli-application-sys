@@ -13,7 +13,6 @@ CREATE OR REPLACE VIEW claims.v_current_invoice_versions AS
 SELECT DISTINCT ON (iv.invoice_id)
   i.session_id,
   i.status AS invoice_status,
-  i.status_subtype AS invoice_status_subtype,
   iv.id,
   iv.invoice_id,
   iv.invoice_versionno,
@@ -23,8 +22,23 @@ SELECT DISTINCT ON (iv.invoice_id)
   iv.content_type,
   iv.byte_size,
   iv.sha256,
-  iv.genai_raw_json,
-  iv.genai_result,
+  (
+    SELECT CASE MIN(
+      CASE ivr.rule_result
+        WHEN 'fail' THEN 1
+        WHEN 'warn' THEN 2
+        WHEN 'info' THEN 3
+        WHEN 'pass' THEN 4
+      END
+    )
+      WHEN 1 THEN 'fail'
+      WHEN 2 THEN 'warn'
+      WHEN 3 THEN 'info'
+      WHEN 4 THEN 'pass'
+    END
+    FROM claims.invoice_version_rulechecks ivr
+    WHERE ivr.invoice_version_id = iv.id
+  ) AS validation_result,
   iv.di_raw_json,
   iv.di_page_map,
   iv.di_ocr_invoice_id,
@@ -365,7 +379,6 @@ SELECT
   i.reference_number  AS reference_number,
   s.id                AS session_id,
   i.status            AS invoice_status,
-  i.status_subtype    AS invoice_status_subtype,
   i.status_updated_at AS invoice_status_updated_at,
   i.system_help_notes AS system_help_notes,
   i.created_at        AS invoice_created_at,
@@ -417,10 +430,18 @@ SELECT
   civ.di_ocr_vendor_name              AS latest_di_ocr_vendor_name,
   civ.di_ocr_invoice_id               AS latest_di_ocr_invoice_id,
 
-  civ.genai_result  AS latest_genai_result,
+  civ.validation_result AS latest_validation_result,
 
   civut.latest_detected_upgrade_type_keys AS latest_detected_upgrade_type_keys,
   civut.latest_detected_upgrade_types_json AS latest_detected_upgrade_types_json,
+
+  latest_run.id AS latest_ingest_run_id,
+  latest_run.run_kind AS latest_ingest_run_kind,
+  latest_run.status AS latest_ingest_run_status,
+  latest_run.failure_category AS latest_ingest_failure_category,
+  latest_run.failure_code AS latest_ingest_failure_code,
+  latest_run.created_at AS latest_ingest_run_created_at,
+  latest_run.completed_at AS latest_ingest_run_completed_at,
 
   i.submitted_at      AS invoice_submitted_at
 
@@ -458,10 +479,24 @@ LEFT JOIN LATERAL (
     JOIN claims.invoice_upgrade_types iut
       ON iut.id = ivut.invoice_upgrade_type_id
     WHERE ivut.invoice_version_id = civ.id
-      AND ivut.source_engine = 'classifier'
     ORDER BY iut.upgrade_type_key, ivut.created_at DESC, ivut.confidence DESC
   ) x
 ) civut
+  ON TRUE
+LEFT JOIN LATERAL (
+  SELECT
+    ir.id,
+    ir.run_kind,
+    ir.status,
+    ir.failure_category,
+    ir.failure_code,
+    ir.created_at,
+    ir.completed_at
+  FROM claims.ingest_runs ir
+  WHERE ir.invoice_id = i.id
+  ORDER BY ir.created_at DESC, ir.id DESC
+  LIMIT 1
+) latest_run
   ON TRUE;
 
 DROP VIEW IF EXISTS claims.v_user_eligibilitycodes;
@@ -564,8 +599,23 @@ SELECT
   iv.content_type                 AS invoice_version_content_type,
   iv.byte_size                    AS invoice_version_byte_size,
   iv.sha256                       AS invoice_version_sha256,
-  iv.genai_raw_json               AS invoice_version_genai_raw_json,
-  iv.genai_result AS invoice_version_genai_result,
+  (
+    SELECT CASE MIN(
+      CASE ivr.rule_result
+        WHEN 'fail' THEN 1
+        WHEN 'warn' THEN 2
+        WHEN 'info' THEN 3
+        WHEN 'pass' THEN 4
+      END
+    )
+      WHEN 1 THEN 'fail'
+      WHEN 2 THEN 'warn'
+      WHEN 3 THEN 'info'
+      WHEN 4 THEN 'pass'
+    END
+    FROM claims.invoice_version_rulechecks ivr
+    WHERE ivr.invoice_version_id = iv.id
+  ) AS invoice_version_validation_result,
   iv.di_raw_json                  AS invoice_version_di_raw_json,
   iv.di_page_map                  AS invoice_version_di_page_map,
   iv.di_ocr_invoice_id            AS di_ocr_invoice_id,

@@ -3,7 +3,16 @@ module Claims
   class Invoice < ApplicationRecord
     self.table_name = "claims.invoices"
 
-    FAILURE_STATUSES = %w[package_needs_correction technical_failure].freeze
+    STATUSES = %w[
+      contractor_precheck
+      admin_review_inbox
+      contractor_revision_inbox
+      in_review
+      approved_pending
+      approved_paid
+      ineligible
+      contractor_withdrawn
+    ].freeze
 
     has_many :invoice_versions,
              class_name: "Claims::InvoiceVersion",
@@ -46,9 +55,13 @@ module Claims
              foreign_key: :invoice_id,
              dependent: :nullify
 
+    has_many :ingest_runs,
+             class_name: "Claims::IngestRun",
+             foreign_key: :invoice_id,
+             dependent: :nullify
+
     def set_workflow_status!(
       status,
-      status_subtype: nil,
       actor_user_id: nil,
       invoice_version_id: nil,
       **attrs
@@ -56,7 +69,6 @@ module Claims
       ::Claims::Invoices::TransitionStatus.call(
         invoice: self,
         to_status: status,
-        status_subtype: status_subtype,
         actor_user_id: actor_user_id,
         invoice_version_id: invoice_version_id,
         attributes: attrs,
@@ -67,7 +79,6 @@ module Claims
 
     def set_workflow_status_columns!(
       status,
-      status_subtype: nil,
       actor_user_id: nil,
       invoice_version_id: nil,
       now: Time.current
@@ -75,7 +86,6 @@ module Claims
       ::Claims::Invoices::TransitionStatus.call(
         invoice: self,
         to_status: status,
-        status_subtype: status_subtype,
         actor_user_id: actor_user_id,
         invoice_version_id: invoice_version_id,
         attributes: {

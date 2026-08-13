@@ -3,8 +3,6 @@
 module Claims
   module Ingest
     class CleanupFailedContractorUpload
-      FAILURE_STATUSES = %w[package_needs_correction technical_failure].freeze
-
       def self.call(ingest_run:)
         new(ingest_run: ingest_run).call
       end
@@ -155,10 +153,10 @@ module Claims
 
       def retained_step_diagnostic_attributes(step, retained_status:)
         analytics =
-          ::Claims::Invoices::FailureSubtypes.analytics_from_step(step)
+          ::Claims::Ingest::FailureClassifier.analytics_from_step(step)
         attributes = {
-          failure_status: analytics["failure_status"],
-          failure_status_subtype: analytics["failure_status_subtype"],
+          failure_category: analytics["failure_category"],
+          failure_code: analytics["failure_code"],
           error_code: analytics["error_code"],
           error_category: analytics["error_category"],
           error_phase: analytics["phase"],
@@ -170,8 +168,8 @@ module Claims
         }
 
         if retained_status == "failed" && attributes[:error_code].blank?
-          attributes[:failure_status] = "technical_failure"
-          attributes[:failure_status_subtype] = "unknown_runtime_failure"
+          attributes[:failure_category] = "technical_failure"
+          attributes[:failure_code] = "unknown_runtime_failure"
           attributes[:error_code] = "pipeline_cancelled_after_failure"
           attributes[:error_category] = "pipeline_cancelled"
           attributes[:retryable] = false
@@ -197,25 +195,12 @@ module Claims
       end
 
       def failed_invoice_ids
-        ids =
-          ::Claims::Invoice.where(
-            session_id: ingest_run.session_id,
-            contractor_id: ingest_run.contractor_id,
-            status: FAILURE_STATUSES
-          ).pluck(:id)
-
-        staging_invoice_ids =
-          ::Claims::IngestDocument
-            .where(ingest_run_id: ingest_run.id)
-            .pluck(:invoice_id, :resolved_invoice_id)
-            .flatten
-            .compact
-
-        (ids + staging_invoice_ids).uniq
+        invoice_id = ingest_run.invoice_id.presence
+        invoice_id ? [invoice_id] : []
       end
 
       def preserve_debug_payloads?
-        ingest_run.failure_status == "technical_failure"
+        ingest_run.failure_category == "technical_failure"
       end
     end
   end

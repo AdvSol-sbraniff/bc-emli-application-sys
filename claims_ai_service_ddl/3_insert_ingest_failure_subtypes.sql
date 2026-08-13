@@ -1,8 +1,8 @@
 BEGIN;
 
-INSERT INTO claims.invoice_status_subtypes (
-  status,
-  status_subtype,
+INSERT INTO claims.ingest_failure_subtypes (
+  failure_category,
+  failure_code,
   admin_label,
   contractor_message,
   retry_guidance,
@@ -48,7 +48,7 @@ VALUES
   ('technical_failure', 'db_persistence_failure', 'Database persistence failure', 'We could not prepare your AI advice right now because the app could not save processing results.', 'Please try uploading the same files again later.', true, NOW(), NOW()),
   ('technical_failure', 'worker_retry_exhausted', 'Worker retry exhausted', 'We could not prepare your AI advice right now because background processing could not finish.', 'Please try uploading the same files again later.', true, NOW(), NOW()),
   ('technical_failure', 'unknown_runtime_failure', 'Unknown runtime failure', 'We could not prepare your AI advice right now because processing stopped unexpectedly.', 'Please try uploading the same files again later.', true, NOW(), NOW())
-ON CONFLICT (status, status_subtype) DO UPDATE
+ON CONFLICT (failure_category, failure_code) DO UPDATE
 SET
   admin_label = EXCLUDED.admin_label,
   contractor_message = EXCLUDED.contractor_message,

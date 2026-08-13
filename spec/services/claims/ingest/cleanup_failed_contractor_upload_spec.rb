@@ -8,8 +8,7 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "package_needs_correction",
-        status_subtype: "package_unreadable_file"
+        status: "contractor_precheck"
       )
     invoice_version =
       Claims::InvoiceVersion.create!(
@@ -22,12 +21,17 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
       )
     run =
       Claims::IngestRun.create!(
+        run_kind: "initial_upload",
         session_id: session.id,
         contractor_id: contractor.id,
+        invoice_id: invoice.id,
         status: "failed",
+        failure_category: "package_needs_correction",
+        failure_code: "package_unreadable_file",
         cleanup_failed_invoice_artifacts: true,
         total_files: 1,
-        failed_files: 1
+        failed_files: 1,
+        completed_at: Time.current
       )
     document =
       Claims::IngestDocument.create!(
@@ -50,7 +54,7 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "ocr_read",
+        step_type: "read_document",
         status: "succeeded",
         di_results_json: {
           private_text: "sensitive DI result"
@@ -62,12 +66,12 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "classifier_files",
+        step_type: "classify_document",
         status: "failed",
         error_text: "Raw private provider response",
         genai_results_json: {
-          "failure_status" => "package_needs_correction",
-          "failure_status_subtype" => "package_unreadable_file",
+          "failure_category" => "package_needs_correction",
+          "failure_code" => "package_unreadable_file",
           "error_code" => "genai_input_image_invalid",
           "error_category" => "provider_invalid_image",
           "retryable" => false,
@@ -113,8 +117,8 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
     expect(failed_step.context_window_json).to be_nil
     expect(failed_step.genai_results_json).to be_nil
     expect(failed_step).to have_attributes(
-      failure_status: "package_needs_correction",
-      failure_status_subtype: "package_unreadable_file",
+      failure_category: "package_needs_correction",
+      failure_code: "package_unreadable_file",
       error_code: "genai_input_image_invalid",
       error_category: "provider_invalid_image",
       retryable: false,
@@ -133,8 +137,7 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "technical_failure",
-        status_subtype: "genai_service_malformed_response"
+        status: "contractor_precheck"
       )
     invoice_version =
       Claims::InvoiceVersion.create!(
@@ -147,14 +150,17 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
       )
     run =
       Claims::IngestRun.create!(
+        run_kind: "initial_upload",
         session_id: session.id,
         contractor_id: contractor.id,
+        invoice_id: invoice.id,
         status: "failed",
-        failure_status: "technical_failure",
-        failure_status_subtype: "genai_service_malformed_response",
+        failure_category: "technical_failure",
+        failure_code: "genai_service_malformed_response",
         cleanup_failed_invoice_artifacts: true,
         total_files: 1,
-        failed_files: 1
+        failed_files: 1,
+        completed_at: Time.current
       )
     document =
       Claims::IngestDocument.create!(
@@ -180,13 +186,13 @@ RSpec.describe Claims::Ingest::CleanupFailedContractorUpload do
         ingest_run_id: run.id,
         session_id: session.id,
         ingest_document_id: document.id,
-        step_type: "classifier_files",
+        step_type: "classify_document",
         status: "failed",
         error_text:
           "Node GenAI request failed " \
             "(genai_model_output_invalid_json; snippet=not json)",
-        failure_status: "technical_failure",
-        failure_status_subtype: "genai_service_malformed_response",
+        failure_category: "technical_failure",
+        failure_code: "genai_service_malformed_response",
         error_code: "genai_model_output_invalid_json",
         error_category: "model_output_invalid_json",
         retryable: true,

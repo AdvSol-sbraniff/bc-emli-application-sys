@@ -14,21 +14,50 @@ RSpec.describe "Claims admin ingest runs", type: :request do
   def create_run(contractor:, status: "failed", created_at: Time.current)
     session =
       Claims::Session.create!(created_at: created_at, updated_at: created_at)
-    Claims::IngestRun.create!(
+    invoice =
+      Claims::Invoice.create!(
+        session_id: session.id,
+        contractor_id:
+          (contractor || Contractor.create!(business_name: "Run Owner")).id,
+        status: "contractor_precheck",
+        created_at: created_at,
+        updated_at: created_at
+      )
+    invoice_version =
+      if status == "succeeded"
+        Claims::InvoiceVersion.create!(
+          invoice_id: invoice.id,
+          invoice_versionno: 1,
+          storage_provider: "test",
+          storage_key: "admin-runs/#{invoice.id}.pdf",
+          original_filename: "Invoice.pdf",
+          content_type: "application/pdf",
+          created_at: created_at,
+          updated_at: created_at
+        )
+      end
+
+    attributes = {
+      run_kind: "initial_upload",
       session_id: session.id,
+      invoice_id: invoice.id,
       contractor_id: contractor&.id,
       status: status,
       total_files: 2,
       completed_files: status == "succeeded" ? 2 : 0,
       failed_files: status == "failed" ? 1 : 0,
+      failure_category: status == "failed" ? "package_needs_correction" : nil,
+      failure_code: status == "failed" ? "package_unreadable_file" : nil,
+      resolved_invoice_version_id: invoice_version&.id,
       pipeline_error_code:
         status == "failed" ? "genai_input_image_invalid" : nil,
       pipeline_error_description:
-        status == "failed" ? "classifier_files failed after 1 attempt." : nil,
+        status == "failed" ? "classify_document failed after 1 attempt." : nil,
       created_at: created_at,
       updated_at: created_at,
       completed_at: created_at
-    )
+    }
+    Claims::IngestRun.create!(attributes)
   end
 
   context "with claims-admin access" do
@@ -48,11 +77,11 @@ RSpec.describe "Claims admin ingest runs", type: :request do
       Claims::IngestStepRun.create!(
         ingest_run_id: run.id,
         session_id: run.session_id,
-        step_type: "upload_package_stage",
+        step_type: "stage_package",
         status: "failed",
         error_text: "Provider rejected an image.",
-        failure_status: "package_needs_correction",
-        failure_status_subtype: "package_unreadable_file",
+        failure_category: "package_needs_correction",
+        failure_code: "package_unreadable_file",
         error_code: "genai_input_image_invalid",
         error_category: "provider_invalid_image",
         retryable: false,
@@ -81,7 +110,13 @@ RSpec.describe "Claims admin ingest runs", type: :request do
           "status" => "failed",
           "duration_seconds" => 0.0,
           "pipeline_error_code" => "genai_input_image_invalid",
-          "primary_failure" =>
+          "attempt_summary" =>
+            hash_including(
+              "failed_attempts" => 1,
+              "recovered_attempts" => 0,
+              "failed_targets" => 1
+            ),
+          "terminal_failure" =>
             hash_including(
               "error_code" => "genai_input_image_invalid",
               "diagnostic_id" => "diag-admin-grid",
@@ -105,7 +140,7 @@ RSpec.describe "Claims admin ingest runs", type: :request do
         "status" => "failed",
         "pipeline_error_code" => "genai_input_image_invalid"
       )
-      expect(json_response.fetch("primary_failure")).to include(
+      expect(json_response.fetch("terminal_failure")).to include(
         "error_code" => "genai_input_image_invalid",
         "diagnostic_id" => "diag-admin-grid"
       )
@@ -130,11 +165,11 @@ RSpec.describe "Claims admin ingest runs", type: :request do
           ingest_run_id: selected_run.id,
           session_id: selected_run.session_id,
           ingest_document_id: ingest_document.id,
-          step_type: "classifier_files",
+          step_type: "classify_document",
           status: "failed",
           error_text: "Retained failure: genai_input_image_invalid.",
-          failure_status: "package_needs_correction",
-          failure_status_subtype: "package_unreadable_file",
+          failure_category: "package_needs_correction",
+          failure_code: "package_unreadable_file",
           error_code: "genai_input_image_invalid",
           retryable: false,
           created_at: Time.current,
@@ -143,7 +178,7 @@ RSpec.describe "Claims admin ingest runs", type: :request do
       Claims::IngestStepRun.create!(
         ingest_run_id: other_run.id,
         session_id: other_run.session_id,
-        step_type: "upload_package_stage",
+        step_type: "stage_package",
         status: "succeeded",
         created_at: Time.current,
         updated_at: Time.current
@@ -158,8 +193,12 @@ RSpec.describe "Claims admin ingest runs", type: :request do
           "ingest_run_id" => selected_run.id,
           "ingest_document_id" => ingest_document.id,
           "ingest_document_original_filename" => "Original source photo.jpg",
-          "step_type" => "classifier_files",
+          "step_type" => "classify_document",
           "status" => "failed",
+          "display_status" => "failed",
+          "attempt_number" => 1,
+          "attempt_count" => 1,
+          "effective_attempt" => true,
           "error_code" => "genai_input_image_invalid",
           "retryable" => false,
           "has_di_results_json" => false,
@@ -186,10 +225,85 @@ RSpec.describe "Claims admin ingest runs", type: :request do
         "ingest_document_original_filename" => "Original source photo.jpg",
         "genai_results_json" => nil,
         "error_code" => "genai_input_image_invalid",
+        "display_status" => "failed",
+        "attempt_number" => 1,
         "retryable" => false
       )
       expect(json_response.fetch("completed_at")).to be_present
       expect(json_response.fetch("duration_seconds")).to be >= 0
+    end
+
+    it "reports recovered attempts without presenting a terminal failure" do
+      run = create_run(contractor: nil, status: "succeeded")
+      failed_step =
+        Claims::IngestStepRun.create!(
+          ingest_run_id: run.id,
+          session_id: run.session_id,
+          step_type: "case_facts",
+          status: "failed",
+          error_text: "Malformed first response.",
+          error_code: "genai_model_output_invalid_json",
+          retryable: true,
+          diagnostic_id: "diag-recovered-attempt",
+          created_at: 1.minute.ago,
+          updated_at: 1.minute.ago
+        )
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: run.session_id,
+        step_type: "case_facts",
+        status: "succeeded",
+        created_at: Time.current,
+        updated_at: Time.current
+      )
+
+      get "/api/claims/admin/ingest_runs/#{run.id}"
+
+      expect(response).to have_http_status(:ok)
+      expect(json_response.fetch("status")).to eq("succeeded")
+      expect(json_response.fetch("terminal_failure")).to be_nil
+      expect(json_response.fetch("attempt_summary")).to include(
+        "failed_attempts" => 1,
+        "recovered_attempts" => 1,
+        "retried_targets" => 1,
+        "failed_targets" => 0
+      )
+
+      get "/api/claims/admin/ingest_runs/#{run.id}/steps"
+
+      recovered =
+        json_response
+          .fetch("rows")
+          .find { |row| row.fetch("id") == failed_step.id }
+      expect(recovered).to include(
+        "display_status" => "recovered",
+        "logical_state" => "succeeded",
+        "attempt_number" => 1,
+        "attempt_count" => 2,
+        "effective_attempt" => false
+      )
+    end
+
+    it "finds a run by a retained step diagnostic identifier" do
+      run = create_run(contractor: nil)
+      Claims::IngestStepRun.create!(
+        ingest_run_id: run.id,
+        session_id: run.session_id,
+        step_type: "case_facts",
+        status: "failed",
+        error_text: "Provider unavailable.",
+        error_code: "genai_service_unavailable",
+        retryable: false,
+        diagnostic_id: "diag-search-exact-value"
+      )
+
+      get "/api/claims/admin/ingest_runs",
+          params: {
+            q: "diag-search-exact-value"
+          }
+
+      expect(response).to have_http_status(:ok)
+      expect(json_response.fetch("rows").pluck("id")).to eq([run.id])
     end
   end
 

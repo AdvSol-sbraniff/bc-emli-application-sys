@@ -24,7 +24,7 @@ RSpec.describe "Claims contractor invoice read", type: :request do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           status_updated_at: now,
           submitted_at: now,
           created_at: now,
@@ -77,8 +77,6 @@ RSpec.describe "Claims contractor invoice read", type: :request do
       Claims::InvoiceVersionUpgradeType.create!(
         invoice_version_id: invoice_version.id,
         invoice_upgrade_type_id: upgrade_type.id,
-        source_engine: "classifier",
-        call_status: "classified",
         confidence: 98,
         raw_json: {
           "upgrade_type_key" => "windows_doors"
@@ -120,7 +118,6 @@ RSpec.describe "Claims contractor invoice read", type: :request do
           storage_key: "label.jpg",
           original_filename: "Fenestration energy tag.jpg",
           content_type: "image/jpeg",
-          classification_status: "classified",
           classification_confidence: 99,
           created_at: now,
           updated_at: now

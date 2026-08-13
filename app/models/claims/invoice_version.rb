@@ -3,6 +3,8 @@ module Claims
   class InvoiceVersion < ApplicationRecord
     self.table_name = "claims.invoice_versions"
 
+    VALIDATION_RESULTS_BY_SEVERITY = %w[fail warn info pass].freeze
+
     belongs_to :invoice, class_name: "Claims::Invoice", foreign_key: :invoice_id
 
     belongs_to :ahri_product,
@@ -78,5 +80,10 @@ module Claims
              class_name: "Claims::UploadRun",
              foreign_key: :invoice_version_id,
              dependent: :destroy
+
+    def validation_result
+      results = rulechecks.distinct.pluck(:rule_result)
+      VALIDATION_RESULTS_BY_SEVERITY.find { |result| results.include?(result) }
+    end
   end
 end

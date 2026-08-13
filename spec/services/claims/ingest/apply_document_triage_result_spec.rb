@@ -9,10 +9,11 @@ RSpec.describe Claims::Ingest::ApplyDocumentTriageResult do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "ocr_in_progress"
+          status: "contractor_precheck"
         )
       run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           contractor_id: contractor.id,
           status: "running",
@@ -69,8 +70,7 @@ RSpec.describe Claims::Ingest::ApplyDocumentTriageResult do
       )
       expect(document.reload).to have_attributes(
         document_kind: "supporting_document",
-        supporting_document_type_id: catchall.id,
-        classification_status: "classified"
+        supporting_document_type_id: catchall.id
       )
     end
   end

@@ -26,14 +26,14 @@ module Api
             .offset((page - 1) * per)
             .limit(per)
             .to_a
-        failures_by_run_id = primary_failures_by_run_id(rows.map(&:id))
+        diagnostics_by_run_id = attempt_diagnostics_by_run_id(rows)
 
         render json: {
                  rows:
                    rows.map do |row|
                      serialize_run(
                        row,
-                       primary_failure: failures_by_run_id[row.id.to_s]
+                       diagnostics: diagnostics_by_run_id[row.id.to_s]
                      )
                    end,
                  meta: {
@@ -54,10 +54,9 @@ module Api
       # GET /api/claims/admin/ingest_runs/:ingest_run_id
       def show
         row = ::Claims::VIngestRun.find(params[:ingest_run_id])
-        primary_failure = primary_failures_by_run_id([row.id])[row.id.to_s]
+        diagnostics = attempt_diagnostics_by_run_id([row])[row.id.to_s]
 
-        render json: serialize_run(row, primary_failure: primary_failure),
-               status: :ok
+        render json: serialize_run(row, diagnostics: diagnostics), status: :ok
       end
 
       # GET /api/claims/admin/ingest_runs/:ingest_run_id/steps
@@ -74,9 +73,18 @@ module Api
           )
         total = scope.count
         rows = scope.offset((page - 1) * per).limit(per)
+        diagnostics = attempt_diagnostics_for_run(run)
+        labels = target_labels(rows)
 
         render json: {
-                 rows: rows.map { |row| serialize_step(row) },
+                 rows:
+                   rows.map do |row|
+                     serialize_step(
+                       row,
+                       attempt: diagnostics.annotations_by_step_id[row.id.to_s],
+                       labels: labels
+                     )
+                   end,
                  meta: {
                    total: total,
                    page: page,
@@ -91,7 +99,16 @@ module Api
       # GET /api/claims/admin/ingest_step_runs/:id
       def show_step
         row = ::Claims::VIngestStepRun.find(params[:id])
-        render json: serialize_step(row, include_payloads: true), status: :ok
+        run = ::Claims::VIngestRun.find(row.ingest_run_id)
+        diagnostics = attempt_diagnostics_for_run(run)
+        render json:
+                 serialize_step(
+                   row,
+                   include_payloads: true,
+                   attempt: diagnostics.annotations_by_step_id[row.id.to_s],
+                   labels: target_labels([row])
+                 ),
+               status: :ok
       end
 
       private
@@ -108,6 +125,26 @@ module Api
           OR v_ingest_runs.contractor_business_name ILIKE :like
           OR v_ingest_runs.contractor_number ILIKE :like
           OR v_ingest_runs.pipeline_error_code ILIKE :like
+          OR EXISTS (
+            SELECT 1
+            FROM claims.ingest_step_runs search_step
+            WHERE search_step.ingest_run_id = v_ingest_runs.id
+              AND (
+                search_step.id::text ILIKE :like
+                OR search_step.diagnostic_id ILIKE :like
+                OR search_step.error_code ILIKE :like
+                OR search_step.provider_code ILIKE :like
+              )
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM claims.ingest_documents search_document
+            WHERE search_document.ingest_run_id = v_ingest_runs.id
+              AND (
+                search_document.id::text ILIKE :like
+                OR search_document.original_filename ILIKE :like
+              )
+          )
         SQL
       end
 
@@ -115,7 +152,10 @@ module Api
         status = value.to_s.strip
         return if status.blank?
 
-        status if %w[queued running succeeded failed partial].include?(status)
+        allowed =
+          ::Claims::IngestRun::ACTIVE_STATUSES +
+            ::Claims::IngestRun::TERMINAL_STATUSES
+        status if allowed.include?(status)
       end
 
       def normalized_sort(value)
@@ -144,10 +184,12 @@ module Api
         default
       end
 
-      def serialize_run(row, primary_failure: nil)
+      def serialize_run(row, diagnostics: nil)
         {
           id: row.id,
+          run_kind: row.run_kind,
           session_id: row.session_id,
+          invoice_id: row.invoice_id,
           contractor_id: row.contractor_id,
           contractor_business_name: row.contractor_business_name,
           contractor_number: row.contractor_number,
@@ -160,10 +202,11 @@ module Api
           failed_files: row.failed_files,
           pipeline_error_code: row.pipeline_error_code,
           pipeline_error_description: row.pipeline_error_description,
-          failure_status: row.failure_status,
-          failure_status_subtype: row.failure_status_subtype,
-          primary_failure:
-            primary_failure && serialize_step_diagnostics(primary_failure),
+          failure_category: row.failure_category,
+          failure_code: row.failure_code,
+          attempt_summary: diagnostics&.summary,
+          terminal_failure:
+            serialize_terminal_failure(diagnostics&.terminal_failure_step),
           created_at: row.created_at,
           updated_at: row.updated_at,
           completed_at: row.completed_at,
@@ -171,7 +214,11 @@ module Api
         }
       end
 
-      def serialize_step(row, include_payloads: false)
+      def serialize_step(row, include_payloads: false, attempt: nil, labels: {})
+        upgrade_type =
+          labels.fetch(:upgrade_types, {})[row.invoice_upgrade_type_id]
+        supporting_type =
+          labels.fetch(:supporting_types, {})[row.supporting_document_type_id]
         payload = {
           id: row.id,
           ingest_run_id: row.ingest_run_id,
@@ -181,9 +228,14 @@ module Api
           ingest_document_original_filename:
             row.ingest_document_original_filename,
           invoice_upgrade_type_id: row.invoice_upgrade_type_id,
+          invoice_upgrade_type_key: upgrade_type&.upgrade_type_key,
+          invoice_upgrade_type_description: upgrade_type&.description,
           supporting_document_type_id: row.supporting_document_type_id,
+          supporting_document_type_key: supporting_type&.type_key,
+          supporting_document_type_description: supporting_type&.description,
           step_type: row.step_type,
           status: row.status,
+          **(attempt || {}),
           error_text: row.error_text,
           **serialize_step_diagnostics(row),
           has_di_results_json: row.di_results_json.present?,
@@ -204,22 +256,57 @@ module Api
         payload
       end
 
-      def primary_failures_by_run_id(run_ids)
-        rows =
+      def attempt_diagnostics_by_run_id(runs)
+        runs_by_id = Array(runs).index_by { |run| run.id.to_s }
+        steps_by_run_id =
           ::Claims::IngestStepRun
-            .where(ingest_run_id: run_ids, status: "failed")
-            .order(created_at: :asc, id: :asc)
-            .group_by { |row| row.ingest_run_id.to_s }
+            .where(ingest_run_id: runs_by_id.keys)
+            .order(:created_at, :id)
+            .group_by { |step| step.ingest_run_id.to_s }
 
-        rows.transform_values do |steps|
-          ::Claims::Invoices::FailureSubtypes.primary_failed_step(steps)
+        runs_by_id.transform_values do |run|
+          ::Claims::Ingest::AttemptDiagnostics.call(
+            steps: steps_by_run_id.fetch(run.id.to_s, []),
+            run_status: run.status
+          )
         end
+      end
+
+      def attempt_diagnostics_for_run(run)
+        attempt_diagnostics_by_run_id([run]).fetch(run.id.to_s)
+      end
+
+      def target_labels(rows)
+        upgrade_type_ids = rows.filter_map(&:invoice_upgrade_type_id).uniq
+        supporting_type_ids =
+          rows.filter_map(&:supporting_document_type_id).uniq
+        {
+          upgrade_types:
+            ::Claims::InvoiceUpgradeType.where(id: upgrade_type_ids).index_by(
+              &:id
+            ),
+          supporting_types:
+            ::Claims::SupportingDocumentType.where(
+              id: supporting_type_ids
+            ).index_by(&:id)
+        }
+      end
+
+      def serialize_terminal_failure(step)
+        return if step.nil?
+
+        {
+          step_id: step.id,
+          step_type: step.step_type,
+          error_text: step.error_text,
+          **serialize_step_diagnostics(step)
+        }
       end
 
       def serialize_step_diagnostics(row)
         {
-          failure_status: row.failure_status,
-          failure_status_subtype: row.failure_status_subtype,
+          failure_category: row.failure_category,
+          failure_code: row.failure_code,
           error_code: row.error_code,
           error_category: row.error_category,
           error_phase: row.error_phase,

@@ -50,7 +50,7 @@ module Claims
       }.freeze
 
       # ------------------------------------------------------------
-      # PUBLIC: build_case_facts
+      # PUBLIC: case_facts
       # ------------------------------------------------------------
       # Returns a Ruby Hash you can JSON.generate into the context window.
       #
@@ -325,7 +325,6 @@ module Claims
                 type_key: doc.supporting_document_type&.type_key,
                 type_description: doc.supporting_document_type&.description,
                 original_filename: doc.original_filename,
-                classification_status: doc.classification_status,
                 classification_confidence: doc.classification_confidence,
                 classification_reason: doc.classification_reason,
                 supporting_document_routing_quality:

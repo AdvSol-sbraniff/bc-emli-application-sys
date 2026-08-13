@@ -13,13 +13,13 @@ RSpec.describe "Claims upload-fix errors", type: :request do
       instance_double(
         Claims::Ingest::UploadFixPackage::Result,
         ok: false,
-        failure_status: "technical_failure",
+        failure_category: "technical_failure",
         to_h: {
           ok: false,
           error:
             "A processing service is temporarily unavailable. Please try again.",
-          failure_status: "technical_failure",
-          failure_status_subtype: "upload_unexpected_exception",
+          failure_category: "technical_failure",
+          failure_code: "upload_unexpected_exception",
           error_code: "upload_unexpected_exception",
           retryable: false,
           diagnostic_id: SecureRandom.uuid
@@ -32,7 +32,7 @@ RSpec.describe "Claims upload-fix errors", type: :request do
     expect(response).to have_http_status(:internal_server_error)
     expect(json_response).to include(
       "ok" => false,
-      "failure_status" => "technical_failure",
+      "failure_category" => "technical_failure",
       "error_code" => "upload_unexpected_exception"
     )
   end
@@ -42,13 +42,13 @@ RSpec.describe "Claims upload-fix errors", type: :request do
       instance_double(
         Claims::Ingest::UploadFixPackage::Result,
         ok: false,
-        failure_status: "package_needs_correction",
+        failure_category: "package_needs_correction",
         to_h: {
           ok: false,
           error:
             "We could not prepare your AI advice because the upload package needs a change.",
-          failure_status: "package_needs_correction",
-          failure_status_subtype: "package_unsupported_file_type",
+          failure_category: "package_needs_correction",
+          failure_code: "package_unsupported_file_type",
           error_code: "package_unsupported_file_type",
           retryable: false
         }
@@ -60,7 +60,7 @@ RSpec.describe "Claims upload-fix errors", type: :request do
     expect(response).to have_http_status(:unprocessable_entity)
     expect(json_response).to include(
       "ok" => false,
-      "failure_status" => "package_needs_correction",
+      "failure_category" => "package_needs_correction",
       "error_code" => "package_unsupported_file_type"
     )
   end

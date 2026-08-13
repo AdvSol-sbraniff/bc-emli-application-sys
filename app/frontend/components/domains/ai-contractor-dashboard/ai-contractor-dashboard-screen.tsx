@@ -42,7 +42,6 @@ type ContractorPortalRow = {
   referenceNumber: number | string;
   sessionId: string;
   status: string;
-  statusSubtype?: string | null;
   statusUpdatedAt?: string | null;
   systemHelpNotes?: string | null;
   invoiceCreatedAt?: string | null;
@@ -61,6 +60,11 @@ type ContractorPortalRow = {
   latestDiOcrCustomerAddress?: string | null;
   submitterName?: string | null;
   latestDetectedUpgradeTypeKeys?: string[] | null;
+  latestIngestRunId?: string | null;
+  latestIngestRunKind?: string | null;
+  latestIngestRunStatus?: string | null;
+  latestIngestFailureCategory?: string | null;
+  latestIngestFailureCode?: string | null;
 };
 
 type ContractorPortalResponse = {
@@ -93,8 +97,22 @@ function formatMoney(value?: number | string | null) {
   return n.toLocaleString(undefined, { style: 'currency', currency: 'CAD' });
 }
 
-function contractorStatusLabel(status?: string | null, statusSubtype?: string | null) {
-  return invoiceStatusCopy(status, statusSubtype).label;
+function contractorStatusLabel(status?: string | null) {
+  return invoiceStatusCopy(status).label;
+}
+
+function contractorInvoicePresentation(row: ContractorPortalRow) {
+  const runStatus = String(row.latestIngestRunStatus || '').trim();
+  if (runStatus === 'queued' || runStatus === 'running') {
+    return { label: 'Preparing AI Advice', hint: 'Your uploaded package is still being processed.' };
+  }
+  if (runStatus === 'failed' && row.latestIngestFailureCategory === 'package_needs_correction') {
+    return { label: 'Package Needs Correction', hint: 'The latest upload needs a package correction.' };
+  }
+  if (runStatus === 'failed') {
+    return { label: 'Needs Technical Help', hint: 'A service error stopped the latest processing run.' };
+  }
+  return invoiceStatusCopy(row.status);
 }
 
 function lastUpdatedAt(row: ContractorPortalRow) {
@@ -120,20 +138,7 @@ const STATUS_COMPLETION_RANK: Record<string, number> = {
   in_review: 2,
   contractor_revision_inbox: 3,
   admin_review_inbox: 4,
-  genai_complete: 5,
-  genai_failed: 6,
-  genai_in_progress: 7,
-  genai_queued: 8,
-  ocr_complete: 9,
-  ocr_failed: 10,
-  ocr_in_progress: 11,
-  ocr_queued: 12,
-  package_needs_correction: 13,
-  upload_complete: 14,
-  upload_failed: 15,
-  upload_in_progress: 16,
-  upload_queued: 17,
-  technical_failure: 18,
+  contractor_precheck: 5,
 };
 
 const selectedStatusGroupValuesFor = (statusFilter: string) => {
@@ -215,9 +220,10 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
 
 function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
   const title = row.latestDiOcrCustomerAddress || 'Service address unavailable';
-  const statusCopy = invoiceStatusCopy(row.status, row.statusSubtype);
+  const statusCopy = contractorInvoicePresentation(row);
   const statusHint = `${statusCopy.hint} Technical status: ${row.status || 'unknown'}.`;
-  const isPrecheckContinuation = row.status === 'genai_complete' && !row.invoiceSubmittedAt;
+  const isProcessing = ['queued', 'running'].includes(String(row.latestIngestRunStatus || ''));
+  const isPrecheckContinuation = !isProcessing && row.status === 'contractor_precheck' && !row.invoiceSubmittedAt;
   const actionLabel = isPrecheckContinuation ? 'Continue' : 'View';
   const hasUnreadMessages = Number(row.unreadMessageCount || 0) > 0;
   const ocrFacts = [
@@ -356,7 +362,7 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
               whiteSpace="nowrap"
               aria-label={`Invoice status: ${statusCopy.label}`}
             >
-              {contractorStatusLabel(row.status, row.statusSubtype)}
+              {statusCopy.label}
             </Badge>
           </Tooltip>
 
@@ -369,16 +375,20 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
             </Text>
           </Box>
 
-          <RouterLinkButton
-            to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
-            aria-label={`${actionLabel} invoice submission for ${title}`}
-            variant={isPrecheckContinuation ? 'secondary' : 'primary'}
-            bg={isPrecheckContinuation ? 'greys.white' : undefined}
-            color={isPrecheckContinuation ? '#2D2D2D' : undefined}
-            borderColor={isPrecheckContinuation ? '#2D2D2D' : undefined}
-          >
-            {actionLabel}
-          </RouterLinkButton>
+          {isProcessing ? (
+            <Button isDisabled>Preparing</Button>
+          ) : (
+            <RouterLinkButton
+              to={`/contractor/sessions/${row.sessionId}/invoices/${row.invoiceId}/review?source=portal`}
+              aria-label={`${actionLabel} invoice submission for ${title}`}
+              variant={isPrecheckContinuation ? 'secondary' : 'primary'}
+              bg={isPrecheckContinuation ? 'greys.white' : undefined}
+              color={isPrecheckContinuation ? '#2D2D2D' : undefined}
+              borderColor={isPrecheckContinuation ? '#2D2D2D' : undefined}
+            >
+              {actionLabel}
+            </RouterLinkButton>
+          )}
         </Flex>
       </Flex>
     </Flex>

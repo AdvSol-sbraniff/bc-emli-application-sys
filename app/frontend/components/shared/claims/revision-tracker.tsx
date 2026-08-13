@@ -123,7 +123,6 @@ export type RevisionIssue = {
 export type RevisionTrackerData = {
   invoice_id: string;
   invoice_status?: string | null;
-  invoice_status_subtype?: string | null;
   latest_round_id?: string | null;
   rounds: RevisionRound[];
   issues: RevisionIssue[];

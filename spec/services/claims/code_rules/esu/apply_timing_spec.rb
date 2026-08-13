@@ -35,7 +35,7 @@ RSpec.describe Claims::CodeRules::Esu::ApplyTiming do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "genai_in_progress",
+        status: "contractor_precheck",
         created_at: now,
         updated_at: now
       )
@@ -80,7 +80,6 @@ RSpec.describe Claims::CodeRules::Esu::ApplyTiming do
         invoice_version_id: invoice_version.id,
         supporting_document_type_id: document_type.id,
         storage_key: "utility-#{SecureRandom.hex(4)}.pdf",
-        classification_status: "classified",
         supporting_document_routing_quality: "usable",
         created_at: now,
         updated_at: now

@@ -11,7 +11,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
           pipeline_error_code: "old_error",
           pipeline_error_description: "old description"
         )
-      create_step(run: run, step_type: "upload_package_stage")
+      create_step(run: run, step_type: "stage_package")
       create_final_steps(run: run, invoice_version: context[:invoice_version])
 
       result = described_class.call(ingest_run_id: run.id)
@@ -22,14 +22,20 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
       expect(run.pipeline_error_description).to be_nil
     end
 
-    it "flags a fix run that creates fix_ocr_invoice for a cloned invoice" do
+    it "flags a fix run that creates extract_invoice for a cloned invoice" do
       context = build_context(versionno: 2)
-      run = create_run(context: context, status: "succeeded", total_files: 1)
-      create_step(run: run, step_type: "fix_upload_package_stage")
+      run =
+        create_run(
+          context: context,
+          status: "succeeded",
+          total_files: 1,
+          run_kind: "fix_upload"
+        )
+      create_step(run: run, step_type: "stage_package")
       create_step(
         run: run,
         invoice_version: context[:invoice_version],
-        step_type: "fix_clone_existing_evidence"
+        step_type: "clone_evidence"
       )
       create_cloned_ingest_document(
         context: context,
@@ -40,7 +46,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
       create_step(
         run: run,
         invoice_version: context[:invoice_version],
-        step_type: "fix_ocr_invoice"
+        step_type: "extract_invoice"
       )
       create_final_steps(run: run, invoice_version: context[:invoice_version])
 
@@ -48,7 +54,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
 
       expect(result.ok).to be(false)
       expect(run.reload.pipeline_error_code).to eq(
-        "fix_ocr_invoice_for_cloned_invoice"
+        "extract_invoice_for_cloned_invoice"
       )
       expect(run.pipeline_error_description).to include("cloned invoice")
     end
@@ -63,12 +69,18 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
           row.created_at = Time.current
           row.updated_at = Time.current
         end
-      run = create_run(context: context, status: "succeeded", total_files: 2)
-      create_step(run: run, step_type: "fix_upload_package_stage")
+      run =
+        create_run(
+          context: context,
+          status: "succeeded",
+          total_files: 2,
+          run_kind: "fix_upload"
+        )
+      create_step(run: run, step_type: "stage_package")
       create_step(
         run: run,
         invoice_version: context[:invoice_version],
-        step_type: "fix_clone_existing_evidence"
+        step_type: "clone_evidence"
       )
       create_cloned_ingest_document(
         context: context,
@@ -87,7 +99,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
         run: run,
         invoice_version: context[:invoice_version],
         supporting_document_type: type,
-        step_type: "fix_supporting_document_extraction"
+        step_type: "extract_supporting_document"
       )
       create_final_steps(run: run, invoice_version: context[:invoice_version])
 
@@ -110,7 +122,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "genai_complete"
+        status: "contractor_precheck"
       )
     invoice_version =
       Claims::InvoiceVersion.create!(
@@ -136,8 +148,10 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
   def create_run(context:, status:, total_files: 1, **attrs)
     Claims::IngestRun.create!(
       {
+        run_kind: "initial_upload",
         session_id: context[:session].id,
         contractor_id: context[:contractor].id,
+        invoice_id: context[:invoice].id,
         resolved_invoice_version_id: context[:invoice_version].id,
         status: status,
         total_files: total_files,
@@ -171,7 +185,7 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
   end
 
   def create_final_steps(run:, invoice_version:)
-    %w[case_facts aggregate_advice].each do |step_type|
+    %w[case_facts finalize_validation].each do |step_type|
       create_step(
         run: run,
         invoice_version: invoice_version,
@@ -214,7 +228,6 @@ RSpec.describe Claims::PipelineAudit::CheckRun do
       document_kind: document_kind,
       document_kind_reason: "Cloned from prior invoice version.",
       supporting_document_type_id: supporting_document_type&.id,
-      classification_status: "classified",
       classification_confidence: 100,
       classification_reason: "Cloned from prior invoice version.",
       classified_at: Time.current

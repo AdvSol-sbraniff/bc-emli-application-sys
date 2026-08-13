@@ -18,8 +18,8 @@ module Claims
           :status,
           :message,
           :error,
-          :failure_status,
-          :failure_status_subtype,
+          :failure_category,
+          :failure_code,
           :error_code,
           :retryable,
           :diagnostic_id
@@ -36,8 +36,8 @@ module Claims
               status: status,
               message: message,
               error: error,
-              failure_status: failure_status,
-              failure_status_subtype: failure_status_subtype,
+              failure_category: failure_category,
+              failure_code: failure_code,
               error_code: error_code,
               retryable: retryable,
               diagnostic_id: diagnostic_id
@@ -50,12 +50,8 @@ module Claims
         clone_invoice_version_id: nil,
         clone_supporting_document_ids: [],
         clone_all_current_supporting_documents: false,
-        files: [],
-        file_roles: nil
+        files: []
       )
-        # file_roles is accepted temporarily for compatibility with clients
-        # deployed before fix-package classification became fully classifier-owned.
-        # It is intentionally ignored.
         new(
           invoice_id: invoice_id,
           clone_invoice_version_id: clone_invoice_version_id,
@@ -93,41 +89,33 @@ module Claims
           clone_supporting_document_ids_for(source_invoice_version)
 
         now = Time.current
-        ingest_run =
-          ::Claims::IngestRun.create!(
-            session_id: invoice.session_id,
-            contractor_id: invoice.contractor_id,
-            status: "queued",
-            messages: [
-              {
-                code: "fix_upload_context",
-                level: "info",
-                invoice_id: invoice.id,
-                source_invoice_version_id: source_invoice_version&.id,
-                source_invoice_versionno:
-                  source_invoice_version&.invoice_versionno,
-                clone_invoice_version_id: @clone_invoice_version_id,
-                clone_supporting_document_ids: retained_supporting_document_ids,
-                prior_invoice_status: invoice.status,
-                prior_invoice_status_subtype: invoice.status_subtype
-              }.compact
-            ],
-            total_files: total_file_count(retained_supporting_document_ids),
-            completed_files: 0,
-            failed_files: 0,
-            created_at: now,
-            updated_at: now
-          )
-        stage_step =
-          ::Claims::IngestStepRun.create!(
-            ingest_run_id: ingest_run.id,
-            session_id: invoice.session_id,
-            step_type: "fix_upload_package_stage",
-            status: "in_progress",
-            error_text: nil,
-            created_at: now,
-            updated_at: now
-          )
+        ingest_run = nil
+        stage_step = nil
+        ::Claims::IngestRun.transaction do
+          ingest_run =
+            ::Claims::IngestRun.create!(
+              session_id: invoice.session_id,
+              contractor_id: invoice.contractor_id,
+              invoice_id: invoice.id,
+              run_kind: "fix_upload",
+              status: "queued",
+              total_files: total_file_count(retained_supporting_document_ids),
+              completed_files: 0,
+              failed_files: 0,
+              created_at: now,
+              updated_at: now
+            )
+          stage_step =
+            ::Claims::IngestStepRun.create!(
+              ingest_run_id: ingest_run.id,
+              session_id: invoice.session_id,
+              step_type: "stage_package",
+              status: "in_progress",
+              error_text: nil,
+              created_at: now,
+              updated_at: now
+            )
+        end
         new_file_documents = []
 
         ::Claims::IngestDocument.transaction do
@@ -161,7 +149,7 @@ module Claims
         stage_step.update!(status: "succeeded", updated_at: Time.current)
         enqueue_new_file_ocr!(new_file_documents)
 
-        ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run.id)
+        ::Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload
         if ingest_run.status == "failed"
           return failed_run_result(invoice: invoice, ingest_run: ingest_run)
@@ -185,16 +173,16 @@ module Claims
           nil
         )
       rescue StandardError => e
-        failure_status, failure_subtype =
-          upload_fix_failure_status_and_subtype(e)
-        retryable = ::Claims::Invoices::FailureSubtypes.retryable?(e)
-        diagnostic_id = SecureRandom.uuid if failure_status ==
+        failure_category, failure_subtype =
+          upload_fix_failure_category_and_subtype(e)
+        retryable = ::Claims::Ingest::FailureClassifier.retryable?(e)
+        diagnostic_id = SecureRandom.uuid if failure_category ==
           "technical_failure"
         finalize_upload_fix_failure!(
           stage_step: stage_step,
           invoice: invoice,
           ingest_run: ingest_run,
-          failure_status: failure_status,
+          failure_category: failure_category,
           failure_subtype: failure_subtype,
           retryable: retryable,
           diagnostic_id: diagnostic_id,
@@ -211,8 +199,8 @@ module Claims
         end
 
         safe_error =
-          ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-            failure_status,
+          ::Claims::Ingest::FailureCatalog.contractor_failure_message(
+            failure_category,
             failure_subtype
           ).presence || ::Claims::Ingest::UploadErrors::SAFE_TECHNICAL_MESSAGE
 
@@ -227,7 +215,7 @@ module Claims
           safe_ingest_run_status(ingest_run),
           nil,
           safe_error,
-          failure_status,
+          failure_category,
           failure_subtype,
           failure_subtype,
           retryable,
@@ -238,14 +226,13 @@ module Claims
       private
 
       def failed_run_result(invoice:, ingest_run:)
-        failure_status =
-          ingest_run.failure_status.presence || "technical_failure"
+        failure_category =
+          ingest_run.failure_category.presence || "technical_failure"
         failure_subtype =
-          ingest_run.failure_status_subtype.presence ||
-            "unknown_runtime_failure"
+          ingest_run.failure_code.presence || "unknown_runtime_failure"
         safe_error =
-          ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-            failure_status,
+          ::Claims::Ingest::FailureCatalog.contractor_failure_message(
+            failure_category,
             failure_subtype
           ).presence || ::Claims::Ingest::UploadErrors::SAFE_TECHNICAL_MESSAGE
 
@@ -260,7 +247,7 @@ module Claims
           ingest_run.status,
           nil,
           safe_error,
-          failure_status,
+          failure_category,
           failure_subtype,
           ingest_run.pipeline_error_code.presence || failure_subtype,
           false,
@@ -272,7 +259,7 @@ module Claims
         stage_step:,
         invoice:,
         ingest_run:,
-        failure_status:,
+        failure_category:,
         failure_subtype:,
         retryable:,
         diagnostic_id:,
@@ -280,9 +267,9 @@ module Claims
       )
         now = Time.current
         diagnostic_attributes =
-          ::Claims::Invoices::FailureSubtypes.step_attributes(
-            status: failure_status,
-            status_subtype: failure_subtype,
+          ::Claims::Ingest::FailureClassifier.step_attributes(
+            failure_category: failure_category,
+            failure_code: failure_subtype,
             error: error
           )
         diagnostic_attributes[
@@ -305,8 +292,8 @@ module Claims
         end
 
         normalized_subtype =
-          ::Claims::Invoices::StatusSubtypes.normalize(
-            failure_status,
+          ::Claims::Ingest::FailureCatalog.normalize(
+            failure_category,
             failure_subtype
           ).presence || failure_subtype
         safely_finalize_upload_fix!(
@@ -315,9 +302,8 @@ module Claims
         ) do
           mark_ingest_run_failed!(
             ingest_run: ingest_run,
-            status: failure_status,
-            status_subtype: normalized_subtype,
-            now: now
+            failure_category: failure_category,
+            failure_code: normalized_subtype
           )
         end
       end
@@ -390,7 +376,6 @@ module Claims
           document_kind: "invoice",
           document_kind_confidence: 100,
           document_kind_reason: "Cloned from prior invoice version.",
-          classification_status: "classified",
           classification_confidence: 100,
           classification_reason: "Cloned from prior invoice version.",
           classified_at: now,
@@ -456,7 +441,6 @@ module Claims
           document_kind_confidence: 100,
           document_kind_reason: "Cloned from prior invoice version.",
           supporting_document_type_id: source_doc.supporting_document_type_id,
-          classification_status: source_doc.classification_status,
           classification_confidence: source_doc.classification_confidence,
           classification_reason: source_doc.classification_reason,
           supporting_document_routing_quality:
@@ -503,7 +487,6 @@ module Claims
               original_filename: name,
               content_type: ctype,
               byte_size: size,
-              classification_status: "pending",
               classification_confidence: 0,
               document_kind_confidence: 0,
               created_at: now,
@@ -551,14 +534,13 @@ module Claims
           create_document_step!(
             ingest_run: row.fetch(:document).ingest_run,
             document: row.fetch(:document),
-            step_type: "fix_ocr_read",
+            step_type: "read_document",
             status: "queued",
             now: Time.current
           )
           ::Claims::RunIngestReadOcrJob.perform_async(
             row.fetch(:document).id,
-            row.fetch(:document).ingest_run_id,
-            "fix_ocr_read"
+            row.fetch(:document).ingest_run_id
           )
         end
       end
@@ -595,7 +577,7 @@ module Claims
         )
       end
 
-      def upload_fix_failure_status_and_subtype(error)
+      def upload_fix_failure_category_and_subtype(error)
         message = error.message.to_s.downcase
         if message.include?("evidence files are supported")
           return "package_needs_correction", "package_unsupported_file_type"
@@ -606,21 +588,20 @@ module Claims
           return "package_needs_correction", "package_duplicate_file_conflict"
         end
 
-        ["technical_failure", ::Claims::Invoices::FailureSubtypes.upload(error)]
+        ["technical_failure", ::Claims::Ingest::FailureClassifier.upload(error)]
       end
 
-      def mark_ingest_run_failed!(ingest_run:, status:, status_subtype:, now:)
+      def mark_ingest_run_failed!(ingest_run:, failure_category:, failure_code:)
         return unless ingest_run&.id
 
-        ingest_run.update_columns(
-          status: "failed",
+        ::Claims::Ingest::RunTransition.mark_failed!(
+          run: ingest_run,
+          total_files: [ingest_run.total_files.to_i, 1].max,
           failed_files: 1,
-          failure_status: status,
-          failure_status_subtype: status_subtype,
-          pipeline_error_code: status_subtype,
-          pipeline_error_description: "Fix upload failed: #{status_subtype}.",
-          completed_at: now,
-          updated_at: now
+          failure_category: failure_category,
+          failure_code: failure_code,
+          pipeline_error_code: failure_code,
+          pipeline_error_description: "Fix upload failed: #{failure_code}."
         )
       end
 

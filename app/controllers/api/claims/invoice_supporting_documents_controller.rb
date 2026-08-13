@@ -171,7 +171,6 @@ module Api
           supporting_document_type_key: row.supporting_document_type&.type_key,
           supporting_document_type_description:
             row.supporting_document_type&.description,
-          classification_status: row.classification_status,
           classification_confidence: row.classification_confidence,
           classification_reason: row.classification_reason,
           supporting_document_routing_quality:

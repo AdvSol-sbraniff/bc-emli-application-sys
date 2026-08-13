@@ -30,8 +30,7 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
 
   system_help_notes text NULL,
 
-  status character varying NOT NULL DEFAULT 'upload_queued',
-  status_subtype character varying NULL,
+  status character varying NOT NULL DEFAULT 'contractor_precheck',
   status_updated_at timestamp(6) without time zone NULL,
   submitted_at timestamp(6) without time zone NULL,
 
@@ -43,20 +42,7 @@ CREATE TABLE IF NOT EXISTS claims.invoices (
 
 CONSTRAINT invoices_status_chk
 CHECK (status IN (
-  'upload_queued',    -- not used as currently not using sidekiq for uploads but leaving incase we decide its too laggy and needs to be sidekiqed out
-  'upload_in_progress',
-  'upload_failed',
-  'upload_complete',
-  'ocr_queued',
-  'ocr_in_progress',
-  'ocr_failed',
-  'ocr_complete',
-  'genai_queued',
-  'genai_in_progress',
-  'genai_failed',
-  'genai_complete',         -- AI processing complete; contractor-owned draft until explicit submit.
-  'package_needs_correction',
-  'technical_failure',
+  'contractor_precheck',   -- Contractor-owned before first submission.
   'admin_review_inbox',    -- contractor submitted; waiting for admin review / screen-in.
   'contractor_revision_inbox', -- admin requested contractor revisions before business review resumes.
   'in_review',
@@ -80,9 +66,6 @@ CHECK (status IN (
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_status
   ON claims.invoices (status);
 
-CREATE INDEX IF NOT EXISTS index_claims_invoices_on_status_subtype
-  ON claims.invoices (status_subtype);
-
 CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitted_at
   ON claims.invoices (submitted_at);
 
@@ -97,14 +80,14 @@ CREATE INDEX IF NOT EXISTS index_claims_invoices_on_submitter_id
 
 
 -- ============================================================
--- invoice_status_subtypes
+-- ingest_failure_subtypes
 -- PURPOSE: Friendly/admin-safe copy for technical failure subtypes
 -- and package correction subtypes used by contractor-facing screens.
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS claims.invoice_status_subtypes (
-  status text NOT NULL,
-  status_subtype text NOT NULL,
+CREATE TABLE IF NOT EXISTS claims.ingest_failure_subtypes (
+  failure_category text NOT NULL,
+  failure_code text NOT NULL,
   admin_label text NOT NULL,
   contractor_message text NOT NULL,
   retry_guidance text NULL,
@@ -113,15 +96,15 @@ CREATE TABLE IF NOT EXISTS claims.invoice_status_subtypes (
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
 
-  CONSTRAINT invoice_status_subtypes_pkey
-    PRIMARY KEY (status, status_subtype),
+  CONSTRAINT ingest_failure_subtypes_pkey
+    PRIMARY KEY (failure_category, failure_code),
 
-  CONSTRAINT invoice_status_subtypes_status_chk
-    CHECK (status IN ('package_needs_correction', 'technical_failure'))
+  CONSTRAINT ingest_failure_subtypes_category_chk
+    CHECK (failure_category IN ('package_needs_correction', 'technical_failure'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_invoice_status_subtypes_active
-  ON claims.invoice_status_subtypes (status, active);
+CREATE INDEX IF NOT EXISTS idx_ingest_failure_subtypes_active
+  ON claims.ingest_failure_subtypes (failure_category, active);
 
 
 
@@ -1130,13 +1113,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   personal_information_type_id uuid NULL,
   personal_information_review_reason text NULL,
 
-  -- from the genai
-  genai_raw_json jsonb NULL,
-  genai_result text NULL,
-
-  -- any parent level genai outputs such as overall conf and overall pass flags
-  -- TBD
-
   -- from the DI (retention indefinite for now)
   di_raw_json jsonb NULL,
   di_page_map jsonb NULL,
@@ -1255,9 +1231,6 @@ CREATE TABLE IF NOT EXISTS claims.invoice_versions (
   CONSTRAINT invoice_versions_versionno_chk
     CHECK (invoice_versionno >= 1),
 
-  CONSTRAINT invoice_versions_genai_result_chk
-    CHECK (genai_result IS NULL OR genai_result IN ('pass','info','warn','fail')),
-
   CONSTRAINT invoice_versions_pi_review_status_chk
     CHECK (
       personal_information_review_status IS NULL OR
@@ -1338,7 +1311,7 @@ CREATE INDEX IF NOT EXISTS index_invoice_versions_on_personal_information_type_i
 -- ============================================================
 -- invoice_status_transitions
 -- PURPOSE: Append-only history of every real invoice workflow
--- status/subtype change, including initial and repeat submissions.
+-- status change, including initial and repeat submissions.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS claims.invoice_status_transitions (
@@ -1349,9 +1322,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_status_transitions (
   actor_user_id uuid NULL,
 
   from_status text NULL,
-  from_status_subtype text NULL,
   to_status text NOT NULL,
-  to_status_subtype text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
 
@@ -1976,7 +1947,6 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
   personal_information_type_id uuid NULL,
   personal_information_review_reason text NULL,
 
-  classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
   supporting_document_routing_quality text NULL,
@@ -2001,9 +1971,6 @@ CREATE TABLE IF NOT EXISTS claims.supporting_documents (
     FOREIGN KEY (personal_information_type_id)
     REFERENCES claims.personal_information_types(id)
     ON DELETE RESTRICT,
-
-  CONSTRAINT supporting_documents_classification_status_chk
-    CHECK (classification_status IN ('pending','classified','needs_review','failed')),
 
   CONSTRAINT supporting_documents_routing_quality_chk
     CHECK (
@@ -2981,7 +2948,7 @@ CREATE INDEX IF NOT EXISTS idx_genai_located_field_upgrade_type_history_upgrade_
 
 --
 -- invoice_version_upgrade_types
--- Manifest/result table for the upgrade types found on a specific invoice version.
+-- Classifier evidence for the upgrade types found on a specific invoice version.
 -- This is not a parent of lineitems/located_fields/rulechecks; those rows point
 -- directly at claims.invoice_upgrade_types.
 --
@@ -2991,13 +2958,7 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
   invoice_version_id uuid NOT NULL,
   invoice_upgrade_type_id uuid NOT NULL,
 
-  source_engine text NOT NULL DEFAULT 'classifier',
-  call_status text NOT NULL DEFAULT 'classified',
-
-  -- Meaningful for classifier rows. GenAI manifest rows leave this NULL.
   confidence smallint NULL,
-  result text NULL,
-  admin_advice text NULL,
   evidence_text text NULL,
   classification_explanation text NULL,
   page integer NULL,
@@ -3018,23 +2979,14 @@ CREATE TABLE IF NOT EXISTS claims.invoice_version_upgrade_types (
     FOREIGN KEY (invoice_upgrade_type_id)
     REFERENCES claims.invoice_upgrade_types(id),
 
-  CONSTRAINT invoice_version_upgrade_types_source_engine_chk
-    CHECK (source_engine IN ('classifier','genai')),
-
-  CONSTRAINT invoice_version_upgrade_types_call_status_chk
-    CHECK (call_status IN ('classified','queued','in_progress','succeeded','failed','skipped')),
-
   CONSTRAINT invoice_version_upgrade_types_confidence_chk
     CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 100),
 
   CONSTRAINT invoice_version_upgrade_types_page_chk
     CHECK (page IS NULL OR page >= 1),
 
-  CONSTRAINT invoice_version_upgrade_types_result_chk
-    CHECK (result IS NULL OR result IN ('pass','info','warn','fail')),
-
   CONSTRAINT invoice_version_upgrade_types_uniq
-    UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine)
+    UNIQUE (invoice_version_id, invoice_upgrade_type_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ivut_invoice_version
@@ -3042,10 +2994,6 @@ CREATE INDEX IF NOT EXISTS idx_ivut_invoice_version
 
 CREATE INDEX IF NOT EXISTS idx_ivut_upgrade_type
   ON claims.invoice_version_upgrade_types (invoice_upgrade_type_id);
-
-CREATE INDEX IF NOT EXISTS idx_ivut_invoice_upgrade_status
-  ON claims.invoice_version_upgrade_types (invoice_version_id, invoice_upgrade_type_id, call_status);
-
 
   -- ============================================================
 -- ingest_runs
@@ -3058,17 +3006,19 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
 
   session_id uuid NOT NULL,
   contractor_id uuid NULL,
+  invoice_id uuid NULL,
   resolved_invoice_version_id uuid NULL,
 
-  status text NOT NULL DEFAULT 'queued',  -- queued|running|succeeded|failed|partial
+  run_kind text NOT NULL,
+  status text NOT NULL DEFAULT 'queued',
   cleanup_failed_invoice_artifacts boolean NOT NULL DEFAULT false,
 
   total_files     integer NOT NULL DEFAULT 0,
   completed_files integer NOT NULL DEFAULT 0,
   failed_files    integer NOT NULL DEFAULT 0,
 
-  failure_status text NULL,
-  failure_status_subtype text NULL,
+  failure_category text NULL,
+  failure_code text NULL,
   pipeline_error_code text NULL,
   pipeline_error_description text NULL,
 
@@ -3087,24 +3037,32 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
     FOREIGN KEY (contractor_id)
     REFERENCES public.contractors(id),
 
+  CONSTRAINT fk_ingest_runs_invoice
+    FOREIGN KEY (invoice_id)
+    REFERENCES claims.invoices(id)
+    ON DELETE SET NULL,
+
   CONSTRAINT fk_ingest_runs_resolved_invoice_version
     FOREIGN KEY (resolved_invoice_version_id)
     REFERENCES claims.invoice_versions(id)
     ON DELETE SET NULL,
 
   CONSTRAINT ingest_runs_status_chk
-    CHECK (status IN ('queued','running','succeeded','failed','partial')),
+    CHECK (status IN ('queued','running','succeeded','failed')),
 
-  CONSTRAINT ingest_runs_failure_status_chk
+  CONSTRAINT ingest_runs_run_kind_chk
+    CHECK (run_kind IN ('initial_upload','fix_upload','rules_rerun')),
+
+  CONSTRAINT ingest_runs_failure_category_chk
     CHECK (
-      failure_status IS NULL
-      OR failure_status IN ('package_needs_correction','technical_failure')
+      failure_category IS NULL
+      OR failure_category IN ('package_needs_correction','technical_failure')
     ),
 
-  CONSTRAINT ingest_runs_failure_subtype_chk
+  CONSTRAINT ingest_runs_failure_code_chk
     CHECK (
-      failure_status_subtype IS NULL
-      OR failure_status_subtype IN (
+      failure_code IS NULL
+      OR failure_code IN (
         'package_no_invoice_pdf',
         'package_multiple_invoice_pdfs',
         'package_invoice_not_pdf',
@@ -3144,6 +3102,29 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
       )
     ),
 
+  CONSTRAINT ingest_runs_terminal_shape_chk
+    CHECK (
+      (
+        status IN ('queued','running')
+        AND failure_category IS NULL
+        AND failure_code IS NULL
+        AND completed_at IS NULL
+      )
+      OR (
+        status = 'succeeded'
+        AND resolved_invoice_version_id IS NOT NULL
+        AND failure_category IS NULL
+        AND failure_code IS NULL
+        AND completed_at IS NOT NULL
+      )
+      OR (
+        status = 'failed'
+        AND failure_category IS NOT NULL
+        AND failure_code IS NOT NULL
+        AND completed_at IS NOT NULL
+      )
+    ),
+
   CONSTRAINT ingest_runs_counts_chk
     CHECK (
       total_files >= 0
@@ -3159,6 +3140,9 @@ CREATE INDEX IF NOT EXISTS idx_ingest_runs_session_created
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_contractor_created
   ON claims.ingest_runs (contractor_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_invoice_created
+  ON claims.ingest_runs (invoice_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_resolved_invoice_version
   ON claims.ingest_runs (resolved_invoice_version_id);
@@ -3202,7 +3186,6 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
   document_kind_reason text NULL,
 
   supporting_document_type_id uuid NULL,
-  classification_status text NOT NULL DEFAULT 'pending',
   classification_confidence smallint NOT NULL DEFAULT 0,
   classification_reason text NULL,
   supporting_document_routing_quality text NULL,
@@ -3257,9 +3240,6 @@ CREATE TABLE IF NOT EXISTS claims.ingest_documents (
 
   CONSTRAINT ingest_documents_document_kind_confidence_chk
     CHECK (document_kind_confidence BETWEEN 0 AND 100),
-
-  CONSTRAINT ingest_documents_classification_status_chk
-    CHECK (classification_status IN ('pending','classified','needs_review','failed','superseded')),
 
   CONSTRAINT ingest_documents_classification_confidence_chk
     CHECK (classification_confidence BETWEEN 0 AND 100),
@@ -3317,21 +3297,21 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
   -- Target ingest staging document (required for pre-resolution bundle work)
   ingest_document_id uuid NULL,
 
-  -- GenAI subcall target. Null for upload/ocr/classifier/legacy genai summary rows.
+  -- Ruleset target. Null for non-ruleset operations.
   invoice_upgrade_type_id uuid NULL,
 
   -- Supporting document type target. Used by type-level support-doc extraction steps.
   supporting_document_type_id uuid NULL,
 
   -- Which step this attempt represents
-  step_type text NOT NULL,  -- upload_package_stage | ocr_read | classifier_files | supporting_document_extraction | ocr_invoice | fix_upload_package_stage | fix_ocr_read | fix_classifier_files | fix_clone_existing_evidence | fix_supporting_document_extraction | fix_ocr_invoice | ruleclone_clone_existing_evidence | case_facts | genai_common | genai_upgrade | code_common | code_upgrade | aggregate_advice
+  step_type text NOT NULL,
 
   status character varying NOT NULL DEFAULT 'queued',
 
   -- failed states must provide error details
   error_text text NULL,
-  failure_status text NULL,
-  failure_status_subtype text NULL,
+  failure_category text NULL,
+  failure_code text NULL,
   error_code text NULL,
   error_category text NULL,
   error_phase text NULL,
@@ -3385,7 +3365,7 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
     ON DELETE CASCADE,
 
   CONSTRAINT ingest_step_runs_step_type_chk
-    CHECK (step_type IN ('upload_package_stage','fix_upload_package_stage','ocr_read','fix_ocr_read','classifier_files','fix_classifier_files','supporting_document_extraction','fix_supporting_document_extraction','ocr_invoice','fix_ocr_invoice','fix_clone_existing_evidence','ruleclone_clone_existing_evidence','case_facts','genai_common','genai_upgrade','code_common','code_upgrade','aggregate_advice')),
+    CHECK (step_type IN ('stage_package','read_document','classify_document','extract_supporting_document','extract_invoice','clone_evidence','case_facts','evaluate_genai_ruleset','evaluate_code_ruleset','finalize_validation')),
 
   CONSTRAINT ingest_step_runs_status_chk
     CHECK (status IN ('queued','in_progress','succeeded','failed')),
@@ -3400,16 +3380,16 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       (status = 'failed' AND error_text IS NOT NULL)
     ),
 
-  CONSTRAINT ingest_step_runs_failure_status_chk
+  CONSTRAINT ingest_step_runs_failure_category_chk
     CHECK (
-      failure_status IS NULL
-      OR failure_status IN ('package_needs_correction','technical_failure')
+      failure_category IS NULL
+      OR failure_category IN ('package_needs_correction','technical_failure')
     ),
 
-  CONSTRAINT ingest_step_runs_failure_subtype_chk
+  CONSTRAINT ingest_step_runs_failure_code_chk
     CHECK (
-      failure_status_subtype IS NULL
-      OR failure_status_subtype IN (
+      failure_code IS NULL
+      OR failure_code IN (
         'package_no_invoice_pdf',
         'package_multiple_invoice_pdfs',
         'package_invoice_not_pdf',
@@ -3473,17 +3453,16 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       OR provider_attempt_count > 0
     ),
 
-  -- Only require upgrade type for the new typed GenAI calls.
-  CONSTRAINT ingest_step_runs_upgrade_type_required_for_typed_genai_chk
+  CONSTRAINT ingest_step_runs_upgrade_type_required_for_ruleset_chk
     CHECK (
-      (step_type NOT IN ('genai_common','genai_upgrade','code_common','code_upgrade'))
+      (step_type NOT IN ('evaluate_genai_ruleset','evaluate_code_ruleset'))
       OR
       (invoice_upgrade_type_id IS NOT NULL)
     ),
 
   CONSTRAINT ingest_step_runs_target_required_chk
     CHECK (
-      step_type IN ('upload_package_stage','fix_upload_package_stage')
+      step_type = 'stage_package'
       OR (
         status IN ('succeeded','failed')
         AND invoice_version_id IS NULL
@@ -3515,28 +3494,28 @@ CREATE TABLE IF NOT EXISTS claims.ingest_step_runs (
       )
       OR
       (
-        step_type IN ('upload_package_stage','fix_upload_package_stage')
+        step_type = 'stage_package'
         AND invoice_version_id IS NULL
         AND ingest_document_id IS NULL
         AND supporting_document_type_id IS NULL
       )
       OR
       (
-        step_type IN ('ocr_read','fix_ocr_read','classifier_files','fix_classifier_files')
+        step_type IN ('read_document','classify_document')
         AND ingest_document_id IS NOT NULL
         AND invoice_version_id IS NULL
         AND supporting_document_type_id IS NULL
       )
       OR
       (
-        step_type IN ('supporting_document_extraction','fix_supporting_document_extraction')
+        step_type = 'extract_supporting_document'
         AND supporting_document_type_id IS NOT NULL
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
       )
       OR
       (
-        step_type NOT IN ('upload_package_stage','fix_upload_package_stage','ocr_read','fix_ocr_read','classifier_files','fix_classifier_files','supporting_document_extraction','fix_supporting_document_extraction')
+        step_type NOT IN ('stage_package','read_document','classify_document','extract_supporting_document')
         AND invoice_version_id IS NOT NULL
         AND ingest_document_id IS NULL
         AND supporting_document_type_id IS NULL
@@ -3595,7 +3574,7 @@ CREATE INDEX IF NOT EXISTS idx_ingest_step_runs_provider_status_created
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_ingest_step_runs_document_nonfailed
   ON claims.ingest_step_runs (ingest_run_id, ingest_document_id, step_type)
   WHERE ingest_document_id IS NOT NULL
-    AND step_type IN ('ocr_read','fix_ocr_read','classifier_files','fix_classifier_files')
+    AND step_type IN ('read_document','classify_document')
     AND status IN ('queued','in_progress','succeeded');
 
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_ingest_step_runs_invoice_nonfailed

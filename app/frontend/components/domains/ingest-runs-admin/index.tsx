@@ -3,14 +3,7 @@ import {
   Badge,
   Box,
   Button,
-  Code,
   Container,
-  Drawer,
-  DrawerBody,
-  DrawerCloseButton,
-  DrawerContent,
-  DrawerHeader,
-  DrawerOverlay,
   Flex,
   FormControl,
   FormLabel,
@@ -31,65 +24,34 @@ import {
 } from '@chakra-ui/react';
 import { ArrowsClockwise, CaretLeft, CaretRight, Info, MagnifyingGlass } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
+import {
+  formatIngestDuration,
+  formatIngestTimestamp,
+  IngestAttemptSummary,
+  IngestDiagnosticDrawer,
+  IngestDiagnosticSelection,
+  IngestRunDiagnostic,
+  IngestStepDiagnostic,
+  ingestStatusColor,
+} from '../../shared/claims/ingest-diagnostic-drawer';
 
-type IngestRunRow = {
-  id: string;
-  session_id: string;
-  contractor_id?: string | null;
-  contractor_business_name?: string | null;
-  contractor_number?: string | null;
-  resolved_invoice_version_id?: string | null;
+type IngestRunRow = IngestRunDiagnostic & {
   status: string;
   cleanup_failed_invoice_artifacts: boolean;
   total_files: number;
   completed_files: number;
   failed_files: number;
-  pipeline_error_code?: string | null;
-  pipeline_error_description?: string | null;
-  failure_status?: string | null;
-  failure_status_subtype?: string | null;
-  primary_failure?: StepDiagnostics | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  completed_at?: string | null;
-  duration_seconds?: number | null;
+  attempt_summary?: IngestAttemptSummary | null;
 };
 
-type StepDiagnostics = {
-  failure_status?: string | null;
-  failure_status_subtype?: string | null;
-  error_code?: string | null;
-  error_category?: string | null;
-  error_phase?: string | null;
-  retryable?: boolean | null;
-  diagnostic_id?: string | null;
-  provider_status?: number | null;
-  provider_code?: string | null;
-  provider_attempt_count?: number | null;
-};
-
-type IngestStepRunRow = StepDiagnostics & {
-  id: string;
+type IngestStepRunRow = IngestStepDiagnostic & {
   ingest_run_id: string;
   session_id: string;
-  invoice_version_id?: string | null;
-  ingest_document_id?: string | null;
-  ingest_document_original_filename?: string | null;
-  invoice_upgrade_type_id?: string | null;
-  supporting_document_type_id?: string | null;
   step_type: string;
   status: string;
-  error_text?: string | null;
   has_di_results_json?: boolean;
   has_genai_results_json?: boolean;
   has_context_window_json?: boolean;
-  di_results_json?: unknown;
-  genai_results_json?: unknown;
-  context_window_json?: unknown;
-  created_at?: string | null;
-  updated_at?: string | null;
-  completed_at?: string | null;
-  duration_seconds?: number | null;
 };
 
 type GridResponse<T> = {
@@ -103,75 +65,32 @@ type GridResponse<T> = {
   message?: string;
 };
 
-type DetailRecord =
-  | { kind: 'run'; title: string; value: IngestRunRow }
-  | { kind: 'step'; title: string; value: IngestStepRunRow };
-
 const PAGE_SIZES = [25, 50, 100];
 const STEP_PAGE_SIZE = 100;
 
-function formatTimestamp(value?: string | null) {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString();
+function RunAttemptHistory({ summary }: { summary?: IngestAttemptSummary | null }) {
+  if (summary?.retrying_targets) return <Badge colorScheme="orange">{summary.retrying_targets} retrying</Badge>;
+  if (summary?.recovered_attempts) return <Badge colorScheme="gray">{summary.recovered_attempts} recovered</Badge>;
+  if (summary?.failed_targets) return <Badge colorScheme="red">{summary.failed_targets} failed</Badge>;
+  return <Text fontSize="xs">No retries</Text>;
 }
 
-function formatDuration(value?: number | null) {
-  const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds < 0) return '—';
-  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
-  if (seconds < 60) return `${seconds.toFixed(1)} s`;
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds - minutes * 60;
-  if (minutes < 60) return `${minutes}m ${remainingSeconds.toFixed(1)}s`;
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `${hours}h ${remainingMinutes}m`;
-}
-
-function statusColor(status?: string | null) {
-  switch (String(status || '').toLowerCase()) {
-    case 'succeeded':
-      return 'green';
-    case 'failed':
-      return 'red';
-    case 'partial':
-      return 'orange';
-    case 'running':
-    case 'in_progress':
-      return 'blue';
-    case 'queued':
-      return 'yellow';
-    default:
-      return 'gray';
-  }
-}
-
-function shortId(value?: string | null) {
-  if (!value) return '—';
-  return value.length > 12 ? `${value.slice(0, 8)}…` : value;
-}
-
-function JsonDetail({ value }: { value: unknown }) {
+function stepTargetLabel(step: IngestStepRunRow) {
   return (
-    <Code
-      display="block"
-      p={4}
-      w="full"
-      overflowX="auto"
-      whiteSpace="pre-wrap"
-      wordBreak="break-word"
-      fontSize="xs"
-      bg="gray.50"
-      borderWidth="1px"
-      borderColor="gray.200"
-      borderRadius="md"
-    >
-      {JSON.stringify(value, null, 2)}
-    </Code>
+    step.ingest_document_original_filename ||
+    step.invoice_upgrade_type_description ||
+    step.invoice_upgrade_type_key ||
+    step.supporting_document_type_description ||
+    step.supporting_document_type_key ||
+    'Package / invoice'
+  );
+}
+
+function stepProviderLabel(step: IngestStepRunRow) {
+  return (
+    [step.provider_status ? `HTTP ${step.provider_status}` : '', step.provider_code || '']
+      .filter(Boolean)
+      .join(' · ') || '—'
   );
 }
 
@@ -194,11 +113,8 @@ export default function IngestRunsAdminScreen() {
   const [stepsLoading, setStepsLoading] = useState(false);
   const [stepsError, setStepsError] = useState('');
   const selectedRunIdRef = useRef('');
-
-  const [detail, setDetail] = useState<DetailRecord | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState('');
-  const detailRequestSequence = useRef(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [diagnosticSelection, setDiagnosticSelection] = useState<IngestDiagnosticSelection | null>(null);
   const detailDrawer = useDisclosure();
 
   const runPages = Math.max(1, Math.ceil(runTotal / per));
@@ -230,14 +146,12 @@ export default function IngestRunsAdminScreen() {
       const nextRuns = Array.isArray(payload.rows) ? payload.rows : [];
       setRuns(nextRuns);
       setRunTotal(Number(payload.meta?.total || 0));
+      setLastUpdatedAt(new Date());
       setSelectedRunId((current) => {
         if (current && nextRuns.some((row) => row.id === current)) return current;
         return nextRuns[0]?.id || '';
       });
     } catch (error: any) {
-      setRuns([]);
-      setRunTotal(0);
-      setSelectedRunId('');
       setRunsError(error?.message || 'Failed to load ingest runs.');
     } finally {
       setRunsLoading(false);
@@ -278,10 +192,9 @@ export default function IngestRunsAdminScreen() {
 
       setSteps(Array.isArray(payload.rows) ? payload.rows : []);
       setStepTotal(Number(payload.meta?.total || 0));
+      setLastUpdatedAt(new Date());
     } catch (error: any) {
       if (requestedRunId !== selectedRunIdRef.current) return;
-      setSteps([]);
-      setStepTotal(0);
       setStepsError(error?.message || 'Failed to load ingest step runs.');
     } finally {
       if (requestedRunId === selectedRunIdRef.current) setStepsLoading(false);
@@ -301,6 +214,22 @@ export default function IngestRunsAdminScreen() {
     void loadSteps();
   }, [loadSteps]);
 
+  const shouldPoll = useMemo(
+    () =>
+      runs.some((run) => ['queued', 'running'].includes(String(run.status).toLowerCase())) ||
+      steps.some((step) => ['queued', 'in_progress'].includes(String(step.status).toLowerCase())),
+    [runs, steps],
+  );
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+    const intervalId = window.setInterval(() => {
+      void loadRuns();
+      void loadSteps();
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [loadRuns, loadSteps, shouldPoll]);
+
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
     setPage(1);
@@ -316,49 +245,9 @@ export default function IngestRunsAdminScreen() {
     setPer(25);
   };
 
-  const openDetail = (nextDetail: DetailRecord) => {
-    detailRequestSequence.current += 1;
-    setDetailLoading(false);
-    setDetailError('');
-    setDetail(nextDetail);
+  const openDetail = (selection: IngestDiagnosticSelection) => {
+    setDiagnosticSelection(selection);
     detailDrawer.onOpen();
-  };
-
-  const openStepDetail = async (step: IngestStepRunRow) => {
-    const requestSequence = detailRequestSequence.current + 1;
-    detailRequestSequence.current = requestSequence;
-    setDetail({
-      kind: 'step',
-      title: `Ingest step ${step.id}`,
-      value: step,
-    });
-    setDetailLoading(true);
-    setDetailError('');
-    detailDrawer.onOpen();
-
-    try {
-      const response = await fetch(`/api/claims/admin/ingest_step_runs/${encodeURIComponent(step.id)}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
-      if (requestSequence !== detailRequestSequence.current) return;
-      setDetail({
-        kind: 'step',
-        title: `Ingest step ${step.id}`,
-        value: payload as IngestStepRunRow,
-      });
-    } catch (error: any) {
-      if (requestSequence !== detailRequestSequence.current) return;
-      setDetailError(error?.message || 'Failed to load ingest step details.');
-    } finally {
-      if (requestSequence === detailRequestSequence.current) {
-        setDetailLoading(false);
-      }
-    }
   };
 
   return (
@@ -375,6 +264,11 @@ export default function IngestRunsAdminScreen() {
               <Text fontSize="sm" color="gray.600">
                 Read-only processing runs, including contractor details and retained failure diagnostics.
               </Text>
+              {lastUpdatedAt ? (
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  {shouldPoll ? 'Live monitoring' : 'Last refreshed'} · {lastUpdatedAt.toLocaleTimeString()}
+                </Text>
+              ) : null}
             </Box>
             <Tooltip label="Refresh both grids">
               <IconButton
@@ -396,7 +290,7 @@ export default function IngestRunsAdminScreen() {
               <Input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Run, session, contractor, invoice version, or error code"
+                placeholder="Contractor, filename, run/session/step ID, diagnostic ID, or error code"
               />
             </FormControl>
             <FormControl w="180px">
@@ -413,7 +307,6 @@ export default function IngestRunsAdminScreen() {
                 <option value="running">Running</option>
                 <option value="succeeded">Succeeded</option>
                 <option value="failed">Failed</option>
-                <option value="partial">Partial</option>
               </Select>
             </FormControl>
             <FormControl w="240px">
@@ -449,24 +342,22 @@ export default function IngestRunsAdminScreen() {
 
           {runsError ? (
             <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-              <Text color="red.700">{runsError}</Text>
+              <Text color="red.700">Showing the last successful data. Refresh failed: {runsError}</Text>
             </Box>
           ) : null}
 
           <Box borderWidth="1px" borderColor="#D8D8D8" borderRadius="md" overflow="auto">
-            <Table size="sm" minW="1480px">
+            <Table size="sm" minW="1040px">
               <Thead bg="#FAF9F8">
                 <Tr>
                   <Th>Start</Th>
-                  <Th>End</Th>
                   <Th>Duration</Th>
                   <Th>Contractor</Th>
+                  <Th>Run kind</Th>
                   <Th>Status</Th>
                   <Th isNumeric>Files</Th>
-                  <Th>Root error</Th>
-                  <Th>HTTP status</Th>
-                  <Th>Provider code</Th>
-                  <Th>Retryable</Th>
+                  <Th>Attempt history</Th>
+                  <Th>Terminal error</Th>
                   <Th />
                 </Tr>
               </Thead>
@@ -482,20 +373,18 @@ export default function IngestRunsAdminScreen() {
                       onClick={() => setSelectedRunId(run.id)}
                     >
                       <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatTimestamp(run.created_at)}
+                        {formatIngestTimestamp(run.created_at)}
                       </Td>
                       <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatTimestamp(run.completed_at)}
-                      </Td>
-                      <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatDuration(run.duration_seconds)}
+                        {formatIngestDuration(run.duration_seconds)}
                       </Td>
                       <Td fontSize="xs">
                         <Text fontWeight="semibold">{run.contractor_business_name || 'System / no contractor'}</Text>
                         <Text color="gray.600">{run.contractor_number || '—'}</Text>
                       </Td>
+                      <Td fontSize="xs">{run.run_kind || '—'}</Td>
                       <Td>
-                        <Badge colorScheme={statusColor(run.status)}>{run.status}</Badge>
+                        <Badge colorScheme={ingestStatusColor(run.status)}>{run.status}</Badge>
                       </Td>
                       <Td isNumeric fontSize="xs" whiteSpace="nowrap">
                         {run.completed_files}/{run.total_files}
@@ -505,25 +394,19 @@ export default function IngestRunsAdminScreen() {
                           </Text>
                         ) : null}
                       </Td>
-                      <Td fontSize="xs" maxW="260px">
-                        {run.primary_failure?.error_code || run.pipeline_error_code ? (
+                      <Td>
+                        <RunAttemptHistory summary={run.attempt_summary} />
+                      </Td>
+                      <Td fontSize="xs" maxW="280px">
+                        {run.terminal_failure?.error_code || run.pipeline_error_code ? (
                           <Tooltip label={run.pipeline_error_description || run.pipeline_error_code || ''}>
                             <Badge colorScheme="red">
-                              {run.primary_failure?.error_code || run.pipeline_error_code}
+                              {run.terminal_failure?.error_code || run.pipeline_error_code}
                             </Badge>
                           </Tooltip>
                         ) : (
                           '—'
                         )}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {run.primary_failure?.provider_status ?? '—'}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {run.primary_failure?.provider_code || '—'}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {run.primary_failure?.retryable == null ? '—' : run.primary_failure.retryable ? 'Yes' : 'No'}
                       </Td>
                       <Td>
                         <Tooltip label="View all run fields and structured failure details">
@@ -546,7 +429,7 @@ export default function IngestRunsAdminScreen() {
 
                 {runsLoading && runs.length === 0 ? (
                   <Tr>
-                    <Td colSpan={11}>
+                    <Td colSpan={9}>
                       <HStack py={3}>
                         <Spinner size="sm" />
                         <Text>Loading ingest runs…</Text>
@@ -557,7 +440,7 @@ export default function IngestRunsAdminScreen() {
 
                 {!runsLoading && runs.length === 0 ? (
                   <Tr>
-                    <Td colSpan={11}>
+                    <Td colSpan={9}>
                       <Text py={3} color="gray.600">
                         No ingest runs match the current filters.
                       </Text>
@@ -617,36 +500,29 @@ export default function IngestRunsAdminScreen() {
             </Text>
             <Text fontSize="sm" color="gray.600">
               {selectedRun
-                ? `Read-only step attempts for ${selectedRun.contractor_business_name || 'system run'} — ${selectedRun.id}`
+                ? `Read-only step attempts for ${selectedRun.contractor_business_name || 'system run'} · ${formatIngestTimestamp(selectedRun.created_at)}`
                 : 'Select an ingest run above to see its processing steps.'}
             </Text>
           </Box>
 
           {stepsError ? (
             <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-              <Text color="red.700">{stepsError}</Text>
+              <Text color="red.700">Showing the last successful step data. Refresh failed: {stepsError}</Text>
             </Box>
           ) : null}
 
           <Box borderWidth="1px" borderColor="#D8D8D8" borderRadius="md" overflow="auto">
-            <Table size="sm" minW="2540px">
+            <Table size="sm" minW="1180px">
               <Thead bg="#FAF9F8">
                 <Tr>
                   <Th>Start</Th>
-                  <Th>End</Th>
                   <Th>Duration</Th>
                   <Th>Step</Th>
-                  <Th>Status</Th>
-                  <Th>Invoice version</Th>
-                  <Th>Ingest document / filename</Th>
-                  <Th>Upgrade type</Th>
-                  <Th>Supporting type</Th>
+                  <Th>Attempt</Th>
+                  <Th>Outcome</Th>
+                  <Th>Target</Th>
                   <Th>Error code</Th>
-                  <Th>HTTP status</Th>
-                  <Th>Provider code</Th>
-                  <Th>Retryable</Th>
-                  <Th>Diagnostic ID</Th>
-                  <Th>Error text</Th>
+                  <Th>Provider</Th>
                   <Th>Payloads</Th>
                   <Th />
                 </Tr>
@@ -661,74 +537,43 @@ export default function IngestRunsAdminScreen() {
                   return (
                     <Tr key={step.id}>
                       <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatTimestamp(step.created_at)}
+                        {formatIngestTimestamp(step.created_at)}
                       </Td>
                       <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatTimestamp(step.completed_at)}
-                      </Td>
-                      <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatDuration(step.duration_seconds)}
+                        {formatIngestDuration(step.duration_seconds)}
                       </Td>
                       <Td fontSize="xs" fontWeight="semibold">
                         {step.step_type}
                       </Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {step.attempt_number || 1} of {step.attempt_count || 1}
+                      </Td>
                       <Td>
-                        <Badge colorScheme={statusColor(step.status)}>{step.status}</Badge>
+                        <Badge colorScheme={ingestStatusColor(step.display_status || step.status)}>
+                          {step.display_status || step.status}
+                        </Badge>
                       </Td>
-                      <Td fontFamily="mono" fontSize="xs">
-                        <Tooltip label={step.invoice_version_id || ''}>{shortId(step.invoice_version_id)}</Tooltip>
-                      </Td>
-                      <Td fontSize="xs" maxW="260px">
-                        {step.ingest_document_original_filename ? (
-                          <>
-                            <Tooltip label={step.ingest_document_original_filename}>
-                              <Text noOfLines={2} fontWeight="semibold">
-                                {step.ingest_document_original_filename}
-                              </Text>
-                            </Tooltip>
-                            <Tooltip label={step.ingest_document_id || ''}>
-                              <Text fontFamily="mono" color="gray.600">
-                                {shortId(step.ingest_document_id)}
-                              </Text>
-                            </Tooltip>
-                          </>
-                        ) : (
-                          <Tooltip label={step.ingest_document_id || ''}>
-                            <Text fontFamily="mono">{shortId(step.ingest_document_id)}</Text>
-                          </Tooltip>
-                        )}
-                      </Td>
-                      <Td fontFamily="mono" fontSize="xs">
-                        <Tooltip label={step.invoice_upgrade_type_id || ''}>
-                          {shortId(step.invoice_upgrade_type_id)}
-                        </Tooltip>
-                      </Td>
-                      <Td fontFamily="mono" fontSize="xs">
-                        <Tooltip label={step.supporting_document_type_id || ''}>
-                          {shortId(step.supporting_document_type_id)}
-                        </Tooltip>
+                      <Td fontSize="xs" maxW="300px">
+                        <Text noOfLines={2} fontWeight="semibold">
+                          {stepTargetLabel(step)}
+                        </Text>
+                        {step.invoice_upgrade_type_key || step.supporting_document_type_key ? (
+                          <Text color="gray.600">
+                            {step.invoice_upgrade_type_key || step.supporting_document_type_key}
+                          </Text>
+                        ) : null}
                       </Td>
                       <Td fontSize="xs">
-                        {step.error_code ? <Badge colorScheme="red">{step.error_code}</Badge> : '—'}
+                        {step.error_code ? (
+                          <Badge colorScheme={step.display_status === 'recovered' ? 'gray' : 'red'}>
+                            {step.error_code}
+                          </Badge>
+                        ) : (
+                          '—'
+                        )}
                       </Td>
                       <Td fontSize="xs" whiteSpace="nowrap">
-                        {step.provider_status ?? '—'}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {step.provider_code || '—'}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {step.retryable == null ? '—' : step.retryable ? 'Yes' : 'No'}
-                      </Td>
-                      <Td fontFamily="mono" fontSize="xs">
-                        <Tooltip label={step.diagnostic_id || ''}>{shortId(step.diagnostic_id)}</Tooltip>
-                      </Td>
-                      <Td fontSize="xs" maxW="360px">
-                        <Tooltip label={step.error_text || ''}>
-                          <Text noOfLines={2} color={step.error_text ? 'red.700' : undefined}>
-                            {step.error_text || '—'}
-                          </Text>
-                        </Tooltip>
+                        {stepProviderLabel(step)}
                       </Td>
                       <Td fontSize="xs">{payloadCount}</Td>
                       <Td>
@@ -738,7 +583,9 @@ export default function IngestRunsAdminScreen() {
                             icon={<Info size={16} />}
                             size="xs"
                             variant="outline"
-                            onClick={() => void openStepDetail(step)}
+                            onClick={() =>
+                              openDetail({ kind: 'step', title: `Ingest step · ${step.step_type}`, value: step })
+                            }
                           />
                         </Tooltip>
                       </Td>
@@ -748,7 +595,7 @@ export default function IngestRunsAdminScreen() {
 
                 {stepsLoading && steps.length === 0 ? (
                   <Tr>
-                    <Td colSpan={17}>
+                    <Td colSpan={10}>
                       <HStack py={3}>
                         <Spinner size="sm" />
                         <Text>Loading ingest step runs…</Text>
@@ -759,7 +606,7 @@ export default function IngestRunsAdminScreen() {
 
                 {!stepsLoading && steps.length === 0 ? (
                   <Tr>
-                    <Td colSpan={17}>
+                    <Td colSpan={10}>
                       <Text py={3} color="gray.600">
                         {selectedRunId ? 'No step runs exist for the selected ingest run.' : 'No ingest run selected.'}
                       </Text>
@@ -796,30 +643,11 @@ export default function IngestRunsAdminScreen() {
         </Box>
       </Container>
 
-      <Drawer isOpen={detailDrawer.isOpen} placement="right" size="xl" onClose={detailDrawer.onClose}>
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
-          <DrawerHeader>{detail?.title || 'Ingest details'}</DrawerHeader>
-          <DrawerBody pb={8}>
-            <Text fontSize="sm" color="gray.600" mb={4}>
-              Read-only {detail?.kind === 'step' ? 'ingest_step_runs' : 'v_ingest_runs'} record.
-            </Text>
-            {detailLoading ? (
-              <HStack>
-                <Spinner size="sm" />
-                <Text>Loading full step payloads…</Text>
-              </HStack>
-            ) : null}
-            {detailError ? (
-              <Box mb={4} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
-                <Text color="red.700">{detailError}</Text>
-              </Box>
-            ) : null}
-            {!detailLoading && detail ? <JsonDetail value={detail.value} /> : null}
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
+      <IngestDiagnosticDrawer
+        isOpen={detailDrawer.isOpen}
+        onClose={detailDrawer.onClose}
+        selection={diagnosticSelection}
+      />
     </Flex>
   );
 }

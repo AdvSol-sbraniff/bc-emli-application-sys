@@ -59,39 +59,26 @@ module Api
         end
 
         if params[:invoice_status].present?
-          invoice_status = params[:invoice_status].to_s.strip
           invoice_statuses =
-            invoice_status
+            params[:invoice_status]
+              .to_s
               .split(",")
               .map { |status| status.to_s.strip }
               .select(&:present?)
-          rel =
-            if invoice_status == "failed"
-              rel.where(
-                invoice_status: %w[
-                  upload_failed
-                  ocr_failed
-                  genai_failed
-                  package_needs_correction
-                  technical_failure
-                ]
-              )
-            elsif invoice_status == "processing"
-              rel.where(
-                invoice_status: %w[
-                  upload_queued
-                  upload_in_progress
-                  ocr_queued
-                  ocr_in_progress
-                  genai_queued
-                  genai_in_progress
-                ]
-              )
-            elsif invoice_statuses.many?
-              rel.where(invoice_status: invoice_statuses)
-            else
-              rel.where(invoice_status: invoice_status)
-            end
+          business_statuses = invoice_statuses - %w[processing failed]
+          status_clauses = []
+          status_binds = {}
+          if business_statuses.any?
+            status_clauses << "invoice_status IN (:business_statuses)"
+            status_binds[:business_statuses] = business_statuses
+          end
+          if invoice_statuses.include?("processing")
+            status_clauses << "latest_ingest_run_status IN ('queued','running')"
+          end
+          if invoice_statuses.include?("failed")
+            status_clauses << "latest_ingest_run_status = 'failed'"
+          end
+          rel = rel.where(status_clauses.join(" OR "), status_binds)
         end
 
         upgrade_type_keys = parse_upgrade_type_keys(params[:upgrade_type_keys])
@@ -282,14 +269,7 @@ module Api
                  transition: transition_key,
                  invoice:
                    invoice.as_json(
-                     only: %i[
-                       id
-                       session_id
-                       status
-                       status_subtype
-                       status_updated_at
-                       updated_at
-                     ]
+                     only: %i[id session_id status status_updated_at updated_at]
                    ),
                  previous_status: previous_status,
                  status: invoice.status

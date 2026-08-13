@@ -53,41 +53,47 @@ module Claims
           ::Claims::Sessions::Create.call(contractor_id: contractor_id)
         session_id = session_result.session.id
 
-        ingest_run =
-          ::Claims::IngestRun.create!(
-            session_id: session_id,
-            contractor_id: contractor_id,
-            status: "queued",
-            cleanup_failed_invoice_artifacts: cleanup_failed_invoice_artifacts,
-            total_files: files.size,
-            completed_files: 0,
-            failed_files: 0,
-            created_at: Time.current,
-            updated_at: Time.current
-          )
+        ::Claims::Invoice.transaction do
+          now = Time.current
+          shell_invoice =
+            ::Claims::Invoice.create!(
+              session_id: session_id,
+              contractor_id: contractor_id,
+              submitter_id: nil,
+              status: "contractor_precheck",
+              status_updated_at: now,
+              submitted_at: nil,
+              created_at: now,
+              updated_at: now
+            )
 
-        shell_invoice =
-          ::Claims::Invoice.create!(
-            session_id: session_id,
-            contractor_id: contractor_id,
-            submitter_id: nil,
-            status: "upload_in_progress",
-            status_updated_at: Time.current,
-            submitted_at: nil,
-            created_at: Time.current,
-            updated_at: Time.current
-          )
+          ingest_run =
+            ::Claims::IngestRun.create!(
+              session_id: session_id,
+              contractor_id: contractor_id,
+              invoice_id: shell_invoice.id,
+              run_kind: "initial_upload",
+              status: "queued",
+              cleanup_failed_invoice_artifacts:
+                cleanup_failed_invoice_artifacts,
+              total_files: files.size,
+              completed_files: 0,
+              failed_files: 0,
+              created_at: now,
+              updated_at: now
+            )
 
-        stage_step =
-          ::Claims::IngestStepRun.create!(
-            ingest_run_id: ingest_run.id,
-            session_id: session_id,
-            step_type: "upload_package_stage",
-            status: "in_progress",
-            error_text: nil,
-            created_at: Time.current,
-            updated_at: Time.current
-          )
+          stage_step =
+            ::Claims::IngestStepRun.create!(
+              ingest_run_id: ingest_run.id,
+              session_id: session_id,
+              step_type: "stage_package",
+              status: "in_progress",
+              error_text: nil,
+              created_at: now,
+              updated_at: now
+            )
+        end
 
         results =
           files.each_with_index.map do |file, index|
@@ -96,39 +102,38 @@ module Claims
 
         failed_results = results.select { |row| row[:status].to_s == "failed" }
         if failed_results.any?
-          failure_status, failure_subtype =
-            staging_failure_status_and_subtype(failed_results)
-          shell_invoice.set_workflow_status!(
-            failure_status,
-            status_subtype: failure_subtype
-          )
+          failure_category, failure_subtype =
+            staging_failure_category_and_subtype(failed_results)
+          normalized_subtype =
+            ::Claims::Ingest::FailureCatalog.normalize(
+              failure_category,
+              failure_subtype
+            ).presence || failure_subtype
           failure_payload =
             contractor_failure_payload(
-              status: failure_status,
-              status_subtype: shell_invoice.status_subtype
+              failure_category: failure_category,
+              failure_code: normalized_subtype
             )
           stage_step.update!(
             status: "failed",
             error_text:
               "One or more evidence files failed during upload package staging.",
-            **::Claims::Invoices::FailureSubtypes.step_attributes(
-              status: failure_status,
-              status_subtype: shell_invoice.status_subtype
+            **::Claims::Ingest::FailureClassifier.step_attributes(
+              failure_category: failure_category,
+              failure_code: normalized_subtype
             ),
             updated_at: Time.current
           )
-          ingest_run.update!(
-            status: "failed",
+          ::Claims::Ingest::RunTransition.mark_failed!(
+            run: ingest_run,
+            total_files: files.size,
             failed_files: failed_results.size,
-            failure_status: failure_status,
-            failure_status_subtype: shell_invoice.status_subtype,
-            pipeline_error_code: shell_invoice.status_subtype,
+            failure_category: failure_category,
+            failure_code: normalized_subtype,
+            pipeline_error_code: normalized_subtype,
             pipeline_error_description:
-              "Upload package staging failed: #{shell_invoice.status_subtype}.",
-            completed_at: Time.current,
-            updated_at: Time.current
+              "Upload package staging failed: #{normalized_subtype}."
           )
-          cleanup_failed_contractor_upload!(ingest_run)
           return(
             {
               ok: true,
@@ -151,11 +156,11 @@ module Claims
           )
         end
 
-        shell_invoice.set_workflow_status!("ocr_in_progress")
-
-        ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run.id)
-        ingest_run.reload
-        mark_orphaned_ingest_failures!(ingest_run: ingest_run, results: results)
+        ::Claims::Ingest::RunTransition.mark_running!(
+          run: ingest_run,
+          total_files: files.size
+        )
+        ::Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run.id)
         ingest_run.reload
 
         {
@@ -209,13 +214,13 @@ module Claims
         stage_step:
       )
         error_code =
-          ::Claims::Invoices::FailureSubtypes.upload(error).presence ||
+          ::Claims::Ingest::FailureClassifier.upload(error).presence ||
             "upload_unexpected_exception"
         now = Time.current
         diagnostic_attributes =
-          ::Claims::Invoices::FailureSubtypes.step_attributes(
-            status: "technical_failure",
-            status_subtype: error_code,
+          ::Claims::Ingest::FailureClassifier.step_attributes(
+            failure_category: "technical_failure",
+            failure_code: error_code,
             error: error
           )
         diagnostic_attributes[:diagnostic_id] ||= diagnostic_id
@@ -236,33 +241,22 @@ module Claims
           )
         end
         safely_finalize_unexpected_failure!(
-          label: "invoice",
+          label: "run transition",
           diagnostic_id: diagnostic_id
         ) do
-          shell_invoice&.update_columns(
-            status: "technical_failure",
-            status_subtype: error_code,
-            status_updated_at: now,
-            updated_at: now
-          )
+          if ingest_run&.id
+            ::Claims::Ingest::RunTransition.mark_failed!(
+              run: ingest_run,
+              total_files: [ingest_run.total_files.to_i, files.size].max,
+              failed_files: [ingest_run.failed_files.to_i, 1].max,
+              failure_category: "technical_failure",
+              failure_code: error_code,
+              pipeline_error_code: error_code,
+              pipeline_error_description:
+                "Upload package staging failed before processing completed."
+            )
+          end
         end
-        safely_finalize_unexpected_failure!(
-          label: "ingest run",
-          diagnostic_id: diagnostic_id
-        ) do
-          ingest_run&.update_columns(
-            status: "failed",
-            failed_files: [ingest_run.failed_files.to_i, 1].max,
-            failure_status: "technical_failure",
-            failure_status_subtype: error_code,
-            pipeline_error_code: error_code,
-            pipeline_error_description:
-              "Upload package staging failed before processing completed.",
-            completed_at: now,
-            updated_at: now
-          )
-        end
-        cleanup_failed_contractor_upload!(ingest_run) if ingest_run&.id
         error_code
       end
 
@@ -311,7 +305,6 @@ module Claims
               original_filename: name,
               content_type: content_type,
               byte_size: size,
-              classification_status: "pending",
               classification_confidence: 0,
               document_kind_confidence: 0,
               created_at: Time.current,
@@ -348,7 +341,7 @@ module Claims
             ingest_run_id: ingest_run.id,
             session_id: session_id,
             ingest_document_id: ingest_document.id,
-            step_type: "ocr_read",
+            step_type: "read_document",
             status: "queued",
             error_text: nil,
             created_at: Time.current,
@@ -399,14 +392,14 @@ module Claims
         "package_no_processable_files"
       end
 
-      def staging_failure_status_and_subtype(failed_results)
+      def staging_failure_category_and_subtype(failed_results)
         errors =
           failed_results.map { |row| row[:error].to_s.downcase }.join(" ")
 
         if upload_technical_failure?(errors)
           return [
             "technical_failure",
-            ::Claims::Invoices::FailureSubtypes.upload(errors)
+            ::Claims::Ingest::FailureClassifier.upload(errors)
           ]
         end
 
@@ -431,49 +424,37 @@ module Claims
         ].any? { |marker| message.include?(marker) }
       end
 
-      def contractor_failure_payload(status:, status_subtype:)
+      def contractor_failure_payload(failure_category:, failure_code:)
         {
-          failure_status: status,
-          failure_status_subtype: status_subtype,
+          failure_category: failure_category,
+          failure_code: failure_code,
           failure_message:
-            ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-              status,
-              status_subtype
+            ::Claims::Ingest::FailureCatalog.contractor_failure_message(
+              failure_category,
+              failure_code
             ),
           retry_guidance:
-            ::Claims::Invoices::StatusSubtypes.retry_guidance(
-              status,
-              status_subtype
+            ::Claims::Ingest::FailureCatalog.retry_guidance(
+              failure_category,
+              failure_code
             )
         }
-      end
-
-      def cleanup_failed_contractor_upload!(ingest_run)
-        return unless cleanup_failed_invoice_artifacts
-
-        ::Claims::Ingest::CleanupFailedContractorUpload.call(
-          ingest_run: ingest_run
-        )
-      rescue StandardError => e
-        Rails.logger.error(
-          "[claims][ingest][#{log_prefix}] cleanup failed ingest_run_id=#{ingest_run.id}: #{e.class}: #{e.message}"
-        )
       end
 
       def create_failed_step(ingest_run, session_id, ingest_document, error)
         return unless ingest_document&.id
 
-        status_subtype = ::Claims::Invoices::FailureSubtypes.upload(error)
+        failure_code = ::Claims::Ingest::FailureClassifier.upload(error)
         ::Claims::IngestStepRun.create!(
           ingest_run_id: ingest_run.id,
           session_id: session_id,
           ingest_document_id: ingest_document.id,
-          step_type: "ocr_read",
+          step_type: "read_document",
           status: "failed",
           error_text: "ocr_enqueue_or_upload_failed: #{error.message}",
-          **::Claims::Invoices::FailureSubtypes.step_attributes(
-            status: "technical_failure",
-            status_subtype: status_subtype,
+          **::Claims::Ingest::FailureClassifier.step_attributes(
+            failure_category: "technical_failure",
+            failure_code: failure_code,
             error: error
           ),
           created_at: Time.current,
@@ -490,39 +471,6 @@ module Claims
             content_type: content_type
           )
         "PENDING/session=#{session_id}/ingest_document=#{SecureRandom.uuid}/#{SecureRandom.uuid}#{extension}"
-      end
-
-      def mark_orphaned_ingest_failures!(ingest_run:, results:)
-        orphaned_failures =
-          results.count do |result|
-            result[:status] == "failed" &&
-              result[:ingest_document_id].to_s.strip.empty?
-          end
-
-        return if orphaned_failures.zero?
-
-        failed_files = ingest_run.failed_files.to_i + orphaned_failures
-        completed_files = ingest_run.completed_files.to_i
-        processed_files = completed_files + failed_files
-        total_files = [ingest_run.total_files.to_i, results.size].max
-        status =
-          if total_files.positive? && processed_files >= total_files
-            completed_files.positive? ? "partial" : "failed"
-          else
-            "running"
-          end
-
-        ingest_run.update!(
-          status: status,
-          total_files: total_files,
-          failed_files: failed_files,
-          pipeline_error_code: "upload_unexpected_exception",
-          pipeline_error_description:
-            "#{orphaned_failures} file upload #{"failure".pluralize(orphaned_failures)} could not be attached to an ingest document.",
-          completed_at:
-            %w[succeeded failed partial].include?(status) ? Time.current : nil,
-          updated_at: Time.current
-        )
       end
     end
   end

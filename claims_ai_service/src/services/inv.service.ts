@@ -716,6 +716,8 @@ export class InvService {
       diagnosticId,
     );
     let raw = '';
+    let parsed: any;
+    let providerAttempt = 0;
 
     this.logGenAiDiagnostic('claims.genai.request.started', diagnosticBase);
 
@@ -727,25 +729,67 @@ export class InvService {
           responsesPrompt.input,
           attachments,
         );
-        const resp = await this.withGenAiRetries(() =>
-          this.genaiClient.responses.create({
+        const result = await this.withGenAiRetries(async () => {
+          providerAttempt += 1;
+          const resp = await this.genaiClient.responses.create({
             model: this.genaiDeployment,
             instructions: responsesPrompt.instructions,
             input: responsesInput,
-          }),
-        );
-        raw = resp.output_text ?? '';
+          });
+          return this.parseGenAiResponse(
+            resp.output_text ?? '',
+            providerAttempt,
+            diagnosticBase,
+          );
+        });
+        raw = result.raw;
+        parsed = result.parsed;
       } else {
-        const resp = await this.withGenAiRetries(() =>
-          this.genaiClient.chat.completions.create({
+        const result = await this.withGenAiRetries(async () => {
+          providerAttempt += 1;
+          const resp = await this.genaiClient.chat.completions.create({
             model: this.genaiDeployment,
             messages: toChatMessages(contextwindowjson),
-          }),
-        );
-        raw = extractChatCompletionText(resp);
+          });
+          return this.parseGenAiResponse(
+            extractChatCompletionText(resp),
+            providerAttempt,
+            diagnosticBase,
+          );
+        });
+        raw = result.raw;
+        parsed = result.parsed;
       }
     } catch (error: any) {
       const elapsed_ms = Date.now() - startedAt;
+      if (error?.code === 'genai_model_output_invalid_json') {
+        this.logGenAiDiagnostic('claims.genai.request.failed', {
+          ...diagnosticBase,
+          elapsed_ms,
+          category: 'model_output_invalid_json',
+          error_code: error.code,
+          retryable: true,
+          provider_attempt_count: error.genai_attempt_count,
+          output_chars: error.output_chars,
+        });
+        throw new HttpException(
+          {
+            message: 'Model output was not valid JSON',
+            code: error.code,
+            category: 'model_output_invalid_json',
+            retryable: true,
+            diagnostic_id: diagnosticId,
+            elapsed_ms,
+            provider_attempt_count: error.genai_attempt_count,
+            phase: diagnosticContext?.step_type
+              ? String(diagnosticContext.step_type).slice(0, 120)
+              : undefined,
+            output_chars: error.output_chars,
+            snippet: error.snippet,
+          },
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
       const safeError = sanitizedGenAiError({
         error,
         diagnosticId,
@@ -780,30 +824,29 @@ export class InvService {
       elapsed_ms: Date.now() - startedAt,
       output_chars: raw.length,
     });
+    return parsed;
+  }
 
-    const candidate = extractJsonPayloadText(raw);
-
-    // Return the model JSON verbatim
+  private parseGenAiResponse(
+    raw: string,
+    providerAttempt: number,
+    diagnosticBase: Record<string, any>,
+  ): { raw: string; parsed: any } {
     try {
-      return JSON.parse(candidate);
+      return { raw, parsed: JSON.parse(extractJsonPayloadText(raw)) };
     } catch {
-      const elapsed_ms = Date.now() - startedAt;
-      throw new HttpException(
-        {
-          message: 'Model output was not valid JSON',
-          code: 'genai_model_output_invalid_json',
-          category: 'model_output_invalid_json',
-          retryable: true,
-          diagnostic_id: diagnosticId,
-          elapsed_ms,
-          phase: diagnosticContext?.step_type
-            ? String(diagnosticContext.step_type).slice(0, 120)
-            : undefined,
-          output_chars: raw.length,
-          snippet: stripThinkBlocks(raw).slice(0, 2000),
-        },
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
+      this.logGenAiDiagnostic('claims.genai.response.malformed', {
+        ...diagnosticBase,
+        provider_attempt: providerAttempt,
+        output_chars: raw.length,
+      });
+      throw Object.assign(new Error('Model output was not valid JSON'), {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        code: 'genai_model_output_invalid_json',
+        retryable: true,
+        output_chars: raw.length,
+        snippet: stripThinkBlocks(raw).slice(0, 2000),
+      });
     }
   }
 

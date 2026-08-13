@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Claims::Invoices::DestroyPackage do
   describe ".call" do
-    it "deletes same-session ingest leftovers when deleting the last invoice" do
+    it "deletes the explicitly owned ingest package with the invoice" do
       now = Time.zone.parse("2026-06-23 17:10:00")
       contractor = Contractor.create!(business_name: "Test Contractor")
       session = Claims::Session.create!(created_at: now, updated_at: now)
@@ -10,7 +10,7 @@ RSpec.describe Claims::Invoices::DestroyPackage do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           created_at: now,
           updated_at: now
         )
@@ -29,21 +29,24 @@ RSpec.describe Claims::Invoices::DestroyPackage do
         Claims::InvoiceStatusTransition.create!(
           invoice_id: invoice.id,
           invoice_version_id: invoice_version.id,
-          from_status: "genai_in_progress",
-          to_status: "genai_complete",
+          from_status: "contractor_precheck",
+          to_status: "contractor_precheck",
           created_at: now
         )
       package_run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           contractor_id: contractor.id,
+          invoice_id: invoice.id,
           status: "succeeded",
           total_files: 1,
           completed_files: 1,
           failed_files: 0,
           resolved_invoice_version_id: invoice_version.id,
           created_at: now,
-          updated_at: now
+          updated_at: now,
+          completed_at: now
         )
       package_document =
         Claims::IngestDocument.create!(
@@ -58,54 +61,25 @@ RSpec.describe Claims::Invoices::DestroyPackage do
           original_filename: "Invoice.pdf",
           content_type: "application/pdf",
           document_kind: "invoice",
-          classification_status: "classified",
           created_at: now,
           updated_at: now
         )
-      stale_run =
-        Claims::IngestRun.create!(
-          session_id: session.id,
-          contractor_id: contractor.id,
-          status: "succeeded",
-          total_files: 1,
-          completed_files: 1,
-          failed_files: 0,
-          created_at: now + 1.second,
-          updated_at: now + 1.second
-        )
-      stale_document =
-        Claims::IngestDocument.create!(
-          ingest_run_id: stale_run.id,
-          session_id: session.id,
-          contractor_id: contractor.id,
-          storage_provider: "azure_blob",
-          storage_key: "stale/unlinked.pdf",
-          original_filename: "Unlinked.pdf",
-          content_type: "application/pdf",
-          document_kind: "unknown",
-          classification_status: "pending",
-          created_at: now + 1.second,
-          updated_at: now + 1.second
-        )
-
-      [package_document, stale_document].each do |document|
-        Claims::IngestStepRun.create!(
-          ingest_run_id: document.ingest_run_id,
-          session_id: session.id,
-          ingest_document_id: document.id,
-          step_type: "ocr_read",
-          status: "succeeded",
-          created_at: document.created_at,
-          updated_at: document.updated_at
-        )
-      end
+      Claims::IngestStepRun.create!(
+        ingest_run_id: package_document.ingest_run_id,
+        session_id: session.id,
+        ingest_document_id: package_document.id,
+        step_type: "read_document",
+        status: "succeeded",
+        created_at: package_document.created_at,
+        updated_at: package_document.updated_at
+      )
 
       deleted = described_class.call(invoice_id: invoice.id)
 
       expect(deleted[:invoice_versions]).to eq(1)
-      expect(deleted[:ingest_documents]).to eq(2)
-      expect(deleted[:ingest_runs]).to eq(2)
-      expect(deleted[:ingest_step_runs]).to eq(2)
+      expect(deleted[:ingest_documents]).to eq(1)
+      expect(deleted[:ingest_runs]).to eq(1)
+      expect(deleted[:ingest_step_runs]).to eq(1)
       expect(deleted[:sessions]).to eq(1)
       expect(Claims::Invoice.exists?(invoice.id)).to be(false)
       expect(

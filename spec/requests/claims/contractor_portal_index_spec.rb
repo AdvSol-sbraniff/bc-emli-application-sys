@@ -11,7 +11,7 @@ RSpec.describe "Claims contractor portal index", type: :request do
         session_id: session.id,
         contractor_id: contractor.id,
         submitter_id: submitter.id,
-        status: "genai_complete"
+        status: "contractor_precheck"
       )
     invoice_version =
       Claims::InvoiceVersion.create!(
@@ -58,7 +58,7 @@ RSpec.describe "Claims contractor portal index", type: :request do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: contractor.id,
-        status: "genai_complete"
+        status: "contractor_precheck"
       )
     second_invoice =
       Claims::Invoice.create!(
@@ -70,7 +70,7 @@ RSpec.describe "Claims contractor portal index", type: :request do
       Claims::Invoice.create!(
         session_id: session.id,
         contractor_id: other_contractor.id,
-        status: "genai_complete"
+        status: "contractor_precheck"
       )
 
     [

@@ -14,22 +14,11 @@ RSpec.describe "Claims ingest step history", type: :request do
       now = Time.zone.parse("2026-06-20 13:26:17")
       contractor = Contractor.create!(business_name: "Test Contractor")
       session = Claims::Session.create!(created_at: now, updated_at: now)
-      ingest_run =
-        Claims::IngestRun.create!(
-          session_id: session.id,
-          contractor_id: contractor.id,
-          status: "succeeded",
-          total_files: 3,
-          completed_files: 3,
-          failed_files: 0,
-          created_at: now,
-          updated_at: now
-        )
       invoice =
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           status_updated_at: now,
           created_at: now,
           updated_at: now
@@ -44,6 +33,21 @@ RSpec.describe "Claims ingest step history", type: :request do
           content_type: "application/pdf",
           created_at: now,
           updated_at: now
+        )
+      ingest_run =
+        Claims::IngestRun.create!(
+          run_kind: "initial_upload",
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          resolved_invoice_version_id: invoice_version.id,
+          status: "succeeded",
+          total_files: 3,
+          completed_files: 3,
+          failed_files: 0,
+          created_at: now,
+          updated_at: now,
+          completed_at: now
         )
       supporting_document_type =
         Claims::SupportingDocumentType.find_or_create_by!(
@@ -75,7 +79,7 @@ RSpec.describe "Claims ingest step history", type: :request do
         session_id: session.id,
         invoice_version_id: invoice_version.id,
         supporting_document_type_id: supporting_document_type.id,
-        step_type: "supporting_document_extraction",
+        step_type: "extract_supporting_document",
         status: "succeeded",
         created_at: now,
         updated_at: now
@@ -84,7 +88,7 @@ RSpec.describe "Claims ingest step history", type: :request do
         ingest_run_id: ingest_run.id,
         session_id: session.id,
         invoice_version_id: invoice_version.id,
-        step_type: "ocr_invoice",
+        step_type: "extract_invoice",
         status: "succeeded",
         created_at: now + 1.second,
         updated_at: now + 1.second
@@ -100,7 +104,7 @@ RSpec.describe "Claims ingest step history", type: :request do
       rows = json_response.fetch("rows")
       extraction_rows =
         rows.select do |row|
-          row.fetch("step_type") == "supporting_document_extraction"
+          row.fetch("step_type") == "extract_supporting_document"
         end
 
       expect(extraction_rows.size).to eq(1)
@@ -112,13 +116,13 @@ RSpec.describe "Claims ingest step history", type: :request do
       )
       expect(
         rows.any? do |row|
-          row.fetch("step_type") == "supporting_document_extraction" &&
+          row.fetch("step_type") == "extract_supporting_document" &&
             row.fetch("document_kind") == "invoice"
         end
       ).to be(false)
       expect(
         rows.any? do |row|
-          row.fetch("step_type") == "ocr_invoice" &&
+          row.fetch("step_type") == "extract_invoice" &&
             row.fetch("document_kind") == "invoice"
         end
       ).to be(true)
@@ -132,25 +136,27 @@ RSpec.describe "Claims ingest step history", type: :request do
       session = Claims::Session.create!
       ingest_run =
         Claims::IngestRun.create!(
+          run_kind: "initial_upload",
           session_id: session.id,
           status: "failed",
           total_files: 1,
           completed_files: 0,
           failed_files: 1,
-          failure_status: "technical_failure",
-          failure_status_subtype: "genai_service_error",
+          failure_category: "technical_failure",
+          failure_code: "genai_service_error",
           pipeline_error_code: "checker_test_error",
-          pipeline_error_description: "Checker test description."
+          pipeline_error_description: "Checker test description.",
+          completed_at: Time.current
         )
       failed_step =
         Claims::IngestStepRun.create!(
           ingest_run_id: ingest_run.id,
           session_id: session.id,
-          step_type: "classifier_files",
+          step_type: "classify_document",
           status: "failed",
           error_text: "Provider request failed.",
-          failure_status: "technical_failure",
-          failure_status_subtype: "genai_service_error",
+          failure_category: "technical_failure",
+          failure_code: "genai_service_error",
           error_code: "genai_provider_gateway_error",
           error_category: "provider_gateway_error",
           retryable: true,
@@ -168,7 +174,7 @@ RSpec.describe "Claims ingest step history", type: :request do
       expect(json_response.fetch("pipeline_error_description")).to eq(
         "Checker test description."
       )
-      expect(json_response.fetch("failure_status")).to eq("technical_failure")
+      expect(json_response.fetch("failure_category")).to eq("technical_failure")
       expect(json_response.fetch("primary_failure")).to include(
         "step_id" => failed_step.id,
         "error_code" => "genai_provider_gateway_error",

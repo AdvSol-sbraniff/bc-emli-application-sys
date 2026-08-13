@@ -27,8 +27,17 @@ import {
 } from '@chakra-ui/react';
 import { CheckCircle, FilePlus, Trash, UploadSimple, WarningCircle, XCircle } from '@phosphor-icons/react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { ClaimsIngestRun, useClaimsIngestRun } from '../../../hooks/use-claims-ingest-run';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 import { ContractorProcessingGraphic } from '../../shared/claims/contractor-processing-graphic';
+import { CLAIMS_EVIDENCE_FILE_ACCEPT } from '../../shared/claims/claims-evidence-files';
+import {
+  addFilesToClaimsFixPackage,
+  buildClaimsFixPackageFormData,
+  buildClaimsFixPackageRows,
+  type ClaimsFixPackageRow,
+  type ClaimsSupportingDocument,
+} from '../../shared/claims/claims-fix-package';
 import {
   ClaimsUploadRequestError,
   claimsUploadCaughtErrorMessage,
@@ -36,60 +45,22 @@ import {
   contractorFacingClaimsFailureMessage,
 } from '../../shared/claims/upload-error';
 
-type SupportingDocumentRow = {
-  id: string;
-  invoice_version_id?: string | null;
-  original_filename?: string | null;
-  content_type?: string | null;
-  mime_content_type?: string | null;
-  byte_size?: number | null;
-  supporting_document_type_key?: string | null;
-  supporting_document_type_description?: string | null;
-};
-
 type CurrentReadPayload = {
   read?: {
     id?: string;
     invoice_id?: string;
     session_id?: string | null;
     invoice_status?: string | null;
-    invoice_status_subtype?: string | null;
     invoice_versionno?: number | null;
     original_filename?: string | null;
     content_type?: string | null;
     byte_size?: number | null;
-    uploaded_supporting_documents?: SupportingDocumentRow[];
+    uploaded_supporting_documents?: ClaimsSupportingDocument[];
   };
   error?: string;
 };
 
-type ProposedFileRow = {
-  id: string;
-  sourceId?: string | null;
-  source: 'clone' | 'new';
-  fileRole: 'invoice' | 'supporting_document' | 'auto_detect';
-  filename: string;
-  contentType?: string | null;
-  byteSize?: number | null;
-  file?: File;
-  supportingType?: string | null;
-};
-
-type RunHeader = {
-  id: string;
-  session_id: string;
-  status: string;
-  failure_status?: string | null;
-  failure_status_subtype?: string | null;
-  failure_message?: string | null;
-  retry_guidance?: string | null;
-  invoice_id?: string | null;
-  invoice_status?: string | null;
-  invoice_status_subtype?: string | null;
-  invoice_version_id?: string | null;
-  invoice_versionno?: number | null;
-  original_filename?: string | null;
-  can_continue?: boolean;
+type FixRunHeader = ClaimsIngestRun & {
   upgrade_type_scope_change?: {
     current_upgrade_types?: UpgradeTypeSummary[];
     replacement_upgrade_types?: UpgradeTypeSummary[];
@@ -104,14 +75,6 @@ type UpgradeTypeSummary = {
   description?: string | null;
 };
 
-function makeClientId(prefix: string) {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 function fmtBytes(n?: number | null) {
   if (n === null || n === undefined) return '-';
   if (n < 1024) return `${n} B`;
@@ -123,38 +86,6 @@ function fileSizeMb(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function buildCloneRows(payload: CurrentReadPayload | null): ProposedFileRow[] {
-  const read = payload?.read;
-  const invoiceClone: ProposedFileRow[] = read?.id
-    ? [
-        {
-          id: `clone-invoice-${read.id}`,
-          sourceId: read.id,
-          source: 'clone',
-          fileRole: 'invoice',
-          filename: read.original_filename || 'Current invoice PDF',
-          contentType: read.content_type || 'application/pdf',
-          byteSize: read.byte_size,
-        },
-      ]
-    : [];
-
-  const supportingClones = Array.isArray(read?.uploaded_supporting_documents)
-    ? read.uploaded_supporting_documents.map((doc) => ({
-        id: `clone-support-${doc.id}`,
-        sourceId: doc.id,
-        source: 'clone' as const,
-        fileRole: 'supporting_document' as const,
-        filename: doc.original_filename || 'Supporting document',
-        contentType: doc.mime_content_type || doc.content_type,
-        byteSize: doc.byte_size,
-        supportingType: doc.supporting_document_type_description || doc.supporting_document_type_key,
-      }))
-    : [];
-
-  return [...invoiceClone, ...supportingClones];
-}
-
 export default function ContractorFixUploadScreen() {
   const { sessionId = '', invoiceId = '' } = useParams();
   const navigate = useNavigate();
@@ -163,7 +94,7 @@ export default function ContractorFixUploadScreen() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [readPayload, setReadPayload] = useState<CurrentReadPayload | null>(null);
-  const [proposedRows, setProposedRows] = useState<ProposedFileRow[]>([]);
+  const [proposedRows, setProposedRows] = useState<ClaimsFixPackageRow[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
 
   const [runId, setRunId] = useState('');
@@ -174,10 +105,15 @@ export default function ContractorFixUploadScreen() {
   const [submitFailureStatus, setSubmitFailureStatus] = useState('');
   const [failureMessage, setFailureMessage] = useState('');
   const [dismissedFailureRunId, setDismissedFailureRunId] = useState('');
-  const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
-  const [runError, setRunError] = useState('');
-  const [runErrorStatus, setRunErrorStatus] = useState<number | null>(null);
-  const [runFailureStatus, setRunFailureStatus] = useState('');
+  const {
+    run: polledRun,
+    presentationState,
+    error: runError,
+    errorStatus: runErrorStatus,
+    errorFailureStatus: runFailureStatus,
+    clearError: clearRunError,
+  } = useClaimsIngestRun(runId, 'Failed to check fix upload status.');
+  const runHeader = polledRun as FixRunHeader | null;
 
   const loadCurrentPackage = useCallback(async () => {
     if (!sessionId || !invoiceId) {
@@ -203,7 +139,7 @@ export default function ContractorFixUploadScreen() {
       if (!res.ok) throw claimsUploadRequestError(res, data, 'Failed to load the current invoice package.');
 
       setReadPayload(data);
-      setProposedRows(buildCloneRows(data));
+      setProposedRows(buildClaimsFixPackageRows(data));
     } catch (error: unknown) {
       setLoadError(claimsUploadCaughtErrorMessage(error, 'Failed to load the current invoice package.'));
       setReadPayload(null);
@@ -217,10 +153,10 @@ export default function ContractorFixUploadScreen() {
     void loadCurrentPackage();
   }, [loadCurrentPackage]);
 
-  const currentVersionRows = useMemo(() => buildCloneRows(readPayload), [readPayload]);
+  const currentVersionRows = useMemo(() => buildClaimsFixPackageRows(readPayload), [readPayload]);
   const newRows = useMemo(() => proposedRows.filter((row) => row.source === 'new'), [proposedRows]);
   const currentStatus = String(readPayload?.read?.invoice_status || '').trim();
-  const canStartFix = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
+  const canStartFix = currentStatus === 'contractor_precheck' || currentStatus === 'contractor_revision_inbox';
   const fixAvailabilityMessage =
     readPayload?.read && !canStartFix
       ? 'Fix upload is available after the pre-check finishes, or when the program team has requested a revision.'
@@ -238,60 +174,20 @@ export default function ContractorFixUploadScreen() {
     return '';
   }, [currentVersionRows, fixAvailabilityMessage, newRows.length, proposedRows]);
 
-  const loadRunHeader = useCallback(async (id: string) => {
-    if (!id) return;
-    try {
-      const res = await fetch(`/api/claims/contractor/ingest/runs/${encodeURIComponent(id)}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw claimsUploadRequestError(res, data, 'Failed to check fix upload status.');
-      setRunHeader(data as RunHeader);
-      setRunError('');
-      setRunErrorStatus(null);
-      setRunFailureStatus('');
-      setFailureMessage(data?.failure_message ? String(data.failure_message) : '');
-    } catch (error: unknown) {
-      setRunError(claimsUploadCaughtErrorMessage(error, 'Failed to check fix upload status.'));
-      setRunErrorStatus(error instanceof ClaimsUploadRequestError ? error.status : null);
-      setRunFailureStatus(error instanceof ClaimsUploadRequestError ? error.failureStatus : '');
-      setRunHeader(null);
-    }
-  }, []);
-
-  const refreshRun = useCallback(
-    async (id = runId) => {
-      if (!id) return;
-      await loadRunHeader(id);
-    },
-    [loadRunHeader, runId],
-  );
-
   useEffect(() => {
-    if (!runId) return;
-    void refreshRun(runId);
-  }, [refreshRun, runId]);
+    setFailureMessage(runHeader?.failure_message ? String(runHeader.failure_message) : '');
+  }, [runHeader?.failure_message]);
 
   const failureDismissedForCurrentRun = !!runId && dismissedFailureRunId === runId;
   const visibleFailureMessage = failureDismissedForCurrentRun ? '' : failureMessage;
   const runStatus = String(runHeader?.status || '').toLowerCase();
-  const invoiceStatus = String(runHeader?.invoice_status || '').toLowerCase();
-  const runFailed = runStatus === 'failed';
-  const runTerminal = runStatus === 'failed' || runStatus === 'succeeded' || runStatus === 'partial';
-  const hasFailedRows =
-    !!visibleFailureMessage ||
-    invoiceStatus.endsWith('_failed') ||
-    invoiceStatus === 'package_needs_correction' ||
-    invoiceStatus === 'technical_failure';
-  const hasProcessingRows =
-    invoiceStatus.includes('queued') || invoiceStatus.includes('progress') || invoiceStatus === 'ocr_complete';
-  const canContinue = runHeader?.can_continue === true;
+  const runFailed = presentationState === 'needs_correction' || presentationState === 'failed';
+  const runTerminal = !!presentationState && presentationState !== 'processing';
+  const hasFailedRows = !!visibleFailureMessage || runFailed;
+  const canContinue = presentationState === 'ready';
   const upgradeTypeScopeChange = runHeader?.upgrade_type_scope_change;
   const upgradeTypeScopeChangeDetected =
-    runHeader?.failure_status_subtype === 'package_replacement_upgrade_types_changed' && !!upgradeTypeScopeChange;
+    runHeader?.failure_code === 'package_replacement_upgrade_types_changed' && !!upgradeTypeScopeChange;
   const isProcessing =
     submitLoading ||
     (!submitError &&
@@ -300,7 +196,7 @@ export default function ContractorFixUploadScreen() {
       !!runId &&
       !canContinue &&
       !runTerminal &&
-      (runStatus === 'queued' || runStatus === 'running' || hasProcessingRows || !runHeader?.invoice_id));
+      presentationState === 'processing');
   const fallbackFailureMessage =
     !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
       ? 'We could not prepare the updated AI Advice right now. Please try uploading the same fix again later.'
@@ -311,15 +207,6 @@ export default function ContractorFixUploadScreen() {
   const filesLocked = submitLoading || isProcessing || canContinue;
   const controlsLocked = filesLocked || !!fixAvailabilityMessage;
 
-  const shouldPoll = !!runId && (runStatus === 'queued' || runStatus === 'running');
-  useEffect(() => {
-    if (!shouldPoll) return;
-    const id = window.setInterval(() => {
-      void refreshRun();
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [refreshRun, shouldPoll]);
-
   useEffect(() => {
     if (submitLoading || isProcessing || displayFailureMessage || canContinue) {
       setUploadModalOpen(true);
@@ -329,11 +216,6 @@ export default function ContractorFixUploadScreen() {
   const processingStoryLabel = (() => {
     if (submitLoading || runStatus === 'queued') return 'Uploading revised package';
     if (!runHeader?.invoice_id) return 'Reading revised files';
-
-    if (invoiceStatus.startsWith('upload_')) return 'Uploading revised package';
-    if (invoiceStatus.startsWith('ocr_')) return 'Reading revised files';
-    if (invoiceStatus === 'ocr_complete') return 'Extracting revised invoice evidence';
-    if (invoiceStatus.startsWith('genai_')) return 'Refreshing AI Advice';
     if (runStatus === 'running') return 'Preparing updated review';
 
     return 'Refreshing AI Advice';
@@ -342,29 +224,12 @@ export default function ContractorFixUploadScreen() {
   const addFiles = (files: File[]) => {
     if (controlsLocked) return;
 
-    const supportedEvidenceFiles = files.filter((file) => {
-      const type = String(file.type || '').toLowerCase();
-      const byType = type === 'application/pdf' || type === 'image/jpeg' || type === 'image/png';
-      const byExt = /\.(pdf|jpe?g|png)$/.test(String(file.name || '').toLowerCase());
-      return byType || byExt;
-    });
-
-    if (!supportedEvidenceFiles.length) return;
+    const nextRows = addFilesToClaimsFixPackage(proposedRows, files);
+    if (nextRows.length === proposedRows.length) return;
     setSubmitError('');
     setFailureMessage('');
-    setRunError('');
-    setProposedRows((existing) => [
-      ...existing,
-      ...supportedEvidenceFiles.map((file) => ({
-        id: makeClientId('new'),
-        source: 'new' as const,
-        fileRole: 'auto_detect' as const,
-        filename: file.name,
-        contentType: file.type || null,
-        byteSize: file.size,
-        file,
-      })),
-    ]);
+    clearRunError();
+    setProposedRows(nextRows);
   };
 
   const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -408,28 +273,11 @@ export default function ContractorFixUploadScreen() {
     setSubmitFailureStatus('');
     setFailureMessage('');
     setDismissedFailureRunId('');
-    setRunError('');
-    setRunErrorStatus(null);
-    setRunFailureStatus('');
+    clearRunError();
     setRunId('');
-    setRunHeader(null);
 
     try {
-      const formData = new FormData();
-      const cloneInvoiceRow = proposedRows.find((row) => row.source === 'clone' && row.fileRole === 'invoice');
-      if (cloneInvoiceRow?.sourceId) {
-        formData.append('clone_invoice_version_id', cloneInvoiceRow.sourceId);
-      }
-
-      proposedRows
-        .filter((row) => row.source === 'clone' && row.fileRole === 'supporting_document' && row.sourceId)
-        .forEach((row) => formData.append('clone_supporting_document_ids[]', row.sourceId || ''));
-
-      proposedRows
-        .filter((row) => row.source === 'new' && row.file)
-        .forEach((row) => {
-          formData.append('files[]', row.file as File, row.filename);
-        });
+      const formData = buildClaimsFixPackageFormData(proposedRows);
 
       const res = await fetch(`/api/claims/invoices/${encodeURIComponent(invoiceId)}/upload_fix_package`, {
         method: 'POST',
@@ -466,9 +314,7 @@ export default function ContractorFixUploadScreen() {
     setSubmitErrorStatus(null);
     setSubmitFailureStatus('');
     setFailureMessage('');
-    setRunError('');
-    setRunErrorStatus(null);
-    setRunFailureStatus('');
+    clearRunError();
     if (runId) setDismissedFailureRunId(runId);
     setUploadModalOpen(false);
   };
@@ -491,15 +337,15 @@ export default function ContractorFixUploadScreen() {
 
   const resetToCurrentVersion = () => {
     if (controlsLocked) return;
-    setProposedRows(buildCloneRows(readPayload));
+    setProposedRows(buildClaimsFixPackageRows(readPayload));
     setSubmitError('');
     setFailureMessage('');
-    setRunError('');
+    clearRunError();
   };
 
   const isTechnicalFailure =
-    runHeader?.failure_status === 'technical_failure' ||
-    invoiceStatus === 'technical_failure' ||
+    runHeader?.failure_category === 'technical_failure' ||
+    presentationState === 'failed' ||
     submitFailureStatus === 'technical_failure' ||
     runFailureStatus === 'technical_failure' ||
     (submitErrorStatus !== null && submitErrorStatus >= 500) ||
@@ -591,7 +437,7 @@ export default function ContractorFixUploadScreen() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+              accept={CLAIMS_EVIDENCE_FILE_ACCEPT}
               style={{ display: 'none' }}
               disabled={controlsLocked}
               onChange={handleFilesPicked}

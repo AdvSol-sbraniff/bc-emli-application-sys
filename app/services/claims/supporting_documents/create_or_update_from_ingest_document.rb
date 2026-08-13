@@ -42,7 +42,6 @@ module Claims
           sha256: ingest_document.sha256,
           di_read_raw_json: ingest_document.di_read_raw_json,
           classifier_raw_json: ingest_document.classifier_raw_json,
-          classification_status: ingest_document.classification_status,
           classification_confidence: ingest_document.classification_confidence,
           classification_reason: ingest_document.classification_reason,
           supporting_document_routing_quality:

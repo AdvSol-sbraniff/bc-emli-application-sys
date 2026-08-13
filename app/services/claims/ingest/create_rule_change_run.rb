@@ -83,7 +83,9 @@ module Claims
             ::Claims::IngestRun.create!(
               session_id: invoice.session_id,
               contractor_id: invoice.contractor_id,
+              invoice_id: invoice.id,
               resolved_invoice_version_id: new_invoice_version.id,
+              run_kind: "rules_rerun",
               status: "queued",
               total_files: 0,
               completed_files: 0,
@@ -96,22 +98,22 @@ module Claims
             ingest_run_id: ingest_run.id,
             session_id: invoice.session_id,
             invoice_version_id: new_invoice_version.id,
-            step_type: "ruleclone_clone_existing_evidence",
+            step_type: "clone_evidence",
             status: "succeeded",
             error_text: nil,
             created_at: now,
             updated_at: now
           )
-
-          invoice.set_workflow_status_columns!("genai_queued", now: now)
         end
 
+        ::Claims::Ingest::RunTransition.mark_running!(
+          run: ingest_run,
+          total_files: 1
+        )
         job_id =
-          ::Claims::RunGenaiJob.perform_async(
-            invoice.session_id,
-            new_invoice_version.id,
-            ingest_run.id,
-            "use_existing_classifier"
+          ::Claims::Ingest::ValidationScheduler.start!(
+            run: ingest_run,
+            invoice_version: new_invoice_version
           )
 
         Result.new(
@@ -128,6 +130,21 @@ module Claims
             "Advice refresh accepted. A new invoice version is being revalidated.",
           error: nil
         )
+      rescue StandardError => e
+        if ingest_run&.persisted?
+          failure_subtype = ::Claims::Ingest::FailureClassifier.runtime(e)
+          ::Claims::Ingest::RunTransition.mark_failed!(
+            run: ingest_run,
+            total_files: 1,
+            failed_files: 1,
+            failure_category: "technical_failure",
+            failure_code: failure_subtype,
+            pipeline_error_code: "rule_change_start_failed",
+            pipeline_error_description:
+              "Advice refresh could not start after evidence was cloned."
+          )
+        end
+        raise
       end
 
       private
@@ -150,8 +167,6 @@ module Claims
       def clone_invoice_version!(source_invoice_version:, next_versionno:, now:)
         clone = source_invoice_version.dup
         clone.invoice_versionno = next_versionno
-        clone.genai_raw_json = nil
-        clone.genai_result = nil
         clone.ahri_product_id = nil
         clone.neea_product_id = nil
         clone.awhp_product_id = nil
@@ -227,10 +242,7 @@ module Claims
 
         upgrade_rows =
           ::Claims::InvoiceVersionUpgradeType
-            .where(
-              invoice_version_id: source_invoice_version_id,
-              source_engine: "classifier"
-            )
+            .where(invoice_version_id: source_invoice_version_id)
             .map do |row|
               row
                 .attributes

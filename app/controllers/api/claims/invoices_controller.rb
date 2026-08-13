@@ -24,7 +24,6 @@ module Api
                 id: i.id,
                 session_id: i.session_id,
                 status: i.status,
-                status_subtype: i.status_subtype,
                 status_updated_at: i.status_updated_at,
                 system_help_notes: i.system_help_notes,
                 created_at: i.created_at,

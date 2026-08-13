@@ -293,8 +293,7 @@ export default function ReportsVolumeValueScreen() {
                 onChange={(e) => setParams(navigate, location, { status: e.target.value, page: '1' })}
               >
                 <option value="">(all)</option>
-                <option value="ocr_complete">ocr_complete</option>
-                <option value="genai_complete">genai_complete</option>
+                <option value="contractor_precheck">contractor_precheck</option>
                 <option value="admin_review_inbox">admin_review_inbox</option>
                 <option value="contractor_revision_inbox">contractor_revision_inbox</option>
                 <option value="in_review">in_review</option>

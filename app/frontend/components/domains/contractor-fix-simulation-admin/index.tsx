@@ -22,6 +22,14 @@ import { FilePlus, Trash, UploadSimple, WarningCircle, XCircle } from '@phosphor
 import { useLocation } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { IngestRunMonitorTabs } from '../../shared/claims/ingest-run-monitor-tabs';
+import { CLAIMS_EVIDENCE_FILE_ACCEPT } from '../../shared/claims/claims-evidence-files';
+import {
+  addFilesToClaimsFixPackage,
+  buildClaimsFixPackageFormData,
+  buildClaimsFixPackageRows,
+  type ClaimsFixPackageRow,
+  type ClaimsSupportingDocument,
+} from '../../shared/claims/claims-fix-package';
 
 type CurrentReadPayload = {
   invoice?: {
@@ -37,30 +45,8 @@ type CurrentReadPayload = {
     content_type?: string | null;
     byte_size?: number | null;
     updated_at?: string | null;
-    uploaded_supporting_documents?: SupportingDocumentRow[];
+    uploaded_supporting_documents?: ClaimsSupportingDocument[];
   };
-};
-
-type SupportingDocumentRow = {
-  id: string;
-  original_filename?: string | null;
-  content_type?: string | null;
-  mime_content_type?: string | null;
-  byte_size?: number | null;
-  supporting_document_type_key?: string | null;
-  supporting_document_type_description?: string | null;
-};
-
-type ProposedFileRow = {
-  id: string;
-  sourceId?: string | null;
-  source: 'clone' | 'new';
-  fileRole: 'invoice' | 'supporting_document' | 'auto_detect';
-  filename: string;
-  contentType?: string | null;
-  byteSize?: number | null;
-  file?: File;
-  supportingType?: string | null;
 };
 
 function getParam(search: string, key: string): string {
@@ -87,7 +73,7 @@ export default function ContractorFixSimulationAdminScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [readPayload, setReadPayload] = useState<CurrentReadPayload | null>(null);
-  const [proposedRows, setProposedRows] = useState<ProposedFileRow[]>([]);
+  const [proposedRows, setProposedRows] = useState<ClaimsFixPackageRow[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
@@ -112,35 +98,8 @@ export default function ContractorFixSimulationAdminScreen() {
       const data = (await res.json().catch(() => ({}))) as CurrentReadPayload & { error?: string };
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
-      const invoiceClone: ProposedFileRow[] = data?.read?.id
-        ? [
-            {
-              id: `clone-invoice-${data.read.id}`,
-              sourceId: data.read.id,
-              source: 'clone',
-              fileRole: 'invoice',
-              filename: data.read.original_filename || 'Current invoice PDF',
-              contentType: data.read.content_type || 'application/pdf',
-              byteSize: data.read.byte_size,
-            },
-          ]
-        : [];
-
-      const supportingClones = Array.isArray(data?.read?.uploaded_supporting_documents)
-        ? data.read.uploaded_supporting_documents.map((doc) => ({
-            id: `clone-support-${doc.id}`,
-            sourceId: doc.id,
-            source: 'clone' as const,
-            fileRole: 'supporting_document' as const,
-            filename: doc.original_filename || 'Supporting document',
-            contentType: doc.mime_content_type || doc.content_type,
-            byteSize: doc.byte_size,
-            supportingType: doc.supporting_document_type_description || doc.supporting_document_type_key,
-          }))
-        : [];
-
       setReadPayload(data);
-      setProposedRows([...invoiceClone, ...supportingClones]);
+      setProposedRows(buildClaimsFixPackageRows(data));
     } catch (e: any) {
       setError(e?.message || 'Failed to load current package.');
       setReadPayload(null);
@@ -163,20 +122,10 @@ export default function ContractorFixSimulationAdminScreen() {
   }, [proposedRows.length]);
 
   const addFiles = (files: File[]) => {
-    if (!files.length) return;
+    const nextRows = addFilesToClaimsFixPackage(proposedRows, files);
+    if (nextRows.length === proposedRows.length) return;
     setSubmitMessage('');
-    setProposedRows((existing) => [
-      ...existing,
-      ...files.map((file) => ({
-        id: `new-${crypto.randomUUID()}`,
-        source: 'new' as const,
-        fileRole: 'auto_detect' as const,
-        filename: file.name,
-        contentType: file.type || null,
-        byteSize: file.size,
-        file,
-      })),
-    ]);
+    setProposedRows(nextRows);
   };
 
   const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -219,21 +168,7 @@ export default function ContractorFixSimulationAdminScreen() {
     setError('');
 
     try {
-      const formData = new FormData();
-      const cloneInvoiceRow = proposedRows.find((row) => row.source === 'clone' && row.fileRole === 'invoice');
-      if (cloneInvoiceRow?.sourceId) {
-        formData.append('clone_invoice_version_id', cloneInvoiceRow.sourceId);
-      }
-
-      proposedRows
-        .filter((row) => row.source === 'clone' && row.fileRole === 'supporting_document' && row.sourceId)
-        .forEach((row) => formData.append('clone_supporting_document_ids[]', row.sourceId || ''));
-
-      proposedRows
-        .filter((row) => row.source === 'new' && row.file)
-        .forEach((row) => {
-          formData.append('files[]', row.file as File);
-        });
+      const formData = buildClaimsFixPackageFormData(proposedRows);
 
       const res = await fetch(`/api/claims/invoices/${encodeURIComponent(invoiceId)}/upload_fix_package`, {
         method: 'POST',
@@ -339,7 +274,14 @@ export default function ContractorFixSimulationAdminScreen() {
           </Box>
 
           <Box bg="white" p={5} borderRadius="xl" boxShadow="0 12px 34px rgba(15, 23, 42, 0.06)">
-            <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFilesPicked} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={CLAIMS_EVIDENCE_FILE_ACCEPT}
+              style={{ display: 'none' }}
+              onChange={handleFilesPicked}
+            />
 
             <Flex justify="space-between" align="center" gap={3} wrap="wrap" mb={3}>
               <Box>

@@ -53,33 +53,20 @@ module Claims
 
       private
 
-      def run_messages
-        Array(@ingest_run.messages).map do |message|
-          message.respond_to?(:to_h) ? message.to_h.stringify_keys : {}
-        end
-      end
-
-      def upload_context
-        run_messages.reverse.find do |message|
-          message["code"] == "fix_upload_context"
-        end || {}
+      def context
+        @context ||=
+          ::Claims::Ingest::FixPackageContext.new(ingest_run: @ingest_run)
       end
 
       def invoice_id
         @resolved_document.resolved_invoice_id.presence ||
           @resolved_document.invoice_id.presence ||
-          upload_context["invoice_id"].presence ||
           raise("Fix upload is missing its invoice context.")
       end
 
       def source_invoice_version!(invoice)
-        source_id = upload_context["source_invoice_version_id"].presence
-        source =
-          ::Claims::InvoiceVersion.find_by(
-            id: source_id,
-            invoice_id: invoice.id
-          )
-        return source if source.present?
+        source = context.source_invoice_version
+        return source if source.invoice_id == invoice.id
 
         raise "The source invoice version for this fix is no longer available."
       end
@@ -92,8 +79,6 @@ module Claims
         now = Time.current
         clone = source.dup
         clone.invoice_versionno = next_versionno
-        clone.genai_raw_json = nil
-        clone.genai_result = nil
         clone.ahri_product_id = nil
         clone.neea_product_id = nil
         clone.awhp_product_id = nil
@@ -181,7 +166,7 @@ module Claims
 
         upgrade_types =
           ::Claims::InvoiceVersionUpgradeType
-            .where(invoice_version_id: source.id, source_engine: "classifier")
+            .where(invoice_version_id: source.id)
             .map do |row|
               row
                 .attributes
@@ -198,35 +183,26 @@ module Claims
       end
 
       def clone_retained_supporting_documents!(source:, replacement:)
-        ids =
-          Array(upload_context["clone_supporting_document_ids"]).map(
-            &:to_s
-          ).uniq
-        return if ids.empty?
+        context
+          .retained_supporting_documents
+          .each do |staged_document, source_document|
+          unless source_document.invoice_version_id == source.id
+            raise "A retained supporting document does not belong to the source invoice version."
+          end
 
-        source_documents =
-          ::Claims::SupportingDocument
-            .where(id: ids, invoice_version_id: source.id)
-            .includes(
-              :supporting_document_located_fields,
-              :supporting_document_visual_findings
-            )
-            .order(:created_at, :id)
-            .to_a
-        missing_ids = ids - source_documents.map { |document| document.id.to_s }
-        if missing_ids.any?
-          raise "One or more retained supporting documents no longer belong to the source invoice version."
-        end
-
-        source_documents.each do |source_document|
           clone_supporting_document!(
             source_document: source_document,
+            staged_document: staged_document,
             replacement: replacement
           )
         end
       end
 
-      def clone_supporting_document!(source_document:, replacement:)
+      def clone_supporting_document!(
+        source_document:,
+        staged_document:,
+        replacement:
+      )
         now = Time.current
         clone =
           ::Claims::SupportingDocument.create!(
@@ -280,13 +256,7 @@ module Claims
           ::Claims::SupportingDocumentVisualFinding.insert_all!(findings)
         end
 
-        staged_document =
-          ::Claims::IngestDocument.find_by(
-            ingest_run_id: @ingest_run.id,
-            storage_key: source_document.storage_key,
-            document_kind: "supporting_document"
-          )
-        staged_document&.update!(
+        staged_document.update!(
           resolved_invoice_id: replacement.invoice_id,
           resolved_invoice_version_id: replacement.id,
           promoted_supporting_document_id: clone.id,

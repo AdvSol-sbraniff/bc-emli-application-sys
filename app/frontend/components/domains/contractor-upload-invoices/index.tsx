@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -23,9 +23,15 @@ import {
 import { CheckCircle } from '@phosphor-icons/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMst } from '../../../setup/root';
+import { useClaimsIngestRun } from '../../../hooks/use-claims-ingest-run';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 import { CustomMessageBox } from '../../shared/base/custom-message-box';
 import { ContractorProcessingGraphic } from '../../shared/claims/contractor-processing-graphic';
+import {
+  CLAIMS_EVIDENCE_FILE_ACCEPT,
+  mergeUniqueClaimsEvidenceFiles,
+  supportedClaimsEvidenceFiles,
+} from '../../shared/claims/claims-evidence-files';
 import {
   ClaimsUploadRequestError,
   claimsUploadCaughtErrorMessage,
@@ -40,23 +46,6 @@ type ContractorPortalResponse = {
     number?: string | null;
   };
   error?: string;
-};
-
-type RunHeader = {
-  id: string;
-  session_id: string;
-  status: string;
-  failure_status?: string | null;
-  failure_status_subtype?: string | null;
-  failure_message?: string | null;
-  retry_guidance?: string | null;
-  invoice_id?: string | null;
-  invoice_status?: string | null;
-  invoice_status_subtype?: string | null;
-  invoice_version_id?: string | null;
-  invoice_versionno?: number | null;
-  original_filename?: string | null;
-  can_continue?: boolean;
 };
 
 function getParam(search: string, key: string): string {
@@ -99,9 +88,12 @@ export default function ContractorUploadInvoicesScreen() {
   const [submitErrorStatus, setSubmitErrorStatus] = useState<number | null>(null);
   const [failureMessage, setFailureMessage] = useState('');
   const [dismissedFailureRunId, setDismissedFailureRunId] = useState('');
-  const [runHeader, setRunHeader] = useState<RunHeader | null>(null);
-  const [runError, setRunError] = useState('');
-  const [runErrorStatus, setRunErrorStatus] = useState<number | null>(null);
+  const {
+    run: runHeader,
+    presentationState,
+    error: runError,
+    errorStatus: runErrorStatus,
+  } = useClaimsIngestRun(runId, 'We could not check the status of your upload.');
 
   useEffect(() => setRunId(runIdFromUrl), [runIdFromUrl]);
 
@@ -140,59 +132,14 @@ export default function ContractorUploadInvoicesScreen() {
     };
   }, [sessionStore]);
 
-  const loadRunHeader = async (id: string) => {
-    if (!id) return;
-    try {
-      const res = await fetch(`/api/claims/contractor/ingest/runs/${encodeURIComponent(id)}`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw claimsUploadRequestError(res, data, 'We could not check the status of your upload.');
-      setRunHeader(data as RunHeader);
-      setRunError('');
-      setRunErrorStatus(null);
-      setFailureMessage(data?.failure_message ? String(data.failure_message) : '');
-    } catch (error: unknown) {
-      setRunError(claimsUploadCaughtErrorMessage(error, 'We could not check the status of your upload.'));
-      setRunErrorStatus(error instanceof ClaimsUploadRequestError ? error.status : null);
-      setRunHeader(null);
-    }
-  };
-
-  const refreshRun = async (id = runId) => {
-    if (!id) return;
-    await loadRunHeader(id);
-  };
-
   useEffect(() => {
-    if (!runId) return;
-    void refreshRun(runId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId]);
-
-  const shouldPoll = useMemo(() => {
-    const runStatus = String(runHeader?.status || '').toLowerCase();
-    return runId && (runStatus === 'queued' || runStatus === 'running');
-  }, [runHeader?.status, runId]);
-
-  useEffect(() => {
-    if (!shouldPoll) return;
-    const id = window.setInterval(() => {
-      void refreshRun();
-    }, 3000);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldPoll, runId]);
+    setFailureMessage(runHeader?.failure_message ? String(runHeader.failure_message) : '');
+  }, [runHeader?.failure_message]);
 
   const clearUploadAttention = () => {
     setFailureMessage('');
     setSubmitError('');
     setSubmitErrorStatus(null);
-    setRunError('');
-    setRunErrorStatus(null);
     if (runId) setDismissedFailureRunId(runId);
   };
 
@@ -204,12 +151,7 @@ export default function ContractorUploadInvoicesScreen() {
   const mergeStagedFiles = (files: File[]) => {
     if (filesLocked) return;
 
-    const supportedEvidenceFiles = files.filter((file) => {
-      const type = String(file.type || '').toLowerCase();
-      const byType = type === 'application/pdf' || type === 'image/jpeg' || type === 'image/png';
-      const byExt = /\.(pdf|jpe?g|png)$/.test(String(file.name || '').toLowerCase());
-      return byType || byExt;
-    });
+    const supportedEvidenceFiles = supportedClaimsEvidenceFiles(files);
 
     if (!supportedEvidenceFiles.length) return;
 
@@ -217,19 +159,11 @@ export default function ContractorUploadInvoicesScreen() {
     clearUploadAttention();
     if (startingFreshBatch) {
       setRunId('');
-      setRunHeader(null);
       setParams(navigate, location, { ingest_run_id: '', session_id: '' });
     }
-    setSelectedFiles((prev) => {
-      const next = startingFreshBatch ? [] : [...prev];
-      supportedEvidenceFiles.forEach((file) => {
-        const exists = next.some(
-          (item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified,
-        );
-        if (!exists) next.push(file);
-      });
-      return next;
-    });
+    setSelectedFiles((previous) =>
+      mergeUniqueClaimsEvidenceFiles(startingFreshBatch ? [] : previous, supportedEvidenceFiles),
+    );
   };
 
   const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -265,8 +199,6 @@ export default function ContractorUploadInvoicesScreen() {
     setSubmitErrorStatus(null);
     setFailureMessage('');
     setDismissedFailureRunId('');
-    setRunError('');
-    setRunErrorStatus(null);
     try {
       if (!selectedFiles.length) throw new Error('Select an invoice package first.');
 
@@ -298,25 +230,15 @@ export default function ContractorUploadInvoicesScreen() {
 
   const failureDismissedForCurrentRun = !!runId && dismissedFailureRunId === runId;
   const visibleFailureMessage = failureDismissedForCurrentRun ? '' : failureMessage;
-  const invoiceStatus = String(runHeader?.invoice_status || '').toLowerCase();
   const hasFailedRows =
-    !!visibleFailureMessage ||
-    invoiceStatus.endsWith('_failed') ||
-    invoiceStatus === 'package_needs_correction' ||
-    invoiceStatus === 'technical_failure';
-  const hasProcessingRows =
-    invoiceStatus.includes('queued') || invoiceStatus.includes('progress') || invoiceStatus === 'ocr_complete';
-  const canContinue = runHeader?.can_continue === true;
+    !!visibleFailureMessage || presentationState === 'needs_correction' || presentationState === 'failed';
+  const hasProcessingRows = presentationState === 'processing';
+  const canContinue = presentationState === 'ready';
   const runStatus = String(runHeader?.status || '').toLowerCase();
-  const runFailed = runStatus === 'failed';
-  const runTerminal = runStatus === 'failed' || runStatus === 'succeeded' || runStatus === 'partial';
+  const runFailed = presentationState === 'needs_correction' || presentationState === 'failed';
+  const runTerminal = !!presentationState && presentationState !== 'processing';
   const isProcessing =
-    submitLoading ||
-    (!failureMessage &&
-      !!runId &&
-      !canContinue &&
-      !runTerminal &&
-      (runStatus === 'queued' || runStatus === 'running' || hasProcessingRows || !runHeader?.invoice_id));
+    submitLoading || (!failureMessage && !!runId && !canContinue && !runTerminal && presentationState === 'processing');
   const fallbackFailureMessage =
     !failureDismissedForCurrentRun && (hasFailedRows || runFailed)
       ? 'We could not prepare your AI advice right now. Please try uploading the same files again later.'
@@ -326,18 +248,13 @@ export default function ContractorUploadInvoicesScreen() {
   );
   const authenticationExpired = [submitErrorStatus, runErrorStatus].includes(401);
   const uploadNeedsTechnicalHelp =
-    runHeader?.failure_status === 'technical_failure' || invoiceStatus === 'technical_failure';
+    runHeader?.failure_category === 'technical_failure' || presentationState === 'failed';
   const uploadErrorStatus = submitErrorStatus ?? runErrorStatus;
   const uploadMessageIsWarning =
     [413, 422, 429].includes(uploadErrorStatus || 0) || ((hasFailedRows || runFailed) && !uploadNeedsTechnicalHelp);
   const processingStoryLabel = (() => {
     if (submitLoading || runStatus === 'queued') return 'Uploading your files';
     if (!runHeader?.invoice_id) return 'Reading your files';
-
-    if (invoiceStatus.startsWith('upload_')) return 'Uploading your files';
-    if (invoiceStatus.startsWith('ocr_')) return 'Reading your files';
-    if (invoiceStatus === 'ocr_complete') return 'Sorting invoice and support documents';
-    if (invoiceStatus.startsWith('genai_')) return 'Preparing AI Advice';
     if (runStatus === 'running') return 'Extracting invoice evidence';
 
     return 'Preparing AI Advice';
@@ -400,7 +317,7 @@ export default function ContractorUploadInvoicesScreen() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+            accept={CLAIMS_EVIDENCE_FILE_ACCEPT}
             style={{ display: 'none' }}
             disabled={filesLocked}
             onChange={handleFilesPicked}

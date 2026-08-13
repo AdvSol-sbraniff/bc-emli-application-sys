@@ -18,8 +18,6 @@ RSpec.describe "fix-package candidate lifecycle" do
     Claims::InvoiceVersionUpgradeType.create!(
       invoice_version_id: invoice_version.id,
       invoice_upgrade_type_id: type.id,
-      source_engine: "classifier",
-      call_status: "classified",
       confidence: 99,
       created_at: now,
       updated_at: now
@@ -56,22 +54,14 @@ RSpec.describe "fix-package candidate lifecycle" do
     [contractor, session, invoice, source]
   end
 
-  def build_fix_run(contractor:, session:, invoice:, source:, retained_ids: [])
+  def build_fix_run(contractor:, session:, invoice:, source:)
     run =
       Claims::IngestRun.create!(
+        run_kind: "fix_upload",
         session_id: session.id,
         contractor_id: contractor.id,
+        invoice_id: invoice.id,
         status: "running",
-        messages: [
-          {
-            code: "fix_upload_context",
-            invoice_id: invoice.id,
-            source_invoice_version_id: source.id,
-            source_invoice_versionno: source.invoice_versionno,
-            clone_supporting_document_ids: retained_ids,
-            prior_invoice_status: invoice.status
-          }
-        ],
         total_files: 1,
         completed_files: 0,
         failed_files: 0,
@@ -81,7 +71,7 @@ RSpec.describe "fix-package candidate lifecycle" do
     Claims::IngestStepRun.create!(
       ingest_run_id: run.id,
       session_id: session.id,
-      step_type: "fix_upload_package_stage",
+      step_type: "stage_package",
       status: "succeeded",
       created_at: now,
       updated_at: now
@@ -125,7 +115,7 @@ RSpec.describe "fix-package candidate lifecycle" do
         original_filename: filename,
         content_type: "application/pdf",
         byte_size: 222,
-        sha256: SecureRandom.hex(32),
+        sha256: reused ? nil : SecureRandom.hex(32),
         di_read_raw_json: {
           "read" => filename
         },
@@ -141,7 +131,6 @@ RSpec.describe "fix-package candidate lifecycle" do
             end
           ),
         supporting_document_type_id: supporting_document_type_id,
-        classification_status: "classified",
         classification_confidence: 99,
         classification_reason: "Test classification.",
         classified_at: now,
@@ -149,7 +138,7 @@ RSpec.describe "fix-package candidate lifecycle" do
         updated_at: now
       )
     unless reused
-      %w[fix_ocr_read fix_classifier_files].each do |step_type|
+      %w[read_document classify_document].each do |step_type|
         Claims::IngestStepRun.create!(
           ingest_run_id: run.id,
           session_id: session.id,
@@ -194,13 +183,10 @@ RSpec.describe "fix-package candidate lifecycle" do
 
     expect(run.reload).to have_attributes(
       status: "failed",
-      failure_status_subtype: "package_no_invoice_pdf",
+      failure_code: "package_no_invoice_pdf",
       resolved_invoice_version_id: nil
     )
-    expect(invoice.reload).to have_attributes(
-      status: "contractor_revision_inbox",
-      status_subtype: nil
-    )
+    expect(invoice.reload.status).to eq("contractor_revision_inbox")
     expect(
       Claims::InvoiceVersion.where(invoice_id: invoice.id).pluck(:id)
     ).to eq([source.id])
@@ -223,7 +209,6 @@ RSpec.describe "fix-package candidate lifecycle" do
         storage_key: "source/immediate-failure-support.pdf",
         original_filename: "Retained evidence.pdf",
         content_type: "application/pdf",
-        classification_status: "classified",
         classification_confidence: 99,
         created_at: now,
         updated_at: now
@@ -240,8 +225,8 @@ RSpec.describe "fix-package candidate lifecycle" do
     expect(result).to have_attributes(
       ok: false,
       status: "failed",
-      failure_status: "package_needs_correction",
-      failure_status_subtype: "package_no_invoice_pdf",
+      failure_category: "package_needs_correction",
+      failure_code: "package_no_invoice_pdf",
       retryable: false
     )
     expect(result.error).to include("No invoice PDF was found")
@@ -275,7 +260,7 @@ RSpec.describe "fix-package candidate lifecycle" do
 
     expect(run.reload).to have_attributes(
       status: "failed",
-      failure_status_subtype: "package_multiple_invoice_pdfs",
+      failure_code: "package_multiple_invoice_pdfs",
       resolved_invoice_version_id: nil
     )
     expect(invoice.reload.status).to eq("contractor_revision_inbox")
@@ -306,7 +291,7 @@ RSpec.describe "fix-package candidate lifecycle" do
 
     expect(run.reload).to have_attributes(
       status: "failed",
-      failure_status_subtype: "package_replacement_upgrade_types_changed",
+      failure_code: "package_replacement_upgrade_types_changed",
       resolved_invoice_version_id: nil
     )
     expect(invoice.reload.status).to eq("contractor_revision_inbox")
@@ -346,11 +331,7 @@ RSpec.describe "fix-package candidate lifecycle" do
     expect(Claims::InvoiceVersion.where(invoice_id: invoice.id).count).to eq(2)
     expect(Claims::RunOcrJob).to have_received(:perform_async).with(
       target.id,
-      run.id,
-      "prebuilt-invoice",
-      true,
-      "use_existing_classifier",
-      "fix_ocr_invoice"
+      run.id
     )
   end
 
@@ -371,7 +352,6 @@ RSpec.describe "fix-package candidate lifecycle" do
         storage_key: "source/retained-support.pdf",
         original_filename: "Retained support.pdf",
         content_type: "application/pdf",
-        classification_status: "classified",
         classification_confidence: 99,
         created_at: now,
         updated_at: now
@@ -381,8 +361,7 @@ RSpec.describe "fix-package candidate lifecycle" do
         contractor: contractor,
         session: session,
         invoice: invoice,
-        source: source,
-        retained_ids: [source_support.id]
+        source: source
       )
     stage_document(
       run: run,

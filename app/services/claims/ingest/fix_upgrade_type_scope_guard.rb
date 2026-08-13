@@ -3,37 +3,36 @@
 module Claims
   module Ingest
     class FixUpgradeTypeScopeGuard
-      FAILURE_STATUS = "package_needs_correction"
-      FAILURE_SUBTYPE = "package_replacement_upgrade_types_changed"
+      FAILURE_CATEGORY = "package_needs_correction"
+      FAILURE_CODE = "package_replacement_upgrade_types_changed"
       ERROR_CODE = "fix_upgrade_types_changed"
 
       Result = Struct.new(:changed, :payload, keyword_init: true)
 
-      def self.call(
-        ingest_run:,
-        replacement_document: nil,
-        replacement_invoice_version_id: nil
-      )
+      def self.call(ingest_run:, replacement_document: nil)
         new(
           ingest_run: ingest_run,
-          replacement_document: replacement_document,
-          replacement_invoice_version_id: replacement_invoice_version_id
+          replacement_document: replacement_document
         ).call
       end
 
-      def initialize(
-        ingest_run:,
-        replacement_document:,
-        replacement_invoice_version_id:
-      )
+      def self.preview(ingest_run:)
+        new(ingest_run: ingest_run, replacement_document: nil).preview
+      end
+
+      def initialize(ingest_run:, replacement_document:)
         @ingest_run = ingest_run
         @replacement_document = replacement_document
-        @replacement_invoice_version_id = replacement_invoice_version_id
       end
 
       def call
-        source = source_invoice_version
-        return Result.new(changed: false, payload: nil) if source.blank?
+        result = preview
+        reject_replacement! if result.changed
+        result
+      end
+
+      def preview
+        source = context.source_invoice_version
 
         current_types = persisted_upgrade_types(source.id)
         return Result.new(changed: false, payload: nil) if current_types.empty?
@@ -58,55 +57,30 @@ module Claims
           removed_upgrade_types: removed_keys.map { |key| current_types[key] }
         }
 
-        reject_candidate!(source: source, payload: payload)
         Result.new(changed: true, payload: payload)
       end
 
       private
 
-      def run_messages
-        Array(@ingest_run.messages).map do |message|
-          message.respond_to?(:to_h) ? message.to_h.stringify_keys : {}
-        end
+      def context
+        @context ||=
+          ::Claims::Ingest::FixPackageContext.new(ingest_run: @ingest_run)
       end
 
-      def upload_context
-        run_messages.reverse.find do |message|
-          message["code"] == "fix_upload_context"
-        end || {}
-      end
-
-      def source_invoice_version
-        source_id = upload_context["source_invoice_version_id"].presence
-        source = ::Claims::InvoiceVersion.find_by(id: source_id)
-        return source if source.present?
-        return nil if @replacement_invoice_version_id.blank?
-
-        replacement =
-          ::Claims::InvoiceVersion.find(@replacement_invoice_version_id)
-        ::Claims::InvoiceVersion
-          .where(invoice_id: replacement.invoice_id)
-          .where.not(id: replacement.id)
-          .where("invoice_versionno < ?", replacement.invoice_versionno)
-          .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
-          .first
+      def replacement_document
+        @replacement_document ||= context.replacement_invoice_document
       end
 
       def reused_document?
-        return false if @replacement_document.blank?
-
-        @replacement_document.document_kind_reason.to_s.start_with?(
-          "Cloned from prior"
+        replacement_document.document_kind_reason.to_s.start_with?(
+          ::Claims::Ingest::FixPackageContext::CLONED_REASON_PREFIX
         )
       end
 
       def replacement_upgrade_types(current_types)
-        if @replacement_invoice_version_id.present?
-          return persisted_upgrade_types(@replacement_invoice_version_id)
-        end
         return current_types if reused_document?
 
-        payload = @replacement_document.classifier_raw_json
+        payload = replacement_document.classifier_raw_json
         rows =
           if payload.is_a?(Hash)
             payload["detected_upgrade_types"] ||
@@ -132,10 +106,7 @@ module Claims
               "ON iut.id = " \
               "claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
           )
-          .where(
-            invoice_version_id: invoice_version_id,
-            source_engine: "classifier"
-          )
+          .where(invoice_version_id: invoice_version_id)
           .where("iut.upgrade_type_key <> ?", "common")
           .pluck("iut.upgrade_type_key", "iut.description")
           .to_h { |key, description| [key, type_payload(key, description)] }
@@ -156,50 +127,20 @@ module Claims
       end
 
       def replacement_filename
-        return @replacement_document.original_filename if @replacement_document
-
-        ::Claims::InvoiceVersion.where(
-          id: @replacement_invoice_version_id
-        ).pick(:original_filename)
+        replacement_document.original_filename
       end
 
-      def reject_candidate!(source:, payload:)
-        now = Time.current
-        ActiveRecord::Base.transaction do
-          @ingest_run.update!(
-            resolved_invoice_version_id: nil,
-            status: "failed",
-            completed_files: 0,
-            failed_files: 1,
-            failure_status: FAILURE_STATUS,
-            failure_status_subtype: FAILURE_SUBTYPE,
-            pipeline_error_code: ERROR_CODE,
-            pipeline_error_description:
-              "Replacement invoice changed the claimed upgrade types.",
-            messages: run_messages + [payload.deep_stringify_keys],
-            completed_at: now,
-            updated_at: now
-          )
-
-          if @replacement_invoice_version_id.present?
-            replacement =
-              ::Claims::InvoiceVersion.find(@replacement_invoice_version_id)
-            ::Claims::Lineitem.where(
-              invoice_version_id: replacement.id
-            ).delete_all
-            replacement.delete
-            restore_prior_invoice_status!(source: source, now: now)
-          end
-        end
-      end
-
-      def restore_prior_invoice_status!(source:, now:)
-        context = upload_context
-        source.invoice.set_workflow_status_columns!(
-          context["prior_invoice_status"].presence || "genai_complete",
-          status_subtype: context["prior_invoice_status_subtype"].presence,
-          invoice_version_id: source.id,
-          now: now
+      def reject_replacement!
+        @ingest_run.update!(resolved_invoice_version_id: nil)
+        ::Claims::Ingest::RunTransition.mark_failed!(
+          run: @ingest_run,
+          total_files: [@ingest_run.total_files.to_i, 1].max,
+          failed_files: 1,
+          failure_category: FAILURE_CATEGORY,
+          failure_code: FAILURE_CODE,
+          pipeline_error_code: ERROR_CODE,
+          pipeline_error_description:
+            "Replacement invoice changed the claimed upgrade types."
         )
       end
     end

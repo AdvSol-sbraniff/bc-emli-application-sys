@@ -6,24 +6,23 @@ require "net/http"
 module Claims
   class RunIngestReadOcrJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_ocr, retry: 3
+    sidekiq_options queue: :claims_ocr,
+                    retry: ::Claims::Ingest::RetryPolicy.sidekiq_retries
 
-    def perform(ingest_document_id, ingest_run_id, step_type = "ocr_read")
+    def perform(ingest_document_id, ingest_run_id)
       raise "Missing ingest_run_id for ingest read OCR." if ingest_run_id.blank?
+      return if terminal_run?(ingest_run_id)
 
       document = ::Claims::IngestDocument.find(ingest_document_id)
 
       step =
-        find_or_create_step!(
+        ::Claims::Ingest::StepClaim.call(
           ingest_run_id: ingest_run_id,
-          document: document,
-          step_type: step_type
+          session_id: document.session_id,
+          ingest_document_id: document.id,
+          step_type: "read_document"
         )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
+      return unless step
 
       payload =
         call_node_ocr!(
@@ -41,54 +40,30 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-
-      advance_run!(ingest_run_id: ingest_run_id)
     rescue StandardError => e
-      status_subtype = ::Claims::Invoices::FailureSubtypes.ocr(e)
+      failure_code = ::Claims::Ingest::FailureClassifier.ocr(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
         di_results_json: nil,
-        **::Claims::Invoices::FailureSubtypes.step_attributes(
-          status: "technical_failure",
-          status_subtype: status_subtype,
+        **::Claims::Ingest::FailureClassifier.step_attributes(
+          failure_category: "technical_failure",
+          failure_code: failure_code,
           error: e
         ),
         updated_at: Time.current
       )
+      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+    ensure
       advance_run!(ingest_run_id: ingest_run_id)
-      raise
     end
 
     private
 
-    def find_or_create_step!(ingest_run_id:, document:, step_type:)
-      step = nil
-
-      if ingest_run_id.present?
-        step =
-          ::Claims::IngestStepRun
-            .where(
-              ingest_run_id: ingest_run_id,
-              ingest_document_id: document.id,
-              step_type: step_type
-            )
-            .where(status: %w[queued in_progress])
-            .order(created_at: :asc)
-            .first
-      end
-
-      step ||=
-        ::Claims::IngestStepRun.create!(
-          ingest_run_id: ingest_run_id,
-          session_id: document.session_id,
-          ingest_document_id: document.id,
-          step_type: step_type,
-          status: "queued",
-          error_text: nil,
-          created_at: Time.current,
-          updated_at: Time.current
-        )
+    def terminal_run?(ingest_run_id)
+      ::Claims::Ingest::RunTransition::TERMINAL_STATUSES.include?(
+        ::Claims::IngestRun.find(ingest_run_id).status
+      )
     end
 
     def call_node_ocr!(storage_key:, model_id:)
@@ -114,9 +89,7 @@ module Claims
     def advance_run!(ingest_run_id:)
       return if ingest_run_id.blank?
 
-      ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
-    rescue StandardError
-      nil
+      ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
     end
   end
 end

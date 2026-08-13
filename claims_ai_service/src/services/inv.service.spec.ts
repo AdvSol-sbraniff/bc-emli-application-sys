@@ -30,6 +30,7 @@ describe('InvService Responses API attachments', () => {
       },
     };
     service.downloadBlob = jest.fn();
+    service.sleep = jest.fn().mockResolvedValue(undefined);
     jest.spyOn(console, 'log').mockImplementation();
     jest.spyOn(console, 'error').mockImplementation();
     jest.spyOn(console, 'warn').mockImplementation();
@@ -38,6 +39,32 @@ describe('InvService Responses API attachments', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     delete process.env.GENAI_MAX_ATTEMPTS;
+    delete process.env.GENAI_RETRY_BASE_MS;
+    delete process.env.GENAI_RETRY_MAX_MS;
+  });
+
+  it('retries malformed output and succeeds only after parsed JSON', async () => {
+    process.env.GENAI_MAX_ATTEMPTS = '2';
+    process.env.GENAI_RETRY_BASE_MS = '0';
+    process.env.GENAI_RETRY_MAX_MS = '0';
+    responsesCreate
+      .mockResolvedValueOnce({ output_text: 'not json' })
+      .mockResolvedValueOnce({ output_text: '{"document_kind":"invoice"}' });
+
+    await expect(service.genai(prompt())).resolves.toEqual({
+      document_kind: 'invoice',
+    });
+    expect(responsesCreate).toHaveBeenCalledTimes(2);
+
+    const events = (console.log as jest.Mock).mock.calls.map(([line]) =>
+      JSON.parse(line),
+    );
+    expect(
+      events.filter((row) => row.event === 'claims.genai.response.malformed'),
+    ).toHaveLength(1);
+    expect(
+      events.filter((row) => row.event === 'claims.genai.request.succeeded'),
+    ).toHaveLength(1);
   });
 
   it('sends a JPEG as an inline Responses image', async () => {
@@ -113,6 +140,9 @@ describe('InvService Responses API attachments', () => {
   });
 
   it('returns a structured retryable error when model output is not JSON', async () => {
+    process.env.GENAI_MAX_ATTEMPTS = '2';
+    process.env.GENAI_RETRY_BASE_MS = '0';
+    process.env.GENAI_RETRY_MAX_MS = '0';
     responsesCreate.mockResolvedValue({
       output_text: 'I found an invoice, but this is not JSON.',
     });
@@ -129,11 +159,13 @@ describe('InvService Responses API attachments', () => {
         code: 'genai_model_output_invalid_json',
         category: 'model_output_invalid_json',
         retryable: true,
+        provider_attempt_count: 2,
         phase: 'classifier_files',
         output_chars: expect.any(Number),
         snippet: 'I found an invoice, but this is not JSON.',
       });
     }
+    expect(responsesCreate).toHaveBeenCalledTimes(4);
   });
 
   function prompt() {

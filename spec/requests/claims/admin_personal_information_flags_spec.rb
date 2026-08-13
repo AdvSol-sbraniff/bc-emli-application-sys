@@ -53,7 +53,6 @@ RSpec.describe "Claims admin personal-information flags", type: :request do
       Claims::SupportingDocument.create!(
         invoice_version_id: version.id,
         storage_key: "flagged-support.pdf",
-        classification_status: "classified",
         personal_information_review_status: "review_recommended",
         personal_information_type_id: pi_type.id,
         personal_information_review_reason: supporting_reason,

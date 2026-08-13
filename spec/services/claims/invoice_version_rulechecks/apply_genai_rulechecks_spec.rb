@@ -10,7 +10,7 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyGenaiRulechecks do
     Claims::Invoice.create!(
       session_id: session.id,
       contractor_id: contractor.id,
-      status: "genai_in_progress",
+      status: "contractor_precheck",
       status_updated_at: now,
       created_at: now,
       updated_at: now

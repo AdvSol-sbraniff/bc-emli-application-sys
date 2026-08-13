@@ -247,12 +247,13 @@ module Api
         code_located_rows = located_fields_for(civ.id, "code")
         rule_rows = rulechecks_for(civ.id, "genai")
         code_rule_rows = rulechecks_for(civ.id, "code")
-        upgrade_type_results = upgrade_type_results_for(civ.id)
+        detected_upgrade_types = detected_upgrade_types_for(civ.id)
 
         render json: {
                  invoice_version_id: civ.id,
-                 upgrade_type_results:
-                   serialize_upgrade_type_results(upgrade_type_results),
+                 validation_result: civ.validation_result,
+                 detected_upgrade_types:
+                   serialize_detected_upgrade_types(detected_upgrade_types),
                  located_fields: serialize_located_fields(located_rows),
                  classifier_located_fields:
                    serialize_located_fields(classifier_located_rows),
@@ -419,7 +420,7 @@ module Api
           .order(:source_engine, :rule_key, :created_at)
       end
 
-      def upgrade_type_results_for(invoice_version_id)
+      def detected_upgrade_types_for(invoice_version_id)
         ::Claims::InvoiceVersionUpgradeType
           .joins(
             "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
@@ -430,7 +431,7 @@ module Api
           )
           .order(
             Arel.sql(
-              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key, claims.invoice_version_upgrade_types.source_engine"
+              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key"
             )
           )
       end
@@ -496,18 +497,14 @@ module Api
         end
       end
 
-      def serialize_upgrade_type_results(rows)
+      def serialize_detected_upgrade_types(rows)
         rows.map do |row|
           row.as_json(
             only: %i[
               id
               invoice_version_id
               invoice_upgrade_type_id
-              source_engine
-              call_status
               confidence
-              result
-              admin_advice
               evidence_text
               classification_explanation
               page
@@ -528,7 +525,7 @@ module Api
       )
         return [] if invoice_version_id.blank?
 
-        rows = upgrade_type_results_for(invoice_version_id).to_a
+        rows = detected_upgrade_types_for(invoice_version_id).to_a
         upgrade_types = []
         seen_upgrade_type_ids = {}
 
@@ -603,7 +600,6 @@ module Api
                 row.supporting_document_type&.type_key,
               supporting_document_type_description:
                 row.supporting_document_type&.description,
-              classification_status: row.classification_status,
               classification_confidence: row.classification_confidence,
               classification_reason: row.classification_reason,
               supporting_document_routing_quality:

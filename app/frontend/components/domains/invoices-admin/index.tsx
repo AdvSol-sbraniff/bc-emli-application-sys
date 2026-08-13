@@ -70,7 +70,6 @@ type InvoiceGridRow = {
   session_id: string;
   session_created_at?: string | null;
   invoice_status?: string | null;
-  invoice_status_subtype?: string | null;
   invoice_status_updated_at?: string | null;
   invoice_created_at?: string | null;
   invoice_updated_at?: string | null;
@@ -98,7 +97,12 @@ type InvoiceGridRow = {
   latest_di_ocr_vendor_name?: string | null;
   latest_di_ocr_invoice_total?: string | number | null;
 
-  latest_genai_result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
+  latest_validation_result?: 'pass' | 'info' | 'warn' | 'fail' | string | null;
+  latest_ingest_run_id?: string | null;
+  latest_ingest_run_kind?: string | null;
+  latest_ingest_run_status?: string | null;
+  latest_ingest_failure_category?: string | null;
+  latest_ingest_failure_code?: string | null;
   latest_detected_upgrade_type_keys?: string[] | null;
   latest_detected_upgrade_types_json?: DetectedUpgradeType[] | null;
 
@@ -116,6 +120,29 @@ type ApiResp = {
     unread_by_admin_overall_invoice_count?: number;
     filters?: any;
   };
+};
+
+const invoicePresentationCopy = (row: InvoiceGridRow) => {
+  const runStatus = String(row.latest_ingest_run_status || '').trim();
+  if (runStatus === 'queued' || runStatus === 'running') {
+    return {
+      label: 'Preparing AI Advice',
+      hint: 'The latest invoice processing run is still active.',
+    };
+  }
+  if (runStatus === 'failed' && row.latest_ingest_failure_category === 'package_needs_correction') {
+    return {
+      label: 'Package Needs Correction',
+      hint: 'The latest upload could not be processed because the package needs a correction.',
+    };
+  }
+  if (runStatus === 'failed') {
+    return {
+      label: 'Needs Technical Help',
+      hint: 'A system or service error stopped the latest processing run.',
+    };
+  }
+  return invoiceStatusCopy(row.invoice_status);
 };
 
 const fmtDateTime = (s?: string | null) => {
@@ -258,6 +285,12 @@ const ALL_STATUS_FILTER_ITEM_VALUE = '__all_statuses__';
 
 const statusGroupValue = (statuses: string[]) => statuses.join(',');
 
+const ADMIN_INVOICE_STATUS_FILTER_GROUPS = [
+  { label: 'Preparing AI Advice', statuses: ['processing'] },
+  { label: 'Latest Processing Failed', statuses: ['failed'] },
+  ...INVOICE_STATUS_FILTER_GROUPS,
+];
+
 const normalizeStatusFilterFromUrl = (value: string | null) => {
   if (value === null) return DEFAULT_INVOICE_STATUS_FILTER;
   if (value === ALL_STATUS_FILTER_URL_VALUE) return '';
@@ -274,7 +307,7 @@ const selectedStatusGroupValuesFor = (invoiceStatus: string) => {
 
   if (!selectedStatuses.size) return [];
 
-  return INVOICE_STATUS_FILTER_GROUPS.filter((group) =>
+  return ADMIN_INVOICE_STATUS_FILTER_GROUPS.filter((group) =>
     group.statuses.every((status) => selectedStatuses.has(status)),
   ).map((group) => statusGroupValue(group.statuses));
 };
@@ -294,7 +327,7 @@ const INVOICE_STATUS_FILTER_ITEMS = [
     label: 'All statuses',
     value: ALL_STATUS_FILTER_ITEM_VALUE,
   },
-  ...INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
+  ...ADMIN_INVOICE_STATUS_FILTER_GROUPS.map((group) => ({
     label: group.label,
     value: statusGroupValue(group.statuses),
   })),
@@ -946,7 +979,7 @@ export function InvoicesAdminScreen() {
               <Tbody>
                 {rows.map((r, idx) => {
                   const hasInvoice = Boolean(r.invoice_id && String(r.invoice_id).trim());
-                  const statusCopy = invoiceStatusCopy(r.invoice_status, r.invoice_status_subtype);
+                  const statusCopy = invoicePresentationCopy(r);
                   const technicalStatus = String(r.invoice_status || '').trim() || 'unknown';
                   return (
                     <Tr
@@ -1022,9 +1055,9 @@ export function InvoicesAdminScreen() {
 
                       <Td whiteSpace="nowrap">
                         <Flex gap={2} wrap="nowrap" align="center" minW={0} overflow="hidden">
-                          <Tooltip label={aiResultHint(r.latest_genai_result)}>
+                          <Tooltip label={aiResultHint(r.latest_validation_result)}>
                             <Box as="span" display="inline-flex" alignItems="center" flexShrink={0}>
-                              <ResultDot val={r.latest_genai_result} />
+                              <ResultDot val={r.latest_validation_result} />
                             </Box>
                           </Tooltip>
 

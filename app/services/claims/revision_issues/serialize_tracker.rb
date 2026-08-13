@@ -31,7 +31,6 @@ module Claims
         {
           invoice_id: @invoice.id,
           invoice_status: @invoice.status,
-          invoice_status_subtype: @invoice.status_subtype,
           latest_round_id: latest&.id,
           rounds: rounds.map { |round| serialize_round(round) },
           issues:

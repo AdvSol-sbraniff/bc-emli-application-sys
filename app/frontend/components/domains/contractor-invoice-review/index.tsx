@@ -82,12 +82,7 @@ type RuleResult = 'pass' | 'info' | 'warn' | 'fail' | null | undefined;
 type FitMode = 'width' | 'page';
 
 const CONTRACTOR_WITHDRAWABLE_INVOICE_STATUSES = new Set([
-  'upload_failed',
-  'ocr_failed',
-  'genai_failed',
-  'genai_complete',
-  'package_needs_correction',
-  'technical_failure',
+  'contractor_precheck',
   'admin_review_inbox',
   'contractor_revision_inbox',
   'in_review',
@@ -447,7 +442,6 @@ export default function ContractorInvoiceReviewScreen() {
   }, [chatPanelOpen]);
 
   const currentStatus = String(readData?.invoice_status || '').trim();
-  const currentStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
   const currentInvoiceId = String(readData?.invoice_id || invoiceId || '').trim();
   const currentReferenceNumber = String(readData?.reference_number ?? '').trim();
   const adoptRevisionTrackerData = useCallback((next: RevisionTrackerData) => {
@@ -467,8 +461,9 @@ export default function ContractorInvoiceReviewScreen() {
     (contractorDraftState.allEditableDraftsComplete && !contractorDraftState.hasUnsavedChanges);
   const revisionResponsesComplete = savedRevisionResponsesComplete && visibleRevisionDraftsComplete;
   const canSubmit =
-    currentStatus === 'genai_complete' || (currentStatus === 'contractor_revision_inbox' && revisionResponsesComplete);
-  const canUploadFix = currentStatus === 'genai_complete' || currentStatus === 'contractor_revision_inbox';
+    currentStatus === 'contractor_precheck' ||
+    (currentStatus === 'contractor_revision_inbox' && revisionResponsesComplete);
+  const canUploadFix = currentStatus === 'contractor_precheck' || currentStatus === 'contractor_revision_inbox';
   const canWithdraw = CONTRACTOR_WITHDRAWABLE_INVOICE_STATUSES.has(currentStatus);
   const submitTooltip =
     currentStatus === 'contractor_revision_inbox' && contractorDraftState?.hasUnsavedChanges
@@ -480,7 +475,7 @@ export default function ContractorInvoiceReviewScreen() {
           : canSubmit
             ? 'Send this invoice to the program team for first-level review.'
             : 'Submission is available after the pre-check finishes, or when the program team has requested a revision.';
-  const currentStatusCopy = invoiceStatusCopy(currentStatus, currentStatusSubtype);
+  const currentStatusCopy = invoiceStatusCopy(currentStatus);
   const contractorActionableRulechecks = useMemo(
     () =>
       genAiRulechecks.filter((row: any) => {
@@ -529,7 +524,6 @@ export default function ContractorInvoiceReviewScreen() {
         ? {
             ...read,
             invoice_status: read.invoice_status ?? invoice?.status ?? null,
-            invoice_status_subtype: read.invoice_status_subtype ?? invoice?.status_subtype ?? null,
             session_id: read.session_id ?? invoice?.session_id ?? null,
           }
         : null,
@@ -563,7 +557,7 @@ export default function ContractorInvoiceReviewScreen() {
     const genaiJson = await genaiResp.json().catch(() => ({}));
     setGenAiFields(Array.isArray(genaiJson?.located_fields) ? genaiJson.located_fields : []);
     setClassifierFields(Array.isArray(genaiJson?.classifier_located_fields) ? genaiJson.classifier_located_fields : []);
-    setUpgradeTypeResults(Array.isArray(genaiJson?.upgrade_type_results) ? genaiJson.upgrade_type_results : []);
+    setUpgradeTypeResults(Array.isArray(genaiJson?.detected_upgrade_types) ? genaiJson.detected_upgrade_types : []);
     setGenAiRulechecks([
       ...(Array.isArray(genaiJson?.code_rulechecks) ? genaiJson.code_rulechecks : []),
       ...(Array.isArray(genaiJson?.rulechecks) ? genaiJson.rulechecks : []),
@@ -1079,7 +1073,6 @@ export default function ContractorInvoiceReviewScreen() {
           ? {
               ...prev,
               invoice_status: json?.invoice?.status || 'admin_review_inbox',
-              invoice_status_subtype: json?.invoice?.status_subtype || null,
               submitted_at: json?.invoice?.submitted_at ?? prev.submitted_at,
             }
           : prev,

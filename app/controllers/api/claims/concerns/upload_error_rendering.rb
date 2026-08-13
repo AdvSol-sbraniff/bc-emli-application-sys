@@ -42,8 +42,8 @@ module Api
             json: {
               ok: false,
               error: wrapped_error.message,
-              failure_status: "technical_failure",
-              failure_status_subtype: wrapped_error.error_code,
+              failure_category: "technical_failure",
+              failure_code: wrapped_error.error_code,
               error_code: wrapped_error.error_code,
               retryable: false,
               diagnostic_id: wrapped_error.diagnostic_id,

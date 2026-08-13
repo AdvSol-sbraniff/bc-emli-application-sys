@@ -3318,15 +3318,19 @@ The active claims-only rebuild path is:
 3. `claims_ai_service_ddl/3_insert_neea_sources.sql`
 4. `claims_ai_service_ddl/3_insert_awhp_sources.sql`
 5. `claims_ai_service_ddl/3_insert_ohpa_sources.sql`
-6. `claims_ai_service_ddl/3_insert_invoice_upgrade_types.sql`
-7. `claims_ai_service_ddl/3_insert_supporting_document_types.sql`
-8. `claims_ai_service_ddl/3_insert_supporting_document_type_upgrade_types.sql`
-9. `claims_ai_service_ddl/3_insert_supporting_document_type_located_fields.sql`
-10. `claims_ai_service_ddl/3_insert_code_rules.sql`
-11. `claims_ai_service_ddl/3_insert_code_located_fields.sql`
-12. `claims_ai_service_ddl/3_insert_validationgenai_config.sql`
-13. `claims_ai_service_ddl/3_insert_genai_normalized.sql`
-14. `claims_ai_service_ddl/4_create_views.sql`
+6. `claims_ai_service_ddl/3_insert_herv_sources.sql`
+7. `claims_ai_service_ddl/3_insert_vent_fan_sources.sql`
+8. `claims_ai_service_ddl/3_insert_ingest_failure_subtypes.sql`
+9. `claims_ai_service_ddl/3_insert_invoice_upgrade_types.sql`
+10. `claims_ai_service_ddl/3_insert_personal_information_types.sql`
+11. `claims_ai_service_ddl/3_insert_supporting_document_types.sql`
+12. `claims_ai_service_ddl/3_insert_supporting_document_type_upgrade_types.sql`
+13. `claims_ai_service_ddl/3_insert_supporting_document_type_located_fields.sql`
+14. `claims_ai_service_ddl/3_insert_code_rules.sql`
+15. `claims_ai_service_ddl/3_insert_code_located_fields.sql`
+16. `claims_ai_service_ddl/3_insert_validationgenai_config.sql`
+17. `claims_ai_service_ddl/3_insert_genai_normalized.sql`
+18. `claims_ai_service_ddl/4_create_views.sql`
 
 Optional local test data:
 

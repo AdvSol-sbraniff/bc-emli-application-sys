@@ -53,12 +53,6 @@ module Claims
                 @triage_payload[:document_kind_reason]
             ).to_s.presence,
           supporting_document_type_id: type&.id,
-          classification_status:
-            classification_status_for(
-              document_kind: document_kind,
-              type_key: type_key,
-              type: type
-            ),
           classification_confidence:
             coerce_confidence(
               @triage_payload["supporting_document_type_confidence"] ||
@@ -115,15 +109,6 @@ module Claims
           @triage_payload["supporting_document_type_key"] ||
             @triage_payload[:supporting_document_type_key]
         ).to_s.strip.presence
-      end
-
-      def classification_status_for(document_kind:, type_key:, type:)
-        return "needs_review" if document_kind == "unknown"
-        return "classified" if document_kind == "invoice"
-        return "pending" if type_key.blank?
-        return "classified" if type.present?
-
-        "needs_review"
       end
 
       def supporting_document_routing_quality(document_kind:)

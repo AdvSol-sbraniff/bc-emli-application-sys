@@ -11,7 +11,7 @@ Run these when you want to drop and rebuild only the `claims` schema while leavi
 5. `3_insert_ohpa_sources.sql`
 6. `3_insert_herv_sources.sql`
 7. `3_insert_vent_fan_sources.sql`
-8. `3_insert_invoice_status_subtypes.sql`
+8. `3_insert_ingest_failure_subtypes.sql`
 9. `3_insert_invoice_upgrade_types.sql`
 10. `3_insert_personal_information_types.sql`
 11. `3_insert_supporting_document_types.sql`

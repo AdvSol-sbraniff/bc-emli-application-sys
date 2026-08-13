@@ -7,81 +7,41 @@ require "json"
 module Claims
   class RunOcrJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_ocr, retry: 3
+    sidekiq_options queue: :claims_ocr,
+                    retry: ::Claims::Ingest::RetryPolicy.sidekiq_retries
 
     # args:
     # - invoice_version_id (required)
     # - ingest_run_id (required)  => parent pipeline run
-    # - model_id (optional) => DI model, default prebuilt-invoice
-    # - enqueue_genai_after (optional) => whether to queue RunGenaiJob after OCR
-    # - genai_mode (optional) => classifier payload handling when enqueueing GenAI
-    # - step_type (optional) => ingest step type
-    def perform(
-      invoice_version_id,
-      ingest_run_id,
-      model_id = "prebuilt-invoice",
-      enqueue_genai_after = true,
-      genai_mode = "use_existing_classifier",
-      step_type = "ocr_invoice"
-    )
+    def perform(invoice_version_id, ingest_run_id)
       raise "Missing ingest_run_id for invoice OCR." if ingest_run_id.blank?
+      return if terminal_run?(ingest_run_id)
 
       Rails.logger.info("[CLAIMS][INGEST][RUN_OCR]")
 
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
-      sess = Claims::Session.find(inv.session_id)
-
-      # 1) find/create queued step run for this invoice
-      step = nil
-      if ingest_run_id.present?
-        step =
-          Claims::IngestStepRun
-            .where(
-              ingest_run_id: ingest_run_id,
-              invoice_version_id: iv.id,
-              step_type: step_type
-            )
-            .where(status: %w[queued in_progress])
-            .order(created_at: :asc)
-            .first
-      end
-
-      step ||=
-        Claims::IngestStepRun.create!(
+      step =
+        ::Claims::Ingest::StepClaim.call(
           ingest_run_id: ingest_run_id,
-          session_id: sess.id,
+          session_id: inv.session_id,
           invoice_version_id: iv.id,
-          step_type: step_type,
-          status: "queued",
-          error_text: nil,
-          created_at: Time.current,
-          updated_at: Time.current
+          step_type: "extract_invoice"
         )
-
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
+      return unless step
 
       # OCR reruns make all AI-derived outputs stale for this invoice version.
       # Fresh uploads usually have nothing to clear, but admin/manual reruns do.
-      ::Claims::InvoiceVersions::ResetAiOutputs.call(
-        invoice_version_id: iv.id,
-        preserve_classifier: (genai_mode == "use_existing_classifier")
-      )
+      ::Claims::InvoiceVersions::ResetAiOutputs.call(invoice_version_id: iv.id)
 
-      # 2) set invoice status
-      inv.set_workflow_status!("ocr_in_progress")
-
-      # 3) call node
+      # 2) call node
       base = ENV.fetch("INV_NODE_BASE_URL") # e.g. http://host.docker.internal:3001
       uri = URI("#{base}/inv/ocr")
 
       req = Net::HTTP::Post.new(uri)
       req["Content-Type"] = "application/json"
-      req.body = JSON.generate(storageKey: iv.storage_key, modelId: model_id)
+      req.body =
+        JSON.generate(storageKey: iv.storage_key, modelId: "prebuilt-invoice")
 
       http = Net::HTTP.new(uri.host, uri.port)
       http.open_timeout = 5
@@ -99,29 +59,27 @@ module Claims
         # 4) persist DI payload
         iv.update!(di_raw_json: di_raw)
 
-        if model_id == "prebuilt-invoice"
-          # 4b) populate first-class fields on invoice_versions from di_raw_json
-          result =
-            ::Claims::InvoiceVersions::ApplyDiResult.call(
-              invoice_version_id: iv.id,
-              di_json: di_raw
-            )
+        # 4b) populate first-class fields on invoice_versions from di_raw_json
+        result =
+          ::Claims::InvoiceVersions::ApplyDiResult.call(
+            invoice_version_id: iv.id,
+            di_json: di_raw
+          )
 
-          # 4c) fail if mapping failed
-          unless result[:ok] || result["ok"]
-            raise "ApplyDiResult failed: #{result[:error] || result["error"] || "unknown error"}"
-          end
+        # 4c) fail if mapping failed
+        unless result[:ok] || result["ok"]
+          raise "ApplyDiResult failed: #{result[:error] || result["error"] || "unknown error"}"
+        end
 
-          # 4d) populate lineitems from di_raw_json
-          li_result =
-            ::Claims::Lineitems::ApplyDiLineitems.call(
-              invoice_version_id: iv.id,
-              di_json: di_raw
-            )
+        # 4d) populate lineitems from di_raw_json
+        li_result =
+          ::Claims::Lineitems::ApplyDiLineitems.call(
+            invoice_version_id: iv.id,
+            di_json: di_raw
+          )
 
-          unless li_result[:ok] || li_result["ok"]
-            raise "ApplyDiLineitems failed: #{li_result[:error] || li_result["error"] || "unknown error"}"
-          end
+        unless li_result[:ok] || li_result["ok"]
+          raise "ApplyDiLineitems failed: #{li_result[:error] || li_result["error"] || "unknown error"}"
         end
       end
 
@@ -132,33 +90,17 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-      inv.set_workflow_status!("ocr_complete")
-
-      if enqueue_genai_after
-        inv.set_workflow_status!("genai_queued")
-
-        Claims::RunGenaiJob.perform_async(
-          sess.id,
-          iv.id,
-          ingest_run_id,
-          genai_mode
-        )
-      end
-
-      if ingest_run_id.present?
-        Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
-      end
     rescue StandardError => e
-      status_subtype = ocr_failure_subtype(e)
+      failure_code = ocr_failure_subtype(e)
       # mark failed (best-effort)
       begin
         step&.update!(
           status: "failed",
           error_text: e.message,
           di_results_json: nil,
-          **::Claims::Invoices::FailureSubtypes.step_attributes(
-            status: "technical_failure",
-            status_subtype: status_subtype,
+          **::Claims::Ingest::FailureClassifier.step_attributes(
+            failure_category: "technical_failure",
+            failure_code: failure_code,
             error: e
           ),
           updated_at: Time.current
@@ -167,30 +109,23 @@ module Claims
         # ignore
       end
 
-      begin
-        inv&.set_workflow_status!(
-          "technical_failure",
-          status_subtype: status_subtype
-        )
-      rescue StandardError
-        # ignore
+      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+    ensure
+      if ingest_run_id.present?
+        ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
       end
-
-      begin
-        if ingest_run_id.present?
-          Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
-        end
-      rescue StandardError
-        # ignore
-      end
-
-      raise
     end
 
     private
 
+    def terminal_run?(ingest_run_id)
+      ::Claims::Ingest::RunTransition::TERMINAL_STATUSES.include?(
+        ::Claims::IngestRun.find(ingest_run_id).status
+      )
+    end
+
     def ocr_failure_subtype(error)
-      ::Claims::Invoices::FailureSubtypes.ocr(error)
+      ::Claims::Ingest::FailureClassifier.ocr(error)
     end
   end
 end

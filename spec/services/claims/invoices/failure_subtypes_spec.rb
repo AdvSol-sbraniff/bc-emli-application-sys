@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Claims::Invoices::FailureSubtypes do
+RSpec.describe Claims::Ingest::FailureClassifier do
   it "maps an invalid image to a permanent package correction" do
     error =
       Claims::Genai::NodeClient::Error.new(
@@ -21,13 +21,13 @@ RSpec.describe Claims::Invoices::FailureSubtypes do
     expect(described_class).not_to be_retryable(error)
     expect(
       described_class.step_attributes(
-        status: described_class.genai_status(error),
-        status_subtype: described_class.genai(error),
+        failure_category: described_class.genai_status(error),
+        failure_code: described_class.genai(error),
         error: error
       )
     ).to include(
-      failure_status: "package_needs_correction",
-      failure_status_subtype: "package_unreadable_file",
+      failure_category: "package_needs_correction",
+      failure_code: "package_unreadable_file",
       error_code: "genai_input_image_invalid",
       retryable: false,
       diagnostic_id: "diag-image",
@@ -59,7 +59,7 @@ RSpec.describe Claims::Invoices::FailureSubtypes do
           category: "model_output_invalid_json",
           retryable: true,
           diagnostic_id: "diag-json",
-          phase: "classifier_files",
+          phase: "classify_document",
           snippet: "not json"
         }
       )
@@ -71,18 +71,18 @@ RSpec.describe Claims::Invoices::FailureSubtypes do
     expect(described_class).to be_retryable(error)
     expect(
       described_class.step_attributes(
-        status: described_class.genai_status(error),
-        status_subtype: described_class.genai(error),
+        failure_category: described_class.genai_status(error),
+        failure_code: described_class.genai(error),
         error: error
       )
     ).to include(
-      failure_status: "technical_failure",
-      failure_status_subtype: "genai_service_malformed_response",
+      failure_category: "technical_failure",
+      failure_code: "genai_service_malformed_response",
       error_code: "genai_model_output_invalid_json",
       error_category: "model_output_invalid_json",
       retryable: true,
       diagnostic_id: "diag-json",
-      error_phase: "classifier_files"
+      error_phase: "classify_document"
     )
     expect(error.message).to include("snippet=not json")
   end

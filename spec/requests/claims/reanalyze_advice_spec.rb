@@ -12,7 +12,7 @@ RSpec.describe "Claims advice refresh", type: :request do
         Claims::Invoice.create!(
           session_id: session.id,
           contractor_id: contractor.id,
-          status: "genai_complete",
+          status: "contractor_precheck",
           status_updated_at: now,
           created_at: now,
           updated_at: now
@@ -29,10 +29,6 @@ RSpec.describe "Claims advice refresh", type: :request do
           di_raw_json: {
             "invoice" => "di"
           },
-          genai_raw_json: {
-            "old" => "advice"
-          },
-          genai_result: "fail",
           created_at: now,
           updated_at: now
         )
@@ -67,7 +63,6 @@ RSpec.describe "Claims advice refresh", type: :request do
           classifier_raw_json: {
             "kind" => "label"
           },
-          classification_status: "classified",
           classification_confidence: 99,
           created_at: now,
           updated_at: now
@@ -105,21 +100,10 @@ RSpec.describe "Claims advice refresh", type: :request do
       Claims::InvoiceVersionUpgradeType.create!(
         invoice_version_id: source_version.id,
         invoice_upgrade_type_id: upgrade_type.id,
-        source_engine: "classifier",
-        call_status: "classified",
         confidence: 98,
         raw_json: {
           "upgrade_type_key" => "windows_doors"
         },
-        created_at: now,
-        updated_at: now
-      )
-      Claims::InvoiceVersionUpgradeType.create!(
-        invoice_version_id: source_version.id,
-        invoice_upgrade_type_id: upgrade_type.id,
-        source_engine: "genai",
-        call_status: "succeeded",
-        result: "fail",
         created_at: now,
         updated_at: now
       )
@@ -162,14 +146,13 @@ RSpec.describe "Claims advice refresh", type: :request do
         "source_invoice_version_id" => source_version.id,
         "invoice_versionno" => 4,
         "job_id" => "jid-123",
-        "status" => "genai_queued"
+        "status" => "contractor_precheck"
       )
       expect(new_version.invoice_id).to eq(invoice.id)
       expect(new_version.invoice_versionno).to eq(4)
       expect(ingest_run.resolved_invoice_version_id).to eq(new_version.id)
       expect(new_version.di_raw_json).to eq("invoice" => "di")
-      expect(new_version.genai_raw_json).to be_nil
-      expect(new_version.genai_result).to be_nil
+      expect(new_version.validation_result).to be_nil
       expect(new_version.users_eligibilitycode_id).to be_nil
       expect(new_version.participant_user_id).to be_nil
 
@@ -186,8 +169,8 @@ RSpec.describe "Claims advice refresh", type: :request do
       expect(
         Claims::InvoiceVersionUpgradeType.where(
           invoice_version_id: new_version.id
-        ).pluck(:source_engine)
-      ).to eq(["classifier"])
+        ).count
+      ).to eq(1)
 
       cloned_supporting_document =
         Claims::SupportingDocument.find_by!(
@@ -211,7 +194,7 @@ RSpec.describe "Claims advice refresh", type: :request do
         Claims::IngestStepRun.where(
           ingest_run_id: ingest_run.id,
           invoice_version_id: new_version.id,
-          step_type: "ruleclone_clone_existing_evidence",
+          step_type: "clone_evidence",
           status: "succeeded"
         )
       ).to exist

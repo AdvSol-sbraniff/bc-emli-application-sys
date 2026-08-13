@@ -3,6 +3,12 @@ module Claims
   class IngestRun < ApplicationRecord
     self.table_name = "claims.ingest_runs"
 
+    RUN_KINDS = %w[initial_upload fix_upload rules_rerun].freeze
+    ACTIVE_STATUSES = %w[queued running].freeze
+    TERMINAL_STATUSES = %w[succeeded failed].freeze
+
+    scope :active, -> { where(status: ACTIVE_STATUSES) }
+
     has_many :ingest_documents,
              class_name: "Claims::IngestDocument",
              foreign_key: :ingest_run_id,
@@ -16,6 +22,11 @@ module Claims
     belongs_to :contractor,
                class_name: "Contractor",
                foreign_key: :contractor_id,
+               optional: true
+
+    belongs_to :invoice,
+               class_name: "Claims::Invoice",
+               foreign_key: :invoice_id,
                optional: true
 
     belongs_to :resolved_invoice_version,

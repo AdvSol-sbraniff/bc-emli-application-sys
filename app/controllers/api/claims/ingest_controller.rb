@@ -250,7 +250,7 @@ module Api
         response_status =
           if result.ok
             :accepted
-          elsif result.failure_status == "technical_failure"
+          elsif result.failure_category == "technical_failure"
             :internal_server_error
           else
             :unprocessable_entity
@@ -310,16 +310,31 @@ module Api
         raise "Missing ingest_run_id." if ingest_run_id.empty?
 
         run = ::Claims::IngestRun.find(ingest_run_id)
+        diagnostics =
+          ::Claims::Ingest::AttemptDiagnostics.call(
+            steps:
+              ::Claims::IngestStepRun.where(ingest_run_id: run.id).order(
+                :created_at,
+                :id
+              ),
+            run_status: run.status
+          )
+        terminal_failure =
+          terminal_failure_payload(diagnostics.terminal_failure_step)
         render json: {
                  id: run.id,
+                 run_kind: run.run_kind,
                  session_id: run.session_id,
+                 invoice_id: run.invoice_id,
                  resolved_invoice_version_id: run.resolved_invoice_version_id,
                  status: run.status,
                  pipeline_error_code: run.pipeline_error_code,
                  pipeline_error_description: run.pipeline_error_description,
-                 failure_status: run.failure_status,
-                 failure_status_subtype: run.failure_status_subtype,
-                 primary_failure: primary_failure_payload_for_run(run),
+                 failure_category: run.failure_category,
+                 failure_code: run.failure_code,
+                 attempt_summary: diagnostics.summary,
+                 terminal_failure: terminal_failure,
+                 primary_failure: terminal_failure,
                  total_files: run.total_files,
                  completed_files: run.completed_files,
                  failed_files: run.failed_files,
@@ -473,83 +488,31 @@ module Api
       end
 
       def ingest_run_invoice_rows(ingest_run_id:)
-        rows_by_invoice_id = {}
+        run = ::Claims::IngestRun.includes(:invoice).find(ingest_run_id)
+        invoice = run.invoice
+        return [] unless invoice
 
-        documents =
-          ::Claims::IngestDocument
-            .where(ingest_run_id: ingest_run_id)
-            .where.not(resolved_invoice_id: nil)
-            .order(created_at: :asc)
-            .to_a
+        invoice_version =
+          ::Claims::InvoiceVersion.find_by(id: run.resolved_invoice_version_id)
+        invoice_version ||=
+          ::Claims::InvoiceVersion
+            .where(invoice_id: invoice.id)
+            .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
+            .first
 
-        documents
-          .group_by(&:resolved_invoice_id)
-          .each do |invoice_id, docs|
-            invoice = ::Claims::Invoice.find_by(id: invoice_id)
-            next if invoice.nil?
-
-            primary_doc =
-              docs.find { |doc| doc.document_kind == "invoice" } || docs.first
-            invoice_version =
-              ::Claims::InvoiceVersion.find_by(
-                id:
-                  primary_doc&.resolved_invoice_version_id ||
-                    docs.map(&:resolved_invoice_version_id).compact.first
-              )
-
-            rows_by_invoice_id[invoice.id] = {
-              invoice_id: invoice.id,
-              invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
-              invoice_status_updated_at: invoice.status_updated_at,
-              invoice_version_id: invoice_version&.id,
-              invoice_versionno: invoice_version&.invoice_versionno,
-              original_filename:
-                primary_doc&.original_filename ||
-                  invoice_version&.original_filename,
-              storage_key: invoice_version&.storage_key,
-              created_at: invoice.created_at,
-              updated_at: invoice.updated_at
-            }.merge(invoice_status_subtype_copy(invoice))
-          end
-
-        invoice_version_ids =
-          ::Claims::IngestStepRun
-            .where(ingest_run_id: ingest_run_id)
-            .where.not(invoice_version_id: nil)
-            .distinct
-            .pluck(:invoice_version_id)
-
-        ::Claims::InvoiceVersion
-          .joins(:invoice)
-          .where(id: invoice_version_ids)
-          .order(created_at: :asc)
-          .each do |invoice_version|
-            invoice = invoice_version.invoice
-            rows_by_invoice_id[invoice.id] ||= {
-              invoice_id: invoice.id,
-              invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
-              invoice_status_updated_at: invoice.status_updated_at,
-              invoice_version_id: invoice_version.id,
-              invoice_versionno: invoice_version.invoice_versionno,
-              original_filename: invoice_version.original_filename,
-              storage_key: invoice_version.storage_key,
-              created_at: invoice.created_at,
-              updated_at: invoice.updated_at
-            }.merge(invoice_status_subtype_copy(invoice))
-          end
-
-        rows_by_invoice_id.values.sort_by do |row|
-          row[:created_at] || Time.at(0)
-        end
-      end
-
-      def invoice_status_subtype_copy(invoice)
-        ::Claims::Invoices::StatusSubtypes.invoice_row_copy(
-          invoice.status,
-          invoice.status_subtype
-        )
+        [
+          {
+            invoice_id: invoice.id,
+            invoice_status: invoice.status,
+            invoice_status_updated_at: invoice.status_updated_at,
+            invoice_version_id: invoice_version&.id,
+            invoice_versionno: invoice_version&.invoice_versionno,
+            original_filename: invoice_version&.original_filename,
+            storage_key: invoice_version&.storage_key,
+            created_at: invoice.created_at,
+            updated_at: invoice.updated_at
+          }
+        ]
       end
 
       def ingest_invoice_step_rows(invoice_id:, ingest_run_id:, limit:)
@@ -618,8 +581,8 @@ module Api
                   invoice_version_id: invoice_versions_by_id.keys,
                   supporting_document_type_id: type_ids,
                   step_type: %w[
-                    supporting_document_extraction
-                    fix_supporting_document_extraction
+                    extract_supporting_document
+                    extract_supporting_document
                   ]
                 )
                 .where.not(supporting_document_type_id: nil)
@@ -661,7 +624,6 @@ module Api
               original_filename: document&.original_filename,
               document_kind: document&.document_kind,
               invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               state_label: nil,
@@ -686,7 +648,6 @@ module Api
               original_filename: nil,
               document_kind: "package",
               invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               state_label: nil,
@@ -724,7 +685,6 @@ module Api
                 supporting_document_type_step_label(documents_for_type),
               document_kind: "supporting_document_type",
               invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               state_label: nil,
@@ -751,7 +711,6 @@ module Api
               original_filename: invoice_version&.original_filename,
               document_kind: "invoice",
               invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               state_label: nil,
@@ -803,10 +762,7 @@ module Api
                 "iut.upgrade_type_key AS upgrade_type_key",
                 "iut.description AS upgrade_type_description"
               )
-              .where(
-                invoice_version_id: invoice_version_ids,
-                source_engine: "classifier"
-              )
+              .where(invoice_version_id: invoice_version_ids)
 
           rows =
             scope
@@ -819,11 +775,9 @@ module Api
                   upgrade_type_key: row.read_attribute("upgrade_type_key"),
                   upgrade_type_description:
                     row.read_attribute("upgrade_type_description"),
-                  call_status: row.call_status,
                   confidence: row.confidence,
-                  evidence_text: row.raw_json&.dig("evidence_text"),
-                  classifier_notes:
-                    row.raw_json&.dig("classification_explanation"),
+                  evidence_text: row.evidence_text,
+                  classifier_notes: row.classification_explanation,
                   updated_at: row.updated_at
                 }
               end
@@ -928,13 +882,7 @@ module Api
         node_resp.fetch("storage_key")
       end
 
-      def primary_failure_payload_for_run(run)
-        steps =
-          ::Claims::IngestStepRun
-            .where(ingest_run_id: run.id, status: "failed")
-            .order(created_at: :asc, id: :asc)
-            .to_a
-        step = ::Claims::Invoices::FailureSubtypes.primary_failed_step(steps)
+      def terminal_failure_payload(step)
         return if step.nil?
 
         {
@@ -947,8 +895,8 @@ module Api
 
       def step_diagnostic_payload(step)
         {
-          failure_status: step.failure_status,
-          failure_status_subtype: step.failure_status_subtype,
+          failure_category: step.failure_category,
+          failure_code: step.failure_code,
           error_code: step.error_code,
           error_category: step.error_category,
           error_phase: step.error_phase,
@@ -958,40 +906,6 @@ module Api
           provider_code: step.provider_code,
           provider_attempt_count: step.provider_attempt_count
         }
-      end
-
-      def mark_orphaned_ingest_failures!(ingest_run:, results:)
-        orphaned_failures =
-          results.count do |result|
-            result[:status] == "failed" &&
-              result[:invoice_version_id].to_s.strip.empty?
-          end
-
-        return if orphaned_failures.zero?
-
-        failed_files = ingest_run.failed_files.to_i + orphaned_failures
-        completed_files = ingest_run.completed_files.to_i
-        processed_files = completed_files + failed_files
-        total_files = [ingest_run.total_files.to_i, results.size].max
-
-        status =
-          if total_files.positive? && processed_files >= total_files
-            completed_files.positive? ? "partial" : "failed"
-          else
-            "running"
-          end
-
-        ingest_run.update!(
-          status: status,
-          total_files: total_files,
-          failed_files: failed_files,
-          pipeline_error_code: "upload_unexpected_exception",
-          pipeline_error_description:
-            "#{orphaned_failures} file upload #{"failure".pluralize(orphaned_failures)} could not be attached to an invoice version.",
-          completed_at:
-            %w[succeeded failed partial].include?(status) ? Time.current : nil,
-          updated_at: Time.current
-        )
       end
     end
   end

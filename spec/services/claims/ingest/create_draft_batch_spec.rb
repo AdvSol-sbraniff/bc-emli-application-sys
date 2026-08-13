@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Claims::Ingest::CreateDraftBatch do
   describe ".call" do
-    it "terminally records a technical failure created before the staging step" do
+    it "rolls back the shell and run when atomic staging initialization fails" do
       contractor =
         Contractor.create!(business_name: "Upload Failure Contractor")
       raw_error =
@@ -22,26 +22,15 @@ RSpec.describe Claims::Ingest::CreateDraftBatch do
         Claims::Ingest::UploadErrors::UnexpectedError
       ) { |error| raised_error = error }
 
-      run = Claims::IngestRun.find(raised_error.ingest_run_id)
-      invoice = Claims::Invoice.find(raised_error.invoice_id)
-
       expect(raised_error.message).to eq(
         Claims::Ingest::UploadErrors::SAFE_TECHNICAL_MESSAGE
       )
       expect(raised_error.cause).to equal(raw_error)
       expect(raised_error.diagnostic_id).to be_present
-      expect(run).to have_attributes(
-        status: "failed",
-        failure_status: "technical_failure",
-        failure_status_subtype: "upload_unexpected_exception",
-        pipeline_error_code: "upload_unexpected_exception"
-      )
-      expect(run.completed_at).to be_present
-      expect(invoice).to have_attributes(
-        status: "technical_failure",
-        status_subtype: "upload_unexpected_exception"
-      )
-      expect(run.pipeline_error_description).not_to include("undefined method")
+      expect(raised_error.ingest_run_id).to be_nil
+      expect(raised_error.invoice_id).to be_nil
+      expect(Claims::IngestRun.count).to eq(0)
+      expect(Claims::Invoice.count).to eq(0)
     end
 
     it "does not create a run for a request validation error" do

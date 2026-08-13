@@ -7,7 +7,8 @@ require "json"
 module Claims
   class RunGenaiJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 3
+    sidekiq_options queue: :claims_genai,
+                    retry: ::Claims::Ingest::RetryPolicy.sidekiq_retries
 
     # args must match controller perform_async call order.
     # GenAI validation reads classifier facts from evidence tables. Classifier
@@ -30,46 +31,39 @@ module Claims
       if %w[classifier_only triage_only].include?(requested_mode)
         raise "RunGenaiJob no longer runs classifier modes. Use RunIngestTriageJob through OCR/triage instead."
       end
+      if requested_mode == "finish_validation"
+        raise "RunGenaiJob no longer performs fan-in. Use FinalizeGenaiValidationJob."
+      end
+
+      ingest_run = Claims::IngestRun.find(ingest_run_id)
+      if ::Claims::Ingest::RunTransition::TERMINAL_STATUSES.include?(
+           ingest_run.status
+         )
+        return
+      end
 
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
 
-      if requested_mode == "finish_validation"
-        finish_validation_if_ready!(
-          session_id: session_id,
-          invoice_version_id: iv.id,
-          ingest_run_id: ingest_run_id
-        )
-        return
-      end
-
       sess = Claims::Session.find(session_id)
-
-      step = nil
 
       if iv.di_raw_json.blank?
         raise "Missing invoice_versions.di_raw_json. Run OCR first for invoice_version_id=#{iv.id}."
       end
 
-      # GenAI reruns must not leave stale common/upgrade outputs from a prior run.
-      # Preserve classifier-derived upgrade mappings from the OCR/triage phase.
-      ::Claims::InvoiceVersions::ResetAiOutputs.call(
-        invoice_version_id: iv.id,
-        preserve_classifier: true
-      )
-
       classifier_payload = classifier_payload_from_evidence(invoice_version: iv)
 
-      inv.set_workflow_status!("genai_in_progress")
+      case_facts_payload =
+        run_case_facts_step!(
+          ingest_run_id: ingest_run_id,
+          session_id: sess.id,
+          invoice_version: iv,
+          invoice: inv,
+          claim_session: sess,
+          classifier_payload: classifier_payload
+        )
+      return if case_facts_payload.nil?
 
-      run_case_facts_step!(
-        ingest_run_id: ingest_run_id,
-        session_id: sess.id,
-        invoice_version: iv,
-        invoice: inv,
-        claim_session: sess,
-        classifier_payload: classifier_payload
-      )
       upgrade_types = detected_upgrade_types(classifier_payload)
 
       common_upgrade_type = upgrade_type_by_key!("common")
@@ -78,7 +72,7 @@ module Claims
         ingest_run_id: ingest_run_id,
         session_id: sess.id,
         invoice_version: iv,
-        step_type: "genai_common",
+        step_type: "evaluate_genai_ruleset",
         upgrade_type: common_upgrade_type
       )
 
@@ -87,57 +81,41 @@ module Claims
           ingest_run_id: ingest_run_id,
           session_id: sess.id,
           invoice_version: iv,
-          step_type: "genai_upgrade",
+          step_type: "evaluate_genai_ruleset",
           upgrade_type: upgrade_type
         )
       end
     rescue StandardError => e
       failed_step =
-        latest_failed_validation_step(
+        ::Claims::Ingest::StepOutcome.for_target(
           ingest_run_id: ingest_run_id,
-          invoice_version_id: iv&.id
-        )
-      status_subtype =
+          invoice_version_id: invoice_version_id,
+          step_type: "case_facts"
+        ).effective_step
+      failure_code =
         failure_subtype_from_step(
           failed_step,
-          fallback:
-            (
-              if requested_mode == "finish_validation"
-                runtime_failure_subtype(e)
-              else
-                genai_failure_subtype(e)
-              end
-            )
+          fallback: genai_failure_subtype(e)
         )
-      # mark failed (best-effort)
       begin
-        step&.update!(
-          status: "failed",
-          error_text: "#{e.class}: #{e.message}",
-          genai_results_json: nil,
-          **failure_step_attributes(status_subtype: status_subtype, error: e),
-          updated_at: Time.current
-        )
+        if failed_step&.status.in?(%w[queued in_progress])
+          failed_step.update!(
+            status: "failed",
+            error_text: "#{e.class}: #{e.message}",
+            genai_results_json: nil,
+            **failure_step_attributes(failure_code: failure_code, error: e),
+            updated_at: Time.current
+          )
+        end
       rescue StandardError
-        # ignore
+        nil
       end
 
-      begin
-        inv&.set_workflow_status!(
-          "technical_failure",
-          status_subtype: status_subtype
-        )
-      rescue StandardError
-        # ignore
+      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+    ensure
+      if ingest_run_id.present?
+        ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
       end
-
-      begin
-        advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
-      rescue StandardError
-        # ignore
-      end
-
-      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     def run_genai_ruleset_child!(
@@ -147,6 +125,13 @@ module Claims
       invoice_upgrade_type_id:,
       step_type:
     )
+      ingest_run = Claims::IngestRun.find(ingest_run_id)
+      if ::Claims::Ingest::RunTransition::TERMINAL_STATUSES.include?(
+           ingest_run.status
+         )
+        return
+      end
+
       iv = Claims::InvoiceVersion.find(invoice_version_id)
       inv = Claims::Invoice.find(iv.invoice_id)
       upgrade_type = Claims::InvoiceUpgradeType.find(invoice_upgrade_type_id)
@@ -166,13 +151,6 @@ module Claims
         classifier_payload: classifier_payload,
         di_raw_json: iv.di_raw_json
       )
-
-      Claims::RunGenaiJob.perform_async(
-        session_id,
-        invoice_version_id,
-        ingest_run_id,
-        "finish_validation"
-      )
     rescue StandardError => e
       failed_step =
         latest_step(
@@ -181,89 +159,69 @@ module Claims
           step_type: step_type.to_s,
           invoice_upgrade_type_id: invoice_upgrade_type_id
         )
-      status_subtype =
+      failure_code =
         failure_subtype_from_step(
           failed_step,
           fallback: genai_failure_subtype(e)
         )
       begin
-        inv&.set_workflow_status!(
-          "technical_failure",
-          status_subtype: status_subtype
-        )
+        if failed_step&.status.in?(%w[queued in_progress])
+          failed_step.update!(
+            status: "failed",
+            error_text: "#{e.class}: #{e.message}",
+            genai_results_json: nil,
+            **failure_step_attributes(failure_code: failure_code, error: e),
+            updated_at: Time.current
+          )
+        end
       rescue StandardError
         nil
       end
-      begin
-        advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
-      rescue StandardError
-        nil
+      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+    ensure
+      if ingest_run_id.present?
+        ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
       end
-      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
-    def finish_validation_if_ready!(
-      session_id:,
-      invoice_version_id:,
-      ingest_run_id:
-    )
+    def finalize_validation!(session_id:, invoice_version_id:, ingest_run_id:)
       iv = Claims::InvoiceVersion.find(invoice_version_id)
-      inv = Claims::Invoice.find(iv.invoice_id)
 
       iv.with_lock do
-        if latest_step(
-             ingest_run_id: ingest_run_id,
-             invoice_version_id: iv.id,
-             step_type: "aggregate_advice"
-           )&.status == "succeeded" && inv.reload.status == "genai_complete"
-          return
-        end
+        aggregate_outcome =
+          ::Claims::Ingest::StepOutcome.for_target(
+            ingest_run_id: ingest_run_id,
+            invoice_version_id: iv.id,
+            step_type: "finalize_validation"
+          )
+        return if aggregate_outcome.succeeded?
 
         classifier_payload =
           classifier_payload_from_evidence(invoice_version: iv)
         common_upgrade_type = upgrade_type_by_key!("common")
         upgrade_types = detected_upgrade_types(classifier_payload)
         required_genai_steps =
-          [[common_upgrade_type, "genai_common"]] +
-            upgrade_types.map { |upgrade_type| [upgrade_type, "genai_upgrade"] }
-        step_rows =
+          [[common_upgrade_type, "evaluate_genai_ruleset"]] +
+            upgrade_types.map do |upgrade_type|
+              [upgrade_type, "evaluate_genai_ruleset"]
+            end
+        step_outcomes =
           required_genai_steps.map do |upgrade_type, step_type|
-            latest_step(
+            ::Claims::Ingest::StepOutcome.for_target(
               ingest_run_id: ingest_run_id,
               invoice_version_id: iv.id,
               step_type: step_type,
               invoice_upgrade_type_id: upgrade_type.id
             )
           end
-
-        if (
-             failed_step =
-               step_rows.compact.find { |row| row.status == "failed" }
-           )
-          status_subtype =
-            failure_subtype_from_step(
-              failed_step,
-              fallback: "genai_unexpected_exception"
-            )
-          inv.set_workflow_status!(
-            "technical_failure",
-            status_subtype: status_subtype
-          )
-          raise(
-            "GenAI validation step failed: " \
-              "#{failed_step.step_type} #{failed_step.invoice_upgrade_type_id}"
-          )
-        end
-
-        return if step_rows.size != required_genai_steps.size
-        return unless step_rows.all? { |row| row&.status == "succeeded" }
+        return unless step_outcomes.all?(&:succeeded?)
 
         if code_rules_enabled_for_upgrade_type?(common_upgrade_type)
           run_code_ruleset_once!(
             ingest_run_id: ingest_run_id,
             session_id: session_id,
             invoice_version_id: iv.id,
-            step_type: "code_common",
+            step_type: "evaluate_code_ruleset",
             upgrade_type: common_upgrade_type
           ) do
             ::Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks.call(
@@ -279,7 +237,7 @@ module Claims
             ingest_run_id: ingest_run_id,
             session_id: session_id,
             invoice_version_id: iv.id,
-            step_type: "code_upgrade",
+            step_type: "evaluate_code_ruleset",
             upgrade_type: upgrade_type
           ) do
             ::Claims::InvoiceVersionRulechecks::ApplyUpgradeCodeRulechecks.call(
@@ -289,27 +247,12 @@ module Claims
           end
         end
 
-        run_aggregate_advice_once!(
+        run_finalize_validation_once!(
           ingest_run_id: ingest_run_id,
           session_id: session_id,
           invoice_version: iv
-        ) do
-          apply_combined_overall!(
-            invoice_version: iv,
-            classifier_payload: classifier_payload,
-            ruleset_results:
-              ruleset_results_from_steps!(
-                invoice_version_id: iv.id,
-                ingest_run_id: ingest_run_id,
-                upgrade_types: [common_upgrade_type] + upgrade_types
-              )
-          )
-        end
-
-        inv.set_workflow_status!("genai_complete")
+        )
       end
-
-      advance_run!(ingest_run_id: ingest_run_id) if ingest_run_id.present?
     end
 
     private
@@ -322,17 +265,27 @@ module Claims
       claim_session:,
       classifier_payload:
     )
+      outcome =
+        ::Claims::Ingest::StepOutcome.for_target(
+          ingest_run_id: ingest_run_id,
+          invoice_version_id: invoice_version.id,
+          step_type: "case_facts"
+        )
+      return outcome.effective_step.genai_results_json if outcome.succeeded?
+
       step =
-        find_or_create_step!(
+        ::Claims::Ingest::StepClaim.call(
           ingest_run_id: ingest_run_id,
           session_id: session_id,
           invoice_version_id: invoice_version.id,
           step_type: "case_facts"
         )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
+      return nil unless step
+
+      # Clear prior common/upgrade outputs once, when this run actually claims
+      # its case-facts root. Classifier evidence is the input to this run.
+      ::Claims::InvoiceVersions::ResetAiOutputs.call(
+        invoice_version_id: invoice_version.id
       )
 
       classifier_eligibility_code =
@@ -372,13 +325,13 @@ module Claims
 
       payload
     rescue StandardError => e
-      status_subtype = runtime_failure_subtype(e)
+      failure_code = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
           genai_results_json: nil,
-          **failure_step_attributes(status_subtype: status_subtype, error: e),
+          **failure_step_attributes(failure_code: failure_code, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -387,49 +340,34 @@ module Claims
       raise
     end
 
-    def run_aggregate_advice_step!(
+    def run_finalize_validation_step!(
       ingest_run_id:,
       session_id:,
       invoice_version:
     )
       step =
-        find_or_create_step!(
+        ::Claims::Ingest::StepClaim.call(
           ingest_run_id: ingest_run_id,
           session_id: session_id,
           invoice_version_id: invoice_version.id,
-          step_type: "aggregate_advice"
+          step_type: "finalize_validation"
         )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
+      return nil unless step
 
-      yield
-
-      invoice_version.reload
       step.update!(
         status: "succeeded",
-        genai_results_json: {
-          genai_result: invoice_version.genai_result,
-          contractor_advice_present:
-            Claims::InvoiceVersions::BuildContractorAdvice
-              .call(invoice_version_id: invoice_version.id)
-              .to_s
-              .strip
-              .present?
-        },
+        genai_results_json: nil,
         error_text: nil,
         updated_at: Time.current
       )
     rescue StandardError => e
-      status_subtype = runtime_failure_subtype(e)
+      failure_code = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
           genai_results_json: nil,
-          **failure_step_attributes(status_subtype: status_subtype, error: e),
+          **failure_step_attributes(failure_code: failure_code, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -438,28 +376,24 @@ module Claims
       raise
     end
 
-    def advance_run!(ingest_run_id:)
-      Claims::Ingest::AdvanceRun.call(ingest_run_id: ingest_run_id)
-    end
-
     def genai_failure_subtype(error)
-      ::Claims::Invoices::FailureSubtypes.genai(error)
+      ::Claims::Ingest::FailureClassifier.genai(error)
     end
 
     def runtime_failure_subtype(error)
-      ::Claims::Invoices::FailureSubtypes.runtime(error)
+      ::Claims::Ingest::FailureClassifier.runtime(error)
     end
 
-    def failure_step_attributes(status_subtype:, error:)
-      ::Claims::Invoices::FailureSubtypes.step_attributes(
-        status: "technical_failure",
-        status_subtype: status_subtype,
+    def failure_step_attributes(failure_code:, error:)
+      ::Claims::Ingest::FailureClassifier.step_attributes(
+        failure_category: "technical_failure",
+        failure_code: failure_code,
         error: error
       )
     end
 
     def failure_subtype_from_step(step, fallback:)
-      ::Claims::Invoices::FailureSubtypes.from_step(step, fallback: fallback)
+      ::Claims::Ingest::FailureClassifier.from_step(step, fallback: fallback)
     end
 
     def enqueue_genai_ruleset_job!(
@@ -470,13 +404,13 @@ module Claims
       upgrade_type:
     )
       existing_step =
-        latest_step(
+        ::Claims::Ingest::StepOutcome.for_target(
           ingest_run_id: ingest_run_id,
           invoice_version_id: invoice_version.id,
           step_type: step_type,
           invoice_upgrade_type_id: upgrade_type.id
         )
-      return if existing_step&.status.in?(%w[queued in_progress succeeded])
+      return unless existing_step.missing?
 
       find_or_create_step!(
         ingest_run_id: ingest_run_id,
@@ -490,8 +424,7 @@ module Claims
         session_id,
         invoice_version.id,
         ingest_run_id,
-        upgrade_type.id,
-        step_type
+        upgrade_type.id
       )
     end
 
@@ -530,11 +463,9 @@ module Claims
     def validation_step_types
       %w[
         case_facts
-        genai_common
-        genai_upgrade
-        code_common
-        code_upgrade
-        aggregate_advice
+        evaluate_genai_ruleset
+        evaluate_code_ruleset
+        finalize_validation
       ]
     end
 
@@ -583,7 +514,7 @@ module Claims
       ) { yield }
     end
 
-    def run_aggregate_advice_once!(
+    def run_finalize_validation_once!(
       ingest_run_id:,
       session_id:,
       invoice_version:
@@ -592,59 +523,23 @@ module Claims
         latest_step(
           ingest_run_id: ingest_run_id,
           invoice_version_id: invoice_version.id,
-          step_type: "aggregate_advice"
+          step_type: "finalize_validation"
         )
       if existing_step&.status == "succeeded"
         return existing_step.genai_results_json
       end
 
-      run_aggregate_advice_step!(
+      run_finalize_validation_step!(
         ingest_run_id: ingest_run_id,
         session_id: session_id,
         invoice_version: invoice_version
-      ) { yield }
-    end
-
-    def ruleset_results_from_steps!(
-      invoice_version_id:,
-      ingest_run_id:,
-      upgrade_types:
-    )
-      upgrade_types.map do |upgrade_type|
-        step_type =
-          (
-            if upgrade_type.upgrade_type_key == "common"
-              "genai_common"
-            else
-              "genai_upgrade"
-            end
-          )
-        step =
-          latest_step(
-            ingest_run_id: ingest_run_id,
-            invoice_version_id: invoice_version_id,
-            step_type: step_type,
-            invoice_upgrade_type_id: upgrade_type.id
-          )
-        payload = step&.genai_results_json
-        unless step&.status == "succeeded" && payload.is_a?(Hash)
-          raise(
-            "Missing succeeded #{step_type} step for " \
-              "upgrade_type_key=#{upgrade_type.upgrade_type_key}"
-          )
-        end
-
-        { upgrade_type: upgrade_type, payload: payload }
-      end
+      )
     end
 
     def classifier_payload_from_evidence(invoice_version:)
       detected_rows =
         Claims::InvoiceVersionUpgradeType
-          .where(
-            invoice_version_id: invoice_version.id,
-            source_engine: "classifier"
-          )
+          .where(invoice_version_id: invoice_version.id)
           .order(created_at: :asc, id: :asc)
           .to_a
       upgrade_types_by_id =
@@ -759,24 +654,14 @@ module Claims
     )
       contextwindowjson = nil
       step =
-        find_or_create_step!(
+        ::Claims::Ingest::StepClaim.call(
           ingest_run_id: ingest_run_id,
           session_id: session_id,
           invoice_version_id: invoice_version_id,
           step_type: step_type,
           invoice_upgrade_type_id: upgrade_type.id
         )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
-
-      upsert_genai_manifest!(
-        invoice_version_id: invoice_version_id,
-        upgrade_type: upgrade_type,
-        call_status: "in_progress"
-      )
+      return nil unless step
 
       contextwindowjson =
         build_contextwindowjson(
@@ -823,13 +708,6 @@ module Claims
         raise "ApplyGenaiLocatedFields failed: #{located_field_result.inspect}"
       end
 
-      upsert_genai_manifest!(
-        invoice_version_id: invoice_version_id,
-        upgrade_type: upgrade_type,
-        call_status: "succeeded",
-        payload: payload
-      )
-
       step.update!(
         status: "succeeded",
         genai_results_json: payload,
@@ -840,23 +718,14 @@ module Claims
 
       { upgrade_type: upgrade_type, payload: payload }
     rescue StandardError => e
-      status_subtype = genai_failure_subtype(e)
-      begin
-        upsert_genai_manifest!(
-          invoice_version_id: invoice_version_id,
-          upgrade_type: upgrade_type,
-          call_status: "failed"
-        )
-      rescue StandardError
-        nil
-      end
+      failure_code = genai_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           context_window_json: contextwindowjson,
           error_text: "#{e.class}: #{e.message}",
           genai_results_json: nil,
-          **failure_step_attributes(status_subtype: status_subtype, error: e),
+          **failure_step_attributes(failure_code: failure_code, error: e),
           updated_at: Time.current
         )
       rescue StandardError
@@ -887,18 +756,14 @@ module Claims
       upgrade_type:
     )
       step =
-        find_or_create_step!(
+        ::Claims::Ingest::StepClaim.call(
           ingest_run_id: ingest_run_id,
           session_id: session_id,
           invoice_version_id: invoice_version_id,
           step_type: step_type,
           invoice_upgrade_type_id: upgrade_type.id
         )
-      step.update!(
-        status: "in_progress",
-        error_text: nil,
-        updated_at: Time.current
-      )
+      return nil unless step
 
       result = yield
       raise "Code rules failed: #{result.inspect}" unless result[:ok]
@@ -912,58 +777,19 @@ module Claims
 
       result
     rescue StandardError => e
-      status_subtype = runtime_failure_subtype(e)
+      failure_code = runtime_failure_subtype(e)
       begin
         step&.update!(
           status: "failed",
           error_text: "#{e.class}: #{e.message}",
           genai_results_json: nil,
-          **failure_step_attributes(status_subtype: status_subtype, error: e),
+          **failure_step_attributes(failure_code: failure_code, error: e),
           updated_at: Time.current
         )
       rescue StandardError
         nil
       end
       raise
-    end
-
-    def upsert_genai_manifest!(
-      invoice_version_id:,
-      upgrade_type:,
-      call_status:,
-      payload: nil
-    )
-      overall =
-        (
-          if payload.is_a?(Hash)
-            payload["overall"] || payload[:overall] || {}
-          else
-            {}
-          end
-        )
-      row =
-        Claims::InvoiceVersionUpgradeType.find_or_initialize_by(
-          invoice_version_id: invoice_version_id,
-          invoice_upgrade_type_id: upgrade_type.id,
-          source_engine: "genai"
-        )
-      row.assign_attributes(
-        call_status: call_status,
-        confidence: nil,
-        raw_json: payload,
-        admin_advice:
-          payload ? advice_from_rulechecks(payload) : row.admin_advice,
-        result:
-          (
-            if payload
-              coerce_overall_result(overall)
-            else
-              row.result
-            end
-          ),
-        updated_at: Time.current
-      )
-      row.save!
     end
 
     def detected_upgrade_types(classifier_payload)
@@ -1017,177 +843,6 @@ module Claims
       raise(
         "Compiled GenAI prompt is empty for upgrade_type_key=#{upgrade_type.upgrade_type_key}"
       )
-    end
-
-    def apply_combined_overall!(
-      invoice_version:,
-      classifier_payload:,
-      ruleset_results:
-    )
-      payloads =
-        ruleset_results.map { |r| r[:payload] }.select { |p| p.is_a?(Hash) }
-      overall_rows =
-        payloads.map { |payload| payload["overall"] || payload[:overall] || {} }
-
-      result_values =
-        overall_rows.map { |overall| coerce_overall_result(overall) }.compact
-      code_result_values =
-        code_result_values_for(invoice_version_id: invoice_version.id)
-      invoice_version.update!(
-        genai_raw_json: {
-          classifier: classifier_payload,
-          ruleset_results:
-            ruleset_results.map do |result|
-              {
-                upgrade_type_key: result[:upgrade_type].upgrade_type_key,
-                payload: result[:payload]
-              }
-            end
-        },
-        genai_result: combined_result(result_values + code_result_values)
-      )
-    end
-
-    def code_advice_sections_for(invoice_version_id:)
-      rows =
-        Claims::InvoiceVersionRulecheck
-          .joins(
-            "LEFT JOIN claims.invoice_upgrade_types iut ON iut.id = claims.invoice_version_rulechecks.invoice_upgrade_type_id"
-          )
-          .where(invoice_version_id: invoice_version_id, source_engine: "code")
-          .where(rule_result: %w[warn fail])
-          .select(
-            "claims.invoice_version_rulechecks.*",
-            "iut.description AS upgrade_type_description",
-            "iut.upgrade_type_key AS upgrade_type_key"
-          )
-          .order(
-            Arel.sql(
-              "CASE WHEN iut.upgrade_type_key = 'common' THEN 0 ELSE 1 END, iut.upgrade_type_key, claims.invoice_version_rulechecks.rule_key"
-            )
-          )
-
-      rows
-        .group_by do |row|
-          row.read_attribute("upgrade_type_description").presence ||
-            "Code-owned checks"
-        end
-        .filter_map do |description, grouped_rows|
-          advice = advice_from_rulecheck_rows(grouped_rows)
-          next if advice.blank?
-
-          "#{description} code checks\n#{advice}"
-        end
-    end
-
-    def code_result_values_for(invoice_version_id:)
-      Claims::InvoiceVersionRulecheck
-        .where(invoice_version_id: invoice_version_id, source_engine: "code")
-        .pluck(:rule_result)
-        .filter_map { |result| coerce_rule_result(result) }
-    end
-
-    def advice_from_rulechecks(payload)
-      return nil unless payload.is_a?(Hash)
-
-      rows = payload["rulechecks"] || payload[:rulechecks]
-      bullets =
-        Array(rows).filter_map do |row|
-          next unless row.is_a?(Hash)
-
-          result = coerce_rule_result(row["rule_result"] || row[:rule_result])
-          next if result.blank? || result == "pass"
-
-          message = advice_message_for_rule(row)
-          next if message.blank?
-
-          rule_key = (row["rule_key"] || row[:rule_key]).to_s.strip
-
-          label_parts = []
-          label_parts << rule_key if rule_key.present?
-
-          result_label =
-            case result
-            when "info"
-              "Info"
-            when "warn"
-              "Please verify"
-            when "fail"
-              "Correction needed"
-            end
-
-          "- #{[label_parts.join(" ").presence, result_label].compact.join(": ")}: #{message}"
-        end
-
-      bullets.empty? ? nil : bullets.join("\n")
-    end
-
-    def advice_from_rulecheck_rows(rows)
-      bullets =
-        Array(rows).filter_map do |row|
-          result = coerce_rule_result(row.rule_result)
-          next unless %w[warn fail].include?(result)
-
-          message = advice_message_for_rule(row)
-          next if message.blank?
-
-          rule_key = row.rule_key.to_s.strip
-          label_parts = []
-          label_parts << rule_key if rule_key.present?
-
-          result_label =
-            case result
-            when "warn"
-              "Please verify"
-            when "fail"
-              "Correction needed"
-            end
-
-          "- #{[label_parts.join(" ").presence, result_label].compact.join(": ")}: #{message}"
-        end
-
-      bullets.empty? ? nil : bullets.join("\n")
-    end
-
-    def advice_message_for_rule(row)
-      if row.respond_to?(:reason_and_likely_causes)
-        [row.reason_and_likely_causes, row.evidence_text].map do |value|
-            value.to_s.strip
-          end
-          .find(&:present?)
-      else
-        [
-          row["reason_and_likely_causes"] || row[:reason_and_likely_causes],
-          row["evidence_text"] || row[:evidence_text]
-        ].map { |value| value.to_s.strip }.find(&:present?)
-      end
-    end
-
-    def coerce_overall_result(overall)
-      result =
-        (
-          overall["overall_result"] || overall[:overall_result] ||
-            overall["result"] || overall[:result]
-        ).to_s.strip.downcase
-      return result if %w[pass info warn fail].include?(result)
-
-      nil
-    end
-
-    def combined_result(results)
-      return nil if results.empty?
-      return "fail" if results.include?("fail")
-      return "warn" if results.include?("warn")
-      return "info" if results.include?("info")
-
-      "pass"
-    end
-
-    def coerce_rule_result(value)
-      result = value.to_s.strip.downcase
-      return result if %w[pass info warn fail].include?(result)
-
-      nil
     end
 
     # ============================================================

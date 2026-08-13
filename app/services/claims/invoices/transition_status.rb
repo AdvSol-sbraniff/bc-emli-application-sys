@@ -3,6 +3,9 @@
 module Claims
   module Invoices
     class TransitionStatus
+      class ProcessingActive < StandardError
+      end
+
       def self.call(**args)
         new(**args).call
       end
@@ -10,7 +13,6 @@ module Claims
       def initialize(
         invoice:,
         to_status:,
-        status_subtype: nil,
         actor_user_id: nil,
         invoice_version_id: nil,
         attributes: {},
@@ -19,7 +21,6 @@ module Claims
       )
         @invoice = invoice
         @to_status = to_status.to_s
-        @status_subtype = status_subtype
         @actor_user_id = actor_user_id.presence
         @invoice_version_id = invoice_version_id.presence
         @attributes = attributes.to_h.symbolize_keys
@@ -34,16 +35,16 @@ module Claims
         ::Claims::Invoice.transaction do
           locked = ::Claims::Invoice.lock.find(@invoice.id)
           from_status = locked.status.to_s
-          from_subtype = locked.status_subtype.presence
-          to_subtype = normalized_subtype
-          changed = from_status != @to_status || from_subtype != to_subtype
+          changed = from_status != @to_status
+          if changed && locked.ingest_runs.active.exists?
+            raise ProcessingActive,
+                  "Invoice cannot change business status while processing is active"
+          end
           version_id = resolved_invoice_version_id(locked)
 
-          attrs =
-            @attributes.except(:status, :status_subtype, :status_updated_at)
+          attrs = @attributes.except(:status, :status_updated_at)
           if changed
             attrs[:status] = @to_status
-            attrs[:status_subtype] = to_subtype
             attrs[:status_updated_at] = @now
           end
           attrs[:updated_at] ||= @now
@@ -56,9 +57,7 @@ module Claims
               invoice_version_id: version_id,
               actor_user_id: @actor_user_id,
               from_status: from_status.presence,
-              from_status_subtype: from_subtype,
               to_status: @to_status,
-              to_status_subtype: to_subtype,
               created_at: @now
             )
           end
@@ -69,17 +68,6 @@ module Claims
       end
 
       private
-
-      def normalized_subtype
-        unless ::Claims::Invoice::FAILURE_STATUSES.include?(@to_status)
-          return nil
-        end
-
-        ::Claims::Invoices::StatusSubtypes.normalize(
-          @to_status,
-          @status_subtype
-        )
-      end
 
       def resolved_invoice_version_id(invoice)
         if @invoice_version_id

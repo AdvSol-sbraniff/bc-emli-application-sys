@@ -67,7 +67,6 @@ type SupportingDocumentRow = {
   supporting_document_type_id?: string | null;
   supporting_document_type_key?: string | null;
   supporting_document_type_description?: string | null;
-  classification_status?: string | null;
   classification_confidence?: number | null;
   classification_reason?: string | null;
   supporting_document_routing_quality?: string | null;

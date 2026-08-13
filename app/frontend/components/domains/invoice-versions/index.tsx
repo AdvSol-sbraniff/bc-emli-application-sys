@@ -542,8 +542,8 @@ const invoiceStatusLabel = (status: unknown): string => invoiceStatusCopy(String
 
 const invoiceStatusColorScheme = (status: unknown): string => {
   const value = String(status ?? '').trim();
-  if (['upload_failed', 'ocr_failed', 'genai_failed', 'technical_failure', 'ineligible'].includes(value)) return 'red';
-  if (['package_needs_correction', 'contractor_revision_inbox'].includes(value)) return 'orange';
+  if (value === 'ineligible') return 'red';
+  if (value === 'contractor_revision_inbox') return 'orange';
   if (['approved_pending', 'approved_paid'].includes(value)) return 'green';
   if (value === 'in_review') return 'purple';
   return 'blue';
@@ -939,7 +939,6 @@ export const InvoiceVersionShowScreen = () => {
         ? {
             ...current,
             invoice_status: next.invoice_status ?? current.invoice_status,
-            invoice_status_subtype: next.invoice_status_subtype ?? current.invoice_status_subtype,
           }
         : current,
     );
@@ -1197,7 +1196,6 @@ export const InvoiceVersionShowScreen = () => {
           ? {
               ...read,
               invoice_status: read.invoice_status ?? invoice?.status ?? null,
-              invoice_status_subtype: read.invoice_status_subtype ?? invoice?.status_subtype ?? null,
               session_id: read.session_id ?? invoice?.session_id ?? null,
             }
           : null,
@@ -1252,7 +1250,7 @@ export const InvoiceVersionShowScreen = () => {
         setGenAiFields(Array.isArray(json?.located_fields) ? json.located_fields : []);
         setCodeFields(Array.isArray(json?.code_located_fields) ? json.code_located_fields : []);
         setClassifierFields(Array.isArray(json?.classifier_located_fields) ? json.classifier_located_fields : []);
-        setUpgradeTypeResults(Array.isArray(json?.upgrade_type_results) ? json.upgrade_type_results : []);
+        setUpgradeTypeResults(Array.isArray(json?.detected_upgrade_types) ? json.detected_upgrade_types : []);
 
         // ============================================================
         // SECTION 06.02.01.10 - RULECHECKS (ONLY IF PRESENT)
@@ -1481,13 +1479,11 @@ export const InvoiceVersionShowScreen = () => {
       if (!resp.ok) throw new Error(data?.error || data?.message || `Status update failed (${resp.status}).`);
 
       const nextStatus = String(data?.status || data?.invoice?.status || action.targetStatus);
-      const nextStatusSubtype = data?.invoice?.status_subtype ?? null;
       setReadData((prev: any) =>
         prev
           ? {
               ...prev,
               invoice_status: nextStatus,
-              invoice_status_subtype: nextStatusSubtype,
             }
           : prev,
       );
@@ -1788,7 +1784,6 @@ export const InvoiceVersionShowScreen = () => {
   );
 
   const currentInvoiceStatus = String(readData?.invoice_status || '').trim();
-  const currentInvoiceStatusSubtype = String(readData?.invoice_status_subtype || '').trim();
   const invoiceVersionNo = Number(readData?.invoice_versionno);
   const invoiceVersionLabel = Number.isFinite(invoiceVersionNo)
     ? invoiceVersionCount
@@ -1995,7 +1990,7 @@ export const InvoiceVersionShowScreen = () => {
 
               {readData ? (
                 <Tooltip
-                  label={`${invoiceStatusCopy(currentInvoiceStatus, currentInvoiceStatusSubtype).hint} Technical status: ${currentInvoiceStatus || 'unknown'}.`}
+                  label={`${invoiceStatusCopy(currentInvoiceStatus).hint} Technical status: ${currentInvoiceStatus || 'unknown'}.`}
                   hasArrow
                 >
                   <Badge
@@ -2005,7 +2000,7 @@ export const InvoiceVersionShowScreen = () => {
                     borderRadius="md"
                     textTransform="none"
                   >
-                    Status: {invoiceStatusCopy(currentInvoiceStatus, currentInvoiceStatusSubtype).label}
+                    Status: {invoiceStatusCopy(currentInvoiceStatus).label}
                   </Badge>
                 </Tooltip>
               ) : null}
@@ -4030,7 +4025,7 @@ export const InvoiceVersionShowScreen = () => {
     SECTION 07.05.30.05 - GENAI OVERALL SUMMARY (from /read)
     PURPOSE: Quiet summary at top of Rule Checks panel
     REQUIRES: readData includes these invoice_versions columns:
-      ? genai_result
+      ? validation_result
       ? contractor_advice
    ============================================================ */}
                           <Box

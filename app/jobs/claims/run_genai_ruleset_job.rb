@@ -3,27 +3,23 @@
 module Claims
   class RunGenaiRulesetJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 3
+    sidekiq_options queue: :claims_genai,
+                    retry: ::Claims::Ingest::RetryPolicy.sidekiq_retries
 
     def perform(
       session_id,
       invoice_version_id,
       ingest_run_id,
-      invoice_upgrade_type_id,
-      step_type
+      invoice_upgrade_type_id
     )
       raise "Missing ingest_run_id for GenAI ruleset." if ingest_run_id.blank?
-
-      unless %w[genai_common genai_upgrade].include?(step_type.to_s)
-        raise "Unsupported GenAI ruleset step_type=#{step_type.inspect}"
-      end
 
       Claims::RunGenaiJob.new.run_genai_ruleset_child!(
         session_id: session_id,
         invoice_version_id: invoice_version_id,
         ingest_run_id: ingest_run_id,
         invoice_upgrade_type_id: invoice_upgrade_type_id,
-        step_type: step_type.to_s
+        step_type: "evaluate_genai_ruleset"
       )
     end
   end

@@ -91,12 +91,6 @@ module Api
               reference_number: invoice.reference_number,
               session_id: invoice.session_id,
               status: invoice.invoice_status,
-              status_subtype:
-                (
-                  if invoice.respond_to?(:invoice_status_subtype)
-                    invoice.invoice_status_subtype
-                  end
-                ),
               status_updated_at: invoice.invoice_status_updated_at,
               system_help_notes: invoice.system_help_notes,
               invoice_created_at: invoice.invoice_created_at,
@@ -137,7 +131,13 @@ module Api
                   else
                     []
                   end
-                )
+                ),
+              latest_ingest_run_id: invoice.latest_ingest_run_id,
+              latest_ingest_run_kind: invoice.latest_ingest_run_kind,
+              latest_ingest_run_status: invoice.latest_ingest_run_status,
+              latest_ingest_failure_category:
+                invoice.latest_ingest_failure_category,
+              latest_ingest_failure_code: invoice.latest_ingest_failure_code
             }
           end
 
@@ -411,7 +411,10 @@ module Api
       def submit_to_admin
         invoice = contractor_invoice!
 
-        allowed_submit_statuses = %w[genai_complete contractor_revision_inbox]
+        allowed_submit_statuses = %w[
+          contractor_precheck
+          contractor_revision_inbox
+        ]
         unless allowed_submit_statuses.include?(invoice.status)
           render json: {
                    error: "Invoice is not ready to submit",
@@ -510,7 +513,6 @@ module Api
                        reference_number
                        session_id
                        status
-                       status_subtype
                        submitted_at
                        status_updated_at
                        updated_at
@@ -537,7 +539,6 @@ module Api
                        id
                        session_id
                        status
-                       status_subtype
                        submitted_at
                        status_updated_at
                        updated_at
@@ -565,21 +566,21 @@ module Api
       # GET /api/claims/contractor/ingest/runs/:ingest_run_id
       def ingest_run_show
         run = contractor_ingest_run!
-        failure_payload = contractor_ingest_run_failure_payload(run)
-        invoice_payload = contractor_ingest_run_invoice_payload(run)
+        presentation =
+          ::Claims::Ingest::ContractorRunPresenter.call(
+            run: run,
+            contractor_id: current_contractor.id
+          )
 
         render json: {
                  id: run.id,
+                 run_kind: run.run_kind,
                  session_id: run.session_id,
+                 invoice_id: run.invoice_id,
                  resolved_invoice_version_id: run.resolved_invoice_version_id,
                  status: run.status,
                  pipeline_error_code: run.pipeline_error_code,
                  pipeline_error_description: run.pipeline_error_description,
-                 failure_status: failure_payload[:failure_status],
-                 failure_status_subtype:
-                   failure_payload[:failure_status_subtype],
-                 failure_message: failure_payload[:failure_message],
-                 retry_guidance: failure_payload[:retry_guidance],
                  upgrade_type_scope_change:
                    contractor_ingest_upgrade_type_scope_change(run),
                  total_files: run.total_files,
@@ -588,7 +589,7 @@ module Api
                  created_at: run.created_at,
                  updated_at: run.updated_at,
                  completed_at: run.completed_at
-               }.merge(invoice_payload),
+               }.merge(presentation),
                status: :ok
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Ingest run not found" }, status: :not_found
@@ -636,47 +637,6 @@ module Api
       end
 
       private
-
-      def contractor_ingest_run_invoice_payload(run)
-        contractor_id = run.contractor_id.presence || current_contractor&.id
-        invoice_version =
-          ::Claims::InvoiceVersion.includes(:invoice).find_by(
-            id: run.resolved_invoice_version_id
-          )
-        if invoice_version&.invoice&.contractor_id.to_s != contractor_id.to_s
-          invoice_version = nil
-        end
-
-        invoice =
-          invoice_version&.invoice ||
-            ::Claims::Invoice
-              .where(session_id: run.session_id, contractor_id: contractor_id)
-              .order(updated_at: :desc, created_at: :desc, id: :desc)
-              .first
-
-        if invoice && invoice_version.nil?
-          invoice_version =
-            ::Claims::InvoiceVersion
-              .where(invoice_id: invoice.id)
-              .order(invoice_versionno: :desc, updated_at: :desc, id: :desc)
-              .first
-        end
-
-        can_continue =
-          run.status == "succeeded" && invoice&.status == "genai_complete" &&
-            invoice_version.present?
-
-        {
-          invoice_id: invoice&.id,
-          invoice_status: invoice&.status,
-          invoice_status_subtype: invoice&.status_subtype,
-          invoice_status_updated_at: invoice&.status_updated_at,
-          invoice_version_id: invoice_version&.id,
-          invoice_versionno: invoice_version&.invoice_versionno,
-          original_filename: invoice_version&.original_filename,
-          can_continue: can_continue
-        }
-      end
 
       def contractor_ingest_invoice_step_rows(
         invoice_id:,
@@ -735,7 +695,6 @@ module Api
               original_filename: document&.original_filename,
               document_kind: document&.document_kind,
               invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,
@@ -758,7 +717,6 @@ module Api
               original_filename: invoice_version&.original_filename,
               document_kind: "invoice",
               invoice_status: invoice.status,
-              invoice_status_subtype: invoice.status_subtype,
               step_type: step.step_type,
               status: step.status,
               error_text: step.error_text,
@@ -792,10 +750,7 @@ module Api
                 "iut.upgrade_type_key AS upgrade_type_key",
                 "iut.description AS upgrade_type_description"
               )
-              .where(
-                invoice_version_id: invoice_version_ids,
-                source_engine: "classifier"
-              )
+              .where(invoice_version_id: invoice_version_ids)
               .order(updated_at: :desc)
               .map do |row|
                 {
@@ -805,11 +760,9 @@ module Api
                   upgrade_type_key: row.read_attribute("upgrade_type_key"),
                   upgrade_type_description:
                     row.read_attribute("upgrade_type_description"),
-                  call_status: row.call_status,
                   confidence: row.confidence,
-                  evidence_text: row.raw_json&.dig("evidence_text"),
-                  classifier_notes:
-                    row.raw_json&.dig("classification_explanation"),
+                  evidence_text: row.evidence_text,
+                  classifier_notes: row.classification_explanation,
                   updated_at: row.updated_at
                 }
               end
@@ -890,120 +843,29 @@ module Api
         run
       end
 
-      def contractor_ingest_run_failure_payload(run)
-        run_failure_status = run.failure_status.to_s.strip
-        run_failure_subtype =
-          ::Claims::Invoices::StatusSubtypes.normalize(
-            run_failure_status,
-            run.failure_status_subtype
-          )
-        if run_failure_subtype.present?
-          return(
-            {
-              failure_status: run_failure_status,
-              failure_status_subtype: run_failure_subtype,
-              failure_message:
-                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-                  run_failure_status,
-                  run_failure_subtype
-                ),
-              retry_guidance:
-                ::Claims::Invoices::StatusSubtypes.retry_guidance(
-                  run_failure_status,
-                  run_failure_subtype
-                )
-            }
-          )
-        end
-
-        failed_steps =
-          ::Claims::IngestStepRun
-            .where(ingest_run_id: run.id, status: "failed")
-            .order(created_at: :asc, id: :asc)
-            .to_a
-        failed_step =
-          ::Claims::Invoices::FailureSubtypes.primary_failed_step(failed_steps)
-        if failed_step
-          status =
-            ::Claims::Invoices::FailureSubtypes.status_from_step(
-              failed_step,
-              fallback: "technical_failure"
-            )
-          subtype =
-            ::Claims::Invoices::FailureSubtypes.from_step(
-              failed_step,
-              fallback: run.pipeline_error_code
-            )
-          subtype =
-            ::Claims::Invoices::StatusSubtypes.normalize(status, subtype)
-          if subtype.present?
-            return(
-              {
-                failure_status: status,
-                failure_status_subtype: subtype,
-                failure_message:
-                  ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-                    status,
-                    subtype
-                  ),
-                retry_guidance:
-                  ::Claims::Invoices::StatusSubtypes.retry_guidance(
-                    status,
-                    subtype
-                  )
-              }
-            )
-          end
-        end
-
-        invoice =
-          ::Claims::Invoice
-            .where(
-              session_id: run.session_id,
-              contractor_id: run.contractor_id,
-              status: %w[package_needs_correction technical_failure]
-            )
-            .order(updated_at: :desc)
-            .first
-
-        if invoice
-          return(
-            {
-              failure_status: invoice.status,
-              failure_status_subtype: invoice.status_subtype,
-              failure_message:
-                ::Claims::Invoices::StatusSubtypes.contractor_failure_message(
-                  invoice.status,
-                  invoice.status_subtype
-                ),
-              retry_guidance:
-                ::Claims::Invoices::StatusSubtypes.retry_guidance(
-                  invoice.status,
-                  invoice.status_subtype
-                )
-            }
-          )
-        end
-
-        {}
-      end
-
       def contractor_ingest_upgrade_type_scope_change(run)
-        message =
-          Array(run.messages).reverse.find do |entry|
-            entry.is_a?(Hash) &&
-              entry["code"] ==
-                ::Claims::Ingest::FixUpgradeTypeScopeGuard::ERROR_CODE
-          end
-        return nil if message.blank?
+        unless run.failure_code ==
+                 ::Claims::Ingest::FixUpgradeTypeScopeGuard::FAILURE_CODE
+          return nil
+        end
 
-        message.slice(
-          "current_upgrade_types",
-          "replacement_upgrade_types",
-          "added_upgrade_types",
-          "removed_upgrade_types",
-          "replacement_filename"
+        result =
+          ::Claims::Ingest::FixUpgradeTypeScopeGuard.preview(ingest_run: run)
+        return nil unless result.changed
+
+        result.payload.slice(
+          :current_upgrade_types,
+          :replacement_upgrade_types,
+          :added_upgrade_types,
+          :removed_upgrade_types,
+          :replacement_filename
         )
+      rescue StandardError => e
+        Rails.logger.error(
+          "[claims][contractor_portal][scope_change] " \
+            "ingest_run_id=#{run.id} ERROR: #{e.class}: #{e.message}"
+        )
+        nil
       end
     end
   end

@@ -6,35 +6,31 @@ require "net/http"
 module Claims
   class RunIngestTriageJob
     include Sidekiq::Job
-    sidekiq_options queue: :claims_genai, retry: 3
+    sidekiq_options queue: :claims_genai,
+                    retry: ::Claims::Ingest::RetryPolicy.sidekiq_retries
 
-    def perform(ingest_document_id, ingest_run_id, requested_step_type = nil)
+    def perform(ingest_document_id, ingest_run_id)
       raise "Missing ingest_run_id for ingest triage." if ingest_run_id.blank?
+      return if terminal_run?(ingest_run_id)
 
       document = ::Claims::IngestDocument.find(ingest_document_id)
+      step =
+        ::Claims::Ingest::StepClaim.call(
+          ingest_run_id: ingest_run_id,
+          session_id: document.session_id,
+          ingest_document_id: document.id,
+          step_type: "classify_document"
+        )
+      return unless step
+
       if document.di_read_raw_json.blank?
         raise "Missing ingest_documents.di_read_raw_json for ingest_document_id=#{document.id}"
       end
 
-      step_type = classifier_step_type_for(requested_step_type)
-
-      step =
-        claim_step!(
-          ingest_run_id: ingest_run_id,
-          document: document,
-          step_type: step_type
-        )
-      unless step
-        advance_run!(ingest_run_id: ingest_run_id)
-        return
-      end
-
-      step.update!(error_text: nil, updated_at: Time.current)
-
       contextwindowjson =
         build_classifier_contextwindowjson(
           document: document,
-          step_type: step_type
+          step_type: "classify_document"
         )
       attachments = build_attachments(document: document)
       triage_payload =
@@ -44,7 +40,7 @@ module Claims
           diagnostic_context:
             genai_diagnostic_context(
               document: document,
-              step_type: step_type,
+              step_type: "classify_document",
               ingest_run_id: ingest_run_id
             )
         )
@@ -64,78 +60,30 @@ module Claims
         error_text: nil,
         updated_at: Time.current
       )
-
-      advance_run!(ingest_run_id: ingest_run_id)
     rescue StandardError => e
-      failure_status = ::Claims::Invoices::FailureSubtypes.genai_status(e)
-      status_subtype = ::Claims::Invoices::FailureSubtypes.genai(e)
+      failure_category = ::Claims::Ingest::FailureClassifier.genai_status(e)
+      failure_code = ::Claims::Ingest::FailureClassifier.genai(e)
       step&.update!(
         status: "failed",
         error_text: "#{e.class}: #{e.message}",
         genai_results_json: nil,
-        **::Claims::Invoices::FailureSubtypes.step_attributes(
-          status: failure_status,
-          status_subtype: status_subtype,
+        **::Claims::Ingest::FailureClassifier.step_attributes(
+          failure_category: failure_category,
+          failure_code: failure_code,
           error: e
         ),
         updated_at: Time.current
       )
+      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+    ensure
       advance_run!(ingest_run_id: ingest_run_id)
-      raise if ::Claims::Invoices::FailureSubtypes.retryable?(e)
     end
 
     private
 
-    def claim_step!(ingest_run_id:, document:, step_type:)
-      document.with_lock do
-        if succeeded_step_exists?(
-             ingest_run_id: ingest_run_id,
-             document: document,
-             step_type: step_type
-           )
-          return nil
-        end
-
-        step =
-          ::Claims::IngestStepRun
-            .where(
-              ingest_run_id: ingest_run_id,
-              ingest_document_id: document.id,
-              step_type: step_type,
-              status: %w[queued in_progress]
-            )
-            .order(created_at: :asc, id: :asc)
-            .first
-
-        return nil if step&.status == "in_progress"
-
-        step ||=
-          ::Claims::IngestStepRun.create!(
-            ingest_run_id: ingest_run_id,
-            session_id: document.session_id,
-            ingest_document_id: document.id,
-            step_type: step_type,
-            status: "queued",
-            error_text: nil,
-            created_at: Time.current,
-            updated_at: Time.current
-          )
-
-        step.update!(
-          status: "in_progress",
-          error_text: nil,
-          updated_at: Time.current
-        )
-        step
-      end
-    end
-
-    def succeeded_step_exists?(ingest_run_id:, document:, step_type:)
-      ::Claims::IngestStepRun.exists?(
-        ingest_run_id: ingest_run_id,
-        ingest_document_id: document.id,
-        step_type: step_type,
-        status: "succeeded"
+    def terminal_run?(ingest_run_id)
+      ::Claims::Ingest::RunTransition::TERMINAL_STATUSES.include?(
+        ::Claims::IngestRun.find(ingest_run_id).status
       )
     end
 
@@ -216,15 +164,6 @@ module Claims
       }.compact
     end
 
-    def classifier_step_type_for(requested_step_type)
-      requested = requested_step_type.to_s
-      if %w[classifier_files fix_classifier_files].include?(requested)
-        return requested
-      end
-
-      "classifier_files"
-    end
-
     def classifier_actual_ask
       <<~TEXT.squish
         Classify this supplied file using both the attached file and DI-read JSON.
@@ -266,9 +205,7 @@ module Claims
     def advance_run!(ingest_run_id:)
       return if ingest_run_id.blank?
 
-      ::Claims::Ingest::AdvanceBundleRun.call(ingest_run_id: ingest_run_id)
-    rescue StandardError
-      nil
+      ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
     end
   end
 end

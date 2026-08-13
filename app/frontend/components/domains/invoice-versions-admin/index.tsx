@@ -255,7 +255,7 @@ function diffContractor(a: DiffSnapshot, b: DiffSnapshot): ContractorDiff {
 }
 
 function diffAi(a: DiffSnapshot, b: DiffSnapshot): AiDiff {
-  const overallDefs = [{ key: 'genai_result', label: 'Overall result' }];
+  const overallDefs = [{ key: 'validation_result', label: 'Validation result' }];
 
   const overallChanges = overallDefs
     .filter((f) => norm(a.read?.[f.key]) !== norm(b.read?.[f.key]))
