@@ -12,6 +12,7 @@ module Claims
         REBATE_FIELD_KEY = "upgrade_specific_rebate_line_amount"
         EQUIPMENT_TYPE_FIELD_KEY = "hp_new_equipment_type"
         EFFICIENCY_AND_CAPACITY_FIELD_KEY = "hp_efficiency_and_capacity"
+        MAKE_MODEL_FIELD_KEY = "hp_make_model"
         INCOME_LEVEL_FIELD_KEY = "users_eligibilitycodes.income_level"
 
         ESP_CAP_BY_INCOME_LEVEL = {
@@ -53,6 +54,14 @@ module Claims
             key: "ashp_multisplit_minimum_two_indoor_heads"
           }
         }.freeze
+
+        RULECHECK_UPDATE_COLUMNS = %i[
+          rule_result
+          expected_text
+          calculation
+          evidence_text
+          reason_and_likely_causes
+        ].freeze
 
         def self.call(invoice_version_id:, invoice_upgrade_type_id:)
           new(
@@ -346,7 +355,7 @@ module Claims
                 .join("; "),
             evidence_text: [
               product_evidence(product),
-              field_evidence(efficiency_and_capacity_field)
+              field_evidence(efficiency_and_capacity_field, make_model_field)
             ].compact_blank.join("; "),
             reason_and_likely_causes:
               product_specs_reason_text(
@@ -568,6 +577,10 @@ module Claims
             best_genai_field(EFFICIENCY_AND_CAPACITY_FIELD_KEY)
         end
 
+        def make_model_field
+          @make_model_field ||= best_genai_field(MAKE_MODEL_FIELD_KEY)
+        end
+
         def income_level_field
           @income_level_field ||= best_code_field(INCOME_LEVEL_FIELD_KEY)
         end
@@ -683,6 +696,8 @@ module Claims
           [
             efficiency_and_capacity_field&.value_text,
             efficiency_and_capacity_field&.evidence_text,
+            make_model_field&.value_text,
+            make_model_field&.evidence_text,
             equipment_type_field&.value_text,
             product_value(product, :heat_pump_type),
             product_value(product, :ducting_configuration),
@@ -762,14 +777,28 @@ module Claims
 
         def replace_rulechecks!(rows)
           ::Claims::InvoiceVersionRulecheck.transaction do
-            ::Claims::InvoiceVersionRulecheck.where(
-              invoice_version_id: invoice_version.id,
-              invoice_upgrade_type_id: upgrade_type.id,
-              source_engine: "code",
-              rule_key: RULES.values.map { |rule| rule.fetch(:key) }
-            ).delete_all
+            scope =
+              ::Claims::InvoiceVersionRulecheck.where(
+                invoice_version_id: invoice_version.id,
+                invoice_upgrade_type_id: upgrade_type.id,
+                source_engine: "code",
+                rule_key: RULES.values.map { |rule| rule.fetch(:key) }
+              )
 
-            ::Claims::InvoiceVersionRulecheck.insert_all!(rows) if rows.any?
+            if rows.any?
+              ::Claims::InvoiceVersionRulecheck.upsert_all(
+                rows,
+                unique_by: :invoice_version_rulechecks_uniq,
+                update_only: RULECHECK_UPDATE_COLUMNS
+              )
+            end
+
+            stale_scope = scope.where.not(rule_key: rows.pluck(:rule_key))
+            referenced_ids =
+              ::Claims::RevisionIssue
+                .where.not(opened_from_invoice_version_rulecheck_id: nil)
+                .select(:opened_from_invoice_version_rulecheck_id)
+            stale_scope.where.not(id: referenced_ids).delete_all
           end
         end
 

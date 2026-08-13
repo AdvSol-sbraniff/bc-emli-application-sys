@@ -130,7 +130,7 @@ module Claims
               if pass
                 nil
               else
-                "Admin should verify the missing first-class invoice fields in the PDF. This is a warning because OCR may have missed fields that are still visible on the invoice."
+                "Standard extraction did not identify the following invoice field(s): #{missing.join(", ")}."
               end
             )
         )

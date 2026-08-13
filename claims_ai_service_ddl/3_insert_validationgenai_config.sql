@@ -189,8 +189,8 @@ Rules:
 - Use supporting_document_type_key="other_supporting_document" when a readable file is clearly supplementary evidence rather than the primary claim invoice but does not fit a more specific allowed supporting-document type. Examples include completion records, commissioning or start-up reports, attestations, certificates, work records, correspondence, and other unusual evidence.
 - Do not use other_supporting_document when a more specific allowed supporting-document type clearly applies.
 - Use document_kind="unknown" only when the available evidence does not reliably establish whether the file is the primary invoice, a supporting document, or unrelated/unusable material. Do not return unknown merely because a clearly supplementary document does not fit a specific named type; use other_supporting_document instead.
-- If an image has little OCR text but visible evidence shows before/after work, classify it as document_kind="supporting_document", supporting_document_type_key="before_after_photo_set", and supporting_document_routing_quality="requires_visual_review".
-- If an image has little OCR text but visible evidence shows a product/nameplate/label, classify it as document_kind="supporting_document", supporting_document_type_key="manufacturer_label_photo", and supporting_document_routing_quality="requires_visual_review".
+- If an image has little OCR text but visible evidence shows before/after work, classify it as document_kind="supporting_document" and supporting_document_type_key="before_after_photo_set". Set supporting_document_routing_quality from the clarity of the attached visual evidence, not merely because the evidence is photographic.
+- If an image has little OCR text but visible evidence shows a product/nameplate/label, classify it as document_kind="supporting_document" and supporting_document_type_key="manufacturer_label_photo". Set supporting_document_routing_quality from whether the attached visual evidence can be interpreted confidently, not merely because it is an image.
 - Do not classify a readable image as unknown merely because DI-read has little text. Use the attached file itself to decide whether it is an invoice, supporting document, or genuinely unknown.
 - document_kind_reason is mandatory.
 - Set supporting_document_type_key only when document_kind="supporting_document". Otherwise return null.
@@ -198,9 +198,9 @@ Rules:
 - Set supporting_document_type_reason only when document_kind="supporting_document". Otherwise return null.
 - Set supporting_document_routing_quality only when document_kind="supporting_document". Otherwise return null.
 - Allowed supporting_document_routing_quality values are usable, needs_review, requires_visual_review, and unusable.
-- Use supporting_document_routing_quality="usable" when the document appears to be the selected supporting-document type and the text/DI evidence is readable enough for downstream validation.
+- Use supporting_document_routing_quality="usable" when the document appears to be the selected supporting-document type and its text, DI evidence, or attached visual evidence is clear enough for downstream validation.
 - Use supporting_document_routing_quality="needs_review" when it is probably the selected supporting-document type but has legibility, completeness, mismatch, redaction, or ambiguity concerns.
-- Use supporting_document_routing_quality="requires_visual_review" when text/DI is not enough because the evidence depends on image content, such as photos, labels, or visual before/after proof.
+- Use supporting_document_routing_quality="requires_visual_review" only when genuine visual uncertainty remains after inspecting the attached file and a human must resolve it, such as blurry photographs, an illegible label, ambiguous photo roles, or an unclear relationship between before and after subjects. Do not use it merely because evidence is photographic or visual.
 - Use supporting_document_routing_quality="unusable" when the document appears blank, irrelevant, unreadable, the wrong document family, or too poor to route safely.
 - supporting_document_routing_quality_reason is mandatory when supporting_document_routing_quality is not null. Otherwise return null. Use 1-3 concise sentences.
 - Return personal_information_review_status, personal_information_type_key, and personal_information_review_reason for every file, regardless of document_kind.

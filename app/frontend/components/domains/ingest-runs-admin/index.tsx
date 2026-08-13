@@ -24,6 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { ArrowsClockwise, CaretLeft, CaretRight, Info, MagnifyingGlass } from '@phosphor-icons/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
+import { IngestProcessPipeCell } from '../../shared/claims/ingest-process-pipeline';
 import {
   formatIngestDuration,
   formatIngestTimestamp,
@@ -83,14 +84,6 @@ function stepTargetLabel(step: IngestStepRunRow) {
     step.supporting_document_type_description ||
     step.supporting_document_type_key ||
     'Package / invoice'
-  );
-}
-
-function stepProviderLabel(step: IngestStepRunRow) {
-  return (
-    [step.provider_status ? `HTTP ${step.provider_status}` : '', step.provider_code || '']
-      .filter(Boolean)
-      .join(' · ') || '—'
   );
 }
 
@@ -512,90 +505,78 @@ export default function IngestRunsAdminScreen() {
           ) : null}
 
           <Box borderWidth="1px" borderColor="#D8D8D8" borderRadius="md" overflow="auto">
-            <Table size="sm" minW="1180px">
+            <Table size="sm" minW="720px">
               <Thead bg="#FAF9F8">
                 <Tr>
-                  <Th>Start</Th>
-                  <Th>Duration</Th>
-                  <Th>Step</Th>
+                  <Th w="64px" minW="64px" p={0} aria-label="Pipeline" />
+                  <Th>Step / target</Th>
                   <Th>Attempt</Th>
                   <Th>Outcome</Th>
-                  <Th>Target</Th>
+                  <Th>Duration</Th>
                   <Th>Error code</Th>
-                  <Th>Provider</Th>
-                  <Th>Payloads</Th>
                   <Th />
                 </Tr>
               </Thead>
               <Tbody>
-                {steps.map((step) => {
-                  const payloadCount = [
-                    step.has_di_results_json,
-                    step.has_genai_results_json,
-                    step.has_context_window_json,
-                  ].filter(Boolean).length;
-                  return (
-                    <Tr key={step.id}>
-                      <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatIngestTimestamp(step.created_at)}
-                      </Td>
-                      <Td whiteSpace="nowrap" fontSize="xs">
-                        {formatIngestDuration(step.duration_seconds)}
-                      </Td>
-                      <Td fontSize="xs" fontWeight="semibold">
+                {steps.map((step, index) => (
+                  <Tr key={step.id}>
+                    <Td p={0} position="relative">
+                      <IngestProcessPipeCell
+                        step={step}
+                        first={index === 0}
+                        last={index === steps.length - 1}
+                        onOpen={() =>
+                          openDetail({ kind: 'step', title: `Ingest step · ${step.step_type}`, value: step })
+                        }
+                      />
+                    </Td>
+                    <Td fontSize="xs" maxW="320px">
+                      <Text noOfLines={2} fontWeight="semibold">
                         {step.step_type}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {step.attempt_number || 1} of {step.attempt_count || 1}
-                      </Td>
-                      <Td>
-                        <Badge colorScheme={ingestStatusColor(step.display_status || step.status)}>
-                          {step.display_status || step.status}
+                      </Text>
+                      <Text color="gray.600" noOfLines={2}>
+                        {stepTargetLabel(step)}
+                      </Text>
+                    </Td>
+                    <Td fontSize="xs" whiteSpace="nowrap">
+                      {step.attempt_number || 1} of {step.attempt_count || 1}
+                    </Td>
+                    <Td>
+                      <Badge colorScheme={ingestStatusColor(step.display_status || step.status)}>
+                        {step.display_status || step.status}
+                      </Badge>
+                    </Td>
+                    <Td whiteSpace="nowrap" fontSize="xs">
+                      {formatIngestDuration(step.duration_seconds)}
+                    </Td>
+                    <Td fontSize="xs">
+                      {step.error_code ? (
+                        <Badge colorScheme={step.display_status === 'recovered' ? 'gray' : 'red'}>
+                          {step.error_code}
                         </Badge>
-                      </Td>
-                      <Td fontSize="xs" maxW="300px">
-                        <Text noOfLines={2} fontWeight="semibold">
-                          {stepTargetLabel(step)}
-                        </Text>
-                        {step.invoice_upgrade_type_key || step.supporting_document_type_key ? (
-                          <Text color="gray.600">
-                            {step.invoice_upgrade_type_key || step.supporting_document_type_key}
-                          </Text>
-                        ) : null}
-                      </Td>
-                      <Td fontSize="xs">
-                        {step.error_code ? (
-                          <Badge colorScheme={step.display_status === 'recovered' ? 'gray' : 'red'}>
-                            {step.error_code}
-                          </Badge>
-                        ) : (
-                          '—'
-                        )}
-                      </Td>
-                      <Td fontSize="xs" whiteSpace="nowrap">
-                        {stepProviderLabel(step)}
-                      </Td>
-                      <Td fontSize="xs">{payloadCount}</Td>
-                      <Td>
-                        <Tooltip label="View all step fields and JSON payloads">
-                          <IconButton
-                            aria-label={`View ingest step ${step.id}`}
-                            icon={<Info size={16} />}
-                            size="xs"
-                            variant="outline"
-                            onClick={() =>
-                              openDetail({ kind: 'step', title: `Ingest step · ${step.step_type}`, value: step })
-                            }
-                          />
-                        </Tooltip>
-                      </Td>
-                    </Tr>
-                  );
-                })}
+                      ) : (
+                        '—'
+                      )}
+                    </Td>
+                    <Td>
+                      <Tooltip label="View all step fields and JSON payloads">
+                        <IconButton
+                          aria-label={`View ingest step ${step.id}`}
+                          icon={<Info size={16} />}
+                          size="xs"
+                          variant="outline"
+                          onClick={() =>
+                            openDetail({ kind: 'step', title: `Ingest step · ${step.step_type}`, value: step })
+                          }
+                        />
+                      </Tooltip>
+                    </Td>
+                  </Tr>
+                ))}
 
                 {stepsLoading && steps.length === 0 ? (
                   <Tr>
-                    <Td colSpan={10}>
+                    <Td colSpan={7}>
                       <HStack py={3}>
                         <Spinner size="sm" />
                         <Text>Loading ingest step runs…</Text>
@@ -606,7 +587,7 @@ export default function IngestRunsAdminScreen() {
 
                 {!stepsLoading && steps.length === 0 ? (
                   <Tr>
-                    <Td colSpan={10}>
+                    <Td colSpan={7}>
                       <Text py={3} color="gray.600">
                         {selectedRunId ? 'No step runs exist for the selected ingest run.' : 'No ingest run selected.'}
                       </Text>

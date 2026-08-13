@@ -25,6 +25,11 @@ import {
   MenuButton,
   MenuItem,
   MenuList,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   Tooltip,
   useToast,
 } from '@chakra-ui/react';
@@ -39,6 +44,7 @@ import {
   AdminConversationPanel,
   AdminInternalNotesPanel,
 } from '../../shared/claims/admin-invoice-communication-panels';
+import { ComplianceSpectrum } from '../../shared/claims/compliance-spectrum';
 import {
   AdminRevisionSourceAnchor,
   AdminRevisionWorkspace,
@@ -263,16 +269,15 @@ const ruleSourceLabel = (rulecheck: any) => {
   return sourceEngine || '';
 };
 
-const ruleComplianceScoreLabel = (rulecheck: any) => {
-  const sourceEngine = String(rulecheck?.source_engine ?? '').toLowerCase();
-  if (sourceEngine !== 'genai') return '';
-  if (rulecheck?.compliance_score == null || rulecheck.compliance_score === '') return '';
-  return `Compliance score: ${Number(rulecheck.compliance_score).toFixed(0)} / 100`;
-};
-
 const ruleDefinitionLabel = (rulecheck: any) => {
   const sourceEngine = String(rulecheck?.source_engine ?? '').toLowerCase();
   return sourceEngine === 'code' ? 'Code description' : 'GenAI prompt';
+};
+
+const hasComplianceSpectrum = (rulecheck: any) => {
+  if (String(rulecheck?.source_engine ?? '').toLowerCase() !== 'genai') return false;
+  if (rulecheck?.compliance_score == null || rulecheck.compliance_score === '') return false;
+  return Number.isFinite(Number(rulecheck.compliance_score));
 };
 
 const contractorVisibilityLabel = (value: unknown): string => {
@@ -4622,85 +4627,158 @@ export const InvoiceVersionShowScreen = () => {
                   </Text>
                 </Tooltip>
               </Flex>
-              {ruleDetailsDrawerRulecheck?.upgrade_type_description && (
-                <Text fontSize="sm" opacity={0.7}>
-                  {String(ruleDetailsDrawerRulecheck.upgrade_type_description)}
-                </Text>
-              )}
               <Flex align="center" gap="8px" wrap="wrap">
                 {ruleDetailsDrawerRulecheck?.source_engine && (
                   <Badge colorScheme="gray" variant="subtle" textTransform="lowercase">
                     {ruleSourceLabel(ruleDetailsDrawerRulecheck)}
                   </Badge>
                 )}
-                {ruleComplianceScoreLabel(ruleDetailsDrawerRulecheck) && (
-                  <Text fontSize="xs" opacity={0.7}>
-                    {ruleComplianceScoreLabel(ruleDetailsDrawerRulecheck)}
-                  </Text>
-                )}
               </Flex>
             </Flex>
           </DrawerHeader>
           <DrawerBody>
-            <RuleDetailDrawerSection label="Rule Key">
-              <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_key} />
-            </RuleDetailDrawerSection>
-
-            <RuleDetailDrawerSection label="Rule policies">
-              <Box display="grid" gridTemplateColumns={{ base: '1fr', md: 'repeat(3, minmax(0, 1fr))' }} gap="10px">
-                {[
-                  [
-                    'Contractor visibility',
-                    contractorVisibilityLabel(ruleDetailsDrawerRulecheck?.contractor_visibility),
-                  ],
-                  [
-                    'Submission blocking',
-                    contractorBlockingPolicyLabel(ruleDetailsDrawerRulecheck?.contractor_blocking_policy),
-                  ],
-                  [
-                    'Admin workflow management',
-                    adminWorkflowPolicyLabel(ruleDetailsDrawerRulecheck?.admin_workflow_policy),
-                  ],
-                ].map(([label, value]) => (
-                  <Box key={label} borderWidth="1px" borderColor="gray.200" borderRadius="md" p="10px" bg="gray.50">
-                    <Text fontSize="xs" fontWeight="700" color="gray.600" mb="3px">
-                      {label}
-                    </Text>
-                    <Text fontSize="sm">{value}</Text>
-                  </Box>
-                ))}
-              </Box>
-            </RuleDetailDrawerSection>
-
-            <RuleDetailDrawerSection label="Source Quote">
-              {String(ruleDetailsDrawerRulecheck?.source_quote ?? '').trim() ? (
-                <SourceQuoteMarkdown value={ruleDetailsDrawerRulecheck?.source_quote} />
-              ) : (
-                <RuleDetailText value="" />
+            <Tabs
+              key={String(
+                ruleDetailsDrawerRulecheck?.id ||
+                  `${ruleDetailsDrawerRulecheck?.invoice_upgrade_type_id || ''}:${ruleDetailsDrawerRulecheck?.source_engine || ''}:${ruleDetailsDrawerRulecheck?.rule_key || ''}`,
               )}
-            </RuleDetailDrawerSection>
+              variant="unstyled"
+              defaultIndex={0}
+            >
+              <TabList mb="20px" p="4px" borderRadius="xl" bg="gray.100" border="1px solid" borderColor="gray.200">
+                {['Assessment', 'Rule setup'].map((label) => (
+                  <Tab
+                    key={label}
+                    flex="1"
+                    minH="38px"
+                    borderRadius="lg"
+                    fontSize="sm"
+                    fontWeight="700"
+                    color="gray.600"
+                    transition="background 160ms ease, color 160ms ease, box-shadow 160ms ease"
+                    _selected={{
+                      bg: 'white',
+                      color: 'blue.700',
+                      boxShadow: '0 5px 14px -8px rgba(15, 42, 67, 0.65)',
+                    }}
+                    _focusVisible={{ boxShadow: 'outline' }}
+                  >
+                    {label}
+                  </Tab>
+                ))}
+              </TabList>
 
-            <RuleDetailDrawerSection label="Pre-check Contractor Action">
-              <RuleDetailText value={ruleDetailsDrawerRulecheck?.contractor_action} />
-            </RuleDetailDrawerSection>
+              <TabPanels>
+                <TabPanel p={0}>
+                  {hasComplianceSpectrum(ruleDetailsDrawerRulecheck) ? (
+                    <ComplianceSpectrum
+                      compact
+                      complianceScore={ruleDetailsDrawerRulecheck?.compliance_score}
+                      result={ruleDetailsDrawerRulecheck?.rule_result}
+                      sourceEngine={ruleDetailsDrawerRulecheck?.source_engine}
+                      assessmentContent={
+                        <Box minW={0}>
+                          <RuleDetailDrawerSection label="Expected">
+                            <RuleDetailText
+                              value={ruleDetailsDrawerRulecheck?.expected_text ?? ruleDetailsDrawerRulecheck?.expected}
+                            />
+                          </RuleDetailDrawerSection>
 
-            <RuleDetailDrawerSection label={ruleDefinitionLabel(ruleDetailsDrawerRulecheck)}>
-              <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_definition_text} />
-            </RuleDetailDrawerSection>
+                          <RuleDetailDrawerSection label="Calculation">
+                            <RuleDetailText value={ruleDetailsDrawerRulecheck?.calculation} />
+                          </RuleDetailDrawerSection>
 
-            <RuleDetailDrawerSection label="Expected">
-              <RuleDetailText
-                value={ruleDetailsDrawerRulecheck?.expected_text ?? ruleDetailsDrawerRulecheck?.expected}
-              />
-            </RuleDetailDrawerSection>
+                          <RuleDetailDrawerSection label="Evidence">
+                            <RuleDetailText value={ruleDetailsDrawerRulecheck?.evidence_text} />
+                          </RuleDetailDrawerSection>
+                        </Box>
+                      }
+                    />
+                  ) : (
+                    <Box minW={0}>
+                      <RuleDetailDrawerSection label="Expected">
+                        <RuleDetailText
+                          value={ruleDetailsDrawerRulecheck?.expected_text ?? ruleDetailsDrawerRulecheck?.expected}
+                        />
+                      </RuleDetailDrawerSection>
 
-            <RuleDetailDrawerSection label="Calculation">
-              <RuleDetailText value={ruleDetailsDrawerRulecheck?.calculation} />
-            </RuleDetailDrawerSection>
+                      <RuleDetailDrawerSection label="Calculation">
+                        <RuleDetailText value={ruleDetailsDrawerRulecheck?.calculation} />
+                      </RuleDetailDrawerSection>
 
-            <RuleDetailDrawerSection label="Evidence">
-              <RuleDetailText value={ruleDetailsDrawerRulecheck?.evidence_text} />
-            </RuleDetailDrawerSection>
+                      <RuleDetailDrawerSection label="Evidence">
+                        <RuleDetailText value={ruleDetailsDrawerRulecheck?.evidence_text} />
+                      </RuleDetailDrawerSection>
+                    </Box>
+                  )}
+                </TabPanel>
+
+                <TabPanel p={0}>
+                  {ruleDetailsDrawerRulecheck?.upgrade_type_description && (
+                    <RuleDetailDrawerSection label="Applies to">
+                      <RuleDetailText value={ruleDetailsDrawerRulecheck.upgrade_type_description} />
+                    </RuleDetailDrawerSection>
+                  )}
+
+                  <RuleDetailDrawerSection label="Rule Key">
+                    <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_key} />
+                  </RuleDetailDrawerSection>
+
+                  <RuleDetailDrawerSection label="Rule policies">
+                    <Box
+                      display="grid"
+                      gridTemplateColumns={{ base: '1fr', md: 'repeat(3, minmax(0, 1fr))' }}
+                      gap="10px"
+                    >
+                      {[
+                        [
+                          'Contractor visibility',
+                          contractorVisibilityLabel(ruleDetailsDrawerRulecheck?.contractor_visibility),
+                        ],
+                        [
+                          'Submission blocking',
+                          contractorBlockingPolicyLabel(ruleDetailsDrawerRulecheck?.contractor_blocking_policy),
+                        ],
+                        [
+                          'Admin workflow management',
+                          adminWorkflowPolicyLabel(ruleDetailsDrawerRulecheck?.admin_workflow_policy),
+                        ],
+                      ].map(([label, value]) => (
+                        <Box
+                          key={label}
+                          borderWidth="1px"
+                          borderColor="gray.200"
+                          borderRadius="md"
+                          p="10px"
+                          bg="gray.50"
+                        >
+                          <Text fontSize="xs" fontWeight="700" color="gray.600" mb="3px">
+                            {label}
+                          </Text>
+                          <Text fontSize="sm">{value}</Text>
+                        </Box>
+                      ))}
+                    </Box>
+                  </RuleDetailDrawerSection>
+
+                  <RuleDetailDrawerSection label="Source Quote">
+                    {String(ruleDetailsDrawerRulecheck?.source_quote ?? '').trim() ? (
+                      <SourceQuoteMarkdown value={ruleDetailsDrawerRulecheck?.source_quote} />
+                    ) : (
+                      <RuleDetailText value="" />
+                    )}
+                  </RuleDetailDrawerSection>
+
+                  <RuleDetailDrawerSection label="Pre-check Contractor Action">
+                    <RuleDetailText value={ruleDetailsDrawerRulecheck?.contractor_action} />
+                  </RuleDetailDrawerSection>
+
+                  <RuleDetailDrawerSection label={ruleDefinitionLabel(ruleDetailsDrawerRulecheck)}>
+                    <RuleDetailText value={ruleDetailsDrawerRulecheck?.rule_definition_text} />
+                  </RuleDetailDrawerSection>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
           </DrawerBody>
         </DrawerContent>
       </Drawer>

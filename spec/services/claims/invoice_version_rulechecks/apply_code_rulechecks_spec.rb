@@ -69,6 +69,56 @@ RSpec.describe Claims::InvoiceVersionRulechecks::ApplyCodeRulechecks do
   end
 
   describe ".call" do
+    describe "first_class_invoice_fields_present" do
+      it "explains extraction conformity without treating the invoice as incomplete" do
+        enable_common_code_rule("first_class_invoice_fields_present")
+        Claims::CodeRule.find_by!(
+          code_rule_key: "first_class_invoice_fields_present"
+        ).update!(
+          warn_admin_message:
+            "The information may still be visible in the PDF or understood during AI review, so this warning does not necessarily mean the invoice is incomplete. If required information is genuinely absent and cannot be established during AI review, the applicable business rule will identify that separately. This rule provides one consistent place for admins to recognize recurring layout problems and gradually improve invoice conformity through contractor outreach. If the fields are visible, ask the contractor—particularly when the problem recurs—to use clearer, more consistent labels and formatting on future invoices."
+        )
+
+        participant = create(:user)
+        contractor =
+          Contractor.create!(business_name: "Conformity Test Contractor")
+        invoice_version =
+          create_invoice_version(
+            participant: participant,
+            contractor: contractor
+          )
+        invoice_version.update!(
+          di_ocr_invoice_id: "INV-100",
+          di_ocr_invoice_date: Date.new(2026, 6, 20),
+          di_ocr_vendor_name: "Conformity Test Contractor",
+          di_ocr_customer_name: "Test Participant",
+          di_ocr_sub_total: 100,
+          di_ocr_total_tax: 5,
+          di_ocr_invoice_total: 105,
+          di_ocr_amount_due: nil
+        )
+
+        result = described_class.call(invoice_version_id: invoice_version.id)
+
+        expect(result[:ok]).to be(true)
+        rulecheck =
+          Claims::InvoiceVersionRulecheck.find_by!(
+            invoice_version_id: invoice_version.id,
+            rule_key: "first_class_invoice_fields_present"
+          )
+        expect(rulecheck.rule_result).to eq("warn")
+        expect(rulecheck.reason_and_likely_causes).to start_with(
+          "Standard extraction did not identify the following invoice field(s): Amount due."
+        )
+        expect(rulecheck.reason_and_likely_causes).to include(
+          "gradually improve invoice conformity through contractor outreach"
+        )
+        expect(rulecheck.reason_and_likely_causes).to include(
+          "the applicable business rule will identify that separately"
+        )
+      end
+    end
+
     describe "submission_within_six_months" do
       def create_submission_deadline_version(
         program_received_at:,

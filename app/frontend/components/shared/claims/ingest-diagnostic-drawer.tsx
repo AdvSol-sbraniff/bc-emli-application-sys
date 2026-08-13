@@ -300,6 +300,11 @@ function RunSummary({ run, copyValue }: { run: IngestRunDiagnostic; copyValue: C
 function StepSummary({ step, copyValue }: { step: IngestStepDiagnostic; copyValue: CopyValue }) {
   const displayStatus = step.display_status || step.status;
   const attempt = step.attempt_number && step.attempt_count ? `${step.attempt_number} of ${step.attempt_count}` : '—';
+  const availablePayloads = [
+    [step.has_di_results_json || step.di_results_json != null, 'Document Intelligence'],
+    [step.has_genai_results_json || step.genai_results_json != null, 'Processing result'],
+    [step.has_context_window_json || step.context_window_json != null, 'GenAI context window'],
+  ].filter(([available]) => available);
   return (
     <VStack align="stretch" spacing={5}>
       <HStack spacing={2} wrap="wrap">
@@ -322,6 +327,24 @@ function StepSummary({ step, copyValue }: { step: IngestStepDiagnostic; copyValu
           value={step.supporting_document_type_description || step.supporting_document_type_key}
         />
       </SimpleGrid>
+      <Box>
+        <Text fontSize="xs" color="gray.600" textTransform="uppercase" fontWeight="bold" mb={2}>
+          Available diagnostic data
+        </Text>
+        <HStack spacing={2} wrap="wrap">
+          {availablePayloads.length ? (
+            availablePayloads.map(([, label]) => (
+              <Badge key={String(label)} colorScheme="blue" variant="subtle">
+                {String(label)}
+              </Badge>
+            ))
+          ) : (
+            <Text fontSize="sm" color="gray.600">
+              No retained JSON payloads.
+            </Text>
+          )}
+        </HStack>
+      </Box>
       {step.error_code || step.error_text ? (
         <Box p={4} bg={displayStatus === 'recovered' ? 'gray.50' : 'red.50'} borderWidth="1px" borderRadius="md">
           <Text fontWeight="bold">{displayStatus === 'recovered' ? 'Recovered failure' : 'Failure details'}</Text>
