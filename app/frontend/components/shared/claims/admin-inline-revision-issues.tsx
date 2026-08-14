@@ -37,6 +37,7 @@ import { RevisionIssue, RevisionIssueComment, RevisionSourceIdentity, RevisionTr
 
 type AdminDraft = { remedy: string; text: string };
 type CloseDraft = { status: string; text: string };
+export type AdminRevisionDecisionMode = 'recommend_action' | 'close_issue';
 
 const EMPTY_ADMIN_DRAFT: AdminDraft = { remedy: '', text: '' };
 const EMPTY_CLOSE_DRAFT: CloseDraft = { status: '', text: '' };
@@ -199,6 +200,7 @@ export type AdminInlineRevisionWorkspace = {
   error: string;
   errorDetails: string[];
   expandedIssueIds: Set<string>;
+  focusedIssueId: string;
   unsavedIssueIds: string[];
   sendConfirmationOpen: boolean;
   adoptData: (next: RevisionTrackerData, resetIssueId?: string) => void;
@@ -206,8 +208,10 @@ export type AdminInlineRevisionWorkspace = {
   closeDraftFor: (issue: RevisionIssue) => CloseDraft;
   setDraft: (issueId: string, patch: Partial<AdminDraft>) => void;
   setCloseDraft: (issueId: string, patch: Partial<CloseDraft>) => void;
+  decisionModeFor: (issue: RevisionIssue) => AdminRevisionDecisionMode;
+  setDecisionMode: (issueId: string, mode: AdminRevisionDecisionMode) => void;
   toggleIssue: (issueId: string) => void;
-  focusIssue: (issueId: string) => void;
+  focusIssue: (issueId: string, mode?: AdminRevisionDecisionMode) => void;
   focusSource: (issueId: string) => void;
   saveIssue: (issue: RevisionIssue) => Promise<boolean>;
   resetIssue: (issue: RevisionIssue) => Promise<void>;
@@ -216,6 +220,12 @@ export type AdminInlineRevisionWorkspace = {
   requestSend: () => void;
   confirmSend: () => Promise<void>;
   cancelSend: () => void;
+};
+
+export type AdminRevisionIssueStage = {
+  key: 'needs_decision' | 'decision_saved' | 'with_contractor' | 'closed';
+  label: string;
+  colour: string;
 };
 
 const revisionIssueElementId = (issueId: string): string => `admin-revision-issue-${issueId}`;
@@ -267,7 +277,10 @@ export const useAdminInlineRevisionWorkspace = ({
   const dataRef = useRef<RevisionTrackerData | null>(null);
   const [drafts, setDrafts] = useState<Record<string, AdminDraft>>({});
   const [closeDrafts, setCloseDrafts] = useState<Record<string, CloseDraft>>({});
+  const [decisionModes, setDecisionModes] = useState<Record<string, AdminRevisionDecisionMode>>({});
   const [expandedIssueIds, setExpandedIssueIds] = useState<Set<string>>(() => new Set());
+  const [focusedIssueId, setFocusedIssueId] = useState('');
+  const focusHighlightTimerRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -412,6 +425,20 @@ export const useAdminInlineRevisionWorkspace = ({
     }));
   }, []);
 
+  const setDecisionMode = useCallback((issueId: string, mode: AdminRevisionDecisionMode) => {
+    setDecisionModes((current) => ({ ...current, [issueId]: mode }));
+  }, []);
+
+  const decisionModeFor = useCallback(
+    (issue: RevisionIssue): AdminRevisionDecisionMode => {
+      const selected = decisionModes[issue.id];
+      if (selected === 'recommend_action' && issue.can_admin_comment) return selected;
+      if (selected === 'close_issue' && issue.can_close) return selected;
+      return issue.can_admin_comment ? 'recommend_action' : 'close_issue';
+    },
+    [decisionModes],
+  );
+
   const toggleIssue = useCallback((issueId: string) => {
     setExpandedIssueIds((current) => {
       const next = new Set(current);
@@ -420,17 +447,31 @@ export const useAdminInlineRevisionWorkspace = ({
     });
   }, []);
 
-  const focusIssue = useCallback((issueId: string) => {
+  const focusIssue = useCallback((issueId: string, mode?: AdminRevisionDecisionMode) => {
+    if (mode) setDecisionModes((current) => ({ ...current, [issueId]: mode }));
     setExpandedIssueIds((current) => new Set(current).add(issueId));
+    setFocusedIssueId(issueId);
+    if (focusHighlightTimerRef.current != null) window.clearTimeout(focusHighlightTimerRef.current);
+    focusHighlightTimerRef.current = window.setTimeout(() => {
+      setFocusedIssueId((current) => (current === issueId ? '' : current));
+      focusHighlightTimerRef.current = null;
+    }, 1600);
     window.setTimeout(() => revealElement(revisionIssueElementId(issueId)), 60);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (focusHighlightTimerRef.current != null) window.clearTimeout(focusHighlightTimerRef.current);
+    },
+    [],
+  );
 
   const focusSource = useCallback((issueId: string) => {
     window.setTimeout(() => revealRevisionSource(issueId), 60);
   }, []);
 
   const fail = useCallback(
-    (reason: any, title = 'Revision workspace could not save') => {
+    (reason: any, title = 'Revision issue could not be saved') => {
       const message = reason?.message || 'Please try again.';
       setError(message);
       toast({ title, description: message, status: 'error', duration: 6000 });
@@ -569,6 +610,7 @@ export const useAdminInlineRevisionWorkspace = ({
     error,
     errorDetails,
     expandedIssueIds,
+    focusedIssueId,
     unsavedIssueIds,
     sendConfirmationOpen,
     adoptData,
@@ -576,6 +618,8 @@ export const useAdminInlineRevisionWorkspace = ({
     closeDraftFor,
     setDraft,
     setCloseDraft,
+    decisionModeFor,
+    setDecisionMode,
     toggleIssue,
     focusIssue,
     focusSource,
@@ -605,6 +649,23 @@ const issueState = (issue: RevisionIssue, workspace: AdminInlineRevisionWorkspac
   return { label: 'Recommendation required', colour: 'orange' };
 };
 
+export const adminRevisionIssueStage = (
+  issue: RevisionIssue,
+  workspace: AdminInlineRevisionWorkspace,
+): AdminRevisionIssueStage => {
+  if (!revisionIssueUnresolved(issue)) return { key: 'closed', label: 'Closed', colour: 'green' };
+  if (latestRoundAwaitingContractor(workspace.data)) {
+    return { key: 'with_contractor', label: 'Awaiting contractor response', colour: 'orange' };
+  }
+
+  const comment = currentAdminComment(issue, workspace.data);
+  if (comment?.can_edit && comment.admin_recommended_remedy && comment.comment_text.trim()) {
+    return { key: 'decision_saved', label: 'Decision saved - pending send', colour: 'blue' };
+  }
+
+  return { key: 'needs_decision', label: 'Needs decision', colour: 'yellow' };
+};
+
 const sentHistoryLabel = (issue: RevisionIssue, data: RevisionTrackerData | null): string => {
   if (!issue.was_sent_to_contractor) return 'Never sent to contractor';
   const date = formatSentDate(issue.last_sent_to_contractor_at);
@@ -625,12 +686,13 @@ export const AdminInlineRevisionIssue = ({
   workspace,
   sourceAvailable = false,
 }: {
-  issue?: RevisionIssue;
+  issue: RevisionIssue;
   workspace: AdminInlineRevisionWorkspace;
   sourceAvailable?: boolean;
 }) => {
-  if (!issue) return null;
+  const decisionMode = workspace.decisionModeFor(issue);
   const expanded = workspace.expandedIssueIds.has(issue.id);
+  const focused = workspace.focusedIssueId === issue.id;
   const draft = workspace.draftFor(issue);
   const closeDraft = workspace.closeDraftFor(issue);
   const state = issueState(issue, workspace);
@@ -660,6 +722,7 @@ export const AdminInlineRevisionIssue = ({
       .values(),
   ).sort((left, right) => left.number - right.number);
   const value = sourceValue(issue.source.value);
+  const reason = String(issue.source.reason || '').trim();
 
   return (
     <Box
@@ -669,11 +732,18 @@ export const AdminInlineRevisionIssue = ({
       mb="8px"
       borderWidth="1px"
       borderLeftWidth={hasUnsavedChanges ? '4px' : '1px'}
-      borderColor={expanded ? 'blue.300' : 'gray.200'}
+      borderColor={focused ? 'blue.500' : expanded ? 'blue.300' : 'gray.200'}
       borderLeftColor={hasUnsavedChanges ? 'yellow.400' : undefined}
       borderRadius="md"
-      bg={revisionIssueUnresolved(issue) ? 'blue.50' : 'gray.50'}
-      boxShadow={expanded ? '0 0 0 2px rgba(49, 130, 206, 0.10)' : undefined}
+      bg={focused ? 'blue.100' : revisionIssueUnresolved(issue) ? 'blue.50' : 'gray.50'}
+      boxShadow={
+        focused
+          ? '0 0 0 3px rgba(49, 130, 206, 0.24), 0 8px 20px rgba(49, 130, 206, 0.16)'
+          : expanded
+            ? '0 0 0 2px rgba(49, 130, 206, 0.10)'
+            : undefined
+      }
+      transition="background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease"
       _focus={{ outline: 'none', borderColor: 'blue.400' }}
     >
       <Flex align="center" gap="4px">
@@ -716,6 +786,17 @@ export const AdminInlineRevisionIssue = ({
 
       {expanded ? (
         <Box px="10px" pb="10px">
+          {reason ? (
+            <Box bg="white" borderLeftWidth="3px" borderLeftColor="blue.300" px="9px" py="7px" mb="9px">
+              <Text fontSize="xs" fontWeight="700" color="gray.700" mb="2px">
+                Reason
+              </Text>
+              <Text fontSize="sm" whiteSpace="pre-wrap">
+                {reason}
+              </Text>
+            </Box>
+          ) : null}
+
           {value ? (
             <Text fontSize="sm" mb="8px">
               <Text as="span" fontWeight="600">
@@ -815,7 +896,36 @@ export const AdminInlineRevisionIssue = ({
             </Box>
           ) : null}
 
-          {issue.can_admin_comment ? (
+          {issue.can_admin_comment && issue.can_close ? (
+            <Flex mb="10px" gap="6px" role="group" aria-label="Choose how to handle this revision issue">
+              <Button
+                size="sm"
+                flex="1"
+                colorScheme="blue"
+                variant={decisionMode === 'recommend_action' ? 'solid' : 'outline'}
+                fontWeight={decisionMode === 'recommend_action' ? '700' : '500'}
+                opacity={decisionMode === 'recommend_action' ? 1 : 0.7}
+                aria-pressed={decisionMode === 'recommend_action'}
+                onClick={() => workspace.setDecisionMode(issue.id, 'recommend_action')}
+              >
+                Recommend action
+              </Button>
+              <Button
+                size="sm"
+                flex="1"
+                colorScheme="purple"
+                variant={decisionMode === 'close_issue' ? 'solid' : 'outline'}
+                fontWeight={decisionMode === 'close_issue' ? '700' : '500'}
+                opacity={decisionMode === 'close_issue' ? 1 : 0.7}
+                aria-pressed={decisionMode === 'close_issue'}
+                onClick={() => workspace.setDecisionMode(issue.id, 'close_issue')}
+              >
+                Close issue
+              </Button>
+            </Flex>
+          ) : null}
+
+          {issue.can_admin_comment && (!issue.can_close || decisionMode === 'recommend_action') ? (
             <Box bg="white" borderWidth="1px" borderColor="blue.100" borderRadius="md" p="9px" mb="10px">
               <Text fontSize="sm" fontWeight="700">
                 Your decision
@@ -859,7 +969,7 @@ export const AdminInlineRevisionIssue = ({
                   isLoading={workspace.busy}
                   onClick={() => void workspace.saveIssue(issue)}
                 >
-                  Save recommendation
+                  Save decision
                 </Button>
                 <IconButton
                   aria-label="Reset recommendation"
@@ -886,7 +996,7 @@ export const AdminInlineRevisionIssue = ({
             </Box>
           ) : null}
 
-          {issue.can_close ? (
+          {issue.can_close && (!issue.can_admin_comment || decisionMode === 'close_issue') ? (
             <Box bg="purple.50" borderWidth="1px" borderColor="purple.100" borderRadius="md" p="9px">
               <Text fontSize="xs" fontWeight="700" mb="7px">
                 Close issue
@@ -943,23 +1053,14 @@ export const AdminRevisionWorkspace = ({
 }) => {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [decisionSavedSort, setDecisionSavedSort] = useState<'alphabetic' | 'recommendation_type'>('alphabetic');
-  const unresolved = workspace.issues.filter(revisionIssueUnresolved);
   const isWithContractor = latestRoundAwaitingContractor(workspace.data);
-  const readyToSendIssueIds = new Set(
-    isWithContractor
-      ? []
-      : unresolved
-          .filter((issue) => {
-            const comment = currentAdminComment(issue, workspace.data);
-            return !!comment?.can_edit && !!comment.admin_recommended_remedy && !!comment.comment_text.trim();
-          })
-          .map((issue) => issue.id),
-  );
-  const needsDecision = isWithContractor ? [] : unresolved.filter((issue) => !readyToSendIssueIds.has(issue.id));
+  const issueStages = new Map(workspace.issues.map((issue) => [issue.id, adminRevisionIssueStage(issue, workspace)]));
+  const unresolved = workspace.issues.filter(revisionIssueUnresolved);
+  const needsDecision = workspace.issues.filter((issue) => issueStages.get(issue.id)?.key === 'needs_decision');
   const decisionComplete = isWithContractor
     ? []
-    : unresolved
-        .filter((issue) => readyToSendIssueIds.has(issue.id))
+    : workspace.issues
+        .filter((issue) => issueStages.get(issue.id)?.key === 'decision_saved')
         .sort((left, right) => {
           const leftIssueLabel = left.source.friendly_label || pretty(left.issue_type);
           const rightIssueLabel = right.source.friendly_label || pretty(right.issue_type);
@@ -971,8 +1072,8 @@ export const AdminRevisionWorkspace = ({
           }
           return leftIssueLabel.localeCompare(rightIssueLabel);
         });
-  const withContractor = isWithContractor ? unresolved : [];
-  const closed = workspace.issues.filter((issue) => !revisionIssueUnresolved(issue));
+  const withContractor = workspace.issues.filter((issue) => issueStages.get(issue.id)?.key === 'with_contractor');
+  const closed = workspace.issues.filter((issue) => issueStages.get(issue.id)?.key === 'closed');
   const categories = isWithContractor
     ? [
         { label: 'Awaiting contractor response', issues: withContractor, colour: 'orange' },
@@ -999,7 +1100,7 @@ export const AdminRevisionWorkspace = ({
       <Box bg="blue.50" borderWidth="1px" borderColor="blue.200" borderRadius="md" p="10px" mb="12px">
         <Flex align="center" justify="space-between" gap="8px" wrap="wrap">
           <Flex align="center" gap="7px" wrap="wrap">
-            <Text fontWeight="700">Revision workspace</Text>
+            <Text fontWeight="700">Revision Issues</Text>
             {workspace.unsavedIssueIds.length ? (
               <Badge colorScheme="yellow">
                 {workspace.unsavedIssueIds.length}{' '}
@@ -1059,12 +1160,13 @@ export const AdminRevisionWorkspace = ({
                   <AccordionPanel px="4px" pt="4px" pb="8px">
                     {'showDecisionSort' in category && category.showDecisionSort ? (
                       <Flex justify="flex-end" mb="8px">
-                        <FormControl w={{ base: 'full', sm: '240px' }}>
-                          <FormLabel fontSize="xs" mb="2px">
+                        <FormControl display="flex" alignItems="center" justifyContent="flex-end" gap="8px" w="auto">
+                          <FormLabel fontSize="xs" mb="0" whiteSpace="nowrap">
                             Sort issues
                           </FormLabel>
                           <Select
                             size="sm"
+                            w={{ base: '190px', sm: '240px' }}
                             value={decisionSavedSort}
                             onChange={(event) =>
                               setDecisionSavedSort(event.target.value as 'alphabetic' | 'recommendation_type')

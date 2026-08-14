@@ -46,6 +46,9 @@ import {
 } from '../../shared/claims/admin-invoice-communication-panels';
 import { ComplianceSpectrum } from '../../shared/claims/compliance-spectrum';
 import {
+  adminRevisionIssueStage,
+  AdminRevisionDecisionMode,
+  AdminRevisionIssueStage,
   AdminRevisionSourceAnchor,
   AdminRevisionWorkspace,
   diFieldRevisionIdentityKey,
@@ -106,6 +109,10 @@ type FieldRowProps = {
   onClick?: () => void;
   inline?: boolean;
   revisionChecked?: boolean;
+  revisionStatus?: AdminRevisionIssueStage;
+  revisionIssue?: RevisionIssue;
+  onOpenRevision?: () => void;
+  onSelectRevisionAction?: (mode: AdminRevisionDecisionMode) => void;
   onAddToRevision?: () => void;
   revisionAddDisabledReason?: string;
 };
@@ -165,6 +172,82 @@ const RevisionAddIconButton = ({ label, included = false, onAdd, disabledReason 
   );
 };
 
+const RevisionStatusBadge = ({ status, onOpen }: { status?: AdminRevisionIssueStage; onOpen?: () => void }) =>
+  status ? (
+    <Badge
+      as={onOpen ? 'button' : 'span'}
+      colorScheme={status.colour}
+      variant="subtle"
+      fontSize="9px"
+      lineHeight="16px"
+      px="5px"
+      borderRadius="full"
+      textTransform="none"
+      whiteSpace="nowrap"
+      flexShrink={0}
+      cursor={onOpen ? 'pointer' : 'default'}
+      title={onOpen ? `Open ${status.label.toLowerCase()} in Revision Issues` : undefined}
+      onMouseDown={onOpen ? (event) => event.stopPropagation() : undefined}
+      onClick={
+        onOpen
+          ? (event) => {
+              event.stopPropagation();
+              onOpen();
+            }
+          : undefined
+      }
+    >
+      Revision · {status.label}
+    </Badge>
+  ) : null;
+
+const RevisionSourceActions = ({
+  issue,
+  onSelect,
+}: {
+  issue?: RevisionIssue;
+  onSelect?: (mode: AdminRevisionDecisionMode) => void;
+}) => {
+  if (!issue || (!issue.can_admin_comment && !issue.can_close) || !onSelect) return null;
+
+  return (
+    <Flex width="100%" gap="6px" mt="4px" wrap="wrap">
+      {issue.can_admin_comment ? (
+        <Button
+          size="xs"
+          h="24px"
+          colorScheme="blue"
+          variant="outline"
+          fontWeight="600"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect('recommend_action');
+          }}
+        >
+          Recommend action
+        </Button>
+      ) : null}
+      {issue.can_close ? (
+        <Button
+          size="xs"
+          h="24px"
+          colorScheme="purple"
+          variant="outline"
+          fontWeight="600"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect('close_issue');
+          }}
+        >
+          Close issue
+        </Button>
+      ) : null}
+    </Flex>
+  );
+};
+
 const FieldRow = ({
   label,
   labelHint,
@@ -175,6 +258,10 @@ const FieldRow = ({
   onClick,
   inline,
   revisionChecked,
+  revisionStatus,
+  revisionIssue,
+  onOpenRevision,
+  onSelectRevisionAction,
   onAddToRevision,
   revisionAddDisabledReason,
 }: FieldRowProps) => {
@@ -217,6 +304,7 @@ const FieldRow = ({
       alignItems={inline ? 'baseline' : undefined}
       justifyContent={inline ? 'space-between' : undefined}
       gap={inline ? '6px' : '2px'}
+      flexWrap={revisionIssue ? 'wrap' : undefined}
       position="relative"
       pr={onAddToRevision || revisionChecked || revisionAddDisabledReason ? '38px' : '10px'}
     >
@@ -230,17 +318,20 @@ const FieldRow = ({
           />
         </Box>
       ) : null}
-      {labelHint ? (
-        <Tooltip label={labelHint} hasArrow placement="top">
-          <Text fontSize="sm" opacity={0.7} flexShrink={0} cursor="help">
+      <Flex align="center" gap="5px" minW={0} flexShrink={inline ? 1 : undefined} wrap="wrap">
+        {labelHint ? (
+          <Tooltip label={labelHint} hasArrow placement="top">
+            <Text fontSize="sm" opacity={0.7} minW={0} noOfLines={1} cursor="help">
+              {label}
+            </Text>
+          </Tooltip>
+        ) : (
+          <Text fontSize="sm" opacity={0.7} minW={0} noOfLines={1}>
             {label}
           </Text>
-        </Tooltip>
-      ) : (
-        <Text fontSize="sm" opacity={0.7} flexShrink={0}>
-          {label}
-        </Text>
-      )}
+        )}
+        <RevisionStatusBadge status={revisionStatus} onOpen={onOpenRevision} />
+      </Flex>
       {hint ? (
         <Tooltip label={hint} hasArrow placement="top">
           {valueNode}
@@ -248,6 +339,7 @@ const FieldRow = ({
       ) : (
         valueNode
       )}
+      <RevisionSourceActions issue={revisionIssue} onSelect={onSelectRevisionAction} />
     </Box>
   );
 };
@@ -973,7 +1065,7 @@ export const InvoiceVersionShowScreen = () => {
   }, [revisionWorkspace.issues]);
   const canAddRevisionIssue = !!revisionTrackerData?.capabilities?.can_add_issue;
   const revisionAddDisabledReason = !revisionTrackerData
-    ? 'The revision workspace is still loading.'
+    ? 'Revision Issues are still loading.'
     : !canAddRevisionIssue
       ? 'Revision issues can be added while the invoice is in the first-level admin inbox.'
       : undefined;
@@ -983,6 +1075,15 @@ export const InvoiceVersionShowScreen = () => {
   const revisionIssueForInvoiceField = (row: any) => revisionIssueByIdentity.get(invoiceFieldRevisionIdentityKey(row));
   const revisionIssueForDiField = (fieldKey: string) =>
     revisionIssueByIdentity.get(diFieldRevisionIdentityKey(fieldKey));
+  const revisionStatusForIssue = (issue?: RevisionIssue) =>
+    issue ? adminRevisionIssueStage(issue, revisionWorkspace) : undefined;
+  const revisionSourceActionProps = (issue?: RevisionIssue) => ({
+    revisionIssue: issue,
+    onOpenRevision: issue ? () => revisionWorkspace.focusIssue(issue.id) : undefined,
+    onSelectRevisionAction: issue
+      ? (mode: AdminRevisionDecisionMode) => revisionWorkspace.focusIssue(issue.id, mode)
+      : undefined,
+  });
 
   const addToRevision = async (entryType: string, sourceAttribute: string, sourceValue: string) => {
     const invoiceRecordId = String(readData?.invoice_id || invoiceId || '').trim();
@@ -1000,10 +1101,7 @@ export const InvoiceVersionShowScreen = () => {
       );
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json?.error || `Could not add revision item (${response.status}).`);
-      const previousIds = new Set(revisionWorkspace.issues.map((issue) => issue.id));
       revisionWorkspace.adoptData(json as RevisionTrackerData);
-      const createdIssue = (json as RevisionTrackerData).issues.find((issue) => !previousIds.has(issue.id));
-      if (createdIssue) revisionWorkspace.focusIssue(createdIssue.id);
       toast({ title: 'Revision issue added', status: 'success', duration: 2500 });
     } catch (reason: any) {
       toast({
@@ -1016,21 +1114,24 @@ export const InvoiceVersionShowScreen = () => {
   };
 
   const invoiceFieldRevisionProps = (row: any) => {
+    const issue = revisionIssueForInvoiceField(row);
     if (!showAdminFieldRevisionPlus) {
       return {
         revisionChecked: undefined,
+        revisionStatus: revisionStatusForIssue(issue),
+        ...revisionSourceActionProps(issue),
         onAddToRevision: undefined,
         revisionAddDisabledReason: undefined,
       };
     }
 
     const sourceId = String(row?.id || '').trim();
-    const issue = revisionIssueForInvoiceField(row);
     return {
-      revisionChecked: !!issue,
-      onAddToRevision: issue
-        ? () => revisionWorkspace.focusIssue(issue.id)
-        : canRunWorkflowActions && canAddRevisionIssue && sourceId
+      revisionChecked: undefined,
+      revisionStatus: revisionStatusForIssue(issue),
+      ...revisionSourceActionProps(issue),
+      onAddToRevision:
+        !issue && canRunWorkflowActions && canAddRevisionIssue && sourceId
           ? () => addToRevision('invoice_field', 'invoice_version_located_field_id', sourceId)
           : undefined,
       revisionAddDisabledReason: !issue && canRunWorkflowActions && sourceId ? revisionAddDisabledReason : undefined,
@@ -1038,20 +1139,23 @@ export const InvoiceVersionShowScreen = () => {
   };
 
   const diFieldRevisionProps = (fieldKey: string) => {
+    const issue = revisionIssueForDiField(fieldKey);
     if (!showAdminFieldRevisionPlus) {
       return {
         revisionChecked: undefined,
+        revisionStatus: revisionStatusForIssue(issue),
+        ...revisionSourceActionProps(issue),
         onAddToRevision: undefined,
         revisionAddDisabledReason: undefined,
       };
     }
 
-    const issue = revisionIssueForDiField(fieldKey);
     return {
-      revisionChecked: !!issue,
-      onAddToRevision: issue
-        ? () => revisionWorkspace.focusIssue(issue.id)
-        : canRunWorkflowActions && canAddRevisionIssue
+      revisionChecked: undefined,
+      revisionStatus: revisionStatusForIssue(issue),
+      ...revisionSourceActionProps(issue),
+      onAddToRevision:
+        !issue && canRunWorkflowActions && canAddRevisionIssue
           ? () => addToRevision('di_field', 'di_field_key', fieldKey)
           : undefined,
       revisionAddDisabledReason: !issue && canRunWorkflowActions ? revisionAddDisabledReason : undefined,
@@ -2340,6 +2444,7 @@ export const InvoiceVersionShowScreen = () => {
                                   display="flex"
                                   alignItems="baseline"
                                   justifyContent="space-between"
+                                  flexWrap={issue ? 'wrap' : undefined}
                                   gap="6px"
                                   position="relative"
                                   pr="38px"
@@ -2372,11 +2477,17 @@ export const InvoiceVersionShowScreen = () => {
                                       disabledReason={revisionProps.revisionAddDisabledReason}
                                     />
                                   </Box>
-                                  <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
-                                    <Text fontSize="sm" opacity={0.7} flexShrink={0} noOfLines={1} cursor="help">
-                                      {label}
-                                    </Text>
-                                  </Tooltip>
+                                  <Flex align="center" gap="5px" minW={0} wrap="wrap">
+                                    <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
+                                      <Text fontSize="sm" opacity={0.7} minW={0} noOfLines={1} cursor="help">
+                                        {label}
+                                      </Text>
+                                    </Tooltip>
+                                    <RevisionStatusBadge
+                                      status={revisionProps.revisionStatus}
+                                      onOpen={revisionProps.onOpenRevision}
+                                    />
+                                  </Flex>
                                   {confidence ? (
                                     <Tooltip label={confidence} hasArrow placement="top">
                                       <Text fontSize="sm" noOfLines={2} textAlign="right" cursor="help">
@@ -2388,6 +2499,10 @@ export const InvoiceVersionShowScreen = () => {
                                       {value}
                                     </Text>
                                   )}
+                                  <RevisionSourceActions
+                                    issue={revisionProps.revisionIssue}
+                                    onSelect={revisionProps.onSelectRevisionAction}
+                                  />
                                 </Box>
                                 {issue ? (
                                   <Box gridColumn="1 / -1">
@@ -2636,19 +2751,26 @@ export const InvoiceVersionShowScreen = () => {
 
                                       return (
                                         <React.Fragment key={String(field?.id || field?.field_key)}>
-                                          <Tooltip label={locatedFieldKeyHint(field)} hasArrow placement="top">
-                                            <Text
-                                              fontSize="sm"
-                                              opacity={0.7}
-                                              noOfLines={1}
-                                              cursor="help"
-                                              bg={isActive ? 'red.50' : 'transparent'}
-                                              borderRadius="sm"
-                                              onClick={handleClick}
-                                            >
-                                              {displayLocatedFieldLabel(field)}
-                                            </Text>
-                                          </Tooltip>
+                                          <Flex align="center" gap="5px" minW={0} wrap="wrap">
+                                            <Tooltip label={locatedFieldKeyHint(field)} hasArrow placement="top">
+                                              <Text
+                                                fontSize="sm"
+                                                opacity={0.7}
+                                                minW={0}
+                                                noOfLines={1}
+                                                cursor="help"
+                                                bg={isActive ? 'red.50' : 'transparent'}
+                                                borderRadius="sm"
+                                                onClick={handleClick}
+                                              >
+                                                {displayLocatedFieldLabel(field)}
+                                              </Text>
+                                            </Tooltip>
+                                            <RevisionStatusBadge
+                                              status={revisionStatusForIssue(issue)}
+                                              onOpen={issue ? () => revisionWorkspace.focusIssue(issue.id) : undefined}
+                                            />
+                                          </Flex>
                                           <Text
                                             fontSize="sm"
                                             noOfLines={1}
@@ -2663,18 +2785,16 @@ export const InvoiceVersionShowScreen = () => {
                                           {showAdminFieldRevisionPlus ? (
                                             <RevisionAddIconButton
                                               label={displayLocatedFieldLabel(field)}
-                                              included={!!issue}
+                                              included={false}
                                               onAdd={
-                                                issue
-                                                  ? () => revisionWorkspace.focusIssue(issue.id)
-                                                  : canRunWorkflowActions && canAddRevisionIssue
-                                                    ? () =>
-                                                        void addToRevision(
-                                                          'supporting_document_field',
-                                                          'supporting_document_located_field_id',
-                                                          String(field?.id),
-                                                        )
-                                                    : undefined
+                                                !issue && canRunWorkflowActions && canAddRevisionIssue
+                                                  ? () =>
+                                                      void addToRevision(
+                                                        'supporting_document_field',
+                                                        'supporting_document_located_field_id',
+                                                        String(field?.id),
+                                                      )
+                                                  : undefined
                                               }
                                               disabledReason={
                                                 !issue && canRunWorkflowActions ? revisionAddDisabledReason : undefined
@@ -2683,6 +2803,10 @@ export const InvoiceVersionShowScreen = () => {
                                           ) : null}
                                           {issue ? (
                                             <Box gridColumn="1 / -1">
+                                              <RevisionSourceActions
+                                                issue={issue}
+                                                onSelect={(mode) => revisionWorkspace.focusIssue(issue.id, mode)}
+                                              />
                                               <AdminRevisionSourceAnchor issueId={issue.id} />
                                             </Box>
                                           ) : null}
@@ -3556,30 +3680,36 @@ export const InvoiceVersionShowScreen = () => {
                                                     }}
                                                   />
                                                 </Tooltip>
-                                                <Tooltip
-                                                  label={`Rule key: ${String(r.rule_key || '')}`}
-                                                  isDisabled={!String(r.rule_key || '').trim()}
-                                                  hasArrow
-                                                  placement="top"
-                                                >
-                                                  <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                                                    {title}
-                                                  </Text>
-                                                </Tooltip>
+                                                <Flex align="center" gap="6px" minW={0} wrap="wrap">
+                                                  <Tooltip
+                                                    label={`Rule key: ${String(r.rule_key || '')}`}
+                                                    isDisabled={!String(r.rule_key || '').trim()}
+                                                    hasArrow
+                                                    placement="top"
+                                                  >
+                                                    <Text fontSize="sm" fontWeight="semibold" minW={0} noOfLines={1}>
+                                                      {title}
+                                                    </Text>
+                                                  </Tooltip>
+                                                  <RevisionStatusBadge
+                                                    status={revisionStatusForIssue(issue)}
+                                                    onOpen={
+                                                      issue ? () => revisionWorkspace.focusIssue(issue.id) : undefined
+                                                    }
+                                                  />
+                                                </Flex>
                                                 <RevisionAddIconButton
                                                   label={title}
-                                                  included={!!issue}
+                                                  included={false}
                                                   onAdd={
-                                                    issue
-                                                      ? () => revisionWorkspace.focusIssue(issue.id)
-                                                      : canRunWorkflowActions && canAddRevisionIssue
-                                                        ? () =>
-                                                            void addToRevision(
-                                                              'rule',
-                                                              'invoice_version_rulecheck_id',
-                                                              String(r.id),
-                                                            )
-                                                        : undefined
+                                                    !issue && canRunWorkflowActions && canAddRevisionIssue
+                                                      ? () =>
+                                                          void addToRevision(
+                                                            'rule',
+                                                            'invoice_version_rulecheck_id',
+                                                            String(r.id),
+                                                          )
+                                                      : undefined
                                                   }
                                                   disabledReason={
                                                     !issue && canRunWorkflowActions
@@ -3599,6 +3729,14 @@ export const InvoiceVersionShowScreen = () => {
                                                   </Text>
                                                 </Box>
                                               )}
+                                              <RevisionSourceActions
+                                                issue={issue}
+                                                onSelect={
+                                                  issue
+                                                    ? (mode) => revisionWorkspace.focusIssue(issue.id, mode)
+                                                    : undefined
+                                                }
+                                              />
                                               {issue ? <AdminRevisionSourceAnchor issueId={issue.id} /> : null}
                                             </Box>
                                           );

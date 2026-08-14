@@ -48,6 +48,7 @@ import {
   InvoiceUpgradeTypeTile,
 } from '../../shared/claims/invoice-upgrade-type-visual';
 import { INVOICE_STATUS_FILTER_GROUPS, invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
+import { InvoiceStatusBadge } from '../../shared/claims/invoice-status-badge';
 import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
 
 type DetectedUpgradeType = {
@@ -128,21 +129,24 @@ const invoicePresentationCopy = (row: InvoiceGridRow) => {
     return {
       label: 'Preparing AI Advice',
       hint: 'The latest invoice processing run is still active.',
+      visualStatus: 'preparing_ai_advice',
     };
   }
   if (runStatus === 'failed' && row.latest_ingest_failure_category === 'package_needs_correction') {
     return {
       label: 'Package Needs Correction',
       hint: 'The latest upload could not be processed because the package needs a correction.',
+      visualStatus: 'package_needs_correction',
     };
   }
   if (runStatus === 'failed') {
     return {
       label: 'Needs Technical Help',
       hint: 'A system or service error stopped the latest processing run.',
+      visualStatus: 'needs_technical_help',
     };
   }
-  return invoiceStatusCopy(row.invoice_status);
+  return { ...invoiceStatusCopy(row.invoice_status), visualStatus: String(row.invoice_status || '') };
 };
 
 const fmtDateTime = (s?: string | null) => {
@@ -175,6 +179,11 @@ const normalizeResult = (result: unknown): AiResult | null => {
 const claimsAiSignalPulse = keyframes`
   0%, 100% { opacity: 0.45; transform: scale(1); }
   50% { opacity: 0.18; transform: scale(1.65); }
+`;
+
+const adminUnreadPulse = keyframes`
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.5); }
+  50% { transform: scale(1.14); box-shadow: 0 0 0 7px rgba(229, 62, 62, 0); }
 `;
 
 const rowActionButtonProps = {
@@ -257,6 +266,37 @@ function UnreadMessageStatus({
       >
         {isUnread ? 'Unread' : 'Read'}
       </Badge>
+    </Tooltip>
+  );
+}
+
+function AdminUnreadIndicator({ count }: { count: unknown }) {
+  const isUnread = Math.max(0, Number(count) || 0) > 0;
+  if (!isUnread) return null;
+
+  return (
+    <Tooltip label="The contractor has sent a message that has not yet been read by an admin." hasArrow>
+      <Flex
+        as="span"
+        aria-label="Unread message for admin"
+        w="22px"
+        h="22px"
+        mx="auto"
+        align="center"
+        justify="center"
+        borderRadius="full"
+        borderWidth="2px"
+        borderColor="white"
+        bg="red.500"
+        color="white"
+        fontSize="xs"
+        fontWeight="black"
+        lineHeight="1"
+        animation={`${adminUnreadPulse} 1.6s ease-in-out infinite`}
+        sx={{ '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}
+      >
+        !
+      </Flex>
     </Tooltip>
   );
 }
@@ -351,11 +391,13 @@ const INVOICE_SORT_OPTIONS = [
 function SortableHeader({
   field,
   label,
+  ariaLabel,
   sort,
   onSort,
 }: {
   field: string;
-  label: string;
+  label: React.ReactNode;
+  ariaLabel?: string;
   sort: string;
   onSort: (field: string) => void;
 }) {
@@ -376,14 +418,15 @@ function SortableHeader({
       borderRadius="md"
       cursor="pointer"
       role="group"
+      aria-label={ariaLabel}
       transition="background-color 140ms ease, color 140ms ease"
       onClick={() => onSort(field)}
       _hover={{ bg: 'blue.50', color: 'blue.800' }}
       _focusVisible={{ boxShadow: 'outline' }}
     >
-      <Text as="span" fontSize="sm" fontWeight="semibold" textTransform="none">
+      <Box as="span" display="inline-flex" alignItems="center" fontSize="sm" fontWeight="semibold">
         {label}
-      </Text>
+      </Box>
       <Text
         as="span"
         fontSize="sm"
@@ -926,8 +969,16 @@ export function InvoicesAdminScreen() {
                 }}
               >
                 <Tr>
-                  <Th w="220px">
+                  <Th w="250px">
                     <SortableHeader field="invoice_status" label="status" sort={sort} onSort={handleHeaderSort} />
+                  </Th>
+                  <Th w="150px">
+                    <SortableHeader
+                      field="reference_number"
+                      label="Reference #"
+                      sort={sort}
+                      onSort={handleHeaderSort}
+                    />
                   </Th>
                   <Th w="190px">
                     <SortableHeader
@@ -946,31 +997,18 @@ export function InvoicesAdminScreen() {
                       onSort={handleHeaderSort}
                     />
                   </Th>
-                  <Th w="150px">
-                    <SortableHeader
-                      field="reference_number"
-                      label="Reference #"
-                      sort={sort}
-                      onSort={handleHeaderSort}
-                    />
-                  </Th>
                   <Th w="220px">Invoice #</Th>
                   <Th w="190px"></Th>
-                  <Th w="160px" textAlign="center">
-                    <SortableHeader
-                      field="unread_by_contractor_count"
-                      label="Unread by contractor"
-                      sort={sort}
-                      onSort={handleHeaderSort}
-                    />
-                  </Th>
-                  <Th w="140px" textAlign="center">
-                    <SortableHeader
-                      field="unread_by_admin_count"
-                      label="Unread by admin"
-                      sort={sort}
-                      onSort={handleHeaderSort}
-                    />
+                  <Th w="86px" textAlign="center">
+                    <Tooltip label="Unread messages for admin" hasArrow shouldWrapChildren>
+                      <SortableHeader
+                        field="unread_by_admin_count"
+                        label={<ChatDots size={20} weight="regular" aria-hidden="true" />}
+                        ariaLabel="Sort by unread messages for admin"
+                        sort={sort}
+                        onSort={handleHeaderSort}
+                      />
+                    </Tooltip>
                   </Th>
                   <Th w="225px" textAlign="right"></Th>
                 </Tr>
@@ -991,11 +1029,18 @@ export function InvoicesAdminScreen() {
                       }}
                     >
                       <Td>
-                        <Tooltip label={`${statusCopy.hint} Technical status: ${technicalStatus}.`}>
-                          <Text fontSize="sm" noOfLines={1}>
-                            {statusCopy.label}
-                          </Text>
-                        </Tooltip>
+                        <InvoiceStatusBadge
+                          label={statusCopy.label}
+                          status={statusCopy.visualStatus}
+                          tooltip={`${statusCopy.hint} Technical status: ${technicalStatus}.`}
+                          fontSize="xs"
+                        />
+                      </Td>
+
+                      <Td fontSize="sm" whiteSpace="nowrap">
+                        {r.reference_number !== null && r.reference_number !== undefined
+                          ? formatClaimsReferenceNumber(r.reference_number)
+                          : '—'}
                       </Td>
 
                       <Td fontSize="sm" whiteSpace="nowrap">
@@ -1041,12 +1086,6 @@ export function InvoicesAdminScreen() {
                         ) : (
                           <Text noOfLines={1}>{r.contractor_business_name ?? '—'}</Text>
                         )}
-                      </Td>
-
-                      <Td fontSize="sm" whiteSpace="nowrap">
-                        {r.reference_number !== null && r.reference_number !== undefined
-                          ? formatClaimsReferenceNumber(r.reference_number)
-                          : '—'}
                       </Td>
 
                       <Td fontSize="sm" minW={0}>
@@ -1095,15 +1134,7 @@ export function InvoicesAdminScreen() {
                       </Td>
 
                       <Td textAlign="center">
-                        <UnreadMessageStatus
-                          count={r.unread_by_contractor_count}
-                          audience="contractor"
-                          colorScheme="blue"
-                        />
-                      </Td>
-
-                      <Td textAlign="center">
-                        <UnreadMessageStatus count={r.unread_by_admin_count} audience="admin" colorScheme="purple" />
+                        <AdminUnreadIndicator count={r.unread_by_admin_count} />
                       </Td>
 
                       <Td whiteSpace="nowrap">
@@ -1268,6 +1299,23 @@ export function InvoicesAdminScreen() {
                   <Text fontSize="sm">
                     <b>Email:</b> {selected.submitter_email ?? '—'}
                   </Text>
+                </Box>
+
+                <Divider my={4} />
+
+                <Box>
+                  <Flex align="center" gap={2} mb={2}>
+                    <ChatDots size={19} aria-hidden="true" />
+                    <Text fontWeight="bold">Messages</Text>
+                  </Flex>
+                  <Flex align="center" justify="space-between" gap={3}>
+                    <Text fontSize="sm">Unread by contractor</Text>
+                    <UnreadMessageStatus
+                      count={selected.unread_by_contractor_count}
+                      audience="contractor"
+                      colorScheme="blue"
+                    />
+                  </Flex>
                 </Box>
 
                 <Divider my={4} />

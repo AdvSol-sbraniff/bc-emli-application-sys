@@ -30,6 +30,7 @@ import { PerPageSelect } from '../../shared/base/inputs/per-page-select';
 import { Paginator } from '../../shared/base/inputs/paginator';
 import { BlueTitleBar } from '../../shared/base/blue-title-bar';
 import { INVOICE_STATUS_FILTER_GROUPS, invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
+import { InvoiceStatusBadge } from '../../shared/claims/invoice-status-badge';
 import { GreenLineSmall } from '../../shared/base/decorative/green-line-small';
 import { SharedSpinner } from '../../shared/base/shared-spinner';
 import { RouterLinkButton } from '../../shared/navigation/router-link-button';
@@ -104,15 +105,27 @@ function contractorStatusLabel(status?: string | null) {
 function contractorInvoicePresentation(row: ContractorPortalRow) {
   const runStatus = String(row.latestIngestRunStatus || '').trim();
   if (runStatus === 'queued' || runStatus === 'running') {
-    return { label: 'Preparing AI Advice', hint: 'Your uploaded package is still being processed.' };
+    return {
+      label: 'Preparing AI Advice',
+      hint: 'Your uploaded package is still being processed.',
+      visualStatus: 'preparing_ai_advice',
+    };
   }
   if (runStatus === 'failed' && row.latestIngestFailureCategory === 'package_needs_correction') {
-    return { label: 'Package Needs Correction', hint: 'The latest upload needs a package correction.' };
+    return {
+      label: 'Package Needs Correction',
+      hint: 'The latest upload needs a package correction.',
+      visualStatus: 'package_needs_correction',
+    };
   }
   if (runStatus === 'failed') {
-    return { label: 'Needs Technical Help', hint: 'A service error stopped the latest processing run.' };
+    return {
+      label: 'Needs Technical Help',
+      hint: 'A service error stopped the latest processing run.',
+      visualStatus: 'needs_technical_help',
+    };
   }
-  return invoiceStatusCopy(row.status);
+  return { ...invoiceStatusCopy(row.status), visualStatus: row.status };
 }
 
 function lastUpdatedAt(row: ContractorPortalRow) {
@@ -348,23 +361,12 @@ function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
               </Badge>
             </Tooltip>
           ) : null}
-          <Tooltip label={statusHint} hasArrow>
-            <Badge
-              p={1}
-              fontSize="md"
-              color="greys.anotherGrey"
-              bg="theme.orangeLight02"
-              borderWidth="1px"
-              borderColor="theme.orange"
-              borderRadius="md"
-              fontWeight="bold"
-              textTransform="uppercase"
-              whiteSpace="nowrap"
-              aria-label={`Invoice status: ${statusCopy.label}`}
-            >
-              {statusCopy.label}
-            </Badge>
-          </Tooltip>
+          <InvoiceStatusBadge
+            label={statusCopy.label}
+            status={statusCopy.visualStatus}
+            tooltip={statusHint}
+            fontSize="md"
+          />
 
           <Box>
             <Text align={{ base: 'left', md: 'right' }} fontSize="md" color="#2D2D2D">

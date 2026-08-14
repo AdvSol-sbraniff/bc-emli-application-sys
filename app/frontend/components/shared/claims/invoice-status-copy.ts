@@ -3,6 +3,76 @@ export type InvoiceStatusCopy = {
   hint: string;
 };
 
+export type InvoiceStatusVisual = {
+  background: string;
+  border: string;
+  color: string;
+};
+
+const DEFAULT_STATUS_VISUAL: InvoiceStatusVisual = {
+  background: 'greys.grey50',
+  border: 'border.randomBorderColorforthePublishModal',
+  color: 'greys.anotherGrey',
+};
+
+const INVOICE_STATUS_VISUALS: Record<string, InvoiceStatusVisual> = {
+  contractor_precheck: {
+    background: 'theme.blueLight',
+    border: 'greys.lightGrey',
+    color: 'greys.anotherGrey',
+  },
+  admin_review_inbox: {
+    background: 'theme.orangeLight02',
+    border: 'theme.orange',
+    color: 'greys.anotherGrey',
+  },
+  contractor_revision_inbox: {
+    background: 'theme.softRose',
+    border: 'semantic.errorDark',
+    color: 'greys.anotherGrey',
+  },
+  in_review: {
+    background: 'theme.lightGreen',
+    border: 'theme.darkGreen',
+    color: 'greys.anotherGrey',
+  },
+  approved: {
+    background: 'theme.lightGreen',
+    border: 'theme.darkGreen',
+    color: 'greys.anotherGrey',
+  },
+  approved_pending: {
+    background: 'theme.lightGreen',
+    border: 'theme.darkGreen',
+    color: 'greys.anotherGrey',
+  },
+  approved_paid: {
+    background: 'theme.lightGreen',
+    border: 'theme.darkGreen',
+    color: 'greys.anotherGrey',
+  },
+  ineligible: DEFAULT_STATUS_VISUAL,
+  contractor_withdrawn: DEFAULT_STATUS_VISUAL,
+  preparing_ai_advice: {
+    background: 'theme.blueLight',
+    border: 'greys.lightGrey',
+    color: 'greys.anotherGrey',
+  },
+  package_needs_correction: {
+    background: 'theme.softRose',
+    border: 'semantic.errorDark',
+    color: 'greys.anotherGrey',
+  },
+  needs_technical_help: {
+    background: 'theme.softRose',
+    border: 'semantic.errorDark',
+    color: 'greys.anotherGrey',
+  },
+};
+
+export const invoiceStatusVisual = (status?: string | null): InvoiceStatusVisual =>
+  INVOICE_STATUS_VISUALS[String(status || '').trim()] || DEFAULT_STATUS_VISUAL;
+
 export const INVOICE_STATUS_COPY: Record<string, InvoiceStatusCopy> = {
   contractor_precheck: {
     label: 'With Contractor for Pre-check',
