@@ -305,7 +305,7 @@ Use these named fields and facts as the main evidence for this rule. When other 
 - hs_remediation_scope: description of the remediation work completed.
 - hs_issue_type: health/safety issue type being remediated.
 - hs_line_amount and upgrade_specific_rebate_line_amount: visible health and safety remediation cost/rebate context, only as supporting invoice-scope evidence.
-- invoice_upgrade_type_evidence and the classified invoice upgrade type context when supplied.
+- The classified invoice upgrade type context when supplied.
 
 Set rule_result="pass" when the named evidence clearly connects the remediation to an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade and does not show the remediation being claimed as a standalone upgrade.
 Set rule_result="warn" when the remediation appears plausibly associated with an eligible upgrade but the connection likely requires application/DB context, associated-invoice context, or admin confirmation; or when the invoice does not contradict association but the association is incomplete or ambiguous.
@@ -435,14 +435,14 @@ In calculation, show one reasonable reconstruction of the visible arithmetic and
 
 Use these named fields and facts as the main evidence for this rule. When other supplied context is helpful, include the exact field or document name in calculation and evidence_text:
 - vent_associated_upgrade_evidence: evidence that ventilation is installed with heat pump, heat pump water heater, insulation, or windows/doors work.
-- invoice_upgrade_type_evidence: broad invoice upgrade-type evidence, especially when it shows both ventilation and an eligible associated upgrade on the same invoice.
+- The classified invoice upgrade type context, especially when it shows both ventilation and an eligible associated upgrade on the same invoice.
 - vent_system_type: ventilation system type, only as supporting context that the ventilation portion is identifiable.
 - vent_line_amount and upgrade_specific_rebate_line_amount: visible ventilation cost/rebate context, only as supporting invoice-scope evidence.
 
 Set rule_result="pass" when the named evidence clearly connects the ventilation work to an eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade.
 Set rule_result="warn" when ventilation work is visible and the association with an eligible upgrade is missing, incomplete, or likely requires application/DB context, but the named evidence does not clearly show ventilation being claimed on its own.
 Set rule_result="fail" when the named evidence clearly shows the ventilation upgrade is being claimed on its own without an associated eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade, or clearly connects the ventilation work only to an ineligible/unrelated project.
-In calculation, state vent_associated_upgrade_evidence, invoice_upgrade_type_evidence, vent_system_type, any visible ventilation rebate/cost context, and classify the association as associated_eligible_upgrade, standalone_ventilation, unrelated_ineligible_project, or unclear.
+In calculation, state vent_associated_upgrade_evidence, the classified upgrade types, vent_system_type, any visible ventilation rebate/cost context, and classify the association as associated_eligible_upgrade, standalone_ventilation, unrelated_ineligible_project, or unclear.
 In evidence_text, cite the exact named-field wording that supports the decision.', true, 'be installed in association with a CleanBC Energy Savings Program rebate-eligible heat pump, heat pump water heater, insulation, or windows/doors upgrade. Rebates will not be paid for ventilation upgrades on their own.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('vent_multiple_ventilation_rebate_or_fan_count_review', 'Check whether the visible invoice evidence suggests more than one ventilation rebate, more than one eligible ventilation system, or multiple bathroom fans/HRV/ERV units that admin should review against the one-ventilation-rebate-per-home limit.
 
@@ -450,7 +450,7 @@ Use named fields and visible invoice context as the main evidence:
 - vent_system_type: HRV, ERV, bathroom fan, exhaust fan, or similar ventilation subtype wording.
 - vent_make_model, vent_manufacturer, vent_model_number, vent_energy_star_reference, and vent_nrcan_or_product_list_reference: product identity evidence that may show one or multiple ventilation products.
 - vent_line_amount and upgrade_specific_rebate_line_amount: visible ventilation cost/rebate context.
-- invoice_upgrade_type_evidence and vent_associated_upgrade_evidence: surrounding invoice wording that may show a ventilation scope bundled with another eligible upgrade.
+- vent_associated_upgrade_evidence and the classified invoice upgrade type context may show ventilation bundled with another eligible upgrade.
 - DI line items, quantities, descriptions, and totals when available in the context window.
 
 Set rule_result="pass" when the invoice clearly shows a single ventilation rebate and a single eligible ventilation system/product, or when no visible quantity/model/rebate wording suggests multiple ventilation rebates or multiple eligible ventilation systems.
@@ -798,7 +798,6 @@ Health and safety', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_contractor_address', 'Locate the contractor/vendor business address visibly shown on the invoice if present.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_contractor_name', 'Locate the contractor, vendor, supplier, or business name visibly shown on the invoice. Prefer the invoice header/vendor name over generic text in descriptions.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('invoice_homeowner_name', 'Locate the homeowner, customer, bill-to, ship-to, or participant name visibly shown on the invoice. Prefer explicit customer/bill-to/homeowner fields over payment-history names or generic references.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('invoice_upgrade_type_evidence', 'Locate text that indicates the broad upgrade type, such as windows, doors, heat pump, insulation, ventilation, electrical service, health/safety, or water heater.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('labour_cost_invoice_total', 'Locate total invoice labour cost if shown separately.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
   ('overall_rebate_line_amount', 'Locate the visible overall CleanBC / Better Homes / Energy Savings Program rebate amount for the whole invoice.
 
@@ -983,15 +982,14 @@ WITH genai_located_field_upgrade_types_seed (
   ('common', 'contractor_gst_number', 1),
   ('common', 'customer_payment_or_deposit', 4),
   ('common', 'eligibility_code', 2),
-  ('common', 'invoice_contractor_address', 10),
-  ('common', 'invoice_contractor_name', 9),
-  ('common', 'invoice_homeowner_name', 11),
-  ('common', 'invoice_upgrade_type_evidence', 8),
+  ('common', 'invoice_contractor_address', 9),
+  ('common', 'invoice_contractor_name', 8),
+  ('common', 'invoice_homeowner_name', 10),
   ('common', 'labour_cost_invoice_total', 3),
   ('common', 'overall_rebate_line_amount', 5),
   ('common', 'overall_rebate_line_description', 6),
   ('common', 'paid_cost_of_upgrade_amount', 7),
-  ('common', 'warranty_or_home_insurance_cost_evidence', 12),
+  ('common', 'warranty_or_home_insurance_cost_evidence', 11),
   ('dual_fuel_ducted_heat_pump', 'dfhp_equipment_type', 1),
   ('dual_fuel_ducted_heat_pump', 'dfhp_existing_heat_evidence', 2),
   ('dual_fuel_ducted_heat_pump', 'dfhp_fossil_modification_evidence', 7),

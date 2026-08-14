@@ -22,6 +22,7 @@ RSpec.describe "Claims validation GenAI config", type: :request do
           created_at: Time.current,
           updated_at: Time.current
         )
+    config.update!(show_admin_field_revision_plus: true)
 
     get "/api/claims/admin/validationgenai_config"
 

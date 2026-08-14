@@ -4,6 +4,7 @@ module Api
   module Claims
     class UsersAdminController < ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.test_tools"
 
       skip_before_action :authenticate_user!,
                          only: %i[index show create update destroy]

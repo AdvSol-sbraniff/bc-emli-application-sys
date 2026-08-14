@@ -2,6 +2,9 @@ require "rails_helper"
 
 RSpec.describe "Claims contractor ingest run status", type: :request do
   before do
+    allow_any_instance_of(Api::Claims::ContractorPortalController).to receive(
+      :require_claims_function!
+    )
     host! "localhost"
     allow_any_instance_of(Api::ApplicationController).to receive(
       :authenticate_user!

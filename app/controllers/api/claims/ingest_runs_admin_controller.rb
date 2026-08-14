@@ -4,6 +4,7 @@ module Api
   module Claims
     class IngestRunsAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       skip_after_action :verify_authorized, only: %i[index show steps show_step]
       skip_after_action :verify_policy_scoped, only: %i[index]

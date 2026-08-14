@@ -110,6 +110,10 @@ Rails.application.routes.draw do
 
       get "admin/invoices", to: "invoice_grid#index"
 
+      get "access", to: "rbac#access"
+      get "admin/rbac", to: "rbac#show"
+      put "admin/rbac", to: "rbac#update"
+
       delete "admin/invoices/:id", to: "invoice_grid#destroy"
       post "admin/invoices/:id/status_transition",
            to: "invoice_grid#status_transition"

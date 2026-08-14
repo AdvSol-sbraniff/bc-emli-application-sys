@@ -4,6 +4,7 @@ module Api
   module Claims
     class ValidationRulesAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       RECORD_TYPES = %w[
         code_rule

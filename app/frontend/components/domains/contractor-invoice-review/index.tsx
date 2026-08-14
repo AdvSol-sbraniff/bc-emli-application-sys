@@ -163,23 +163,68 @@ const ValueGrid = ({ rows }: { rows: Array<[string, unknown]> }) => (
   </Box>
 );
 
-const ProductMatchAccordion = ({ title, rows }: { title: string; rows: Array<[string, unknown]> }) => (
-  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-    <h2>
-      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-        <Box flex="1" textAlign="left">
-          <Text fontSize="lg" fontWeight="bold">
-            {title}
-          </Text>
-        </Box>
-        <AccordionIcon />
-      </AccordionButton>
-    </h2>
-    <AccordionPanel px="0" pt="8px">
-      <ValueGrid rows={rows} />
-    </AccordionPanel>
-  </AccordionItem>
-);
+type ProductMatchDetail = {
+  key: string;
+  title: string;
+  appliesTo: (upgradeTypeKey: string) => boolean;
+  rows: Array<[string, unknown]>;
+};
+
+const PossibleSupportingDocumentsContent = ({ groups }: { groups: any[] }) => {
+  if (groups.length === 0) {
+    return (
+      <Text fontSize="md" opacity={0.7}>
+        No supporting-document type mappings are configured for the detected upgrade types.
+      </Text>
+    );
+  }
+
+  return (
+    <Box display="flex" flexDirection="column" gap="6px">
+      {groups.map((group: any) => {
+        const types = Array.isArray(group?.supporting_document_types) ? group.supporting_document_types : [];
+        const title = String(
+          group?.upgrade_type_description ||
+            getInvoiceUpgradeTypeMeta(String(group?.upgrade_type_key || 'common')).label,
+        );
+
+        return (
+          <Box
+            key={String(group?.invoice_upgrade_type_id || group?.upgrade_type_key || 'group')}
+            borderRadius="md"
+            px="10px"
+            py="2px"
+          >
+            <Flex align="center" gap="8px" mb="2px" wrap="wrap">
+              <Text fontSize="md" fontWeight="bold" noOfLines={1}>
+                {title}
+              </Text>
+              <InvoiceUpgradeTypeTile
+                upgradeTypeKey={String(group?.upgrade_type_key || 'common')}
+                description={group?.upgrade_type_description}
+                size={24}
+              />
+            </Flex>
+
+            {types.length === 0 ? (
+              <Text fontSize="md" opacity={0.7}>
+                No supporting document types mapped to this upgrade type.
+              </Text>
+            ) : (
+              <Box pl="12px">
+                {types.map((typeRow: any) => (
+                  <Text key={String(typeRow?.supporting_document_type_id || typeRow?.type_key || 'type')} fontSize="md">
+                    {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
+                  </Text>
+                ))}
+              </Box>
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
 
 const fmtBytes = (n?: number | null) => {
   if (n === null || n === undefined) return '-';
@@ -380,6 +425,11 @@ export default function ContractorInvoiceReviewScreen() {
     onOpen: onFixUploadWarningOpen,
     onClose: onFixUploadWarningClose,
   } = useDisclosure();
+  const {
+    isOpen: isPossibleSupportingDocumentsOpen,
+    onOpen: onPossibleSupportingDocumentsOpen,
+    onClose: onPossibleSupportingDocumentsClose,
+  } = useDisclosure();
 
   const [rightPanelMode, setRightPanelMode] = useState<ViewerPanelMode>('document');
   const [readData, setReadData] = useState<any>(null);
@@ -387,7 +437,6 @@ export default function ContractorInvoiceReviewScreen() {
   const [classifierFields, setClassifierFields] = useState<any[]>([]);
   const [genAiRulechecks, setGenAiRulechecks] = useState<any[]>([]);
   const [genAiError, setGenAiError] = useState<string | null>(null);
-  const [upgradeTypeResults, setUpgradeTypeResults] = useState<any[]>([]);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfUrlError, setPdfUrlError] = useState<string | null>(null);
   const [viewerFile, setViewerFile] = useState<{
@@ -431,6 +480,7 @@ export default function ContractorInvoiceReviewScreen() {
     title: string;
     sourceQuote: unknown;
   } | null>(null);
+  const [productMatchModal, setProductMatchModal] = useState<ProductMatchDetail | null>(null);
 
   useEffect(() => {
     if (!chatPanelOpen) return;
@@ -548,7 +598,6 @@ export default function ContractorInvoiceReviewScreen() {
       const txt = await genaiResp.text();
       setGenAiFields([]);
       setClassifierFields([]);
-      setUpgradeTypeResults([]);
       setGenAiRulechecks([]);
       setGenAiError(`read_genai failed (${genaiResp.status}): ${txt}`);
       return;
@@ -557,7 +606,6 @@ export default function ContractorInvoiceReviewScreen() {
     const genaiJson = await genaiResp.json().catch(() => ({}));
     setGenAiFields(Array.isArray(genaiJson?.located_fields) ? genaiJson.located_fields : []);
     setClassifierFields(Array.isArray(genaiJson?.classifier_located_fields) ? genaiJson.classifier_located_fields : []);
-    setUpgradeTypeResults(Array.isArray(genaiJson?.detected_upgrade_types) ? genaiJson.detected_upgrade_types : []);
     setGenAiRulechecks([
       ...(Array.isArray(genaiJson?.code_rulechecks) ? genaiJson.code_rulechecks : []),
       ...(Array.isArray(genaiJson?.rulechecks) ? genaiJson.rulechecks : []),
@@ -766,6 +814,157 @@ export default function ContractorInvoiceReviewScreen() {
   const ohpaProduct = readData?.ohpa_product_match?.product;
   const hervProduct = readData?.herv_product_match?.product;
   const ventFanProduct = readData?.vent_fan_product_match?.product;
+  const productMatchDetails = useMemo(() => {
+    const matches: ProductMatchDetail[] = [];
+    const appliesToAirSourceHeatPump = (upgradeTypeKey: string) =>
+      upgradeTypeKey.startsWith('air_source_heat_pump_') || upgradeTypeKey === 'dual_fuel_ducted_heat_pump';
+
+    if (ahriProduct) {
+      matches.push({
+        key: 'ahri',
+        title: 'AHRI product registry match',
+        appliesTo: appliesToAirSourceHeatPump,
+        rows: [
+          ['Product reference', `AHRI ${fmtText(ahriProduct.ahri_reference_number)}`],
+          ['Make', ahriProduct.make],
+          ['Outdoor model', ahriProduct.outdoor_model],
+          ['Indoor / air handler', ahriProduct.indoor_model_or_air_handler],
+          ['Furnace model', ahriProduct.furnace_model],
+          ['Heat pump type', ahriProduct.heat_pump_type],
+          ['Rated capacity at -5 C', ahriProduct.rated_capacity_btu_at_minus_5c],
+          ['SEER2', ahriProduct.seer2],
+          ['HSPF2', ahriProduct.hspf2],
+          ['COP', ahriProduct.cop],
+          ['Capacity maintenance %', ahriProduct.capacity_maintenance_percent],
+          [
+            'Cold climate rated',
+            ahriProduct.cold_climate_rated == null ? null : ahriProduct.cold_climate_rated ? 'Yes' : 'No',
+          ],
+          ['Eligibility notes', ahriProduct.eligibility_notes],
+        ],
+      });
+    }
+
+    if (neeaProduct) {
+      matches.push({
+        key: 'neea',
+        title: 'NEEA product registry match',
+        appliesTo: (upgradeTypeKey) => upgradeTypeKey === 'heat_pump_water_heater',
+        rows: [
+          ['Brand', neeaProduct.brand],
+          ['Model number', neeaProduct.model_number],
+          ['Storage volume gallons', neeaProduct.storage_volume_gallons],
+          ['Configuration', neeaProduct.configuration],
+          ['Indoor tier', neeaProduct.indoor_tier],
+          ['Indoor CCE', neeaProduct.indoor_cce],
+          ['Outdoor tier', neeaProduct.outdoor_tier],
+          ['Outdoor SCOP', neeaProduct.outdoor_scop],
+          ['Flex-load connectivity', neeaProduct.flex_load_connectivity],
+          [
+            'Plug-in endorsement',
+            neeaProduct.plug_in_endorsement == null ? null : neeaProduct.plug_in_endorsement ? 'Yes' : 'No',
+          ],
+          ['Qualified date', neeaProduct.qualified_date ? fmtDate(neeaProduct.qualified_date) : null],
+          ['Specification version', neeaProduct.specification_version],
+          ['Eligibility notes', neeaProduct.eligibility_notes],
+        ],
+      });
+    }
+
+    if (awhpProduct) {
+      matches.push({
+        key: 'awhp',
+        title: 'Air-to-water product registry match',
+        appliesTo: (upgradeTypeKey) =>
+          upgradeTypeKey === 'air_to_water_heat_pump' || upgradeTypeKey === 'combined_space_water_heat_pump',
+        rows: [
+          ['Brand', awhpProduct.brand],
+          ['Model number', awhpProduct.model_number],
+          [
+            'Model components',
+            Array.isArray(awhpProduct.model_components)
+              ? awhpProduct.model_components.join(' / ')
+              : awhpProduct.model_components,
+          ],
+          ['System type', awhpProduct.system_type],
+          ['Eligibility notes', awhpProduct.eligibility_notes],
+        ],
+      });
+    }
+
+    if (ohpaProduct) {
+      matches.push({
+        key: 'ohpa',
+        title: 'OHPA BC product registry match',
+        appliesTo: appliesToAirSourceHeatPump,
+        rows: [
+          ['AHRI reference', ohpaProduct.ahri_reference_number],
+          ['Brand', ohpaProduct.brand],
+          ['Outdoor model', ohpaProduct.model_number],
+          ['Indoor model(s)', ohpaProduct.indoor_model_numbers],
+          ['Furnace model', ohpaProduct.furnace_model_number],
+          ['Product group', ohpaProduct.product_group],
+          ['AHRI type', ohpaProduct.ahri_type],
+          ['Ducting / configuration', ohpaProduct.ducting_configuration],
+          ['Model status', ohpaProduct.model_status],
+          ['Series name', ohpaProduct.series_name],
+          ['Rated capacity 47 F', ohpaProduct.rated_capacity_47f],
+          ['Rated capacity 95 F', ohpaProduct.rated_capacity_95f],
+          ['Capacity maintenance %', ohpaProduct.capacity_maintenance_percent],
+          ['COP 5 F', ohpaProduct.cop_5f],
+          ['HSPF2 Region IV', ohpaProduct.hspf2_region_iv],
+          ['HSPF2 Region V', ohpaProduct.hspf2_region_v],
+          ['SEER2', ohpaProduct.seer2],
+        ],
+      });
+    }
+
+    if (hervProduct) {
+      matches.push({
+        key: 'herv',
+        title: 'ENERGY STAR H/ERV registry match',
+        appliesTo: (upgradeTypeKey) => upgradeTypeKey === 'ventilation',
+        rows: [
+          ['Brand', hervProduct.brand],
+          ['Model number', hervProduct.model_number],
+          ['Model type', hervProduct.model_type],
+          ['SRE at 0 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_0c],
+          ['SRE at -25 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_minus_25c],
+          ['Associated net supply airflow at 0 C CFM', hervProduct.associated_net_supply_airflow_at_0c_cfm],
+          ['Associated net supply airflow at -25 C CFM', hervProduct.associated_net_supply_airflow_at_minus_25c_cfm],
+          ['Associated power consumption at 0 C W', hervProduct.associated_power_consumption_at_0c_w],
+          ['Associated power consumption at -25 C W', hervProduct.associated_power_consumption_at_minus_25c_w],
+          ['Max rated airflow at 0 C CFM', hervProduct.max_rated_airflow_at_0c_cfm],
+          ['Power consumption at 0 C W', hervProduct.power_consumption_at_0c_w],
+          ['Eligibility notes', hervProduct.eligibility_notes],
+        ],
+      });
+    }
+
+    if (ventFanProduct) {
+      matches.push({
+        key: 'vent-fan',
+        title: 'ENERGY STAR fan registry match',
+        appliesTo: (upgradeTypeKey) => upgradeTypeKey === 'ventilation',
+        rows: [
+          ['Brand', ventFanProduct.brand],
+          ['Model number', ventFanProduct.model_number],
+          ['Product model name', ventFanProduct.product_model_name],
+          ['Fan type', ventFanProduct.fan_type],
+          ['Airflow 1 CFM', ventFanProduct.airflow_1_cfm],
+          ['Efficacy 1 CFM/Watt', ventFanProduct.efficacy_1_cfm_watt],
+          ['Sound level sones', ventFanProduct.sound_level_sones],
+          ['Bathroom/utility airflow at 0.25 in. w.g.', ventFanProduct.bathroom_utility_airflow_at_0_25_in_wg],
+          ['Markets', ventFanProduct.markets],
+          ['ENERGY STAR Unique ID', ventFanProduct.energy_star_unique_id],
+          ['CB model identifier', ventFanProduct.cb_model_identifier],
+          ['Most Efficient criteria', ventFanProduct.meets_most_efficient_criteria],
+        ],
+      });
+    }
+
+    return matches;
+  }, [ahriProduct, awhpProduct, hervProduct, neeaProduct, ohpaProduct, ventFanProduct]);
   const supportingDocumentTypeGroups = useMemo(
     () =>
       Array.isArray(readData?.supporting_document_types_by_upgrade_type)
@@ -1749,18 +1948,6 @@ export default function ContractorInvoiceReviewScreen() {
                         );
                       })}
                     </Box>
-                    {commonInvoiceFields.length > 0 && (
-                      <Box mt="10px" pt="10px" borderTopWidth="1px" borderColor="gray.200">
-                        <Text fontSize="md" fontWeight="bold" textTransform="uppercase" mb="4px">
-                          Additional details found
-                        </Text>
-                        <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
-                          {commonInvoiceFields.map((row: any) =>
-                            renderLocatedFieldRow(row, `common-${row.id ?? row.field_key}`),
-                          )}
-                        </Box>
-                      </Box>
-                    )}
                   </AccordionPanel>
                 </AccordionItem>
 
@@ -1769,7 +1956,7 @@ export default function ContractorInvoiceReviewScreen() {
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text fontSize="lg" fontWeight="bold">
-                          Details We Found
+                          Upgrade details
                         </Text>
                       </Box>
                       <AccordionIcon />
@@ -1781,18 +1968,33 @@ export default function ContractorInvoiceReviewScreen() {
                         {genAiError}
                       </Text>
                     )}
-                    {!genAiError && detailsGroups.length === 0 ? (
+                    {!genAiError && commonInvoiceFields.length === 0 && detailsGroups.length === 0 ? (
                       <Text fontSize="md" opacity={0.7}>
-                        No upgrade-specific details found.
+                        No upgrade details found.
                       </Text>
                     ) : (
                       <Box display="flex" flexDirection="column" gap="14px">
+                        {commonInvoiceFields.length > 0 && (
+                          <Box>
+                            <Text fontSize="md" fontWeight="bold" mb="6px">
+                              General details
+                            </Text>
+                            <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
+                              {commonInvoiceFields.map((row: any) =>
+                                renderLocatedFieldRow(row, `common-${row.id ?? row.field_key}`),
+                              )}
+                            </Box>
+                          </Box>
+                        )}
                         {detailsGroups.map((group) => {
                           const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
+                          const registryMatches = productMatchDetails.filter((match) =>
+                            match.appliesTo(group.upgradeTypeKey),
+                          );
 
                           return (
                             <Box key={group.upgradeTypeKey}>
-                              <Flex align="center" gap="8px" mb="6px">
+                              <Flex align="center" gap="8px" mb="6px" wrap="wrap">
                                 <Text fontSize="md" fontWeight="bold">
                                   {meta.label}
                                 </Text>
@@ -1801,6 +2003,17 @@ export default function ContractorInvoiceReviewScreen() {
                                   description={group.description}
                                   size={24}
                                 />
+                                {registryMatches.map((match) => (
+                                  <Button
+                                    key={match.key}
+                                    size="xs"
+                                    variant="outline"
+                                    colorScheme="blue"
+                                    onClick={() => setProductMatchModal(match)}
+                                  >
+                                    {match.title}
+                                  </Button>
+                                ))}
                               </Flex>
                               <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                                 {group.fields.map((row: any) =>
@@ -1828,9 +2041,20 @@ export default function ContractorInvoiceReviewScreen() {
                       </AccordionButton>
                     </h2>
                     <AccordionPanel px="0" pt="8px">
-                      <Text fontSize="md" opacity={0.7}>
-                        No supporting-document evidence stored for this invoice.
-                      </Text>
+                      <Flex align="center" justify="space-between" gap="12px" wrap="wrap">
+                        <Text fontSize="md" opacity={0.7}>
+                          No supporting-document evidence stored for this invoice.
+                        </Text>
+                        <Button
+                          size="lg"
+                          variant="outline"
+                          colorScheme="purple"
+                          fontSize="sm"
+                          onClick={onPossibleSupportingDocumentsOpen}
+                        >
+                          Possible Supporting Documents
+                        </Button>
+                      </Flex>
                     </AccordionPanel>
                   </AccordionItem>
                 ) : (
@@ -1860,6 +2084,15 @@ export default function ContractorInvoiceReviewScreen() {
                           <AccordionPanel px="0" pt="8px">
                             <Box px="10px" py="3px">
                               <Flex justify="flex-end" gap="8px" mb="6px">
+                                <Button
+                                  size="lg"
+                                  variant="outline"
+                                  colorScheme="purple"
+                                  fontSize="sm"
+                                  onClick={onPossibleSupportingDocumentsOpen}
+                                >
+                                  Possible Supporting Documents
+                                </Button>
                                 <Tooltip label={`Show ${filename} in application`}>
                                   <IconButton
                                     aria-label={`Show ${filename} in application`}
@@ -2038,76 +2271,6 @@ export default function ContractorInvoiceReviewScreen() {
                   )
                 )}
 
-                <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                  <h2>
-                    <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                      <Box flex="1" textAlign="left">
-                        <Text fontSize="lg" fontWeight="bold">
-                          Possible Supporting Documents
-                        </Text>
-                      </Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel px="0" pt="3px">
-                    {supportingDocumentTypeGroups.length === 0 ? (
-                      <Text fontSize="md" opacity={0.7}>
-                        No supporting-document type mappings are configured for the detected upgrade types.
-                      </Text>
-                    ) : (
-                      <Box display="flex" flexDirection="column" gap="6px">
-                        {supportingDocumentTypeGroups.map((group: any) => {
-                          const types = Array.isArray(group?.supporting_document_types)
-                            ? group.supporting_document_types
-                            : [];
-                          const title = String(
-                            group?.upgrade_type_description ||
-                              getInvoiceUpgradeTypeMeta(String(group?.upgrade_type_key || 'common')).label,
-                          );
-
-                          return (
-                            <Box
-                              key={String(group?.invoice_upgrade_type_id || group?.upgrade_type_key || 'group')}
-                              borderRadius="md"
-                              px="10px"
-                              py="2px"
-                            >
-                              <Flex align="center" gap="8px" mb="2px" wrap="wrap">
-                                <Text fontSize="md" fontWeight="bold" noOfLines={1}>
-                                  {title}
-                                </Text>
-                                <InvoiceUpgradeTypeTile
-                                  upgradeTypeKey={String(group?.upgrade_type_key || 'common')}
-                                  description={group?.upgrade_type_description}
-                                  size={24}
-                                />
-                              </Flex>
-
-                              {types.length === 0 ? (
-                                <Text fontSize="md" opacity={0.7}>
-                                  No supporting document types mapped to this upgrade type.
-                                </Text>
-                              ) : (
-                                <Box pl="12px">
-                                  {types.map((typeRow: any) => (
-                                    <Text
-                                      key={String(typeRow?.supporting_document_type_id || typeRow?.type_key || 'type')}
-                                      fontSize="md"
-                                      noOfLines={1}
-                                    >
-                                      {String(typeRow?.description || typeRow?.type_key || 'Unknown type')}
-                                    </Text>
-                                  ))}
-                                </Box>
-                              )}
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    )}
-                  </AccordionPanel>
-                </AccordionItem>
-
                 {classifierDisplayFields.length > 0 && (
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                     <h2>
@@ -2158,181 +2321,6 @@ export default function ContractorInvoiceReviewScreen() {
                           );
                         })}
                       </Box>
-                    </AccordionPanel>
-                  </AccordionItem>
-                )}
-
-                {ahriProduct && (
-                  <ProductMatchAccordion
-                    title="AHRI product-list match"
-                    rows={[
-                      ['Product reference', `AHRI ${fmtText(ahriProduct.ahri_reference_number)}`],
-                      ['Make', ahriProduct.make],
-                      ['Outdoor model', ahriProduct.outdoor_model],
-                      ['Indoor / air handler', ahriProduct.indoor_model_or_air_handler],
-                      ['Furnace model', ahriProduct.furnace_model],
-                      ['Heat pump type', ahriProduct.heat_pump_type],
-                      ['Rated capacity at -5 C', ahriProduct.rated_capacity_btu_at_minus_5c],
-                      ['SEER2', ahriProduct.seer2],
-                      ['HSPF2', ahriProduct.hspf2],
-                      ['COP', ahriProduct.cop],
-                      ['Capacity maintenance %', ahriProduct.capacity_maintenance_percent],
-                      [
-                        'Cold climate rated',
-                        ahriProduct.cold_climate_rated == null ? null : ahriProduct.cold_climate_rated ? 'Yes' : 'No',
-                      ],
-                      ['Eligibility notes', ahriProduct.eligibility_notes],
-                    ]}
-                  />
-                )}
-
-                {neeaProduct && (
-                  <ProductMatchAccordion
-                    title="NEEA HPWH product-list match"
-                    rows={[
-                      ['Brand', neeaProduct.brand],
-                      ['Model number', neeaProduct.model_number],
-                      ['Storage volume gallons', neeaProduct.storage_volume_gallons],
-                      ['Configuration', neeaProduct.configuration],
-                      ['Indoor tier', neeaProduct.indoor_tier],
-                      ['Indoor CCE', neeaProduct.indoor_cce],
-                      ['Outdoor tier', neeaProduct.outdoor_tier],
-                      ['Outdoor SCOP', neeaProduct.outdoor_scop],
-                      ['Flex-load connectivity', neeaProduct.flex_load_connectivity],
-                      [
-                        'Plug-in endorsement',
-                        neeaProduct.plug_in_endorsement == null ? null : neeaProduct.plug_in_endorsement ? 'Yes' : 'No',
-                      ],
-                      ['Qualified date', neeaProduct.qualified_date ? fmtDate(neeaProduct.qualified_date) : null],
-                      ['Specification version', neeaProduct.specification_version],
-                      ['Eligibility notes', neeaProduct.eligibility_notes],
-                    ]}
-                  />
-                )}
-
-                {awhpProduct && (
-                  <ProductMatchAccordion
-                    title="Air-to-water product-list match"
-                    rows={[
-                      ['Brand', awhpProduct.brand],
-                      ['Model number', awhpProduct.model_number],
-                      [
-                        'Model components',
-                        Array.isArray(awhpProduct.model_components)
-                          ? awhpProduct.model_components.join(' / ')
-                          : awhpProduct.model_components,
-                      ],
-                      ['System type', awhpProduct.system_type],
-                      ['Eligibility notes', awhpProduct.eligibility_notes],
-                    ]}
-                  />
-                )}
-
-                {ohpaProduct && (
-                  <ProductMatchAccordion
-                    title="OHPA BC product-list match"
-                    rows={[
-                      ['AHRI reference', ohpaProduct.ahri_reference_number],
-                      ['Brand', ohpaProduct.brand],
-                      ['Outdoor model', ohpaProduct.model_number],
-                      ['Indoor model(s)', ohpaProduct.indoor_model_numbers],
-                      ['Furnace model', ohpaProduct.furnace_model_number],
-                      ['Product group', ohpaProduct.product_group],
-                      ['AHRI type', ohpaProduct.ahri_type],
-                      ['Ducting / configuration', ohpaProduct.ducting_configuration],
-                      ['Model status', ohpaProduct.model_status],
-                      ['Series name', ohpaProduct.series_name],
-                      ['Rated capacity 47 F', ohpaProduct.rated_capacity_47f],
-                      ['Rated capacity 95 F', ohpaProduct.rated_capacity_95f],
-                      ['Capacity maintenance %', ohpaProduct.capacity_maintenance_percent],
-                      ['COP 5 F', ohpaProduct.cop_5f],
-                      ['HSPF2 Region IV', ohpaProduct.hspf2_region_iv],
-                      ['HSPF2 Region V', ohpaProduct.hspf2_region_v],
-                      ['SEER2', ohpaProduct.seer2],
-                    ]}
-                  />
-                )}
-
-                {hervProduct && (
-                  <ProductMatchAccordion
-                    title="HERV ENERGY STAR product-list match"
-                    rows={[
-                      ['Brand', hervProduct.brand],
-                      ['Model number', hervProduct.model_number],
-                      ['Model type', hervProduct.model_type],
-                      ['SRE at 0 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_0c],
-                      ['SRE at -25 C', hervProduct.sensible_heat_recovery_efficiency_sre_at_minus_25c],
-                      ['Associated net supply airflow at 0 C CFM', hervProduct.associated_net_supply_airflow_at_0c_cfm],
-                      [
-                        'Associated net supply airflow at -25 C CFM',
-                        hervProduct.associated_net_supply_airflow_at_minus_25c_cfm,
-                      ],
-                      ['Associated power consumption at 0 C W', hervProduct.associated_power_consumption_at_0c_w],
-                      [
-                        'Associated power consumption at -25 C W',
-                        hervProduct.associated_power_consumption_at_minus_25c_w,
-                      ],
-                      ['Max rated airflow at 0 C CFM', hervProduct.max_rated_airflow_at_0c_cfm],
-                      ['Power consumption at 0 C W', hervProduct.power_consumption_at_0c_w],
-                      ['Eligibility notes', hervProduct.eligibility_notes],
-                    ]}
-                  />
-                )}
-
-                {ventFanProduct && (
-                  <ProductMatchAccordion
-                    title="ENERGY STAR fan product-list match"
-                    rows={[
-                      ['Brand', ventFanProduct.brand],
-                      ['Model number', ventFanProduct.model_number],
-                      ['Product model name', ventFanProduct.product_model_name],
-                      ['Fan type', ventFanProduct.fan_type],
-                      ['Airflow 1 CFM', ventFanProduct.airflow_1_cfm],
-                      ['Efficacy 1 CFM/Watt', ventFanProduct.efficacy_1_cfm_watt],
-                      ['Sound level sones', ventFanProduct.sound_level_sones],
-                      [
-                        'Bathroom/utility airflow at 0.25 in. w.g.',
-                        ventFanProduct.bathroom_utility_airflow_at_0_25_in_wg,
-                      ],
-                      ['Markets', ventFanProduct.markets],
-                      ['ENERGY STAR Unique ID', ventFanProduct.energy_star_unique_id],
-                      ['CB model identifier', ventFanProduct.cb_model_identifier],
-                      ['Most Efficient criteria', ventFanProduct.meets_most_efficient_criteria],
-                    ]}
-                  />
-                )}
-
-                {unmatchedRevisionIssues.filter(
-                  (issue) =>
-                    ['pending_admin_review', 'open'].includes(issue.status) &&
-                    !currentRevisionAttentionIssueIds.has(issue.id),
-                ).length > 0 && (
-                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                    <h2>
-                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                        <Box flex="1" textAlign="left">
-                          <Text fontSize="lg" fontWeight="bold">
-                            Other outstanding requested changes
-                          </Text>
-                        </Box>
-                        <AccordionIcon />
-                      </AccordionButton>
-                    </h2>
-                    <AccordionPanel px="0" pt="8px">
-                      {unmatchedRevisionIssues
-                        .filter(
-                          (issue) =>
-                            ['pending_admin_review', 'open'].includes(issue.status) &&
-                            !currentRevisionAttentionIssueIds.has(issue.id),
-                        )
-                        .map((issue) => (
-                          <ContractorInlineRevisionIssueCard
-                            key={issue.id}
-                            issue={issue}
-                            workspace={revisionWorkspace}
-                            attention={revisionAttentionIssueIds.includes(issue.id)}
-                          />
-                        ))}
                     </AccordionPanel>
                   </AccordionItem>
                 )}
@@ -2733,6 +2721,55 @@ export default function ContractorInvoiceReviewScreen() {
           </Flex>
         ) : null}
       </Box>
+
+      <Modal
+        isOpen={isPossibleSupportingDocumentsOpen}
+        onClose={onPossibleSupportingDocumentsClose}
+        size="2xl"
+        isCentered
+      >
+        <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(8px)" />
+        <ModalContent
+          mx={4}
+          borderRadius="xl"
+          boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)"
+          maxH="calc(100vh - 48px)"
+          overflowY="auto"
+        >
+          <ModalHeader>Possible Supporting Documents</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <PossibleSupportingDocumentsContent groups={supportingDocumentTypeGroups} />
+            <Flex justify="flex-end" mt={6}>
+              <Button variant="primary" onClick={onPossibleSupportingDocumentsClose}>
+                Close
+              </Button>
+            </Flex>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={productMatchModal != null} onClose={() => setProductMatchModal(null)} size="2xl" isCentered>
+        <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(8px)" />
+        <ModalContent
+          mx={4}
+          borderRadius="xl"
+          boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)"
+          maxH="calc(100vh - 48px)"
+          overflowY="auto"
+        >
+          <ModalHeader>{productMatchModal?.title}</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <ValueGrid rows={productMatchModal?.rows || []} />
+            <Flex justify="flex-end" mt={6}>
+              <Button variant="primary" onClick={() => setProductMatchModal(null)}>
+                Close
+              </Button>
+            </Flex>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       <Modal
         isOpen={programRequirementsModal != null}

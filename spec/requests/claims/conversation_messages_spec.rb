@@ -1,6 +1,21 @@
 require "rails_helper"
 
 RSpec.describe "Claims conversation messages API", type: :request do
+  before do
+    allow_any_instance_of(Api::ApplicationController).to receive(
+      :authenticate_user!
+    )
+    allow_any_instance_of(Api::ApplicationController).to receive(
+      :require_confirmation
+    )
+    allow_any_instance_of(Api::Claims::ContractorPortalController).to receive(
+      :require_claims_function!
+    )
+    allow_any_instance_of(Api::Claims::InvoiceGridController).to receive(
+      :require_claims_admin!
+    )
+  end
+
   it "stores and serves ordinary messages separately from formal revisions" do
     host! "localhost"
     user = create(:user, :submitter)

@@ -4,6 +4,7 @@ module Api
   module Claims
     class SessionsAdminController < ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.test_tools"
 
       skip_before_action :authenticate_user!, only: %i[show update]
       skip_before_action :require_confirmation, only: %i[show update]

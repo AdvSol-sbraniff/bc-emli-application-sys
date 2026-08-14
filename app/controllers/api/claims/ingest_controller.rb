@@ -20,6 +20,7 @@ module Api
   module Claims
     class IngestController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.test_tools"
       include Api::Claims::Concerns::UploadErrorRendering
 
       # ============================================================
@@ -462,8 +463,13 @@ module Api
       private
 
       def require_upload_fix_actor!
-        if current_user&.admin? || current_user&.admin_manager? ||
-             current_user&.system_admin?
+        return if ::Claims::Rbac.allowed?(current_user, "claims.test_tools")
+
+        unless ::Claims::Rbac.allowed?(current_user, "claims.contractor_portal")
+          render json: {
+                   error: "Invoice upload-fix access denied."
+                 },
+                 status: :forbidden
           return
         end
 

@@ -1,6 +1,21 @@
 require "rails_helper"
 
 RSpec.describe "Claims advice refresh", type: :request do
+  before do
+    allow_any_instance_of(Api::ApplicationController).to receive(
+      :authenticate_user!
+    )
+    allow_any_instance_of(Api::ApplicationController).to receive(
+      :require_confirmation
+    )
+    allow_any_instance_of(Api::Claims::InvoiceGridController).to receive(
+      :require_claims_admin!
+    )
+    allow_any_instance_of(Api::Claims::InvoiceGridController).to receive(
+      :require_claims_function!
+    )
+  end
+
   describe "POST /api/claims/admin/invoices/:id/reanalyze_advice" do
     it "clones the current invoice version before rerunning advice" do
       host! "localhost"

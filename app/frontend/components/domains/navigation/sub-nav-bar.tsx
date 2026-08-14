@@ -83,6 +83,8 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
 
     const claimsBreadcrumbs: Record<string, TBreadcrumbSegment[]> = {
       '/invoices-admin': [{ href: '/invoices-admin', title: t('home.invoicesAdminTitle') }],
+      '/ingest-runs-admin': [{ href: '/ingest-runs-admin', title: 'Ingest Runs' }],
+      '/claims-rbac-admin': [{ href: '/claims-rbac-admin', title: 'Role Based Access Control' }],
       '/reports-volume-value': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
         { href: '/reports-volume-value', title: 'Reports - Volume and Value' },
@@ -91,10 +93,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/validation-rules-alphabetic-admin': [
         { href: '/validation-rules-alphabetic-admin', title: 'Advice Checks at a Glance' },
       ],
-      '/validation-rules-config': [
-        { href: '/validation-rules-admin', title: 'Fields and Advice Editor' },
-        { href: '/validation-rules-config', title: 'System Config' },
-      ],
+      '/validation-rules-config': [{ href: '/validation-rules-config', title: 'System Config' }],
       '/supporting-document-types-admin': [
         { href: '/validation-rules-admin', title: 'Fields and Advice Editor' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },

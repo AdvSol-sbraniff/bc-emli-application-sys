@@ -4,6 +4,7 @@ module Api
   module Claims
     class VentFanProductsAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       skip_after_action :verify_authorized,
                         only: %i[index import_status import_downloaded_csv]

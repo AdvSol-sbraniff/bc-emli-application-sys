@@ -252,10 +252,16 @@ const revealTarget = (target: HTMLElement | null) => {
   });
 };
 
-const revealElement = (elementId: string) => revealTarget(document.getElementById(elementId));
+const revealAfterRender = (findTarget: () => HTMLElement | null) => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => revealTarget(findTarget()));
+  });
+};
+
+const revealElement = (elementId: string) => revealAfterRender(() => document.getElementById(elementId));
 
 const revealRevisionSource = (issueId: string) =>
-  revealTarget(document.querySelector<HTMLElement>(`[data-admin-revision-source-issue-id="${issueId}"]`));
+  revealAfterRender(() => document.querySelector<HTMLElement>(`[data-admin-revision-source-issue-id="${issueId}"]`));
 
 export const AdminRevisionSourceAnchor = ({ issueId }: { issueId: string }) => (
   <Box data-admin-revision-source-issue-id={issueId} tabIndex={-1} h={0} gridColumn="1 / -1" scrollMarginTop="16px" />
@@ -456,7 +462,7 @@ export const useAdminInlineRevisionWorkspace = ({
       setFocusedIssueId((current) => (current === issueId ? '' : current));
       focusHighlightTimerRef.current = null;
     }, 1600);
-    window.setTimeout(() => revealElement(revisionIssueElementId(issueId)), 60);
+    revealElement(revisionIssueElementId(issueId));
   }, []);
 
   useEffect(
@@ -467,7 +473,7 @@ export const useAdminInlineRevisionWorkspace = ({
   );
 
   const focusSource = useCallback((issueId: string) => {
-    window.setTimeout(() => revealRevisionSource(issueId), 60);
+    revealRevisionSource(issueId);
   }, []);
 
   const fail = useCallback(

@@ -5,28 +5,10 @@ module Api
     class InvoiceGridController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
 
-      # POC: no auth/policy for now (match your SessionsController approach)
-      skip_before_action :authenticate_user!,
-                         only: %i[
-                           index
-                           destroy
-                           status_transition
-                           reanalyze_advice
-                         ]
-      skip_before_action :require_claims_admin!,
-                         only: %i[
-                           index
-                           destroy
-                           status_transition
-                           reanalyze_advice
-                         ]
-      skip_before_action :require_confirmation,
-                         only: %i[
-                           index
-                           destroy
-                           status_transition
-                           reanalyze_advice
-                         ]
+      before_action -> { require_claims_function!("claims.hard_delete") },
+                    only: %i[destroy]
+      before_action -> { require_claims_function!("claims.test_tools") },
+                    only: %i[reanalyze_advice]
       skip_after_action :verify_authorized,
                         only: %i[
                           index

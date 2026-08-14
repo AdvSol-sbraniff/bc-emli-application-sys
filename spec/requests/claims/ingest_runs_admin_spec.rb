@@ -316,6 +316,9 @@ RSpec.describe "Claims admin ingest runs", type: :request do
     get "/api/claims/admin/ingest_runs"
 
     expect(response).to have_http_status(:forbidden)
-    expect(json_response.fetch("error")).to eq("Claims admin access required.")
+    expect(json_response).to include(
+      "error" => "Claims function access required.",
+      "required_function" => "claims.configuration"
+    )
   end
 end

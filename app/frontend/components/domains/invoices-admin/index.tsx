@@ -50,6 +50,7 @@ import {
 import { INVOICE_STATUS_FILTER_GROUPS, invoiceStatusCopy } from '../../shared/claims/invoice-status-copy';
 import { InvoiceStatusBadge } from '../../shared/claims/invoice-status-badge';
 import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
+import { useClaimsAccess } from '../../shared/claims/claims-access';
 
 type DetectedUpgradeType = {
   confidence?: number | null;
@@ -198,6 +199,7 @@ const rowActionIconSize = 18;
 
 function ResultDot({ val }: { val: unknown }) {
   const result = normalizeResult(val);
+  const needsAttention = result === 'warn' || result === 'fail';
   const visual =
     result === 'pass'
       ? 'green.400'
@@ -219,7 +221,7 @@ function ResultDot({ val }: { val: unknown }) {
       display="inline-block"
       position="relative"
       sx={
-        result
+        needsAttention
           ? {
               '&::after': {
                 content: '""',
@@ -240,6 +242,41 @@ function ResultDot({ val }: { val: unknown }) {
           : undefined
       }
     />
+  );
+}
+
+function InvoiceReviewLink({ children, invoiceId }: { children: React.ReactNode; invoiceId: string }) {
+  return (
+    <Tooltip label="Open invoice review">
+      <Text
+        as={RouterLink}
+        to={`/invoices/${encodeURIComponent(invoiceId)}/review`}
+        fontSize="sm"
+        fontWeight="normal"
+        color="gray.800"
+        textAlign="left"
+        cursor="pointer"
+        maxW="100%"
+        display="block"
+        whiteSpace="nowrap"
+        overflow="hidden"
+        textOverflow="ellipsis"
+        px={2}
+        py={1}
+        ml={-2}
+        borderRadius="md"
+        transition="background-color 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 140ms ease"
+        _hover={{
+          bg: 'blue.50',
+          color: 'black',
+          textDecoration: 'none',
+          boxShadow: '0 8px 18px rgba(49, 130, 206, 0.14)',
+        }}
+        _focusVisible={{ boxShadow: 'outline', borderRadius: 'sm' }}
+      >
+        {children}
+      </Text>
+    </Tooltip>
   );
 }
 
@@ -456,6 +493,9 @@ function buildSearchParams(obj: Record<string, string | undefined>) {
 export function InvoicesAdminScreen() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { can: canUseClaimsFunction } = useClaimsAccess();
+  const canUseClaimsTestTools = canUseClaimsFunction('claims.test_tools');
+  const canHardDeleteClaims = canUseClaimsFunction('claims.hard_delete');
 
   // URL-driven state
   const [sessionId, setSessionId] = useState<string>('');
@@ -1038,9 +1078,15 @@ export function InvoicesAdminScreen() {
                       </Td>
 
                       <Td fontSize="sm" whiteSpace="nowrap">
-                        {r.reference_number !== null && r.reference_number !== undefined
-                          ? formatClaimsReferenceNumber(r.reference_number)
-                          : '—'}
+                        {hasInvoice && r.reference_number !== null && r.reference_number !== undefined ? (
+                          <InvoiceReviewLink invoiceId={String(r.invoice_id)}>
+                            {formatClaimsReferenceNumber(r.reference_number)}
+                          </InvoiceReviewLink>
+                        ) : r.reference_number !== null && r.reference_number !== undefined ? (
+                          formatClaimsReferenceNumber(r.reference_number)
+                        ) : (
+                          '—'
+                        )}
                       </Td>
 
                       <Td fontSize="sm" whiteSpace="nowrap">
@@ -1053,47 +1099,26 @@ export function InvoicesAdminScreen() {
 
                       <Td fontSize="sm" minW={0}>
                         {hasInvoice ? (
-                          <Tooltip label="Open Reviewer">
-                            <Text
-                              as={RouterLink}
-                              to={`/invoices/${encodeURIComponent(String(r.invoice_id))}/review`}
-                              fontSize="sm"
-                              fontWeight="normal"
-                              color="gray.800"
-                              textAlign="left"
-                              cursor="pointer"
-                              maxW="100%"
-                              display="block"
-                              whiteSpace="nowrap"
-                              overflow="hidden"
-                              textOverflow="ellipsis"
-                              px={2}
-                              py={1}
-                              ml={-2}
-                              borderRadius="md"
-                              transition="background-color 140ms ease, box-shadow 140ms ease, color 140ms ease, transform 140ms ease"
-                              _hover={{
-                                bg: 'blue.50',
-                                color: 'black',
-                                textDecoration: 'none',
-                                boxShadow: '0 8px 18px rgba(49, 130, 206, 0.14)',
-                              }}
-                              _focusVisible={{ boxShadow: 'outline', borderRadius: 'sm' }}
-                            >
-                              {r.contractor_business_name ?? '—'}
-                            </Text>
-                          </Tooltip>
+                          <InvoiceReviewLink invoiceId={String(r.invoice_id)}>
+                            {r.contractor_business_name ?? '—'}
+                          </InvoiceReviewLink>
                         ) : (
                           <Text noOfLines={1}>{r.contractor_business_name ?? '—'}</Text>
                         )}
                       </Td>
 
                       <Td fontSize="sm" minW={0}>
-                        <Text noOfLines={1}>{r.latest_di_ocr_invoice_id || '—'}</Text>
+                        {hasInvoice && r.latest_di_ocr_invoice_id ? (
+                          <InvoiceReviewLink invoiceId={String(r.invoice_id)}>
+                            {r.latest_di_ocr_invoice_id}
+                          </InvoiceReviewLink>
+                        ) : (
+                          <Text noOfLines={1}>{r.latest_di_ocr_invoice_id || '—'}</Text>
+                        )}
                       </Td>
 
                       <Td whiteSpace="nowrap">
-                        <Flex gap={2} wrap="nowrap" align="center" minW={0} overflow="hidden">
+                        <Flex gap={2} wrap="nowrap" align="center" minW={0} overflow="hidden" pl={3}>
                           <Tooltip label={aiResultHint(r.latest_validation_result)}>
                             <Box as="span" display="inline-flex" alignItems="center" flexShrink={0}>
                               <ResultDot val={r.latest_validation_result} />
@@ -1159,43 +1184,51 @@ export function InvoicesAdminScreen() {
                             />
                           </Tooltip>
 
-                          <Divider orientation="vertical" h="18px" borderColor="gray.300" mx={1} />
+                          {(canUseClaimsTestTools || canHardDeleteClaims) && (
+                            <Divider orientation="vertical" h="18px" borderColor="gray.300" mx={1} />
+                          )}
 
-                          <Tooltip label="Upload a revised package">
-                            <IconButton
-                              aria-label="Upload a revised package"
-                              {...rowActionButtonProps}
-                              icon={<Wrench size={rowActionIconSize} />}
-                              onClick={() => handleOpenPackageFix(r)}
-                              isDisabled={!hasInvoice || !r.latest_invoice_version_id}
-                            />
-                          </Tooltip>
+                          {canUseClaimsTestTools && (
+                            <>
+                              <Tooltip label="Upload a revised package">
+                                <IconButton
+                                  aria-label="Upload a revised package"
+                                  {...rowActionButtonProps}
+                                  icon={<Wrench size={rowActionIconSize} />}
+                                  onClick={() => handleOpenPackageFix(r)}
+                                  isDisabled={!hasInvoice || !r.latest_invoice_version_id}
+                                />
+                              </Tooltip>
 
-                          <Tooltip label="Refresh AI Advice">
-                            <IconButton
-                              aria-label="Refresh AI Advice"
-                              {...rowActionButtonProps}
-                              icon={<ArrowsClockwise size={rowActionIconSize} />}
-                              onClick={() => handleOpenAdviceRefresh(r)}
-                              isDisabled={!hasInvoice || !r.latest_invoice_version_id}
-                            />
-                          </Tooltip>
+                              <Tooltip label="Refresh AI Advice">
+                                <IconButton
+                                  aria-label="Refresh AI Advice"
+                                  {...rowActionButtonProps}
+                                  icon={<ArrowsClockwise size={rowActionIconSize} />}
+                                  onClick={() => handleOpenAdviceRefresh(r)}
+                                  isDisabled={!hasInvoice || !r.latest_invoice_version_id}
+                                />
+                              </Tooltip>
+                            </>
+                          )}
 
-                          <Tooltip label="Delete invoice and all child claim records">
-                            <IconButton
-                              aria-label="Delete invoice"
-                              {...rowActionButtonProps}
-                              colorScheme="red"
-                              icon={<Trash size={rowActionIconSize} />}
-                              onClick={() => handleDeleteInvoice(String(r.invoice_id))}
-                              isDisabled={
-                                !hasInvoice ||
-                                loading ||
-                                (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))
-                              }
-                              isLoading={deletingInvoiceId === String(r.invoice_id)}
-                            />
-                          </Tooltip>
+                          {canHardDeleteClaims && (
+                            <Tooltip label="Delete invoice and all child claim records">
+                              <IconButton
+                                aria-label="Delete invoice"
+                                {...rowActionButtonProps}
+                                colorScheme="red"
+                                icon={<Trash size={rowActionIconSize} />}
+                                onClick={() => handleDeleteInvoice(String(r.invoice_id))}
+                                isDisabled={
+                                  !hasInvoice ||
+                                  loading ||
+                                  (!!deletingInvoiceId && deletingInvoiceId !== String(r.invoice_id))
+                                }
+                                isLoading={deletingInvoiceId === String(r.invoice_id)}
+                              />
+                            </Tooltip>
+                          )}
                         </Flex>
                       </Td>
                     </Tr>

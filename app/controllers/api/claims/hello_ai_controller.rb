@@ -7,6 +7,7 @@ module Api
   module Claims
     class HelloAiController < ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.test_tools"
 
       skip_before_action :authenticate_user!, only: %i[create]
       skip_before_action :require_confirmation, only: %i[create]

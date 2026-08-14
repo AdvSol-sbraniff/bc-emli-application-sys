@@ -1,6 +1,12 @@
 require "rails_helper"
 
 RSpec.describe "Claims revision issue workflow API", type: :request do
+  before do
+    allow_any_instance_of(Api::Claims::ContractorPortalController).to receive(
+      :require_claims_function!
+    )
+  end
+
   let(:now) { Time.zone.parse("2026-07-15 22:00:00") }
   let(:user) { create(:user, :submitter) }
   let(:contractor) do

@@ -4,6 +4,7 @@ module Api
   module Claims
     class ValidationgenaiConfigController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       skip_before_action :verify_authenticity_token, only: %i[show update]
       skip_before_action :authenticate_user!, only: %i[show update]

@@ -1,6 +1,12 @@
 require "rails_helper"
 
 RSpec.describe "Claims contractor portal index", type: :request do
+  before do
+    allow_any_instance_of(Api::Claims::ContractorPortalController).to receive(
+      :require_claims_function!
+    )
+  end
+
   it "returns the stable reference number, service address, and submitter name" do
     host! "localhost"
     submitter = create(:user, first_name: "Jordan", last_name: "Lee")

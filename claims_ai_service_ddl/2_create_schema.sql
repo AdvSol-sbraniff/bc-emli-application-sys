@@ -2,6 +2,92 @@ DROP SCHEMA IF EXISTS claims CASCADE;
 CREATE SCHEMA claims;
 
 
+-- ============================================================
+-- Claims RBAC
+-- PURPOSE: Claims-only function catalogue and fixed-role assignments.
+-- Staff-role inheritance is resolved in application code:
+-- admin -> admin_manager -> system_admin.
+-- ============================================================
+
+CREATE TABLE claims.functions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  function_key character varying(100) NOT NULL,
+  description text NULL,
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT functions_pkey PRIMARY KEY (id),
+  CONSTRAINT functions_function_key_key UNIQUE (function_key),
+  CONSTRAINT functions_function_key_format_chk
+    CHECK (function_key ~ '^claims\.[a-z][a-z0-9_]*$')
+);
+
+CREATE TABLE claims.role_functions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  role_key character varying(50) NOT NULL,
+  function_id uuid NOT NULL,
+  created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+  updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
+
+  CONSTRAINT role_functions_pkey PRIMARY KEY (id),
+  CONSTRAINT role_functions_role_function_key UNIQUE (role_key, function_id),
+  CONSTRAINT role_functions_role_key_chk
+    CHECK (role_key IN ('contractor', 'admin', 'admin_manager', 'system_admin')),
+  CONSTRAINT fk_claims_role_functions_function
+    FOREIGN KEY (function_id) REFERENCES claims.functions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_claims_role_functions_function_id
+  ON claims.role_functions (function_id);
+
+INSERT INTO claims.functions (id, function_key, description)
+VALUES
+  (
+    'c1a10000-0000-4000-8000-000000000001',
+    'claims.contractor_portal',
+    'AI Contractor Portal, Contractor Invoice Review, invoice uploads and fixes, requested-change responses, and Chat with Admin.'
+  ),
+  (
+    'c1a10000-0000-4000-8000-000000000002',
+    'claims.operations',
+    'Invoices Admin, Admin PDF Viewer, WFM Revision Workspace, conversations, invoice status actions, reports, Info drawer, and version-history magnifying-glass action.'
+  ),
+  (
+    'c1a10000-0000-4000-8000-000000000003',
+    'claims.configuration',
+    'Fields and Advice Editor, Advice Checks at a Glance, Supporting Document Types, Downloads, System Config, and read-only Ingest Runs diagnostics.'
+  ),
+  (
+    'c1a10000-0000-4000-8000-000000000004',
+    'claims.test_tools',
+    'Wrench and Refresh AI Advice actions, Contractor Simulator, test-data screens, AI connectivity testing, and ingest rerun or retry actions.'
+  ),
+  (
+    'c1a10000-0000-4000-8000-000000000005',
+    'claims.hard_delete',
+    'Red Trash action in Invoices Admin and permanent invoice-package deletion.'
+  ),
+  (
+    'c1a10000-0000-4000-8000-000000000006',
+    'claims.role_functions',
+    'Claims-only RBAC screen for assigning claims functions to fixed roles.'
+  );
+
+INSERT INTO claims.role_functions (role_key, function_id)
+SELECT assignment.role_key, function_row.id
+FROM (
+  VALUES
+    ('contractor', 'claims.contractor_portal'),
+    ('admin', 'claims.operations'),
+    ('admin_manager', 'claims.configuration'),
+    ('system_admin', 'claims.test_tools'),
+    ('system_admin', 'claims.hard_delete'),
+    ('system_admin', 'claims.role_functions')
+) AS assignment(role_key, function_key)
+JOIN claims.functions function_row
+  ON function_row.function_key = assignment.function_key;
+
+
 --
 -- sessions
 --

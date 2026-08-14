@@ -1,5 +1,14 @@
 // /app/frontend/components/domains/invoice-versions/index.tsx
 import { fmtDate, fmtMoney, fmtText } from './display';
+import {
+  InvoiceReviewAuxiliaryPanel,
+  INVOICE_REVIEW_PANEL_GAP,
+  InvoiceReviewLayout,
+  InvoiceReviewMainPanel,
+  InvoiceReviewRightRegion,
+  MIN_DOCUMENT_PANEL_WIDTH,
+} from './invoice-review-layout';
+import { useInvoiceReviewLayout } from './use-invoice-review-layout';
 
 import {
   Box,
@@ -907,14 +916,21 @@ export const InvoiceVersionShowScreen = () => {
   // ============================================================
 
   const [bannerHidden, setBannerHidden] = useState<boolean>(false);
-  const [documentVisible, setDocumentVisible] = useState(true);
-  const [auxiliaryPanel, setAuxiliaryPanel] = useState<'conversation' | 'internal_notes' | null>(null);
-  const [mountedAuxiliaryPanels, setMountedAuxiliaryPanels] = useState({
-    conversation: false,
-    internal_notes: false,
-  });
-  const [auxiliaryPanelWidth, setAuxiliaryPanelWidth] = useState(420);
-  const auxiliaryResizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
+  const {
+    documentVisible,
+    toggleDocument,
+    showDocument,
+    revisionPlacement,
+    toggleRevisionPlacement,
+    communicationPanel: auxiliaryPanel,
+    toggleCommunicationPanel: toggleAuxiliaryPanel,
+    closeCommunicationPanel,
+    mountedCommunicationPanels: mountedAuxiliaryPanels,
+    showRevisionWorkspace: exposeRevisionWorkspace,
+    effectiveAuxiliaryPanel,
+    auxiliaryPanelWidth,
+    setAuxiliaryPanelWidth,
+  } = useInvoiceReviewLayout();
 
   const [invoiceIds, setInvoiceIds] = useState<string[]>([]);
   const [readData, setReadData] = useState<any>(null);
@@ -1049,6 +1065,10 @@ export const InvoiceVersionShowScreen = () => {
     enabled: canLoadRevisionWorkspace,
     onTrackerChange: handleRevisionTrackerChange,
   });
+  const focusRevisionIssue = (issueId: string, mode?: AdminRevisionDecisionMode) => {
+    exposeRevisionWorkspace();
+    revisionWorkspace.focusIssue(issueId, mode);
+  };
   const revisionTrackerData = revisionWorkspace.data;
   const hasRevisionHistory =
     !!revisionTrackerData && (revisionTrackerData.rounds.length > 0 || revisionTrackerData.issues.length > 0);
@@ -1079,10 +1099,8 @@ export const InvoiceVersionShowScreen = () => {
     issue ? adminRevisionIssueStage(issue, revisionWorkspace) : undefined;
   const revisionSourceActionProps = (issue?: RevisionIssue) => ({
     revisionIssue: issue,
-    onOpenRevision: issue ? () => revisionWorkspace.focusIssue(issue.id) : undefined,
-    onSelectRevisionAction: issue
-      ? (mode: AdminRevisionDecisionMode) => revisionWorkspace.focusIssue(issue.id, mode)
-      : undefined,
+    onOpenRevision: issue ? () => focusRevisionIssue(issue.id) : undefined,
+    onSelectRevisionAction: issue ? (mode: AdminRevisionDecisionMode) => focusRevisionIssue(issue.id, mode) : undefined,
   });
 
   const addToRevision = async (entryType: string, sourceAttribute: string, sourceValue: string) => {
@@ -1410,15 +1428,15 @@ export const InvoiceVersionShowScreen = () => {
     const el = pdfWrapRef.current;
     if (!el) return;
 
-    const MAX_PDF_WIDTH = 560;
+    const PDF_HORIZONTAL_GUTTER = 24;
 
     const ro = new ResizeObserver(() => {
       // Ignore "collapse to 0" measurements during hide/unmount transitions
       if (el.clientWidth <= 0 || el.clientHeight <= 0) return;
 
-      const w = Math.max(300, Math.floor(el.clientWidth));
+      const w = Math.max(300, Math.floor(el.clientWidth - PDF_HORIZONTAL_GUTTER));
       const h = Math.max(300, Math.floor(el.clientHeight));
-      setPageWidthPx(Math.min(w, MAX_PDF_WIDTH));
+      setPageWidthPx(w);
       setPdfPaneHeightPx(h);
     });
 
@@ -1426,21 +1444,14 @@ export const InvoiceVersionShowScreen = () => {
 
     // Also do one immediate measurement right after attach
     if (el.clientWidth > 0 && el.clientHeight > 0) {
-      const w = Math.max(300, Math.floor(el.clientWidth));
+      const w = Math.max(300, Math.floor(el.clientWidth - PDF_HORIZONTAL_GUTTER));
       const h = Math.max(300, Math.floor(el.clientHeight));
-      setPageWidthPx(Math.min(w, MAX_PDF_WIDTH));
+      setPageWidthPx(w);
       setPdfPaneHeightPx(h);
     }
 
     return () => ro.disconnect();
   }, [documentVisible]);
-
-  useEffect(() => {
-    const storedWidth = Number(window.localStorage.getItem('claims-admin-auxiliary-panel-width'));
-    if (Number.isFinite(storedWidth) && storedWidth >= 340 && storedWidth <= 640) {
-      setAuxiliaryPanelWidth(storedWidth);
-    }
-  }, []);
 
   const openSupportingDocumentFile = async (doc: any) => {
     const docId = String(doc?.id || '').trim();
@@ -1512,7 +1523,7 @@ export const InvoiceVersionShowScreen = () => {
 
     if (viewerFile?.source === 'supporting_document' && viewerFile.documentId === docId && viewerFile.url) {
       setSupportingDocumentHighlight();
-      setDocumentVisible(true);
+      showDocument();
       return;
     }
 
@@ -1538,7 +1549,7 @@ export const InvoiceVersionShowScreen = () => {
       });
 
       setSupportingDocumentHighlight();
-      setDocumentVisible(true);
+      showDocument();
     } catch (e: any) {
       toast({
         title: 'Could not show supporting document',
@@ -1553,7 +1564,7 @@ export const InvoiceVersionShowScreen = () => {
   const runStatusTransition = async (transition: InvoiceStatusTransition) => {
     if (!canRunWorkflowActions) return;
     if (revisionWorkspace.unsavedIssueIds.length) {
-      revisionWorkspace.focusIssue(revisionWorkspace.unsavedIssueIds[0]);
+      focusRevisionIssue(revisionWorkspace.unsavedIssueIds[0]);
       setStatusActionError('Save all changed revision recommendations before changing the invoice status.');
       return;
     }
@@ -1821,7 +1832,6 @@ export const InvoiceVersionShowScreen = () => {
       {
         description: string;
         fields: any[];
-        results: any[];
         rulechecks: any[];
         upgradeTypeKey: string;
       }
@@ -1835,7 +1845,6 @@ export const InvoiceVersionShowScreen = () => {
       const group = {
         description: upgradeTypeDescriptionFor(row),
         fields: [],
-        results: [],
         rulechecks: [],
         upgradeTypeKey,
       };
@@ -1851,9 +1860,6 @@ export const InvoiceVersionShowScreen = () => {
         upgrade_type_description: 'Common',
       }),
     );
-    upgradeTypeResults
-      .filter((row) => row?.source_engine !== 'classifier')
-      .forEach((row) => ensureGroup(row).results.push(row));
     genAiRulechecks.forEach((row) => ensureGroup(row).rulechecks.push(row));
 
     return Array.from(groups.values()).sort((a, b) => {
@@ -1862,7 +1868,7 @@ export const InvoiceVersionShowScreen = () => {
       if (sortA !== sortB) return sortA - sortB;
       return a.description.localeCompare(b.description);
     });
-  }, [classifierEligibilityFields, genAiFields, genAiRulechecks, upgradeTypeResults]);
+  }, [classifierEligibilityFields, genAiFields, genAiRulechecks]);
 
   const filteredGenAiRulechecks = useMemo(
     () => genAiRulechecks.filter((row) => ruleMatchesResultFilter(row, ruleResultFilters)),
@@ -1871,14 +1877,12 @@ export const InvoiceVersionShowScreen = () => {
 
   const classifierUpgradeTypeRows = useMemo(
     () =>
-      upgradeTypeResults
-        .filter((row) => row?.source_engine === 'classifier')
-        .sort((a, b) => {
-          const sortA = upgradeTypeSortValue(upgradeTypeKeyFor(a));
-          const sortB = upgradeTypeSortValue(upgradeTypeKeyFor(b));
-          if (sortA !== sortB) return sortA - sortB;
-          return upgradeTypeDescriptionFor(a).localeCompare(upgradeTypeDescriptionFor(b));
-        }),
+      [...upgradeTypeResults].sort((a, b) => {
+        const sortA = upgradeTypeSortValue(upgradeTypeKeyFor(a));
+        const sortB = upgradeTypeSortValue(upgradeTypeKeyFor(b));
+        if (sortA !== sortB) return sortA - sortB;
+        return upgradeTypeDescriptionFor(a).localeCompare(upgradeTypeDescriptionFor(b));
+      }),
     [upgradeTypeResults],
   );
 
@@ -1995,28 +1999,19 @@ export const InvoiceVersionShowScreen = () => {
     return ids;
   }, [renderedRevisionIdentityKeys, revisionWorkspace.issues]);
   const canOpenCommunicationPanels = canRunWorkflowActions && !!readData?.invoice_id;
-  const toggleAuxiliaryPanel = (panel: 'conversation' | 'internal_notes') => {
-    if (!canOpenCommunicationPanels) return;
-    setMountedAuxiliaryPanels((current) => ({ ...current, [panel]: true }));
-    setAuxiliaryPanel((current) => (current === panel ? null : panel));
-  };
-  const resizeAuxiliaryPanel = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = auxiliaryResizeStartRef.current;
-    if (!start) return;
-    setAuxiliaryPanelWidth(Math.min(640, Math.max(340, start.width + start.pointerX - event.clientX)));
-  };
-  const finishAuxiliaryPanelResize = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = auxiliaryResizeStartRef.current;
-    if (!start) return;
-    const nextWidth = Math.min(640, Math.max(340, start.width + start.pointerX - event.clientX));
-    setAuxiliaryPanelWidth(nextWidth);
-    auxiliaryResizeStartRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    window.localStorage.setItem('claims-admin-auxiliary-panel-width', String(nextWidth));
-  };
-
+  const activeAuxiliaryPanel = effectiveAuxiliaryPanel({
+    revisionWorkspaceAvailable: showRevisionWorkspace,
+  });
+  const visibleAuxiliaryPanel =
+    activeAuxiliaryPanel === 'revision_issues' || canOpenCommunicationPanels ? activeAuxiliaryPanel : null;
+  const rightRegionMinimumWidth = documentVisible
+    ? MIN_DOCUMENT_PANEL_WIDTH + (visibleAuxiliaryPanel ? INVOICE_REVIEW_PANEL_GAP + auxiliaryPanelWidth : 0)
+    : visibleAuxiliaryPanel
+      ? auxiliaryPanelWidth
+      : 0;
+  const revisionWorkspaceContent = showRevisionWorkspace ? (
+    <AdminRevisionWorkspace workspace={revisionWorkspace} sourceIssueIds={matchedRevisionIssueIds} />
+  ) : null;
   // ============================================================
   // SECTION 07.01 - MAIN RETURN
   // PURPOSE: JSX layout tree (header + nav + split panes)
@@ -2051,7 +2046,7 @@ export const InvoiceVersionShowScreen = () => {
                   size="sm"
                   colorScheme="blue"
                   variant={documentVisible ? 'solid' : 'outline'}
-                  onClick={() => setDocumentVisible((current) => !current)}
+                  onClick={toggleDocument}
                 >
                   Document
                 </Button>
@@ -2096,6 +2091,20 @@ export const InvoiceVersionShowScreen = () => {
                   Internal Notes
                 </Button>
               </Tooltip>
+              {showRevisionWorkspace ? (
+                <Tooltip
+                  label={
+                    revisionPlacement === 'top'
+                      ? 'Move Revision Issues from above the evidence to the side panel.'
+                      : 'Move Revision Issues from the side panel back above the evidence.'
+                  }
+                  hasArrow
+                >
+                  <Button size="sm" colorScheme="orange" variant="outline" onClick={toggleRevisionPlacement}>
+                    {revisionPlacement === 'top' ? 'Move Revision Issues to Side' : 'Move Revision Issues to Top'}
+                  </Button>
+                </Tooltip>
+              ) : null}
 
               {readData ? (
                 <Tooltip
@@ -2172,27 +2181,17 @@ export const InvoiceVersionShowScreen = () => {
         SECTION 07.04 - MAIN SPLIT VIEW
         PURPOSE: Left fields + Right PDF viewer
         ============================================================ */}
-            <Box display="flex" gap="16px" flex="1" minH={0} overflowX="auto">
+            <InvoiceReviewLayout>
               {/* ============================================================
     SECTION 07.05 - LEFT PANEL (ACCORDION WRAPPER)
     PURPOSE: Put header fields inside a collapsible accordion
     ============================================================ */}
 
-              <Box
-                p="0"
-                // IMPORTANT: overflow must NOT be "visible" for resize to show
-                sx={{
-                  resize: 'horizontal',
-                  overflow: 'auto',
-                }}
-                minW="480px"
-                maxW="100%"
-                w="auto"
-                flex="1 1 auto"
+              <InvoiceReviewMainPanel
+                hasRightRegion={documentVisible || !!visibleAuxiliaryPanel}
+                rightRegionMinimumWidth={rightRegionMinimumWidth}
               >
-                {showRevisionWorkspace ? (
-                  <AdminRevisionWorkspace workspace={revisionWorkspace} sourceIssueIds={matchedRevisionIssueIds} />
-                ) : null}
+                {revisionPlacement === 'top' ? revisionWorkspaceContent : null}
                 {/* ============================================================
       SECTION 07.05.01 - FIELDS ACCORDION
       PURPOSE: Collapsible container for the DI header fields list
@@ -2269,7 +2268,7 @@ export const InvoiceVersionShowScreen = () => {
                                 onClick={
                                   clickable
                                     ? () => {
-                                        setDocumentVisible(true);
+                                        showDocument();
                                         setActiveHighlightKey(f.key);
                                       }
                                     : undefined
@@ -2284,122 +2283,111 @@ export const InvoiceVersionShowScreen = () => {
                           );
                         })}
                       </Box>
-                    </AccordionPanel>
-                  </AccordionItem>
-
-                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                    <h2>
-                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                        <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
-                            Line items
+                      <Box mt="10px" pt="10px" borderTopWidth="1px" borderColor="gray.200">
+                        <Text fontSize="sm" fontWeight="bold" textTransform="uppercase" mb="4px">
+                          Invoice line items
+                        </Text>
+                        {lineitemsError && (
+                          <Text fontSize="xs" color="red.500" mb="8px">
+                            {lineitemsError}
                           </Text>
-                        </Box>
-                        <AccordionIcon />
-                      </AccordionButton>
-                    </h2>
+                        )}
 
-                    <AccordionPanel px="0" pt="3px">
-                      {lineitemsError && (
-                        <Text fontSize="xs" color="red.500" mb="8px">
-                          {lineitemsError}
-                        </Text>
-                      )}
+                        {!lineitemsError && sortedLineitems.length === 0 ? (
+                          <Text fontSize="sm" opacity={0.7}>
+                            No line items found.
+                          </Text>
+                        ) : (
+                          <Box display="flex" flexDirection="column" gap="1px">
+                            <Box
+                              display="grid"
+                              gridTemplateColumns="minmax(220px, 1fr) 72px 96px 96px"
+                              gap="8px"
+                              px="10px"
+                              py="0"
+                            >
+                              <Text fontSize="sm" opacity={0.6}>
+                                description
+                              </Text>
+                              <Text fontSize="sm" opacity={0.6} textAlign="right">
+                                qty
+                              </Text>
+                              <Text fontSize="sm" opacity={0.6} textAlign="right">
+                                unit
+                              </Text>
+                              <Text fontSize="sm" opacity={0.6} textAlign="right">
+                                amount
+                              </Text>
+                            </Box>
+                            {sortedLineitems.map((li: any) => {
+                              const seq = li.lineitem_seqno ?? li.seqno ?? '-';
+                              const lineitemKey = li.id ?? seq;
+                              const highlightKey = `lineitem_${lineitemKey}_desc`;
+                              const clickable = li.ocr_description_page != null && li.ocr_description_polygon != null;
 
-                      {!lineitemsError && sortedLineitems.length === 0 ? (
-                        <Text fontSize="sm" opacity={0.7}>
-                          No line items found.
-                        </Text>
-                      ) : (
-                        <Box display="flex" flexDirection="column" gap="1px">
-                          <Box
-                            display="grid"
-                            gridTemplateColumns="minmax(220px, 1fr) 72px 96px 96px"
-                            gap="8px"
-                            px="10px"
-                            py="0"
-                          >
-                            <Text fontSize="sm" opacity={0.6}>
-                              description
-                            </Text>
-                            <Text fontSize="sm" opacity={0.6} textAlign="right">
-                              qty
-                            </Text>
-                            <Text fontSize="sm" opacity={0.6} textAlign="right">
-                              unit
-                            </Text>
-                            <Text fontSize="sm" opacity={0.6} textAlign="right">
-                              amount
-                            </Text>
-                          </Box>
-                          {sortedLineitems.map((li: any) => {
-                            const seq = li.lineitem_seqno ?? li.seqno ?? '-';
-                            const lineitemKey = li.id ?? seq;
-                            const highlightKey = `lineitem_${lineitemKey}_desc`;
-                            const clickable = li.ocr_description_page != null && li.ocr_description_polygon != null;
-
-                            return (
-                              <Box
-                                key={String(lineitemKey)}
-                                borderWidth="1px"
-                                borderColor={activeHighlightKey === highlightKey ? 'blue.400' : 'transparent'}
-                                borderRadius="md"
-                                bg={activeHighlightKey === highlightKey ? 'blue.50' : 'transparent'}
-                                px="10px"
-                                py="3px"
-                                role={clickable ? 'button' : undefined}
-                                cursor={clickable ? 'pointer' : 'default'}
-                                _hover={
-                                  clickable
-                                    ? {
-                                        bg: activeHighlightKey === highlightKey ? 'blue.50' : 'gray.50',
-                                        borderColor: activeHighlightKey === highlightKey ? 'blue.400' : 'gray.200',
-                                      }
-                                    : {}
-                                }
-                                onClick={
-                                  clickable
-                                    ? () => {
-                                        setActiveHighlight({
-                                          source: 'di',
-                                          key: highlightKey,
-                                          pageNumber: Number(li.ocr_description_page),
-                                          polygon: li.ocr_description_polygon,
-                                        });
-                                        setDocumentVisible(true);
-                                        setActiveHighlightKey(highlightKey);
-                                      }
-                                    : undefined
-                                }
-                              >
+                              return (
                                 <Box
-                                  display="grid"
-                                  gridTemplateColumns="minmax(220px, 1fr) 72px 96px 96px"
-                                  gap="8px"
-                                  alignItems="baseline"
+                                  key={String(lineitemKey)}
+                                  borderWidth="1px"
+                                  borderColor={activeHighlightKey === highlightKey ? 'blue.400' : 'transparent'}
+                                  borderRadius="md"
+                                  bg={activeHighlightKey === highlightKey ? 'blue.50' : 'transparent'}
+                                  px="10px"
+                                  py="3px"
+                                  role={clickable ? 'button' : undefined}
+                                  cursor={clickable ? 'pointer' : 'default'}
+                                  _hover={
+                                    clickable
+                                      ? {
+                                          bg: activeHighlightKey === highlightKey ? 'blue.50' : 'gray.50',
+                                          borderColor: activeHighlightKey === highlightKey ? 'blue.400' : 'gray.200',
+                                        }
+                                      : {}
+                                  }
+                                  onClick={
+                                    clickable
+                                      ? () => {
+                                          setActiveHighlight({
+                                            source: 'di',
+                                            key: highlightKey,
+                                            pageNumber: Number(li.ocr_description_page),
+                                            polygon: li.ocr_description_polygon,
+                                          });
+                                          showDocument();
+                                          setActiveHighlightKey(highlightKey);
+                                        }
+                                      : undefined
+                                  }
                                 >
-                                  <Text
-                                    fontSize="sm"
-                                    fontWeight={activeHighlightKey === highlightKey ? 'semibold' : 'normal'}
-                                    noOfLines={1}
+                                  <Box
+                                    display="grid"
+                                    gridTemplateColumns="minmax(220px, 1fr) 72px 96px 96px"
+                                    gap="8px"
+                                    alignItems="baseline"
                                   >
-                                    {String(li.ocr_description ?? '-')}
-                                  </Text>
-                                  <Text fontSize="sm" textAlign="right" noOfLines={1}>
-                                    {li.ocr_quantity != null ? String(li.ocr_quantity) : '-'}
-                                  </Text>
-                                  <Text fontSize="sm" textAlign="right" noOfLines={1}>
-                                    {li.ocr_unit_price != null ? fmtMoney(li.ocr_unit_price) : '-'}
-                                  </Text>
-                                  <Text fontSize="sm" textAlign="right" noOfLines={1}>
-                                    {li.ocr_amount != null ? fmtMoney(li.ocr_amount) : '-'}
-                                  </Text>
+                                    <Text
+                                      fontSize="sm"
+                                      fontWeight={activeHighlightKey === highlightKey ? 'semibold' : 'normal'}
+                                      noOfLines={1}
+                                    >
+                                      {String(li.ocr_description ?? '-')}
+                                    </Text>
+                                    <Text fontSize="sm" textAlign="right" noOfLines={1}>
+                                      {li.ocr_quantity != null ? String(li.ocr_quantity) : '-'}
+                                    </Text>
+                                    <Text fontSize="sm" textAlign="right" noOfLines={1}>
+                                      {li.ocr_unit_price != null ? fmtMoney(li.ocr_unit_price) : '-'}
+                                    </Text>
+                                    <Text fontSize="sm" textAlign="right" noOfLines={1}>
+                                      {li.ocr_amount != null ? fmtMoney(li.ocr_amount) : '-'}
+                                    </Text>
+                                  </Box>
                                 </Box>
-                              </Box>
-                            );
-                          })}
-                        </Box>
-                      )}
+                              );
+                            })}
+                          </Box>
+                        )}
+                      </Box>
                     </AccordionPanel>
                   </AccordionItem>
 
@@ -2464,7 +2452,7 @@ export const InvoiceVersionShowScreen = () => {
                                             pageNumber: Number(r.page),
                                             polygon: r.polygon ?? null,
                                           });
-                                          setDocumentVisible(true);
+                                          showDocument();
                                         }
                                       : undefined
                                   }
@@ -2516,109 +2504,6 @@ export const InvoiceVersionShowScreen = () => {
                       </AccordionPanel>
                     </AccordionItem>
                   )}
-
-                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                    <h2>
-                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                        <Box flex="1" textAlign="left">
-                          <Text size="sm" fontWeight="bold">
-                            Classified Upgrade Types
-                          </Text>
-                        </Box>
-                        <AccordionIcon />
-                      </AccordionButton>
-                    </h2>
-
-                    <AccordionPanel px="0" pt="3px">
-                      {classifierUpgradeTypeRows.length === 0 ? (
-                        <Text fontSize="sm" opacity={0.7}>
-                          No upgrade types classified for this invoice.
-                        </Text>
-                      ) : (
-                        <Box display="flex" flexDirection="column" gap="6px">
-                          {classifierUpgradeTypeRows.map((r: any) => {
-                            const meta = getInvoiceUpgradeTypeMeta(upgradeTypeKeyFor(r), r.upgrade_type_description);
-                            const explanation = String(r.classification_explanation || '').trim();
-                            const evidenceText = String(r.evidence_text || '').trim();
-                            const confidence =
-                              r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(0)}` : '';
-                            const clickable = r.page != null;
-                            const highlightKey = `classifier_upgrade_${r.id}`;
-                            const isActive =
-                              activeHighlight?.source === 'classifier' && activeHighlight?.key === highlightKey;
-
-                            return (
-                              <Box
-                                key={r.id}
-                                role={clickable ? 'button' : undefined}
-                                cursor={clickable ? 'pointer' : 'default'}
-                                px="10px"
-                                py="6px"
-                                borderRadius="md"
-                                bg={isActive ? 'blue.50' : 'transparent'}
-                                _hover={clickable ? { bg: isActive ? 'blue.50' : 'gray.50' } : undefined}
-                                onClick={
-                                  clickable
-                                    ? () => {
-                                        setActiveHighlight({
-                                          source: 'classifier',
-                                          key: highlightKey,
-                                          pageNumber: Number(r.page),
-                                          polygon: r.polygon ?? null,
-                                        });
-                                        setDocumentVisible(true);
-                                      }
-                                    : undefined
-                                }
-                              >
-                                <Box
-                                  display="grid"
-                                  gridTemplateColumns="minmax(210px, 0.75fr) minmax(260px, 1.25fr)"
-                                  gap="8px"
-                                  alignItems="baseline"
-                                >
-                                  <Text fontSize="sm" fontWeight={isActive ? 'semibold' : 'normal'} noOfLines={1}>
-                                    {meta.label}
-                                  </Text>
-                                  {confidence ? (
-                                    <Tooltip label={confidence} hasArrow placement="top">
-                                      <Text fontSize="sm" noOfLines={1} cursor="help">
-                                        {evidenceText || '-'}
-                                      </Text>
-                                    </Tooltip>
-                                  ) : (
-                                    <Text fontSize="sm" noOfLines={1}>
-                                      {evidenceText || '-'}
-                                    </Text>
-                                  )}
-                                </Box>
-                                {explanation && (
-                                  <Box mt="4px" pl="12px">
-                                    <Text as="span" fontSize="sm" fontWeight="bold">
-                                      Why classified:{' '}
-                                    </Text>
-                                    <Text as="span" fontSize="sm">
-                                      {explanation}
-                                    </Text>
-                                  </Box>
-                                )}
-                                {evidenceText && (
-                                  <Box mt="2px" pl="12px">
-                                    <Text as="span" fontSize="sm" fontWeight="bold">
-                                      Evidence:{' '}
-                                    </Text>
-                                    <Text as="span" fontSize="sm">
-                                      {evidenceText}
-                                    </Text>
-                                  </Box>
-                                )}
-                              </Box>
-                            );
-                          })}
-                        </Box>
-                      )}
-                    </AccordionPanel>
-                  </AccordionItem>
 
                   {supportingDocumentEvidenceSections.length === 0 ? (
                     <AccordionItem borderTopWidth="1px" borderColor="gray.200">
@@ -2768,7 +2653,7 @@ export const InvoiceVersionShowScreen = () => {
                                             </Tooltip>
                                             <RevisionStatusBadge
                                               status={revisionStatusForIssue(issue)}
-                                              onOpen={issue ? () => revisionWorkspace.focusIssue(issue.id) : undefined}
+                                              onOpen={issue ? () => focusRevisionIssue(issue.id) : undefined}
                                             />
                                           </Flex>
                                           <Text
@@ -2805,7 +2690,7 @@ export const InvoiceVersionShowScreen = () => {
                                             <Box gridColumn="1 / -1">
                                               <RevisionSourceActions
                                                 issue={issue}
-                                                onSelect={(mode) => revisionWorkspace.focusIssue(issue.id, mode)}
+                                                onSelect={(mode) => focusRevisionIssue(issue.id, mode)}
                                               />
                                               <AdminRevisionSourceAnchor issueId={issue.id} />
                                             </Box>
@@ -2878,7 +2763,7 @@ export const InvoiceVersionShowScreen = () => {
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
-                              HERV ENERGY STAR product-list match
+                              ENERGY STAR H/ERV registry match
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -2986,7 +2871,7 @@ export const InvoiceVersionShowScreen = () => {
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
-                              ENERGY STAR fan product-list match
+                              ENERGY STAR fan registry match
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -3087,7 +2972,7 @@ export const InvoiceVersionShowScreen = () => {
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
-                              AHRI product-list match
+                              AHRI product registry match
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -3149,7 +3034,7 @@ export const InvoiceVersionShowScreen = () => {
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
-                              NEEA HPWH product-list match
+                              NEEA product registry match
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -3256,7 +3141,7 @@ export const InvoiceVersionShowScreen = () => {
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
-                              Air-to-water product-list match
+                              Air-to-water product registry match
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -3350,7 +3235,7 @@ export const InvoiceVersionShowScreen = () => {
                         <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                           <Box flex="1" textAlign="left">
                             <Text size="sm" fontWeight="bold">
-                              OHPA BC product-list match
+                              OHPA BC product registry match
                             </Text>
                           </Box>
                           <AccordionIcon />
@@ -3602,7 +3487,7 @@ export const InvoiceVersionShowScreen = () => {
                                                           pageNumber: Number(r.page),
                                                           polygon: r.polygon ?? null,
                                                         });
-                                                        setDocumentVisible(true);
+                                                        showDocument();
                                                         setActiveHighlightKey(highlightKey);
                                                       }
                                                     : undefined
@@ -3693,9 +3578,7 @@ export const InvoiceVersionShowScreen = () => {
                                                   </Tooltip>
                                                   <RevisionStatusBadge
                                                     status={revisionStatusForIssue(issue)}
-                                                    onOpen={
-                                                      issue ? () => revisionWorkspace.focusIssue(issue.id) : undefined
-                                                    }
+                                                    onOpen={issue ? () => focusRevisionIssue(issue.id) : undefined}
                                                   />
                                                 </Flex>
                                                 <RevisionAddIconButton
@@ -3732,9 +3615,7 @@ export const InvoiceVersionShowScreen = () => {
                                               <RevisionSourceActions
                                                 issue={issue}
                                                 onSelect={
-                                                  issue
-                                                    ? (mode) => revisionWorkspace.focusIssue(issue.id, mode)
-                                                    : undefined
+                                                  issue ? (mode) => focusRevisionIssue(issue.id, mode) : undefined
                                                 }
                                               />
                                               {issue ? <AdminRevisionSourceAnchor issueId={issue.id} /> : null}
@@ -3816,7 +3697,7 @@ export const InvoiceVersionShowScreen = () => {
                                               pageNumber: Number(opts.page),
                                               polygon: opts.polygon,
                                             });
-                                            setDocumentVisible(true);
+                                            showDocument();
                                             setActiveHighlightKey(`lineitem_${seq}_${opts.subKey}`);
                                           }
                                         : undefined
@@ -3944,7 +3825,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
-                                    setDocumentVisible(true);
+                                    showDocument();
                                   }}
                                 >
                                   <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
@@ -4033,7 +3914,7 @@ export const InvoiceVersionShowScreen = () => {
                                             pageNumber: Number(r.page),
                                             polygon: r.polygon ?? null,
                                           });
-                                          setDocumentVisible(true);
+                                          showDocument();
                                         }
                                       : undefined
                                   }
@@ -4123,7 +4004,7 @@ export const InvoiceVersionShowScreen = () => {
                                       pageNumber: r.page != null ? Number(r.page) : null,
                                       polygon: r.polygon ?? null,
                                     });
-                                    setDocumentVisible(true);
+                                    showDocument();
                                   }}
                                 >
                                   <Tooltip label={locatedFieldKeyHint(r)} hasArrow placement="top">
@@ -4337,189 +4218,293 @@ export const InvoiceVersionShowScreen = () => {
                       )}
                     </AccordionPanel>
                   </AccordionItem>
-                </Accordion>
-              </Box>
 
-              {/* ============================================================
+                  <AccordionItem borderTopWidth="1px" borderColor="gray.200">
+                    <h2>
+                      <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
+                        <Box flex="1" textAlign="left">
+                          <Text size="sm" fontWeight="bold">
+                            Classified Upgrade Types
+                          </Text>
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+
+                    <AccordionPanel px="0" pt="3px">
+                      {classifierUpgradeTypeRows.length === 0 ? (
+                        <Text fontSize="sm" opacity={0.7}>
+                          No upgrade types classified for this invoice.
+                        </Text>
+                      ) : (
+                        <Box display="flex" flexDirection="column" gap="6px">
+                          {classifierUpgradeTypeRows.map((r: any) => {
+                            const meta = getInvoiceUpgradeTypeMeta(upgradeTypeKeyFor(r), r.upgrade_type_description);
+                            const explanation = String(r.classification_explanation || '').trim();
+                            const evidenceText = String(r.evidence_text || '').trim();
+                            const confidence =
+                              r.confidence != null ? `Confidence: ${Number(r.confidence).toFixed(0)}` : '';
+                            const clickable = r.page != null;
+                            const highlightKey = `classifier_upgrade_${r.id}`;
+                            const isActive =
+                              activeHighlight?.source === 'classifier' && activeHighlight?.key === highlightKey;
+
+                            return (
+                              <Box
+                                key={r.id}
+                                role={clickable ? 'button' : undefined}
+                                cursor={clickable ? 'pointer' : 'default'}
+                                px="10px"
+                                py="6px"
+                                borderRadius="md"
+                                bg={isActive ? 'blue.50' : 'transparent'}
+                                _hover={clickable ? { bg: isActive ? 'blue.50' : 'gray.50' } : undefined}
+                                onClick={
+                                  clickable
+                                    ? () => {
+                                        setActiveHighlight({
+                                          source: 'classifier',
+                                          key: highlightKey,
+                                          pageNumber: Number(r.page),
+                                          polygon: r.polygon ?? null,
+                                        });
+                                        showDocument();
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <Box
+                                  display="grid"
+                                  gridTemplateColumns="minmax(210px, 0.75fr) minmax(260px, 1.25fr)"
+                                  gap="8px"
+                                  alignItems="baseline"
+                                >
+                                  <Text fontSize="sm" fontWeight={isActive ? 'semibold' : 'normal'} noOfLines={1}>
+                                    {meta.label}
+                                  </Text>
+                                  {confidence ? (
+                                    <Tooltip label={confidence} hasArrow placement="top">
+                                      <Text fontSize="sm" noOfLines={1} cursor="help">
+                                        {evidenceText || '-'}
+                                      </Text>
+                                    </Tooltip>
+                                  ) : (
+                                    <Text fontSize="sm" noOfLines={1}>
+                                      {evidenceText || '-'}
+                                    </Text>
+                                  )}
+                                </Box>
+                                {explanation && (
+                                  <Box mt="4px" pl="12px">
+                                    <Text as="span" fontSize="sm" fontWeight="bold">
+                                      Why classified:{' '}
+                                    </Text>
+                                    <Text as="span" fontSize="sm">
+                                      {explanation}
+                                    </Text>
+                                  </Box>
+                                )}
+                                {evidenceText && (
+                                  <Box mt="2px" pl="12px">
+                                    <Text as="span" fontSize="sm" fontWeight="bold">
+                                      Evidence:{' '}
+                                    </Text>
+                                    <Text as="span" fontSize="sm">
+                                      {evidenceText}
+                                    </Text>
+                                  </Box>
+                                )}
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      )}
+                    </AccordionPanel>
+                  </AccordionItem>
+                </Accordion>
+              </InvoiceReviewMainPanel>
+
+              {documentVisible || visibleAuxiliaryPanel ? (
+                <InvoiceReviewRightRegion>
+                  {/* ============================================================
         SECTION 07.06 - RIGHT PANEL (PDF)
         PURPOSE: PDF viewer + overlay highlight + toolbar
         ============================================================ */}
 
-              {documentVisible ? (
-                <Box
-                  ref={pdfWrapRef}
-                  flex="0 0 640px"
-                  w="640px"
-                  maxW="640px"
-                  minW="640px"
-                  minH={0}
-                  overflow="auto"
-                  p="0"
-                  bg="transparent"
-                >
-                  <Box position="relative" width="100%">
-                    {/* ============================================================
+                  {documentVisible ? (
+                    <Box
+                      ref={pdfWrapRef}
+                      flex="1 1 640px"
+                      w="auto"
+                      minW={`${MIN_DOCUMENT_PANEL_WIDTH}px`}
+                      minH={0}
+                      overflow="auto"
+                      p="0"
+                      bg="transparent"
+                    >
+                      <Box position="relative" width="100%">
+                        {/* ============================================================
         SECTION 07.07 - PDF TOOLBAR
         PURPOSE: Page nav + zoom/fit/rotate + open
         ============================================================ */}
 
-                    <Box
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      gap="10px"
-                      mb="10px"
-                      p="0"
-                      bg="transparent"
-                      flexWrap="wrap"
-                    >
-                      <Flex align="center" gap="5px" flexWrap="wrap">
-                        <Tooltip label="Previous page" hasArrow>
-                          <IconButton
-                            aria-label="Previous page"
-                            icon={<CaretLeft size={18} weight="bold" />}
-                            size="sm"
-                            variant="ghost"
-                            borderRadius="full"
-                            onClick={() => setActivePageNumber((p) => Math.max(1, p - 1))}
-                            isDisabled={activePageNumber <= 1}
-                          />
-                        </Tooltip>
-
-                        <Text fontSize="xs" opacity={0.7} fontWeight="semibold">
-                          Page
-                        </Text>
-
                         <Box
-                          as="input"
-                          value={pageInput}
-                          onChange={(e: any) => setPageInput(e.target.value)}
-                          onBlur={() => {
-                            const n = Number(pageInput);
-                            if (!Number.isFinite(n)) {
-                              setPageInput(String(activePageNumber));
-                              return;
-                            }
-                            const clamped = Math.min(Math.max(1, Math.floor(n)), numPages || 1);
-                            setActivePageNumber(clamped);
-                          }}
-                          onKeyDown={(e: any) => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          }}
-                          style={{
-                            width: 46,
-                            padding: '4px 6px',
-                            border: '1px solid #E2E8F0',
-                            borderRadius: 999,
-                            background: 'white',
-                            fontSize: 12,
-                            textAlign: 'center',
-                          }}
-                        />
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          gap="10px"
+                          mb="10px"
+                          p="0"
+                          bg="transparent"
+                          flexWrap="wrap"
+                        >
+                          <Flex align="center" gap="5px" flexWrap="wrap">
+                            <Tooltip label="Previous page" hasArrow>
+                              <IconButton
+                                aria-label="Previous page"
+                                icon={<CaretLeft size={18} weight="bold" />}
+                                size="sm"
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => setActivePageNumber((p) => Math.max(1, p - 1))}
+                                isDisabled={activePageNumber <= 1}
+                              />
+                            </Tooltip>
 
-                        <Text fontSize="xs" opacity={0.7}>
-                          / {numPages || '-'}
-                        </Text>
+                            <Text fontSize="xs" opacity={0.7} fontWeight="semibold">
+                              Page
+                            </Text>
 
-                        <Tooltip label="Next page" hasArrow>
-                          <IconButton
-                            aria-label="Next page"
-                            icon={<CaretRight size={18} weight="bold" />}
-                            size="sm"
-                            variant="ghost"
-                            borderRadius="full"
-                            onClick={() => setActivePageNumber((p) => Math.min(numPages || p + 1, p + 1))}
-                            isDisabled={!!numPages && activePageNumber >= numPages}
-                          />
-                        </Tooltip>
-                      </Flex>
+                            <Box
+                              as="input"
+                              value={pageInput}
+                              onChange={(e: any) => setPageInput(e.target.value)}
+                              onBlur={() => {
+                                const n = Number(pageInput);
+                                if (!Number.isFinite(n)) {
+                                  setPageInput(String(activePageNumber));
+                                  return;
+                                }
+                                const clamped = Math.min(Math.max(1, Math.floor(n)), numPages || 1);
+                                setActivePageNumber(clamped);
+                              }}
+                              onKeyDown={(e: any) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                              }}
+                              style={{
+                                width: 46,
+                                padding: '4px 6px',
+                                border: '1px solid #E2E8F0',
+                                borderRadius: 999,
+                                background: 'white',
+                                fontSize: 12,
+                                textAlign: 'center',
+                              }}
+                            />
 
-                      <Flex align="center" gap="5px" flexWrap="wrap">
-                        <Tooltip label="Zoom out" hasArrow>
-                          <IconButton
-                            aria-label="Zoom out"
-                            icon={<MagnifyingGlassMinus size={18} weight="bold" />}
-                            size="sm"
-                            variant="ghost"
-                            borderRadius="full"
-                            onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
-                          />
-                        </Tooltip>
+                            <Text fontSize="xs" opacity={0.7}>
+                              / {numPages || '-'}
+                            </Text>
 
-                        <Text fontSize="xs" minW="44px" textAlign="center" fontWeight="semibold" opacity={0.75}>
-                          {Math.round(zoom * 100)}%
-                        </Text>
+                            <Tooltip label="Next page" hasArrow>
+                              <IconButton
+                                aria-label="Next page"
+                                icon={<CaretRight size={18} weight="bold" />}
+                                size="sm"
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => setActivePageNumber((p) => Math.min(numPages || p + 1, p + 1))}
+                                isDisabled={!!numPages && activePageNumber >= numPages}
+                              />
+                            </Tooltip>
+                          </Flex>
 
-                        <Tooltip label="Zoom in" hasArrow>
-                          <IconButton
-                            aria-label="Zoom in"
-                            icon={<MagnifyingGlassPlus size={18} weight="bold" />}
-                            size="sm"
-                            variant="ghost"
-                            borderRadius="full"
-                            onClick={() => setZoom((z) => Math.min(3.0, +(z + 0.1).toFixed(2)))}
-                          />
-                        </Tooltip>
+                          <Flex align="center" gap="5px" flexWrap="wrap">
+                            <Tooltip label="Zoom out" hasArrow>
+                              <IconButton
+                                aria-label="Zoom out"
+                                icon={<MagnifyingGlassMinus size={18} weight="bold" />}
+                                size="sm"
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))}
+                              />
+                            </Tooltip>
 
-                        <Tooltip label="Fit width" hasArrow>
-                          <IconButton
-                            aria-label="Fit width"
-                            icon={<CornersOut size={18} weight="bold" />}
-                            size="sm"
-                            colorScheme={fitMode === 'width' ? 'blue' : 'gray'}
-                            variant={fitMode === 'width' ? 'solid' : 'ghost'}
-                            borderRadius="full"
-                            onClick={() => {
-                              setFitMode('width');
-                              setZoom(1.0);
-                            }}
-                          />
-                        </Tooltip>
+                            <Text fontSize="xs" minW="44px" textAlign="center" fontWeight="semibold" opacity={0.75}>
+                              {Math.round(zoom * 100)}%
+                            </Text>
 
-                        <Tooltip label="Fit page" hasArrow>
-                          <IconButton
-                            aria-label="Fit page"
-                            icon={<FrameCorners size={18} weight="bold" />}
-                            size="sm"
-                            colorScheme={fitMode === 'page' ? 'blue' : 'gray'}
-                            variant={fitMode === 'page' ? 'solid' : 'ghost'}
-                            borderRadius="full"
-                            onClick={() => {
-                              setFitMode('page');
-                              setZoom(1.0);
-                            }}
-                          />
-                        </Tooltip>
+                            <Tooltip label="Zoom in" hasArrow>
+                              <IconButton
+                                aria-label="Zoom in"
+                                icon={<MagnifyingGlassPlus size={18} weight="bold" />}
+                                size="sm"
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => setZoom((z) => Math.min(3.0, +(z + 0.1).toFixed(2)))}
+                              />
+                            </Tooltip>
 
-                        <Tooltip label="Rotate clockwise" hasArrow>
-                          <IconButton
-                            aria-label="Rotate clockwise"
-                            icon={<ArrowClockwise size={18} weight="bold" />}
-                            size="sm"
-                            variant="ghost"
-                            borderRadius="full"
-                            onClick={() => setRotate((r) => (r + 90) % 360)}
-                          />
-                        </Tooltip>
+                            <Tooltip label="Fit width" hasArrow>
+                              <IconButton
+                                aria-label="Fit width"
+                                icon={<CornersOut size={18} weight="bold" />}
+                                size="sm"
+                                colorScheme={fitMode === 'width' ? 'blue' : 'gray'}
+                                variant={fitMode === 'width' ? 'solid' : 'ghost'}
+                                borderRadius="full"
+                                onClick={() => {
+                                  setFitMode('width');
+                                  setZoom(1.0);
+                                }}
+                              />
+                            </Tooltip>
 
-                        <Tooltip label={`Open ${viewerFilename} in browser`} hasArrow>
-                          <IconButton
-                            aria-label={`Open ${viewerFilename} in browser`}
-                            icon={<ArrowSquareOut size={18} weight="bold" />}
-                            size="sm"
-                            variant="ghost"
-                            borderRadius="full"
-                            onClick={() => {
-                              if (!viewerUrl) return;
-                              window.open(viewerUrl, '_blank', 'noopener,noreferrer');
-                            }}
-                            isDisabled={!viewerUrl}
-                          />
-                        </Tooltip>
-                      </Flex>
-                    </Box>
+                            <Tooltip label="Fit page" hasArrow>
+                              <IconButton
+                                aria-label="Fit page"
+                                icon={<FrameCorners size={18} weight="bold" />}
+                                size="sm"
+                                colorScheme={fitMode === 'page' ? 'blue' : 'gray'}
+                                variant={fitMode === 'page' ? 'solid' : 'ghost'}
+                                borderRadius="full"
+                                onClick={() => {
+                                  setFitMode('page');
+                                  setZoom(1.0);
+                                }}
+                              />
+                            </Tooltip>
 
-                    {/* ============================================================
+                            <Tooltip label="Rotate clockwise" hasArrow>
+                              <IconButton
+                                aria-label="Rotate clockwise"
+                                icon={<ArrowClockwise size={18} weight="bold" />}
+                                size="sm"
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => setRotate((r) => (r + 90) % 360)}
+                              />
+                            </Tooltip>
+
+                            <Tooltip label={`Open ${viewerFilename} in browser`} hasArrow>
+                              <IconButton
+                                aria-label={`Open ${viewerFilename} in browser`}
+                                icon={<ArrowSquareOut size={18} weight="bold" />}
+                                size="sm"
+                                variant="ghost"
+                                borderRadius="full"
+                                onClick={() => {
+                                  if (!viewerUrl) return;
+                                  window.open(viewerUrl, '_blank', 'noopener,noreferrer');
+                                }}
+                                isDisabled={!viewerUrl}
+                              />
+                            </Tooltip>
+                          </Flex>
+                        </Box>
+
+                        {/* ============================================================
     SECTION 07.08 - PDF DOCUMENT + OVERLAY RENDER (DYNAMIC)
     PURPOSE: Render the PDF page + draw polygon overlay
     NOTES:
@@ -4527,214 +4512,172 @@ export const InvoiceVersionShowScreen = () => {
     ? We render Document only when pdfUrl is present
     ============================================================ */}
 
-                    {pdfUrlError && !viewerUrl && (
-                      <Text fontSize="sm" color="red.500" mb="8px">
-                        Image URL error: {pdfUrlError}
-                      </Text>
-                    )}
+                        {pdfUrlError && !viewerUrl && (
+                          <Text fontSize="sm" color="red.500" mb="8px">
+                            Image URL error: {pdfUrlError}
+                          </Text>
+                        )}
 
-                    {/* 2) loading state */}
-                    {!viewerUrl && !pdfUrlError && (
-                      <Text fontSize="sm" opacity={0.7} mb="8px">
-                        Loading image URL...
-                      </Text>
-                    )}
+                        {/* 2) loading state */}
+                        {!viewerUrl && !pdfUrlError && (
+                          <Text fontSize="sm" opacity={0.7} mb="8px">
+                            Loading image URL...
+                          </Text>
+                        )}
 
-                    {viewerUrl && viewerIsImage && (
-                      <Box
-                        position="relative"
-                        width={`${overlayWidthPx}px`}
-                        height={`${overlayHeightPx}px`}
-                        mx="auto"
-                        bg="white"
-                        boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
-                        borderRadius="sm"
-                        overflow="hidden"
-                      >
-                        <svg
-                          width={overlayWidthPx}
-                          height={overlayHeightPx}
-                          style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
-                        >
-                          {shouldShowActivePolygon && (
-                            <polygon points={svgPolygonPoints} fill="rgba(255,0,0,0.20)" stroke="red" strokeWidth={2} />
-                          )}
-                        </svg>
-                        <Box
-                          as="img"
-                          src={viewerUrl}
-                          alt={viewerFilename}
-                          width={`${renderWidthPx}px`}
-                          height="auto"
-                          display="block"
-                          onLoad={(event: any) => {
-                            const img = event.currentTarget as HTMLImageElement;
-                            if (!img?.naturalWidth || !img?.naturalHeight) return;
-                            setNumPages(1);
-                            setViewerPageMetaByPage({
-                              1: {
-                                width: img.naturalWidth,
-                                height: img.naturalHeight,
-                                unit: 'pixel',
-                              },
-                            });
-                          }}
-                        />
-                      </Box>
-                    )}
-
-                    {/* 3) render PDF only when url exists */}
-                    {viewerUrl && viewerIsPdf && (
-                      <Document
-                        key={viewerUrl} // force reload when url changes
-                        file={viewerUrl} // IMPORTANT: dynamic URL here
-                        onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-                        onLoadError={(err) => console.error('PDF load error:', err)}
-                      >
-                        {/* Wrapper so SVG and Page share identical geometry */}
-                        <Box
-                          position="relative"
-                          width={`${overlayWidthPx}px`}
-                          height={`${overlayHeightPx}px`}
-                          mx="auto"
-                          bg="white"
-                          boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
-                          borderRadius="sm"
-                        >
-                          {/* SVG overlay */}
-                          <svg
-                            width={overlayWidthPx}
-                            height={overlayHeightPx}
-                            style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
+                        {viewerUrl && viewerIsImage && (
+                          <Box
+                            position="relative"
+                            width={`${overlayWidthPx}px`}
+                            height={`${overlayHeightPx}px`}
+                            mx="auto"
+                            bg="white"
+                            boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
+                            borderRadius="sm"
+                            overflow="hidden"
                           >
-                            {shouldShowActivePolygon && (
-                              <polygon
-                                points={svgPolygonPoints}
-                                fill="rgba(255,0,0,0.20)"
-                                stroke="red"
-                                strokeWidth={2}
-                              />
-                            )}
-                          </svg>
-
-                          {/* Actual PDF page */}
-                          <Box style={{ position: 'absolute', top: 0, left: 0 }}>
-                            <Page
-                              key={`p${activePageNumber}-w${renderWidthPx}-r${rotate}`} // force remount on zoom/rotate/page
-                              pageNumber={activePageNumber}
-                              width={renderWidthPx}
-                              rotate={rotate}
-                              onLoadSuccess={(page: any) => {
-                                if (!page?.getViewport) return;
-                                const viewport = page.getViewport({ scale: 1 });
-                                if (!viewport?.width || !viewport?.height) return;
-                                setViewerPageMetaByPage((current) => ({
-                                  ...current,
-                                  [activePageNumber]: {
-                                    width: Number(viewport.width) / 72,
-                                    height: Number(viewport.height) / 72,
-                                    unit: 'inch',
+                            <svg
+                              width={overlayWidthPx}
+                              height={overlayHeightPx}
+                              style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
+                            >
+                              {shouldShowActivePolygon && (
+                                <polygon
+                                  points={svgPolygonPoints}
+                                  fill="rgba(255,0,0,0.20)"
+                                  stroke="red"
+                                  strokeWidth={2}
+                                />
+                              )}
+                            </svg>
+                            <Box
+                              as="img"
+                              src={viewerUrl}
+                              alt={viewerFilename}
+                              width={`${renderWidthPx}px`}
+                              height="auto"
+                              display="block"
+                              onLoad={(event: any) => {
+                                const img = event.currentTarget as HTMLImageElement;
+                                if (!img?.naturalWidth || !img?.naturalHeight) return;
+                                setNumPages(1);
+                                setViewerPageMetaByPage({
+                                  1: {
+                                    width: img.naturalWidth,
+                                    height: img.naturalHeight,
+                                    unit: 'pixel',
                                   },
-                                }));
+                                });
                               }}
                             />
                           </Box>
-                        </Box>
-                      </Document>
-                    )}
+                        )}
 
-                    <Text fontSize="xs" opacity={0.6} mt="8px">
-                      Active highlight: {activeHighlight?.source ?? '-'}{' '}
-                      {activeHighlight?.source === 'di'
-                        ? activeHighlight?.key ?? '-'
-                        : `${activeHighlight?.source ?? 'row'} ${activeHighlight?.genaiId ?? '-'}`}{' '}
-                      | page {activePageNumber} / {numPages || '-'} | unit {activePageMeta?.unit ?? '-'}
-                    </Text>
-                  </Box>{' '}
-                  {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
-                </Box>
-              ) : null}
-              {canOpenCommunicationPanels ? (
-                <Box
-                  display={auxiliaryPanel ? 'block' : 'none'}
-                  position="relative"
-                  flex={`0 0 ${auxiliaryPanelWidth}px`}
-                  w={`${auxiliaryPanelWidth}px`}
-                  minW={`${auxiliaryPanelWidth}px`}
-                  maxW={`${auxiliaryPanelWidth}px`}
-                  alignSelf="flex-start"
-                  maxH="calc(100vh - 150px)"
-                  overflowY="auto"
-                  borderWidth="1px"
-                  borderColor="gray.200"
-                  borderRadius="xl"
-                  bg="white"
-                  boxShadow="sm"
-                >
-                  <Box
-                    role="separator"
-                    aria-label="Resize communication panel"
-                    aria-orientation="vertical"
-                    aria-valuemin={340}
-                    aria-valuemax={640}
-                    aria-valuenow={auxiliaryPanelWidth}
-                    tabIndex={0}
-                    position="absolute"
-                    top={0}
-                    bottom={0}
-                    left={0}
-                    w="8px"
-                    cursor="col-resize"
-                    zIndex={2}
-                    sx={{ touchAction: 'none' }}
-                    _hover={{ bg: 'blue.100' }}
-                    _focusVisible={{ bg: 'blue.200', outline: '2px solid', outlineColor: 'blue.500' }}
-                    onPointerDown={(event) => {
-                      auxiliaryResizeStartRef.current = {
-                        pointerX: event.clientX,
-                        width: auxiliaryPanelWidth,
-                      };
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                    }}
-                    onPointerMove={resizeAuxiliaryPanel}
-                    onPointerUp={finishAuxiliaryPanelResize}
-                    onPointerCancel={finishAuxiliaryPanelResize}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-                      event.preventDefault();
-                      const nextWidth = Math.min(
-                        640,
-                        Math.max(340, auxiliaryPanelWidth + (event.key === 'ArrowLeft' ? 20 : -20)),
-                      );
-                      setAuxiliaryPanelWidth(nextWidth);
-                      window.localStorage.setItem('claims-admin-auxiliary-panel-width', String(nextWidth));
-                    }}
-                  />
-                  {mountedAuxiliaryPanels.conversation ? (
-                    <Box display={auxiliaryPanel === 'conversation' ? 'block' : 'none'}>
-                      <AdminConversationPanel
-                        invoiceId={revisionInvoiceId}
-                        latestInvoiceVersionId={String(readData?.id || '')}
-                        contractorBusinessName={String(readData?.contractor_business_name || '')}
-                        diOcrInvoiceId={String(readData?.di_ocr_invoice_id || '')}
-                        onClose={() => setAuxiliaryPanel(null)}
-                      />
+                        {/* 3) render PDF only when url exists */}
+                        {viewerUrl && viewerIsPdf && (
+                          <Document
+                            key={viewerUrl} // force reload when url changes
+                            file={viewerUrl} // IMPORTANT: dynamic URL here
+                            onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                            onLoadError={(err) => console.error('PDF load error:', err)}
+                          >
+                            {/* Wrapper so SVG and Page share identical geometry */}
+                            <Box
+                              position="relative"
+                              width={`${overlayWidthPx}px`}
+                              height={`${overlayHeightPx}px`}
+                              mx="auto"
+                              bg="white"
+                              boxShadow="0 10px 26px rgba(15, 23, 42, 0.18)"
+                              borderRadius="sm"
+                            >
+                              {/* SVG overlay */}
+                              <svg
+                                width={overlayWidthPx}
+                                height={overlayHeightPx}
+                                style={{ position: 'absolute', top: 0, left: 0, zIndex: 10, pointerEvents: 'none' }}
+                              >
+                                {shouldShowActivePolygon && (
+                                  <polygon
+                                    points={svgPolygonPoints}
+                                    fill="rgba(255,0,0,0.20)"
+                                    stroke="red"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                              </svg>
+
+                              {/* Actual PDF page */}
+                              <Box style={{ position: 'absolute', top: 0, left: 0 }}>
+                                <Page
+                                  key={`p${activePageNumber}-w${renderWidthPx}-r${rotate}`} // force remount on zoom/rotate/page
+                                  pageNumber={activePageNumber}
+                                  width={renderWidthPx}
+                                  rotate={rotate}
+                                  onLoadSuccess={(page: any) => {
+                                    if (!page?.getViewport) return;
+                                    const viewport = page.getViewport({ scale: 1 });
+                                    if (!viewport?.width || !viewport?.height) return;
+                                    setViewerPageMetaByPage((current) => ({
+                                      ...current,
+                                      [activePageNumber]: {
+                                        width: Number(viewport.width) / 72,
+                                        height: Number(viewport.height) / 72,
+                                        unit: 'inch',
+                                      },
+                                    }));
+                                  }}
+                                />
+                              </Box>
+                            </Box>
+                          </Document>
+                        )}
+
+                        <Text fontSize="xs" opacity={0.6} mt="8px">
+                          Active highlight: {activeHighlight?.source ?? '-'}{' '}
+                          {activeHighlight?.source === 'di'
+                            ? activeHighlight?.key ?? '-'
+                            : `${activeHighlight?.source ?? 'row'} ${activeHighlight?.genaiId ?? '-'}`}{' '}
+                          | page {activePageNumber} / {numPages || '-'} | unit {activePageMeta?.unit ?? '-'}
+                        </Text>
+                      </Box>{' '}
+                      {/* closes SECTION 07.06 inner <Box position="relative" width="100%"> */}
                     </Box>
                   ) : null}
-                  {mountedAuxiliaryPanels.internal_notes ? (
-                    <Box display={auxiliaryPanel === 'internal_notes' ? 'block' : 'none'}>
-                      <AdminInternalNotesPanel
-                        invoiceId={revisionInvoiceId}
-                        contractorBusinessName={String(readData?.contractor_business_name || '')}
-                        diOcrInvoiceId={String(readData?.di_ocr_invoice_id || '')}
-                        onClose={() => setAuxiliaryPanel(null)}
-                      />
-                    </Box>
+                  {visibleAuxiliaryPanel ? (
+                    <InvoiceReviewAuxiliaryPanel
+                      width={auxiliaryPanelWidth}
+                      onWidthChange={setAuxiliaryPanelWidth}
+                      fillAvailableWidth={!documentVisible}
+                    >
+                      {visibleAuxiliaryPanel === 'revision_issues' ? revisionWorkspaceContent : null}
+                      {mountedAuxiliaryPanels.conversation ? (
+                        <Box display={visibleAuxiliaryPanel === 'conversation' ? 'block' : 'none'}>
+                          <AdminConversationPanel
+                            invoiceId={revisionInvoiceId}
+                            latestInvoiceVersionId={String(readData?.id || '')}
+                            contractorBusinessName={String(readData?.contractor_business_name || '')}
+                            diOcrInvoiceId={String(readData?.di_ocr_invoice_id || '')}
+                            onClose={closeCommunicationPanel}
+                          />
+                        </Box>
+                      ) : null}
+                      {mountedAuxiliaryPanels.internal_notes ? (
+                        <Box display={visibleAuxiliaryPanel === 'internal_notes' ? 'block' : 'none'}>
+                          <AdminInternalNotesPanel
+                            invoiceId={revisionInvoiceId}
+                            contractorBusinessName={String(readData?.contractor_business_name || '')}
+                            diOcrInvoiceId={String(readData?.di_ocr_invoice_id || '')}
+                            onClose={closeCommunicationPanel}
+                          />
+                        </Box>
+                      ) : null}
+                    </InvoiceReviewAuxiliaryPanel>
                   ) : null}
-                </Box>
+                </InvoiceReviewRightRegion>
               ) : null}
-            </Box>{' '}
-            {/*  ADD: closes SECTION 07.04 main split view <Box display="flex" ...> */}
+            </InvoiceReviewLayout>{' '}
+            {/* closes SECTION 07.04 main split view */}
           </Box>{' '}
           {/*  ADD: closes SECTION 07.02 page layout <Box display="flex" flexDirection="column" ...> */}
         </Box>{' '}

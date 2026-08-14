@@ -2,6 +2,9 @@ module Api
   module Claims
     class ContractorPortalController < Api::ApplicationController
       include Api::Claims::Concerns::UploadErrorRendering
+      include Api::Claims::Concerns::FunctionAuthorization
+
+      before_action -> { require_claims_function!("claims.contractor_portal") }
 
       skip_after_action :verify_authorized,
                         only: %i[

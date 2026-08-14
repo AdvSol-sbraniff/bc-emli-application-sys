@@ -9,8 +9,8 @@ begin;
 -- - the user has an active ProgramMembership for Energy Savings Program
 --
 -- Notes:
--- - default role here is regular admin (2)
--- - use set_sbraniff_system_admin.sql afterwards if you want super-admin
+-- - default role here is system admin (3)
+-- - use set_sbraniff_regular_admin.sql afterwards only for a deliberate downgrade
 
 do $$
 declare
@@ -127,7 +127,7 @@ begin
       null,
       clock_timestamp(),
       clock_timestamp(),
-      2,
+      3,
       'Stephen',
       'Braniff',
       null,
@@ -154,7 +154,7 @@ begin
     set email = v_target_email,
         first_name = 'Stephen',
         last_name = 'Braniff',
-        role = 2,
+        role = 3,
         reviewed = true,
         confirmed_at = coalesce(confirmed_at, clock_timestamp()),
         omniauth_provider = 'azureidir',

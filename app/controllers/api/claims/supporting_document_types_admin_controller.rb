@@ -4,6 +4,7 @@ module Api
   module Claims
     class SupportingDocumentTypesAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       skip_after_action :verify_authorized, only: %i[index show create update]
       skip_after_action :verify_policy_scoped, only: %i[index]

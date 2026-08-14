@@ -4,13 +4,10 @@ module Api
   module Claims
     class AhriProductsAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       skip_after_action :verify_authorized,
-                        only: %i[
-                          index
-                          import_status
-                          import_downloaded_pdf
-                        ]
+                        only: %i[index import_status import_downloaded_pdf]
       skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[import_downloaded_pdf]
 
@@ -66,10 +63,7 @@ module Api
 
             latest_success =
               ::Claims::AhriImportRun
-                .where(
-                  ahri_source_id: source.id,
-                  status: "succeeded"
-                )
+                .where(ahri_source_id: source.id, status: "succeeded")
                 .order(started_at: :desc)
                 .first
 
@@ -172,8 +166,7 @@ module Api
           outdoor_model: row.outdoor_model,
           indoor_model_or_air_handler: row.indoor_model_or_air_handler,
           furnace_model: row.furnace_model,
-          rated_capacity_btu_at_minus_5c:
-            row.rated_capacity_btu_at_minus_5c,
+          rated_capacity_btu_at_minus_5c: row.rated_capacity_btu_at_minus_5c,
           seer: row.seer,
           seer2: row.seer2,
           hspf: row.hspf,

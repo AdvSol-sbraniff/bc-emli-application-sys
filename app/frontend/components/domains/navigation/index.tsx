@@ -7,6 +7,7 @@ import { useMst } from '../../../setup/root';
 import { EFlashMessageStatus } from '../../../types/enums';
 import { FlashMessage } from '../../shared/base/flash-message';
 import { LoadingScreen } from '../../shared/base/loading-screen';
+import { ClaimsAccessProvider, useClaimsAccess } from '../../shared/claims/claims-access';
 import { SupportScreen } from '../misc/support-screen';
 import { EULAScreen } from '../onboarding/eula';
 import { NavBar } from './nav-bar';
@@ -72,6 +73,9 @@ const DownloadsAdminScreen = lazy(() => import('../downloads-admin').then((modul
 const HelloAiAdminScreen = lazy(() => import('../hello-ai-admin').then((module) => ({ default: module.default })));
 const IngestRunsAdminScreen = lazy(() =>
   import('../ingest-runs-admin').then((module) => ({ default: module.default })),
+);
+const ClaimsRbacAdminScreen = lazy(() =>
+  import('../claims-rbac-admin').then((module) => ({ default: module.default })),
 );
 
 // the invoicesadmin is in ../invoices-admin/
@@ -456,6 +460,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/awhp-product-list-admin': 'AWHP Product List Admin',
   '/blank-applications': 'Blank Applications',
   '/check-eligible': 'Eligibility Check',
+  '/claims-rbac-admin': 'Role Based Access Control',
   '/configuration-management': 'Configuration Management',
   '/configuration-management/help-drawer-setup': 'Help Drawer Setup',
   '/configuration-management/invite-employee': 'Invite Employee',
@@ -613,14 +618,14 @@ export const Navigation = observer(() => {
       {isValidating ? (
         <LoadingScreen />
       ) : (
-        <>
+        <ClaimsAccessProvider>
           <NavBar />
           <Suspense fallback={<LoadingScreen />}>
             <AppRoutes />
 
             <Footer />
           </Suspense>
-        </>
+        </ClaimsAccessProvider>
       )}
     </BrowserRouter>
   );
@@ -635,6 +640,7 @@ const AppRoutes = observer(() => {
   const enableStepCodeRoute = location.state?.enableStepCodeRoute;
 
   const { currentUser } = userStore;
+  const { can: canUseClaimsFunction, loading: claimsAccessLoading } = useClaimsAccess();
   const { afterLoginPath, setAfterLoginPath, resetAuth, entryPoint } = sessionStore;
 
   const navigate = useNavigate();
@@ -816,13 +822,24 @@ const AppRoutes = observer(() => {
 
   //const mustAcceptEula = loggedIn && !currentUser.eulaAccepted && !currentUser.isSuperAdmin;
   const mustAcceptEula = loggedIn && currentUser && !currentUser.eulaAccepted;
-  const isClaimsAdminUser = Boolean(
-    loggedIn &&
-      !mustAcceptEula &&
-      currentUser &&
-      (currentUser.isAdminManager || currentUser.isAdmin || currentUser.isSystemAdmin),
-  );
   const isClaimsContractorUser = Boolean(loggedIn && !mustAcceptEula && currentUser && currentUser.isContractor);
+  const canUseClaimsContractorPortal = Boolean(
+    loggedIn && !mustAcceptEula && currentUser && canUseClaimsFunction('claims.contractor_portal'),
+  );
+  const canUseClaimsOperations = Boolean(
+    loggedIn && !mustAcceptEula && currentUser && canUseClaimsFunction('claims.operations'),
+  );
+  const canUseClaimsConfiguration = Boolean(
+    loggedIn && !mustAcceptEula && currentUser && canUseClaimsFunction('claims.configuration'),
+  );
+  const canUseClaimsTestTools = Boolean(
+    loggedIn && !mustAcceptEula && currentUser && canUseClaimsFunction('claims.test_tools'),
+  );
+  const canManageClaimsRbac = Boolean(
+    loggedIn && !mustAcceptEula && currentUser && canUseClaimsFunction('claims.role_functions'),
+  );
+
+  if (loggedIn && currentUser && claimsAccessLoading) return <LoadingScreen />;
 
   return (
     <>
@@ -849,9 +866,19 @@ const AppRoutes = observer(() => {
           }
         >
           <Route path="/contractor-dashboard" element={<ContractorDashboardScreen />} />
+          <Route path="/contractor/applications/:permitApplicationId/edit" element={<EditPermitApplicationScreen />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute
+              isAllowed={canUseClaimsContractorPortal}
+              redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/contractor'}
+            />
+          }
+        >
           <Route path="/ai-contractor-dashboard" element={<AiContractorDashboardScreen />} />
           <Route path="/contractor/upload-invoices" element={<ContractorUploadInvoicesScreen />} />
-          <Route path="/contractor/applications/:permitApplicationId/edit" element={<EditPermitApplicationScreen />} />
           <Route
             path="/contractor/sessions/:sessionId/invoices/:invoiceId/review"
             element={<ContractorInvoiceReviewScreen />}
@@ -989,7 +1016,7 @@ const AppRoutes = observer(() => {
         <Route
           element={
             <ProtectedRoute
-              isAllowed={isClaimsAdminUser}
+              isAllowed={canUseClaimsOperations}
               redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/admin'}
             />
           }
@@ -1001,6 +1028,19 @@ const AppRoutes = observer(() => {
           <Route path="/invoice-versions-by-version/:invoiceVersionId/read" element={<InvoiceVersionShowScreen />} />
           <Route path="/invoices-admin" element={<InvoicesAdminScreen />} />
           <Route path="/invoice-versions-admin" element={<InvoiceVersionsAdminScreen />} />
+          <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
+          <Route path="/conversation-messages-admin" element={<ConversationMessagesAdminScreen />} />
+          <Route path="/reports-volume-value" element={<ReportsVolumeValueScreen />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute
+              isAllowed={canUseClaimsConfiguration}
+              redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/admin'}
+            />
+          }
+        >
           <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
           <Route path="/validation-rules-alphabetic-admin" element={<ValidationRulesAlphabeticAdminScreen />} />
           <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />
@@ -1013,19 +1053,37 @@ const AppRoutes = observer(() => {
           <Route path="/ohpa-product-list-admin" element={<OhpaProductListAdminScreen />} />
           <Route path="/herv-product-list-admin" element={<HervProductListAdminScreen />} />
           <Route path="/vent-fan-product-list-admin" element={<VentFanProductListAdminScreen />} />
-          <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/ingest-runs-admin" element={<IngestRunsAdminScreen />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute
+              isAllowed={canUseClaimsTestTools}
+              redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/admin'}
+            />
+          }
+        >
+          <Route path="/hello-ai-admin" element={<HelloAiAdminScreen />} />
           <Route path="/contractorfixsimulation" element={<ContractorFixSimulationAdminScreen />} />
           <Route path="/advice-refresh-simulation-admin" element={<AdviceRefreshSimulationAdminScreen />} />
           <Route path="/submission-simulator-admin" element={<SubmissionSimulatorAdminScreen />} />
-          <Route path="/invoice-supporting-documents-admin" element={<InvoiceSupportingDocumentsAdminScreen />} />
           <Route path="/contractors-admin" element={<ContractorsAdminScreen />} />
           <Route path="/eligibilitycodes-admin" element={<EligibilitycodesAdminScreen />} />
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
-          <Route path="/conversation-messages-admin" element={<ConversationMessagesAdminScreen />} />
-          <Route path="/reports-volume-value" element={<ReportsVolumeValueScreen />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute
+              isAllowed={canManageClaimsRbac}
+              redirectPath={(mustAcceptEula && '/') || (loggedIn && '/not-found') || '/admin'}
+            />
+          }
+        >
+          <Route path="/claims-rbac-admin" element={<ClaimsRbacAdminScreen />} />
         </Route>
         {/* end sbra20260130 */}
 

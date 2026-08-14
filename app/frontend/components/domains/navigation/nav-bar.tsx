@@ -31,6 +31,7 @@ import { PopoverProvider, useNotificationPopover } from '../../../hooks/use-noti
 import { useMst } from '../../../setup/root';
 import { INotification, IPermitNotificationObjectData } from '../../../types/types';
 import { RouterLinkButton } from '../../shared/navigation/router-link-button';
+import { useClaimsAccess } from '../../shared/claims/claims-access';
 import SandboxHeader from '../../shared/sandbox/sandbox-header';
 import { NotificationsPopover } from '../home/notifications/notifications-popover';
 import { SubNavBar } from './sub-nav-bar';
@@ -405,6 +406,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
   const { currentUser } = userStore;
   const { logout, loggedIn } = sessionStore;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { can: canUseClaimsFunction } = useClaimsAccess();
 
   const handleClickLogout = async () => {
     await logout();
@@ -445,32 +447,60 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
     </>
   );
 
-  const claimsAdminItems = (
+  const canUseClaimsOperations = canUseClaimsFunction('claims.operations');
+  const canUseClaimsConfiguration = canUseClaimsFunction('claims.configuration');
+  const canUseClaimsTestTools = canUseClaimsFunction('claims.test_tools');
+  const canManageClaimsRbac = canUseClaimsFunction('claims.role_functions');
+
+  const hasClaimsAdminItems =
+    canUseClaimsOperations || canUseClaimsConfiguration || canUseClaimsTestTools || canManageClaimsRbac;
+
+  const claimsAdminItems = hasClaimsAdminItems ? (
     <>
       <MenuDivider my={0} borderColor="border.light" />
-      <MenuGroup title={t('home.claimsAdminSectionTitle')}>
-        <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
-        <NavMenuItem label={'Reports'} to={'/reports-volume-value'} />
-        <NavMenuItem label={'Fields and Advice Editor'} to={'/validation-rules-admin'} />
-        <NavMenuItem label={'Advice Checks at a Glance'} to={'/validation-rules-alphabetic-admin'} />
-        <NavMenuItem label={'Supporting Document Types'} to={'/supporting-document-types-admin'} />
-        <NavMenuItem label={'Downloads'} to={'/downloads-admin'} />
-      </MenuGroup>
-      <MenuDivider my={0} borderColor="border.light" />
-      <MenuGroup title="AI System Settings">
-        <NavMenuItem label="Test AI Network Connectivity" to={'/hello-ai-admin'} />
-        <NavMenuItem label="System Config" to={'/validation-rules-config'} />
-        <NavMenuItem label="Ingest Runs" to={'/ingest-runs-admin'} />
-      </MenuGroup>
-      <MenuDivider my={0} borderColor="border.light" />
-      <MenuGroup title="Create Test Data">
-        <NavMenuItem label="Contractor Simulator" to={'/submission-simulator-admin'} />
-        <NavMenuItem label="Create Test Contractors" to={'/contractors-admin'} />
-        <NavMenuItem label="Create Test Users" to={'/users-admin'} />
-        <NavMenuItem label="Create Test Eligibility Codes" to={'/eligibilitycodes-admin'} />
-      </MenuGroup>
+      {canUseClaimsOperations && (
+        <MenuGroup title={t('home.claimsAdminSectionTitle')}>
+          <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
+          <NavMenuItem label="Reports" to={'/reports-volume-value'} />
+        </MenuGroup>
+      )}
+      {canUseClaimsConfiguration && (
+        <>
+          {canUseClaimsOperations && <MenuDivider my={0} borderColor="border.light" />}
+          <MenuGroup title="Claims Configuration">
+            <NavMenuItem label="Fields and Advice Editor" to={'/validation-rules-admin'} />
+            <NavMenuItem label="Advice Checks at a Glance" to={'/validation-rules-alphabetic-admin'} />
+            <NavMenuItem label="Supporting Document Types" to={'/supporting-document-types-admin'} />
+            <NavMenuItem label="Downloads" to={'/downloads-admin'} />
+            <NavMenuItem label="System Config" to={'/validation-rules-config'} />
+            <NavMenuItem label="Ingest Runs" to={'/ingest-runs-admin'} />
+          </MenuGroup>
+        </>
+      )}
+      {canUseClaimsTestTools && (
+        <>
+          {(canUseClaimsOperations || canUseClaimsConfiguration) && <MenuDivider my={0} borderColor="border.light" />}
+          <MenuGroup title="Claims Test Tools">
+            <NavMenuItem label="Test AI Network Connectivity" to={'/hello-ai-admin'} />
+            <NavMenuItem label="Contractor Simulator" to={'/submission-simulator-admin'} />
+            <NavMenuItem label="Create Test Contractors" to={'/contractors-admin'} />
+            <NavMenuItem label="Create Test Users" to={'/users-admin'} />
+            <NavMenuItem label="Create Test Eligibility Codes" to={'/eligibilitycodes-admin'} />
+          </MenuGroup>
+        </>
+      )}
+      {canManageClaimsRbac && (
+        <>
+          {(canUseClaimsOperations || canUseClaimsConfiguration || canUseClaimsTestTools) && (
+            <MenuDivider my={0} borderColor="border.light" />
+          )}
+          <MenuGroup title="Claims Security">
+            <NavMenuItem label="Role Based Access Control" to={'/claims-rbac-admin'} />
+          </MenuGroup>
+        </>
+      )}
     </>
-  );
+  ) : null;
 
   const adminRoleLabel = currentUser?.isSuperAdmin
     ? 'System admin'
@@ -562,7 +592,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
                   </Show>
 
                   {/* Role-based menu items */}
-                  {(currentUser?.isSuperAdmin || currentUser?.isReviewStaff) && claimsAdminItems}
+                  {claimsAdminItems}
 
                   {(currentUser?.isSuperAdmin ||
                     currentUser?.isReviewManager ||
@@ -601,7 +631,9 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
                   {currentUser?.isContractor && (
                     <>
                       <NavMenuItem label="Legacy contractor portal" to="/contractor-dashboard" />
-                      <NavMenuItem label="AI contractor portal" to="/ai-contractor-dashboard" />
+                      {canUseClaimsFunction('claims.contractor_portal') && (
+                        <NavMenuItem label="AI contractor portal" to="/ai-contractor-dashboard" />
+                      )}
                       <MenuDivider my={0} borderColor="border.light" />
                     </>
                   )}

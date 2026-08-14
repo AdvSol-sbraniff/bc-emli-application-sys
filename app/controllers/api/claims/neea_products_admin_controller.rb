@@ -4,13 +4,10 @@ module Api
   module Claims
     class NeeaProductsAdminController < Api::ApplicationController
       include Api::Claims::Concerns::AdminAuthorization
+      claims_function "claims.configuration"
 
       skip_after_action :verify_authorized,
-                        only: %i[
-                          index
-                          import_status
-                          import_downloaded_pdf
-                        ]
+                        only: %i[index import_status import_downloaded_pdf]
       skip_after_action :verify_policy_scoped, only: %i[index]
       skip_forgery_protection only: %i[import_downloaded_pdf]
 
@@ -66,10 +63,7 @@ module Api
 
             latest_success =
               ::Claims::NeeaImportRun
-                .where(
-                  neea_source_id: source.id,
-                  status: "succeeded"
-                )
+                .where(neea_source_id: source.id, status: "succeeded")
                 .order(started_at: :desc)
                 .first
 
