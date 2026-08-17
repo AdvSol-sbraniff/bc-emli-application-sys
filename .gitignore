@@ -58,6 +58,9 @@ node_modules
 
 /spec/support/real-arch-signed.pdf
 
+# Local-only invoice test packages and supporting documents
+/claims_ai_service_documentation/Test Data/
+
 # Nest build output
 /claims_ai_service/dist/
 /claims_ai_service/.nestjs_cache/
