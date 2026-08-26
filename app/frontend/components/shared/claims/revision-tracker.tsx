@@ -37,6 +37,7 @@ export type RevisionSource = {
   source_engine?: string | null;
   friendly_label?: string | null;
   rule_result?: string | null;
+  compliance_score?: number | string | null;
   reason?: string | null;
   evidence_text?: string | null;
   expected_text?: string | null;
@@ -102,6 +103,8 @@ export type RevisionIssue = {
     | 'closed_via_exception'
     | 'closed_as_withdrawn';
   disposition_comment?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
   in_latest_round?: boolean;
   was_sent_to_contractor?: boolean;
   first_sent_to_contractor_at?: string | null;

@@ -45,7 +45,7 @@ WITH field_seed (
   ('wett_report', 'site_address', 3, 'Locate the inspected site address.', true),
   ('wett_report', 'compliance_or_removal_conclusion', 4, 'Locate the report conclusion about wood appliance compliance, removal, decommissioning, or not being in use.', true),
   ('wett_report', 'wett_inspector_or_company_name', 5, 'Locate the WETT inspector name, inspection company, or certifying organization if visible.', true),
-  ('wett_report', 'wett_appliance_or_system_reference', 6, 'Locate the wood or solid-fuel appliance/system reference covered by the WETT report, such as stove, fireplace, insert, boiler, furnace, or chimney.', true),
+  ('wett_report', 'wett_appliance_or_system_reference', 6, 'Locate the wood or solid-fuel appliance/system reference covered by the WETT report, such as stove, fireplace, insert, boiler, furnace, or chimney. Include any explicit statement that the appliance was the home''s prior primary heating system and could heat at least 50% of the home throughout the heating season to 21°C.', true),
 
   ('fossil_fuel_removal_proof', 'removed_equipment_type', 1, 'Locate the fossil-fuel equipment type removed or decommissioned, such as gas furnace, propane furnace, boiler, or oil tank.', true),
   ('fossil_fuel_removal_proof', 'removal_date_or_permit_reference', 2, 'Locate the removal/decommissioning date, inspection date, permit number, or permit date.', true),

@@ -1,4 +1,5 @@
 import {
+  Badge,
   Box,
   Button,
   Container,
@@ -73,6 +74,7 @@ type SimpleDiffSection = {
   title: string;
   rows: SimpleDiffRow[];
   upgradeTypeKey?: string | null;
+  upgradeTypeLabel?: string | null;
   beforePass?: boolean | null;
   afterPass?: boolean | null;
   beforeResult?: string | null;
@@ -92,11 +94,13 @@ type PdfChangeRow = {
 
 type PdfChangeGroup = {
   upgradeTypeKey: string;
+  upgradeTypeLabel: string;
   rows: PdfChangeRow[];
 };
 
 type RuleDiffGroup = {
   upgradeTypeKey: string;
+  upgradeTypeLabel: string;
   sections: SimpleDiffSection[];
 };
 
@@ -132,7 +136,7 @@ const ruleDetailFields = [
   { key: 'upgrade_type_key', label: 'Upgrade type' },
   { key: 'rule_key', label: 'Rule key' },
   { key: 'rule_result', label: 'Rule result' },
-  { key: 'confidence', label: 'Confidence' },
+  { key: 'compliance_score', label: 'Compliance score' },
   { key: 'expected_text', label: 'Expected' },
   { key: 'observed_text', label: 'Observed' },
   { key: 'calculation', label: 'Calculation' },
@@ -190,6 +194,23 @@ function StatusDot({ result, pass, label }: StatusDotProps) {
         aria-label={tooltip}
       />
     </Tooltip>
+  );
+}
+
+function UpgradeTypeTableRow({ label, colSpan }: { label: string; colSpan: number }) {
+  return (
+    <Tr>
+      <Td colSpan={colSpan} bg="blue.50" borderTopWidth="2px" borderTopColor="blue.200" py={2}>
+        <Flex align="center" gap={2}>
+          <Badge colorScheme="blue" variant="solid" fontSize="9px" letterSpacing="0.04em">
+            Upgrade type
+          </Badge>
+          <Text fontSize="xs" fontWeight="bold" color="blue.900">
+            {label}
+          </Text>
+        </Flex>
+      </Td>
+    </Tr>
   );
 }
 
@@ -456,23 +477,35 @@ function locatedFieldUpgradeType(before?: any | null, after?: any | null): strin
   return String(after?.upgrade_type_key || before?.upgrade_type_key || 'common');
 }
 
+function upgradeTypeDisplayLabel(before?: any | null, after?: any | null): string {
+  const description = String(after?.upgrade_type_description || before?.upgrade_type_description || '').trim();
+  if (description) return description;
+
+  return String(after?.upgrade_type_key || before?.upgrade_type_key || 'Common')
+    .replace(/_/g, ' ')
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
 function locatedFieldDiffSections(diff: AiDiff): SimpleDiffSection[] {
   const changed = sortedByKey(diff.changedFields, (item) => item.key).map((item) => ({
     title: locatedFieldTitle(item),
     rows: buildDiffRows(locatedFieldDisplayFields, item.before, item.after, diffFieldVal),
     upgradeTypeKey: locatedFieldUpgradeType(item.before, item.after),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(item.before, item.after),
   }));
 
   const added = sortedByKey(diff.addedFields, (item) => String(item.key)).map((item) => ({
     title: locatedFieldTitle({ key: String(item.key), after: item }),
     rows: buildDiffRows(locatedFieldDisplayFields, {}, item, diffFieldVal),
     upgradeTypeKey: locatedFieldUpgradeType(null, item),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(null, item),
   }));
 
   const removed = sortedByKey(diff.removedFields, (item) => String(item.key)).map((item) => ({
     title: locatedFieldTitle({ key: String(item.key), before: item }),
     rows: buildDiffRows(locatedFieldDisplayFields, item, {}, diffFieldVal),
     upgradeTypeKey: locatedFieldUpgradeType(item, null),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(item, null),
   }));
 
   return [...changed, ...added, ...removed].filter((section) => section.rows.length > 0);
@@ -511,14 +544,17 @@ function invoicePdfChangeRows(
 }
 
 function locatedFieldPdfChangeGroups(locatedSections: SimpleDiffSection[]): PdfChangeGroup[] {
-  const groups = new Map<string, PdfChangeRow[]>();
+  const groups = new Map<string, { label: string; rows: PdfChangeRow[] }>();
 
   sortedByKey(locatedSections, (section) => `${section.upgradeTypeKey || 'common'}|${section.title}`).forEach(
     (section) => {
       const upgradeTypeKey = section.upgradeTypeKey || 'common';
-      const groupRows = groups.get(upgradeTypeKey) || [];
+      const group = groups.get(upgradeTypeKey) || {
+        label: section.upgradeTypeLabel || upgradeTypeDisplayLabel({ upgrade_type_key: upgradeTypeKey }),
+        rows: [],
+      };
 
-      groupRows.push({
+      group.rows.push({
         id: `genai-field-${upgradeTypeKey}-${section.title}`,
         category: 'GenAI field',
         title: section.title,
@@ -527,17 +563,21 @@ function locatedFieldPdfChangeGroups(locatedSections: SimpleDiffSection[]): PdfC
         rows: section.rows,
       });
 
-      groups.set(upgradeTypeKey, groupRows);
+      groups.set(upgradeTypeKey, group);
     },
   );
 
-  return Array.from(groups.entries()).map(([upgradeTypeKey, groupRows]) => ({
+  return Array.from(groups.entries()).map(([upgradeTypeKey, group]) => ({
     upgradeTypeKey,
-    rows: groupRows,
+    upgradeTypeLabel: group.label,
+    rows: group.rows,
   }));
 }
 
 function ruleSectionTitle(ruleNumber: string, record?: any): string {
+  const displayName = String(record?.contractor_display_name ?? '').trim();
+  if (displayName) return displayName;
+
   const key = String(record?.rule_key ?? '').trim();
   return key || `rule_${ruleNumber}`;
 }
@@ -548,9 +588,10 @@ function ruleUpgradeType(beforeRule?: any | null, afterRule?: any | null): strin
 
 function ruleDiffSections(diff: AiDiff): SimpleDiffSection[] {
   const changed = sortedByKey(diff.changedRules, (item) => item.key).map((item) => ({
-    title: ruleSectionTitle(item.key, item.after || item.before),
+    title: ruleSectionTitle(item.key, item.afterRule || item.beforeRule || item.after || item.before),
     rows: buildDiffRows(ruleDisplayFields, item.before, item.after, diffFieldVal),
     upgradeTypeKey: ruleUpgradeType(item.beforeRule, item.afterRule),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(item.beforeRule, item.afterRule),
     beforeResult: item.before?.result,
     afterResult: item.after?.result,
     beforeRule: item.beforeRule,
@@ -558,9 +599,10 @@ function ruleDiffSections(diff: AiDiff): SimpleDiffSection[] {
   }));
 
   const added = sortedByKey(diff.addedRules, (item) => String(item.key)).map((item) => ({
-    title: ruleSectionTitle(String(item.key), item),
+    title: ruleSectionTitle(String(item.key), item.rawRule || item),
     rows: buildDiffRows(ruleDisplayFields, {}, item, diffFieldVal),
     upgradeTypeKey: ruleUpgradeType(null, item.rawRule),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(null, item.rawRule),
     beforeResult: null,
     afterResult: item.result,
     beforeRule: null,
@@ -568,9 +610,10 @@ function ruleDiffSections(diff: AiDiff): SimpleDiffSection[] {
   }));
 
   const removed = sortedByKey(diff.removedRules, (item) => String(item.key)).map((item) => ({
-    title: ruleSectionTitle(String(item.key), item),
+    title: ruleSectionTitle(String(item.key), item.rawRule || item),
     rows: buildDiffRows(ruleDisplayFields, item, {}, diffFieldVal),
     upgradeTypeKey: ruleUpgradeType(item.rawRule, null),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(item.rawRule, null),
     beforeResult: item.result,
     afterResult: null,
     beforeRule: item.rawRule,
@@ -594,6 +637,9 @@ function ruleDiffGroups(sections: SimpleDiffSection[]): RuleDiffGroup[] {
 
   return Array.from(groups.entries()).map(([upgradeTypeKey, groupSections]) => ({
     upgradeTypeKey,
+    upgradeTypeLabel:
+      groupSections.find((section) => section.upgradeTypeLabel)?.upgradeTypeLabel ||
+      upgradeTypeDisplayLabel({ upgrade_type_key: upgradeTypeKey }),
     sections: groupSections,
   }));
 }
@@ -603,6 +649,7 @@ function unchangedFailingRuleSections(diff: AiDiff): SimpleDiffSection[] {
     title: ruleSectionTitle(item.key, item.afterRule || item.beforeRule || item.after || item.before),
     rows: buildDiffRows(ruleDisplayFields, item.before, item.after, diffFieldVal),
     upgradeTypeKey: ruleUpgradeType(item.beforeRule, item.afterRule),
+    upgradeTypeLabel: upgradeTypeDisplayLabel(item.beforeRule, item.afterRule),
     beforeResult: item.before?.result,
     afterResult: item.after?.result,
     beforeRule: item.beforeRule,
@@ -1031,13 +1078,7 @@ export function InvoiceVersionsAdminScreen() {
                                 ))}
                                 {pdfLocatedGroups.map((group) => (
                                   <React.Fragment key={group.upgradeTypeKey}>
-                                    <Tr>
-                                      <Td colSpan={5} bg="gray.50">
-                                        <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
-                                          {group.upgradeTypeKey}
-                                        </Text>
-                                      </Td>
-                                    </Tr>
+                                    <UpgradeTypeTableRow label={group.upgradeTypeLabel} colSpan={5} />
                                     {group.rows.map((row) => (
                                       <Tr key={row.id}>
                                         <Td>
@@ -1354,17 +1395,11 @@ export function InvoiceVersionsAdminScreen() {
                               <Tbody>
                                 {aiRuleGroups.map((group) => (
                                   <React.Fragment key={group.upgradeTypeKey}>
-                                    <Tr>
-                                      <Td colSpan={5} bg="gray.50">
-                                        <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
-                                          {group.upgradeTypeKey}
-                                        </Text>
-                                      </Td>
-                                    </Tr>
+                                    <UpgradeTypeTableRow label={group.upgradeTypeLabel} colSpan={5} />
                                     {group.sections.map((section) => (
                                       <Tr key={section.title}>
                                         <Td>
-                                          <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                          <Text fontSize="xs" fontWeight="bold">
                                             {section.title}
                                           </Text>
                                         </Td>
@@ -1429,17 +1464,11 @@ export function InvoiceVersionsAdminScreen() {
                               <Tbody>
                                 {stillFailingRuleGroups.map((group) => (
                                   <React.Fragment key={`still-failing-${group.upgradeTypeKey}`}>
-                                    <Tr>
-                                      <Td colSpan={5} bg="gray.50">
-                                        <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
-                                          {group.upgradeTypeKey}
-                                        </Text>
-                                      </Td>
-                                    </Tr>
+                                    <UpgradeTypeTableRow label={group.upgradeTypeLabel} colSpan={5} />
                                     {group.sections.map((section) => (
                                       <Tr key={`still-failing-${section.title}`}>
                                         <Td>
-                                          <Text fontSize="xs" fontWeight="bold" fontFamily="mono">
+                                          <Text fontSize="xs" fontWeight="bold">
                                             {section.title}
                                           </Text>
                                         </Td>
@@ -1564,7 +1593,7 @@ export function InvoiceVersionsAdminScreen() {
                   <Text fontSize="xs" opacity={0.7} mb={1}>
                     Rule
                   </Text>
-                  <Text fontSize="sm" fontWeight="bold" fontFamily="mono">
+                  <Text fontSize="sm" fontWeight="bold">
                     {selectedRuleDiff.title}
                   </Text>
                 </Box>

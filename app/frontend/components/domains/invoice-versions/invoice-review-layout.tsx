@@ -1,5 +1,5 @@
 import { Box } from '@chakra-ui/react';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   clampAuxiliaryPanelWidth,
   MAX_AUXILIARY_PANEL_WIDTH,
@@ -12,8 +12,14 @@ export const InvoiceReviewLayout = ({ children }: { children: React.ReactNode })
   </Box>
 );
 
-export const InvoiceReviewRightRegion = ({ children }: { children: React.ReactNode }) => (
-  <Box display="flex" gap="16px" flex="1 1 0" minH={0}>
+export const InvoiceReviewRightRegion = ({
+  children,
+  minimumWidth,
+}: {
+  children: React.ReactNode;
+  minimumWidth: number;
+}) => (
+  <Box display="flex" gap="16px" flex="1 1 0" minW={`${minimumWidth}px`} minH={0}>
     {children}
   </Box>
 );
@@ -29,14 +35,17 @@ export const InvoiceReviewMainPanel = ({
   children,
   hasRightRegion,
   rightRegionMinimumWidth,
+  width,
+  onWidthChange,
 }: {
   children: React.ReactNode;
   hasRightRegion: boolean;
   rightRegionMinimumWidth: number;
+  width: number | null;
+  onWidthChange: (width: number) => void;
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const resizeStartRef = useRef<{ pointerX: number; width: number; maxWidth: number } | null>(null);
-  const [width, setWidth] = useState<number | null>(null);
 
   const renderedWidth = () => panelRef.current?.getBoundingClientRect().width ?? MIN_MAIN_PANEL_WIDTH;
   const availableWidth = () =>
@@ -54,12 +63,30 @@ export const InvoiceReviewMainPanel = ({
 
   const finishResize = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!resizeStartRef.current) return;
-    setWidth(resizedWidth(event.clientX));
+    onWidthChange(resizedWidth(event.clientX));
     resizeStartRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !hasRightRegion) return undefined;
+
+    const syncRenderedWidth = () => {
+      if (resizeStartRef.current) return;
+      const rendered = Math.round(panel.getBoundingClientRect().width);
+      if (rendered >= MIN_MAIN_PANEL_WIDTH && (width === null || Math.abs(rendered - width) > 1)) {
+        onWidthChange(rendered);
+      }
+    };
+
+    const observer = new ResizeObserver(syncRenderedWidth);
+    observer.observe(panel);
+    syncRenderedWidth();
+    return () => observer.disconnect();
+  }, [hasRightRegion, onWidthChange, width]);
 
   return (
     <Box
@@ -100,12 +127,12 @@ export const InvoiceReviewMainPanel = ({
               width: currentWidth,
               maxWidth: availableWidth(),
             };
-            setWidth(currentWidth);
+            onWidthChange(currentWidth);
             event.currentTarget.setPointerCapture(event.pointerId);
           }}
           onPointerMove={(event) => {
             if (!resizeStartRef.current) return;
-            setWidth(resizedWidth(event.clientX));
+            onWidthChange(resizedWidth(event.clientX));
           }}
           onPointerUp={finishResize}
           onPointerCancel={finishResize}
@@ -113,7 +140,7 @@ export const InvoiceReviewMainPanel = ({
             if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
             event.preventDefault();
             const nextWidth = renderedWidth() + (event.key === 'ArrowRight' ? 20 : -20);
-            setWidth(clampMainPanelWidth(nextWidth, availableWidth()));
+            onWidthChange(clampMainPanelWidth(nextWidth, availableWidth()));
           }}
         />
       ) : null}
@@ -126,6 +153,7 @@ type InvoiceReviewAuxiliaryPanelProps = {
   width: number;
   onWidthChange: (width: number) => void;
   fillAvailableWidth?: boolean;
+  chromeless?: boolean;
 };
 
 export const InvoiceReviewAuxiliaryPanel = ({
@@ -133,6 +161,7 @@ export const InvoiceReviewAuxiliaryPanel = ({
   width,
   onWidthChange,
   fillAvailableWidth = false,
+  chromeless = false,
 }: InvoiceReviewAuxiliaryPanelProps) => {
   const resizeStartRef = useRef<{ pointerX: number; width: number } | null>(null);
 
@@ -160,11 +189,11 @@ export const InvoiceReviewAuxiliaryPanel = ({
       alignSelf="flex-start"
       maxH="calc(100vh - 150px)"
       overflowY="auto"
-      borderWidth="1px"
-      borderColor="gray.200"
+      borderWidth={chromeless ? 0 : '1px'}
+      borderColor={chromeless ? 'transparent' : 'gray.200'}
       borderRadius="xl"
-      bg="white"
-      boxShadow="sm"
+      bg={chromeless ? 'transparent' : 'white'}
+      boxShadow={chromeless ? 'none' : 'sm'}
     >
       {!fillAvailableWidth ? (
         <Box

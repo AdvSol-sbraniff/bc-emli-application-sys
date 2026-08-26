@@ -102,6 +102,8 @@ Rails.application.routes.draw do
           to: "invoice_versions#pdf"
       get "sessions/:session_id/invoices/:invoice_id/supporting_documents/:id/pdf_url",
           to: "invoice_versions#supporting_document_pdf_url"
+      get "sessions/:session_id/invoices/:invoice_id/supporting_documents/:id/pdf",
+          to: "invoice_versions#supporting_document_pdf"
 
       # ============================================================
       # SECTION 12 — ADMIN GRID (POC)

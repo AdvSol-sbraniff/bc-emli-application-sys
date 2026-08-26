@@ -293,6 +293,25 @@ Known-good local behavior verified on 2026-05-27
     - zero invoice_versions
     - run message says exactly one invoice is required
 
+Parallel extraction update verified on 2026-08-20
+- After classification resolves exactly one invoice, the coordinator now starts:
+  - supporting-document extraction by configured document type
+  - invoice-model OCR/extraction
+  in the same coordinator pass.
+- Validation remains behind a join barrier and starts only after both extraction
+  branches succeed.
+- Verified with all seven files in `demo1_aug4_ASHP-WOOD_VENT`:
+  - run succeeded with 7/7 files and no failed or active steps
+  - pipeline audit recorded no error
+  - four supporting-document extraction groups and invoice extraction overlapped
+  - observed overlap was 12.365 seconds
+  - parallel extraction window was 33.370 seconds versus an estimated 45.736
+    seconds for the same branch durations if serialized
+- Focused automated coverage passed:
+  - 10 coordinator examples
+  - 20 supporting extraction, validation, fix lifecycle, stateflow, and pipeline
+    audit examples
+
 ============================================================
 SECTION D - MEMORY INTENT
 ============================================================

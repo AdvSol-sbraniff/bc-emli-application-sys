@@ -58,8 +58,10 @@ node_modules
 
 /spec/support/real-arch-signed.pdf
 
-# Local-only invoice test packages and supporting documents
+# Local-only invoice and database test data
 /claims_ai_service_documentation/Test Data/
+/claims_ai_service_ddl/**/testdata*/
+/.codex_tmp/
 
 # Nest build output
 /claims_ai_service/dist/
@@ -80,3 +82,10 @@ deleteme.*
 # ignore vscode files except the settings.json
 .vscode/*
 !.vscode/settings.json
+
+# Local client-video production work
+/claims_ai_service_video/
+/claims_ai_service_documentation/client_video_*.md
+/claims_ai_service_documentation/advanced_solutions_cinematic_brand_film_v1.md
+/claims_ai_service_documentation/Test Data/demo1_aug4_ASHP-WOOD_VENT/01_Mini_Home_Energy_Solutions_Invoice_missing_ESP_code.pdf
+/claims_ai_service_documentation/Test Data/demo1_aug4_ASHP-WOOD_VENT/04_WETT_Report_corrected_models.pdf

@@ -43,8 +43,7 @@ module Claims
         return unless advance_document_read(context)
         return unless advance_classification(context)
         return unless resolve_invoice(context)
-        return unless advance_supporting_extraction(context)
-        return unless advance_invoice_ocr(context)
+        return unless advance_extractions(context)
         return unless advance_validation(context)
 
         complete_run(context)
@@ -239,6 +238,20 @@ module Claims
         true
       end
 
+      def advance_extractions(context)
+        supporting_state = advance_supporting_extraction(context)
+        return false if supporting_state == :failed
+
+        invoice_state = advance_invoice_ocr(context)
+        return false if invoice_state == :failed
+
+        if supporting_state == :succeeded && invoice_state == :succeeded
+          return true
+        end
+
+        wait_for_work!(context)
+      end
+
       def advance_supporting_extraction(context)
         documents =
           context.documents.select do |doc|
@@ -269,17 +282,15 @@ module Claims
             supporting_document_type_ids: missing,
             step_type: "extract_supporting_document"
           )
-          return wait_for_work!(context)
+          return :waiting
         end
-        return wait_for_work!(context) if steps.size < type_ids.size
+        return :waiting if steps.size < type_ids.size
 
         failed = steps.values.find { |row| row.status == "failed" }
         if failed.nil? && steps.values.all? { |row| row.status == "succeeded" }
-          return true
+          return :succeeded
         end
-        if failed.nil? || step_failure_retry_pending?(failed)
-          return wait_for_work!(context)
-        end
+        return :waiting if failed.nil? || step_failure_retry_pending?(failed)
 
         fail_context!(
           context,
@@ -289,6 +300,7 @@ module Claims
           fallback_subtype: "genai_unexpected_exception",
           fallback_code: "bundle_extract_supporting_document_failed"
         )
+        :failed
       end
 
       def advance_invoice_ocr(context)
@@ -310,12 +322,12 @@ module Claims
             invoice_version_id: context.resolved_invoice_version_id,
             step_type: "extract_invoice"
           )
-          return wait_for_work!(context)
+          return :waiting
         end
-        return true if reused || step&.status == "succeeded"
+        return :succeeded if reused || step&.status == "succeeded"
         if step.nil? || step.status != "failed" ||
              step_failure_retry_pending?(step)
-          return wait_for_work!(context)
+          return :waiting
         end
 
         fail_context!(
@@ -325,6 +337,7 @@ module Claims
           fallback_subtype: "ocr_unexpected_exception",
           fallback_code: "bundle_invoice_ocr_failed"
         )
+        :failed
       end
 
       def advance_validation(context)

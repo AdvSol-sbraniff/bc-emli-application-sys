@@ -92,13 +92,15 @@ Set rule_result="fail" when the prior heating context is missing, points to a di
 Set rule_result="pass" when backup heat is clearly wood/electric or no fossil-backup concern is visible.
 Set rule_result="warn" when backup fuel context is missing or ambiguous.
 Set rule_result="fail" when visible evidence shows fossil-fuel backup remains as a backup or primary heating system.', true, 'The back-up heating system must be wood or electric. Fossil fuel back-up systems (e.g. dual fuel ducted heat pumps or standalone fossil fuel heating systems) are not eligible for wood-to-heat pump upgrades.', true, TIMESTAMP '2026-05-26 00:00:00', NOW()),
-  ('ashp_wood_existing_heat_context_present', 'Check whether the invoice supports that the home was primarily heated by a wood or solid fuel heating system and that the new air-source heat pump is replacing that system.
+  ('ashp_wood_existing_heat_context_present', 'Check whether the supplied invoice and supporting evidence support that the home was primarily heated by a wood or solid fuel heating system and that the new air-source heat pump is replacing that system.
 
 Wood or solid fuel heating evidence includes wood stove, pellet stove, insert, wood furnace, solid fuel furnace, or similar wording.
 
 A primary heating system must have the capacity to heat a minimum of 50% of the home for the entire heating season to 21°C.
 
-Use invoice evidence first, and treat supporting-document facts only as corroborating context.
+Judge the package as a whole. Credible supporting-document evidence may establish a fact that is not repeated on the invoice.
+
+Do not treat wording that the new or replacement heat pump is the primary heating system as evidence that the removed wood system was the home''s prior primary heating system or met the 50%/21°C requirement.
 
 Set rule_result="pass" when wood/solid-fuel primary heat replacement is clear.
 Set rule_result="warn" when the conversion context is plausible but incomplete.

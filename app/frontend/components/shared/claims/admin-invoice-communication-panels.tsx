@@ -1,6 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Badge, Box, Flex, IconButton, Spinner, Text, Textarea, Tooltip, useToast } from '@chakra-ui/react';
-import { ArrowsClockwise, FloppyDiskBack, PaperPlaneTilt, X } from '@phosphor-icons/react';
+import {
+  Badge,
+  Box,
+  Button,
+  Flex,
+  IconButton,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  Spinner,
+  Text,
+  Textarea,
+  Tooltip,
+  useToast,
+} from '@chakra-ui/react';
+import { ArrowsClockwise, FloppyDiskBack, PaperPlaneTilt, Plus, X } from '@phosphor-icons/react';
 import { useMst } from '../../../setup/root';
 
 type ConversationMessageGridRow = {
@@ -40,6 +58,10 @@ type AdminInvoicePanelProps = {
   showContext?: boolean;
 };
 
+type AdminInternalNotesPanelProps = AdminInvoicePanelProps & {
+  notesViewportHeight?: string | number;
+};
+
 const fmtDate = (value?: string | null) => {
   if (!value) return '-';
   const raw = String(value);
@@ -61,34 +83,43 @@ const PanelHeader = ({
   refreshing,
   onRefresh,
   onClose,
+  actions,
+  showRefresh = true,
 }: {
   title: string;
-  audience: string;
+  audience?: string;
   audienceColor: string;
   refreshing: boolean;
   onRefresh: () => void;
   onClose?: () => void;
+  actions?: React.ReactNode;
+  showRefresh?: boolean;
 }) => (
   <Flex align="center" justify="space-between" gap={3} mb={4}>
     <Box minW={0}>
       <Text fontSize="md" fontWeight="bold">
         {title}
       </Text>
-      <Badge colorScheme={audienceColor} textTransform="none" mt={1}>
-        {audience}
-      </Badge>
+      {audience ? (
+        <Badge colorScheme={audienceColor} textTransform="none" mt={1}>
+          {audience}
+        </Badge>
+      ) : null}
     </Box>
     <Flex align="center" gap={1}>
-      <Tooltip label={`Refresh ${title.toLowerCase()}`}>
-        <IconButton
-          aria-label={`Refresh ${title.toLowerCase()}`}
-          icon={<ArrowsClockwise size={18} />}
-          size="sm"
-          variant="ghost"
-          onClick={onRefresh}
-          isLoading={refreshing}
-        />
-      </Tooltip>
+      {actions}
+      {showRefresh ? (
+        <Tooltip label={`Refresh ${title.toLowerCase()}`}>
+          <IconButton
+            aria-label={`Refresh ${title.toLowerCase()}`}
+            icon={<ArrowsClockwise size={18} />}
+            size="sm"
+            variant="ghost"
+            onClick={onRefresh}
+            isLoading={refreshing}
+          />
+        </Tooltip>
+      ) : null}
       {onClose ? (
         <Tooltip label={`Close ${title.toLowerCase()}`}>
           <IconButton
@@ -406,7 +437,8 @@ export const AdminInternalNotesPanel = ({
   diOcrInvoiceId = '',
   onClose,
   showContext = true,
-}: AdminInvoicePanelProps) => {
+  notesViewportHeight,
+}: AdminInternalNotesPanelProps) => {
   const toast = useToast();
   const { userStore } = useMst();
   const currentUserId = (userStore as any)?.currentUser?.id ? String((userStore as any).currentUser.id) : '';
@@ -415,6 +447,7 @@ export const AdminInternalNotesPanel = ({
   const [error, setError] = useState('');
   const [noteText, setNoteText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [addNoteOpen, setAddNoteOpen] = useState(false);
 
   const fetchNotes = async () => {
     if (!invoiceId.trim()) {
@@ -448,13 +481,13 @@ export const AdminInternalNotesPanel = ({
 
   const canSave = !!invoiceId.trim() && !!currentUserId;
 
-  const saveNote = async () => {
+  const saveNote = async (): Promise<boolean> => {
     const text = noteText.trim();
     if (!text) {
       setError('Please enter an internal note before saving.');
-      return;
+      return false;
     }
-    if (!canSave) return;
+    if (!canSave) return false;
 
     setSaving(true);
     setError('');
@@ -480,22 +513,59 @@ export const AdminInternalNotesPanel = ({
         isClosable: true,
       });
       await fetchNotes();
+      return true;
     } catch (requestError: any) {
       setError(requestError?.message || 'Failed to save internal note.');
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
+  const notesHistory = (height?: string | number) => (
+    <Box h={height} minH={height} overflowY={height ? 'auto' : 'visible'} pr={height ? 1 : 0}>
+      {loading ? (
+        <Flex align="center" gap={3} p={4}>
+          <Spinner size="sm" />
+          <Text fontSize="16px">Loading internal notes...</Text>
+        </Flex>
+      ) : notes.length === 0 ? (
+        <Box p={5} borderWidth="1px" borderColor="#D8D8D8" borderRadius="xl" bg="#FAF9F8" textAlign="center">
+          <Text fontSize="16px" color="gray.600">
+            No internal notes yet.
+          </Text>
+        </Box>
+      ) : (
+        <Flex direction="column" gap={3} maxH={height ? undefined : '440px'} overflowY={height ? 'visible' : 'auto'}>
+          {notes.map((note) => (
+            <Box key={note.id} p={4} borderWidth="1px" borderRadius="xl" bg="#FAF9F8" borderColor="#D8D8D8">
+              <Flex justify="space-between" gap={3} mb={2} flexWrap="wrap">
+                <Text fontSize="16px" color="gray.500">
+                  {note.admin_user_name || note.admin_user_id}
+                </Text>
+                <Text fontSize="16px" color="gray.500">
+                  {fmtDateTime(note.created_at)}
+                </Text>
+              </Flex>
+              <Text whiteSpace="pre-wrap" fontSize="16px">
+                {note.note_text}
+              </Text>
+            </Box>
+          ))}
+        </Flex>
+      )}
+    </Box>
+  );
+
   return (
     <Box p={4} bg="white" minW={0}>
       <PanelHeader
         title="Internal Notes"
-        audience="Admins only"
-        audienceColor="purple"
+        audienceColor="gray"
         refreshing={loading}
         onRefresh={() => void fetchNotes()}
         onClose={onClose}
+        showRefresh={false}
       />
       {showContext ? (
         <InvoiceContext
@@ -512,71 +582,71 @@ export const AdminInternalNotesPanel = ({
         </Box>
       ) : null}
 
-      {loading ? (
-        <Flex align="center" gap={3} p={4}>
-          <Spinner size="sm" />
-          <Text fontSize="sm">Loading internal notes...</Text>
-        </Flex>
-      ) : notes.length === 0 ? (
-        <Box p={5} borderWidth="1px" borderRadius="xl" bg="purple.50" textAlign="center">
-          <Text fontSize="sm" color="gray.600">
-            No internal notes yet. Add the first admin-only note below.
-          </Text>
-        </Box>
-      ) : (
-        <Flex direction="column" gap={3} maxH="440px" overflowY="auto">
-          {notes.map((note) => (
-            <Box key={note.id} p={4} borderWidth="1px" borderRadius="xl" bg="purple.50" borderColor="purple.100">
-              <Flex justify="space-between" gap={3} mb={2} flexWrap="wrap">
-                <Text fontSize="xs" color="gray.500">
-                  {note.admin_user_name || note.admin_user_id}
-                </Text>
-                <Text fontSize="xs" color="gray.500">
-                  {fmtDateTime(note.created_at)}
-                </Text>
-              </Flex>
-              <Text whiteSpace="pre-wrap" fontSize="sm">
-                {note.note_text}
-              </Text>
-            </Box>
-          ))}
-        </Flex>
-      )}
+      {notesHistory(notesViewportHeight)}
 
-      <Box mt={5}>
-        <Text fontWeight="bold" mb={1}>
-          Add internal note
-        </Text>
-        <Text fontSize="xs" color="purple.700" mb={3} fontWeight="semibold">
-          Admins only. Contractors cannot see this note.
-        </Text>
-        <Textarea
-          value={noteText}
-          onChange={(event) => setNoteText(event.target.value)}
-          placeholder="Type an internal admin note..."
-          rows={5}
-          bg="purple.50"
-          borderColor="purple.200"
-          borderRadius="xl"
+      <Flex justify="flex-start" mt={4}>
+        <Button
+          size="sm"
+          variant="secondary"
+          leftIcon={<Plus size={17} weight="bold" />}
+          onClick={() => setAddNoteOpen(true)}
           isDisabled={!canSave}
-        />
-        <Flex justify="flex-end" mt={3}>
-          <Tooltip
-            label={canSave ? 'Save an admin-only note.' : 'Save is disabled because the invoice is unavailable.'}
-            shouldWrapChildren
-          >
-            <IconButton
-              aria-label="Save internal note"
-              icon={<FloppyDiskBack size={22} weight="bold" />}
-              colorScheme="purple"
-              borderRadius="full"
-              onClick={() => void saveNote()}
-              isLoading={saving}
+        >
+          Add note
+        </Button>
+      </Flex>
+
+      <Modal isOpen={addNoteOpen} onClose={() => setAddNoteOpen(false)} size="3xl" isCentered>
+        <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(8px)" />
+        <ModalContent mx={4} borderRadius="xl" boxShadow="0 28px 90px rgba(15, 23, 42, 0.28)">
+          <ModalHeader>Internal Notes</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text fontSize="sm" fontWeight="bold" mb={2}>
+              History
+            </Text>
+            {notesHistory('300px')}
+
+            {error ? (
+              <Box mt={5} p={3} bg="red.50" borderWidth="1px" borderColor="red.200" borderRadius="md">
+                <Text fontSize="sm" color="red.700">
+                  {error}
+                </Text>
+              </Box>
+            ) : null}
+
+            <Text fontSize="sm" fontWeight="bold" mt={5} mb={2}>
+              New note
+            </Text>
+            <Textarea
+              value={noteText}
+              onChange={(event) => setNoteText(event.target.value)}
+              placeholder="Type an internal note..."
+              rows={6}
+              bg="#FAF9F8"
+              borderColor="#D8D8D8"
+              borderRadius="xl"
               isDisabled={!canSave}
             />
-          </Tooltip>
-        </Flex>
-      </Box>
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <Button variant="ghost" onClick={() => setAddNoteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="gray"
+              leftIcon={<FloppyDiskBack size={20} weight="bold" />}
+              onClick={async () => {
+                if (await saveNote()) setAddNoteOpen(false);
+              }}
+              isLoading={saving}
+              isDisabled={!canSave}
+            >
+              Save note
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };

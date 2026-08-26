@@ -18,6 +18,7 @@ import {
 import { ArrowCounterClockwise, FloppyDiskBack } from '@phosphor-icons/react';
 import React, { useEffect, useState } from 'react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
+import { AdminPdfViewerUxMode, normalizeAdminPdfViewerUxMode } from '../../shared/claims/admin-pdf-viewer-ux';
 
 type ConfigDto = {
   id: string;
@@ -27,6 +28,7 @@ type ConfigDto = {
   user_record0: string | null;
   admin_advice_intro: string | null;
   admin_advice_closing: string | null;
+  admin_pdf_viewer_ux_mode: AdminPdfViewerUxMode;
   show_admin_field_revision_plus: boolean;
   updated_at?: string | null;
 };
@@ -42,6 +44,7 @@ export default function RulesetConfigEditorScreen() {
   const [userRecord0, setUserRecord0] = useState<string>('');
   const [adminAdviceIntro, setAdminAdviceIntro] = useState<string>('');
   const [adminAdviceClosing, setAdminAdviceClosing] = useState<string>('');
+  const [adminPdfViewerUxMode, setAdminPdfViewerUxMode] = useState<AdminPdfViewerUxMode>('simple');
   const [showAdminFieldRevisionPlus, setShowAdminFieldRevisionPlus] = useState<boolean>(true);
   const [initialValues, setInitialValues] = useState({
     systemRecord: '',
@@ -50,6 +53,7 @@ export default function RulesetConfigEditorScreen() {
     userRecord0: '',
     adminAdviceIntro: '',
     adminAdviceClosing: '',
+    adminPdfViewerUxMode: 'simple' as AdminPdfViewerUxMode,
     showAdminFieldRevisionPlus: true,
   });
 
@@ -60,6 +64,7 @@ export default function RulesetConfigEditorScreen() {
     userRecord0 !== initialValues.userRecord0 ||
     adminAdviceIntro !== initialValues.adminAdviceIntro ||
     adminAdviceClosing !== initialValues.adminAdviceClosing ||
+    adminPdfViewerUxMode !== initialValues.adminPdfViewerUxMode ||
     showAdminFieldRevisionPlus !== initialValues.showAdminFieldRevisionPlus;
 
   function applyConfig(data: ConfigDto) {
@@ -70,6 +75,7 @@ export default function RulesetConfigEditorScreen() {
       userRecord0: data.user_record0 ?? '',
       adminAdviceIntro: data.admin_advice_intro ?? '',
       adminAdviceClosing: data.admin_advice_closing ?? '',
+      adminPdfViewerUxMode: normalizeAdminPdfViewerUxMode(data.admin_pdf_viewer_ux_mode),
       showAdminFieldRevisionPlus: data.show_admin_field_revision_plus !== false,
     };
 
@@ -80,6 +86,7 @@ export default function RulesetConfigEditorScreen() {
     setUserRecord0(values.userRecord0);
     setAdminAdviceIntro(values.adminAdviceIntro);
     setAdminAdviceClosing(values.adminAdviceClosing);
+    setAdminPdfViewerUxMode(values.adminPdfViewerUxMode);
     setShowAdminFieldRevisionPlus(values.showAdminFieldRevisionPlus);
     setInitialValues(values);
   }
@@ -125,6 +132,7 @@ export default function RulesetConfigEditorScreen() {
           user_record0: userRecord0,
           admin_advice_intro: adminAdviceIntro,
           admin_advice_closing: adminAdviceClosing,
+          admin_pdf_viewer_ux_mode: adminPdfViewerUxMode,
           show_admin_field_revision_plus: showAdminFieldRevisionPlus,
         }),
       });
@@ -277,9 +285,51 @@ export default function RulesetConfigEditorScreen() {
 
                 <TabPanel px={0} pt={3}>
                   <Text fontSize="sm" opacity={0.75} mb={4}>
-                    Controls field-level revision actions in the admin PDF viewer. Rule-level revision actions are not
-                    affected.
+                    Choose the workflow experience and field-level revision controls used by admins reviewing invoices.
                   </Text>
+                  <Flex
+                    align={{ base: 'flex-start', md: 'center' }}
+                    justify="space-between"
+                    direction={{ base: 'column', md: 'row' }}
+                    gap={4}
+                    borderWidth="1px"
+                    borderRadius="md"
+                    p={4}
+                    mb={4}
+                  >
+                    <Box>
+                      <Text fontSize="sm" fontWeight="semibold">
+                        Admin PDF viewer experience
+                      </Text>
+                      <Text fontSize="sm" opacity={0.7} mt={1} maxW="680px">
+                        Embedded handles revision requests directly beside the relevant invoice evidence, with a compact
+                        summary for navigation and history. Centralized manages all revision requests in a dedicated
+                        workspace with filtering, decision, and sending controls.
+                      </Text>
+                    </Box>
+                    <Flex align="center" gap={3} whiteSpace="nowrap">
+                      <Text
+                        fontSize="sm"
+                        fontWeight={adminPdfViewerUxMode === 'simple' ? '700' : '500'}
+                        opacity={adminPdfViewerUxMode === 'simple' ? 1 : 0.65}
+                      >
+                        Embedded
+                      </Text>
+                      <Switch
+                        aria-label="Use the centralized admin PDF viewer experience"
+                        colorScheme="blue"
+                        isChecked={adminPdfViewerUxMode === 'enterprise'}
+                        onChange={(event) => setAdminPdfViewerUxMode(event.target.checked ? 'enterprise' : 'simple')}
+                      />
+                      <Text
+                        fontSize="sm"
+                        fontWeight={adminPdfViewerUxMode === 'enterprise' ? '700' : '500'}
+                        opacity={adminPdfViewerUxMode === 'enterprise' ? 1 : 0.65}
+                      >
+                        Centralized
+                      </Text>
+                    </Flex>
+                  </Flex>
                   <Flex align="center" justify="space-between" gap={4} borderWidth="1px" borderRadius="md" p={4}>
                     <Box>
                       <Text fontSize="sm" fontWeight="semibold">

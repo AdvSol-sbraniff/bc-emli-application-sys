@@ -9,6 +9,7 @@ WITH config_row (
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
+  admin_pdf_viewer_ux_mode,
   show_admin_field_revision_plus,
   created_at,
   updated_at
@@ -337,7 +338,8 @@ Please check for potential issues with the following program requirement(s):
 $intro$,
     $closing$
 If any item asks for a correction or supporting document, please upload the updated invoice or document and resubmit when you are ready.
-$closing$,
+    $closing$,
+    'simple',
     true,
     TIMESTAMP '2026-03-13 21:27:54.352533',
     NOW()
@@ -352,6 +354,7 @@ INSERT INTO claims.validationgenai_config (
   user_record0,
   admin_advice_intro,
   admin_advice_closing,
+  admin_pdf_viewer_ux_mode,
   show_admin_field_revision_plus,
   created_at,
   updated_at
@@ -364,6 +367,7 @@ INSERT INTO claims.validationgenai_config (
     user_record0,
     admin_advice_intro,
     admin_advice_closing,
+    admin_pdf_viewer_ux_mode,
     show_admin_field_revision_plus,
     created_at,
     updated_at
@@ -375,6 +379,7 @@ INSERT INTO claims.validationgenai_config (
     user_record0 = EXCLUDED.user_record0,
     admin_advice_intro = EXCLUDED.admin_advice_intro,
     admin_advice_closing = EXCLUDED.admin_advice_closing,
+    admin_pdf_viewer_ux_mode = EXCLUDED.admin_pdf_viewer_ux_mode,
     show_admin_field_revision_plus = EXCLUDED.show_admin_field_revision_plus,
     updated_at = NOW()
   RETURNING id

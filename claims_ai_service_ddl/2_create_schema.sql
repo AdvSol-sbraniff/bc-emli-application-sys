@@ -2768,12 +2768,15 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
   admin_advice_closing character varying NULL,
+  admin_pdf_viewer_ux_mode character varying NOT NULL DEFAULT 'simple',
   show_admin_field_revision_plus boolean NOT NULL DEFAULT true,
 
   created_at timestamp(6) without time zone NOT NULL,
   updated_at timestamp(6) without time zone NOT NULL,
 
-  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id)
+  CONSTRAINT validationgenai_config_pkey PRIMARY KEY (id),
+  CONSTRAINT validationgenai_config_admin_pdf_viewer_ux_mode_check
+    CHECK (admin_pdf_viewer_ux_mode IN ('simple', 'enterprise'))
 );
 
 

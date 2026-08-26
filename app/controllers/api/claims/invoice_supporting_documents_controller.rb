@@ -111,13 +111,9 @@ module Api
       end
 
       def pdf_url
-        doc = ::Claims::SupportingDocument.find(params[:id])
+        ::Claims::SupportingDocument.find(params[:id])
         render json: {
-                 sas_url:
-                   node_mint_sas!(
-                     storage_key: doc.storage_key,
-                     container: ENV["AZURE_BLOB_CONTAINER"].presence
-                   ).fetch("sas_url")
+                 sas_url: request.path.delete_suffix("_url")
                },
                status: :ok
       rescue ActiveRecord::RecordNotFound
@@ -246,34 +242,6 @@ module Api
               ]
             )
           end
-      end
-
-      def node_mint_sas!(storage_key:, container: nil)
-        base = ENV["INV_NODE_BASE_URL"].to_s.strip
-        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
-
-        uri = URI("#{base.sub(%r{/\z}, "")}/inv/mint-sas")
-        req = Net::HTTP::Post.new(uri)
-        req["Content-Type"] = "application/json"
-        req.body = {
-          storageKey: storage_key,
-          container: container
-        }.compact.to_json
-
-        res =
-          Net::HTTP.start(
-            uri.host,
-            uri.port,
-            use_ssl: (uri.scheme == "https"),
-            read_timeout: 60
-          ) { |http| http.request(req) }
-
-        body = res.body.to_s
-        unless res.is_a?(Net::HTTPSuccess)
-          raise "Node mint-sas failed HTTP=#{res.code} body=#{body}"
-        end
-
-        JSON.parse(body)
       end
 
       def node_download_blob!(storage_key:, container: nil)

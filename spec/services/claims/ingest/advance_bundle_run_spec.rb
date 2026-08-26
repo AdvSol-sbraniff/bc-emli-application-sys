@@ -51,6 +51,170 @@ RSpec.describe Claims::Ingest::AdvanceBundleRun do
       ).to eq(succeeded_step)
     end
 
+    it "fans out invoice and supporting extraction and joins before validation" do
+      now = Time.zone.parse("2026-08-20 09:00:00")
+      contractor =
+        Contractor.create!(business_name: "Parallel Extraction Contractor")
+      session = Claims::Session.create!(created_at: now, updated_at: now)
+      invoice =
+        Claims::Invoice.create!(
+          session_id: session.id,
+          contractor_id: contractor.id,
+          status: "contractor_precheck",
+          created_at: now,
+          updated_at: now
+        )
+      run =
+        Claims::IngestRun.create!(
+          run_kind: "initial_upload",
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          status: "running",
+          total_files: 2,
+          completed_files: 0,
+          failed_files: 0,
+          created_at: now,
+          updated_at: now
+        )
+      support_type =
+        Claims::SupportingDocumentType.create!(
+          type_key: "test_parallel_product_specification",
+          description: "Test parallel product specification",
+          created_at: now,
+          updated_at: now
+        )
+      Claims::SupportingDocumentTypeLocatedField.create!(
+        supporting_document_type_id: support_type.id,
+        field_key: "model_number",
+        contractor_display_name: "Model number",
+        prompt_text: "Find the model number.",
+        field_number: 1,
+        created_at: now,
+        updated_at: now
+      )
+
+      classifier_payload = {
+        "document_kind" => "invoice",
+        "document_kind_confidence" => 99,
+        "detected_upgrade_types" => [
+          {
+            "upgrade_type_key" => "windows_doors",
+            "confidence" => 98,
+            "evidence_text" => "Eligible window installation"
+          }
+        ]
+      }
+      windows_doors_upgrade_type(now)
+      invoice_document =
+        Claims::IngestDocument.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          storage_provider: "azure_blob",
+          storage_key: "parallel/invoice.pdf",
+          original_filename: "Parallel invoice.pdf",
+          content_type: "application/pdf",
+          di_read_raw_json: {
+            "read" => "invoice"
+          },
+          classifier_raw_json: classifier_payload,
+          document_kind: "invoice",
+          document_kind_confidence: 99,
+          document_kind_reason: "Primary contractor invoice.",
+          classification_confidence: 99,
+          classification_reason: "Invoice content detected.",
+          classified_at: now,
+          created_at: now,
+          updated_at: now
+        )
+      supporting_document =
+        Claims::IngestDocument.create!(
+          ingest_run_id: run.id,
+          session_id: session.id,
+          contractor_id: contractor.id,
+          invoice_id: invoice.id,
+          resolved_invoice_id: invoice.id,
+          storage_provider: "azure_blob",
+          storage_key: "parallel/product-specification.pdf",
+          original_filename: "Product specification.pdf",
+          content_type: "application/pdf",
+          di_read_raw_json: {
+            "read" => "product specification"
+          },
+          classifier_raw_json: {
+            "document_kind" => "supporting_document"
+          },
+          document_kind: "supporting_document",
+          document_kind_confidence: 99,
+          document_kind_reason: "Product specification evidence.",
+          supporting_document_type_id: support_type.id,
+          classification_confidence: 99,
+          classification_reason: "Product specification detected.",
+          classified_at: now,
+          created_at: now,
+          updated_at: now
+        )
+
+      [invoice_document, supporting_document].each do |document|
+        %w[read_document classify_document].each do |step_type|
+          Claims::IngestStepRun.create!(
+            ingest_run_id: run.id,
+            session_id: session.id,
+            ingest_document_id: document.id,
+            step_type: step_type,
+            status: "succeeded",
+            created_at: now,
+            updated_at: now
+          )
+        end
+      end
+
+      allow(Claims::RunSupportingDocumentTypeExtractionJob).to receive(
+        :perform_async
+      )
+      allow(Claims::RunOcrJob).to receive(:perform_async)
+      allow(Claims::Ingest::ValidationScheduler).to receive(:start!)
+
+      described_class.call(ingest_run_id: run.id)
+
+      resolved_version_id = run.reload.resolved_invoice_version_id
+      expect(Claims::RunSupportingDocumentTypeExtractionJob).to have_received(
+        :perform_async
+      ).once.with(resolved_version_id, support_type.id, run.id)
+      expect(Claims::RunOcrJob).to have_received(:perform_async).once.with(
+        resolved_version_id,
+        run.id
+      )
+      expect(Claims::Ingest::ValidationScheduler).not_to have_received(:start!)
+
+      supporting_step =
+        Claims::IngestStepRun.find_by!(
+          ingest_run_id: run.id,
+          supporting_document_type_id: support_type.id,
+          step_type: "extract_supporting_document"
+        )
+      invoice_step =
+        Claims::IngestStepRun.find_by!(
+          ingest_run_id: run.id,
+          invoice_version_id: resolved_version_id,
+          step_type: "extract_invoice"
+        )
+      supporting_step.update!(status: "succeeded")
+
+      described_class.call(ingest_run_id: run.id)
+
+      expect(Claims::Ingest::ValidationScheduler).not_to have_received(:start!)
+
+      invoice_step.update!(status: "succeeded")
+
+      described_class.call(ingest_run_id: run.id)
+
+      expect(Claims::Ingest::ValidationScheduler).to have_received(:start!).once
+    end
+
     it "creates and binds a replacement version after fix preflight succeeds" do
       now = Time.zone.parse("2026-06-24 08:30:00")
       contractor = Contractor.create!(business_name: "Replacement Contractor")

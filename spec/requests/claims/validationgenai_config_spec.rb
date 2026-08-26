@@ -14,7 +14,7 @@ RSpec.describe "Claims validation GenAI config", type: :request do
     ).to receive(:require_claims_admin!)
   end
 
-  it "reads and updates the admin field revision plus setting" do
+  it "reads and updates the admin PDF viewer settings" do
     config =
       Claims::ValidationgenaiConfig.order(:created_at).first ||
         Claims::ValidationgenaiConfig.create!(
@@ -22,22 +22,38 @@ RSpec.describe "Claims validation GenAI config", type: :request do
           created_at: Time.current,
           updated_at: Time.current
         )
-    config.update!(show_admin_field_revision_plus: true)
+    config.update!(
+      show_admin_field_revision_plus: true,
+      admin_pdf_viewer_ux_mode: "simple"
+    )
 
     get "/api/claims/admin/validationgenai_config"
 
     expect(response).to have_http_status(:ok)
     expect(json_response.fetch("show_admin_field_revision_plus")).to eq(true)
+    expect(json_response.fetch("admin_pdf_viewer_ux_mode")).to eq("simple")
 
     patch "/api/claims/admin/validationgenai_config",
           params: {
-            show_admin_field_revision_plus: false
+            show_admin_field_revision_plus: false,
+            admin_pdf_viewer_ux_mode: "enterprise"
           },
           as: :json
 
     expect(response).to have_http_status(:ok)
     expect(json_response.fetch("show_admin_field_revision_plus")).to eq(false)
+    expect(json_response.fetch("admin_pdf_viewer_ux_mode")).to eq("enterprise")
     expect(config.reload.show_admin_field_revision_plus).to eq(false)
+    expect(config.admin_pdf_viewer_ux_mode).to eq("enterprise")
+
+    patch "/api/claims/admin/validationgenai_config",
+          params: {
+            admin_pdf_viewer_ux_mode: "unsupported"
+          },
+          as: :json
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(config.reload.admin_pdf_viewer_ux_mode).to eq("enterprise")
   end
 
   it "includes the setting in the existing admin invoice read payload" do
@@ -48,7 +64,10 @@ RSpec.describe "Claims validation GenAI config", type: :request do
           created_at: Time.current,
           updated_at: Time.current
         )
-    config.update!(show_admin_field_revision_plus: false)
+    config.update!(
+      show_admin_field_revision_plus: false,
+      admin_pdf_viewer_ux_mode: "enterprise"
+    )
     now = Time.zone.parse("2026-08-12 10:00:00")
     contractor = Contractor.create!(business_name: "Viewer Config Contractor")
     session = Claims::Session.create!(created_at: now, updated_at: now)
@@ -75,5 +94,12 @@ RSpec.describe "Claims validation GenAI config", type: :request do
     expect(
       json_response.fetch("read").fetch("show_admin_field_revision_plus")
     ).to eq(false)
+    expect(json_response.fetch("read").fetch("admin_pdf_viewer_ux_mode")).to eq(
+      "enterprise"
+    )
+    expect(json_response.fetch("invoice")).to include(
+      "reference_number" => invoice.reference_number,
+      "contractor_business_name" => contractor.business_name
+    )
   end
 end

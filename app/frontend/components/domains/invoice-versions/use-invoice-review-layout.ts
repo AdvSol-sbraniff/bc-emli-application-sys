@@ -65,6 +65,7 @@ export const useInvoiceReviewLayout = () => {
     conversation: false,
     internal_notes: false,
   });
+  const [mainPanelWidth, setMainPanelWidth] = useState<number | null>(null);
   const [auxiliaryPanelWidth, setAuxiliaryPanelWidthState] = useState(storedAuxiliaryPanelWidth);
 
   const toggleDocument = useCallback(() => setDocumentVisible((current) => !current), []);
@@ -116,6 +117,8 @@ export const useInvoiceReviewLayout = () => {
     mountedCommunicationPanels,
     showRevisionWorkspace,
     effectiveAuxiliaryPanel,
+    mainPanelWidth,
+    setMainPanelWidth,
     auxiliaryPanelWidth,
     setAuxiliaryPanelWidth,
   };

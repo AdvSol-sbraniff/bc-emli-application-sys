@@ -169,17 +169,7 @@ module Api
                      "uploaded_supporting_documents" =>
                        serialize_uploaded_supporting_documents(iv.id)
                    ),
-                 invoice:
-                   invoice.as_json(
-                     only: %i[
-                       id
-                       session_id
-                       status
-                       status_updated_at
-                       created_at
-                       updated_at
-                     ]
-                   ),
+                 invoice: invoice_header_json(invoice),
                  lineitems: serialize_lineitems(iv.id)
                },
                status: :ok
@@ -251,11 +241,7 @@ module Api
         end
 
         render json: {
-                 sas_url:
-                   node_mint_sas!(
-                     storage_key: iv.storage_key,
-                     container: ENV["AZURE_BLOB_CONTAINER"].presence
-                   ).fetch("sas_url")
+                 sas_url: request.path.delete_suffix("_url")
                },
                status: :ok
       rescue => e
@@ -349,17 +335,7 @@ module Api
                      "uploaded_supporting_documents" =>
                        serialize_uploaded_supporting_documents(iv.id)
                    ),
-                 invoice:
-                   invoice&.as_json(
-                     only: %i[
-                       id
-                       session_id
-                       status
-                       status_updated_at
-                       created_at
-                       updated_at
-                     ]
-                   ),
+                 invoice: invoice_header_json(invoice),
                  lineitems: lineitems
                },
                status: :ok
@@ -426,11 +402,7 @@ module Api
         end
 
         render json: {
-                 sas_url:
-                   node_mint_sas!(
-                     storage_key: iv.storage_key,
-                     container: ENV["AZURE_BLOB_CONTAINER"].presence
-                   ).fetch("sas_url")
+                 sas_url: request.path.delete_suffix("_url")
                },
                status: :ok
       rescue => e
@@ -461,7 +433,34 @@ module Api
 
       private
 
+      def invoice_header_json(invoice)
+        return nil if invoice.nil?
+
+        invoice_grid =
+          ::Claims::InvoiceGrid.where(invoice_id: invoice.id).limit(1).first
+
+        invoice.as_json(
+          only: %i[
+            id
+            reference_number
+            session_id
+            status
+            status_updated_at
+            created_at
+            updated_at
+          ]
+        ).merge(
+          "contractor_business_name" => invoice_grid&.contractor_business_name
+        )
+      end
+
       def invoice_version_read_json(invoice_version)
+        viewer_config =
+          ::Claims::ValidationgenaiConfig.order(:created_at).pick(
+            :show_admin_field_revision_plus,
+            :admin_pdf_viewer_ux_mode
+          )
+
         invoice_version.as_json.merge(
           "personal_information_type" =>
             serialize_personal_information_type(
@@ -471,12 +470,9 @@ module Api
             ::Claims::InvoiceVersions::BuildContractorAdvice.call(
               invoice_version_id: invoice_version.id
             ),
-          "show_admin_field_revision_plus" =>
-            (
-              ::Claims::ValidationgenaiConfig.order(:created_at).pick(
-                :show_admin_field_revision_plus
-              ) != false
-            )
+          "show_admin_field_revision_plus" => viewer_config&.first != false,
+          "admin_pdf_viewer_ux_mode" =>
+            (viewer_config&.second == "enterprise" ? "enterprise" : "simple")
         )
       end
 
@@ -1118,34 +1114,6 @@ module Api
             records_imported: import_run&.records_imported
           }
         }
-      end
-
-      def node_mint_sas!(storage_key:, container: nil)
-        base = ENV["INV_NODE_BASE_URL"].to_s.strip
-        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
-        base = base.sub(%r{/\z}, "")
-
-        uri = URI("#{base}/inv/mint-sas")
-        req = Net::HTTP::Post.new(uri)
-        req["Content-Type"] = "application/json"
-        req.body = {
-          storageKey: storage_key,
-          container: container
-        }.compact.to_json
-
-        res =
-          Net::HTTP.start(
-            uri.host,
-            uri.port,
-            use_ssl: (uri.scheme == "https"),
-            read_timeout: 60
-          ) { |http| http.request(req) }
-        body = res.body.to_s
-        unless res.is_a?(Net::HTTPSuccess)
-          raise "Node mint-sas failed HTTP=#{res.code} body=#{body}"
-        end
-
-        JSON.parse(body)
       end
     end
   end

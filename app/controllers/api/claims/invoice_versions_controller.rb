@@ -12,6 +12,7 @@ module Api
                       pdf_url
                       pdf
                       supporting_document_pdf_url
+                      supporting_document_pdf
                     ]
       skip_after_action :verify_authorized,
                         only: %i[
@@ -21,6 +22,7 @@ module Api
                           pdf_url
                           pdf
                           supporting_document_pdf_url
+                          supporting_document_pdf
                         ]
 
       # ============================================================
@@ -116,36 +118,6 @@ module Api
                }
       end
 
-      def node_mint_sas!(storage_key:, container: nil)
-        base = ENV["INV_NODE_BASE_URL"].to_s.strip
-        raise "Missing ENV INV_NODE_BASE_URL" if base.empty?
-        base = base.sub(%r{/\z}, "")
-
-        uri = URI("#{base}/inv/mint-sas")
-        req = Net::HTTP::Post.new(uri)
-        req["Content-Type"] = "application/json"
-
-        req.body = {
-          storageKey: storage_key,
-          container: container
-        }.compact.to_json
-
-        res =
-          Net::HTTP.start(
-            uri.host,
-            uri.port,
-            use_ssl: (uri.scheme == "https"),
-            read_timeout: 60
-          ) { |http| http.request(req) }
-
-        body = res.body.to_s
-        unless res.is_a?(Net::HTTPSuccess)
-          raise "Node mint-sas failed HTTP=#{res.code} body=#{body}"
-        end
-
-        JSON.parse(body)
-      end
-
       # GET /api/claims/sessions/:session_id/invoices/:invoice_id/pdf_url
       def pdf_url
         civ =
@@ -159,13 +131,7 @@ module Api
           return
         end
 
-        render json: {
-                 sas_url:
-                   node_mint_sas!(
-                     storage_key: civ.storage_key,
-                     container: ENV["AZURE_BLOB_CONTAINER"].presence
-                   ).fetch("sas_url")
-               }
+        render json: { sas_url: request.path.delete_suffix("_url") }
       end
 
       # GET /api/claims/sessions/:session_id/invoices/:invoice_id/supporting_documents/:id/pdf_url
@@ -195,13 +161,37 @@ module Api
           return
         end
 
-        render json: {
-                 sas_url:
-                   node_mint_sas!(
-                     storage_key: doc.storage_key,
-                     container: ENV["AZURE_BLOB_CONTAINER"].presence
-                   ).fetch("sas_url")
-               }
+        render json: { sas_url: request.path.delete_suffix("_url") }
+      end
+
+      # GET /api/claims/sessions/:session_id/invoices/:invoice_id/supporting_documents/:id/pdf
+      def supporting_document_pdf
+        civ =
+          ::Claims::CurrentInvoiceVersion.find_by(
+            session_id: params[:session_id],
+            invoice_id: params[:invoice_id]
+          )
+
+        if civ.nil?
+          render json: { error: "Not found" }, status: :not_found
+          return
+        end
+
+        doc =
+          ::Claims::SupportingDocument.find_by(
+            id: params[:id],
+            invoice_version_id: civ.id
+          )
+
+        if doc.nil?
+          render json: {
+                   error: "Supporting document not found"
+                 },
+                 status: :not_found
+          return
+        end
+
+        stream_blob_pdf!(storage_key: doc.storage_key)
       end
 
       # GET /api/claims/sessions/:session_id/invoices/:invoice_id/pdf
