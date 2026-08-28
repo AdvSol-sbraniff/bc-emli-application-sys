@@ -634,7 +634,9 @@ export const AdminInternalNotesPanel = ({
               Cancel
             </Button>
             <Button
-              colorScheme="gray"
+              variant="primary"
+              bg="theme.blueGradient"
+              _hover={{ bg: 'theme.blueAltGradient' }}
               leftIcon={<FloppyDiskBack size={20} weight="bold" />}
               onClick={async () => {
                 if (await saveNote()) setAddNoteOpen(false);

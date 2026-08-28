@@ -761,6 +761,13 @@ export default function ValidationRulesAdminScreen() {
                 >
                   Advice Checks at a Glance
                 </Button>
+                <Button
+                  colorScheme="blue"
+                  variant="outline"
+                  onClick={() => navigate('/validation-fields-alphabetic-admin')}
+                >
+                  GenAI Fields at a Glance
+                </Button>
               </HStack>
             </Flex>
 

@@ -470,6 +470,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
           <MenuGroup title="Claims Configuration">
             <NavMenuItem label="Fields and Advice Editor" to={'/validation-rules-admin'} />
             <NavMenuItem label="Advice Checks at a Glance" to={'/validation-rules-alphabetic-admin'} />
+            <NavMenuItem label="GenAI Fields at a Glance" to={'/validation-fields-alphabetic-admin'} />
             <NavMenuItem label="Supporting Document Types" to={'/supporting-document-types-admin'} />
             <NavMenuItem label="Downloads" to={'/downloads-admin'} />
             <NavMenuItem label="System Config" to={'/validation-rules-config'} />

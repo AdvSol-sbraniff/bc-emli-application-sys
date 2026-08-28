@@ -5,23 +5,24 @@
 Run these when you want to drop and rebuild only the `claims` schema while leaving `public` users, contractors, programs, and legacy app data alone:
 
 1. `2_create_schema.sql`
-2. `3_insert_ahri_sources.sql`
-3. `3_insert_neea_sources.sql`
-4. `3_insert_awhp_sources.sql`
-5. `3_insert_ohpa_sources.sql`
-6. `3_insert_herv_sources.sql`
-7. `3_insert_vent_fan_sources.sql`
-8. `3_insert_ingest_failure_subtypes.sql`
-9. `3_insert_invoice_upgrade_types.sql`
-10. `3_insert_personal_information_types.sql`
-11. `3_insert_supporting_document_types.sql`
-12. `3_insert_supporting_document_type_upgrade_types.sql`
-13. `3_insert_supporting_document_type_located_fields.sql`
-14. `3_insert_code_rules.sql`
-15. `3_insert_code_located_fields.sql`
-16. `3_insert_validationgenai_config.sql`
-17. `3_insert_genai_normalized.sql`
-18. `4_create_views.sql`
+2. `2_create_schema_for_testharness.sql`
+3. `3_insert_ahri_sources.sql`
+4. `3_insert_neea_sources.sql`
+5. `3_insert_awhp_sources.sql`
+6. `3_insert_ohpa_sources.sql`
+7. `3_insert_herv_sources.sql`
+8. `3_insert_vent_fan_sources.sql`
+9. `3_insert_ingest_failure_subtypes.sql`
+10. `3_insert_invoice_upgrade_types.sql`
+11. `3_insert_personal_information_types.sql`
+12. `3_insert_supporting_document_types.sql`
+13. `3_insert_supporting_document_type_upgrade_types.sql`
+14. `3_insert_supporting_document_type_located_fields.sql`
+15. `3_insert_code_rules.sql`
+16. `3_insert_code_located_fields.sql`
+17. `3_insert_validationgenai_config.sql`
+18. `3_insert_genai_normalized.sql`
+19. `4_create_views.sql`
 
 ## Operational notes for Gold/dev rebuilds
 

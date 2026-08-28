@@ -1848,33 +1848,24 @@ export default function ContractorInvoiceReviewScreen() {
                   },
                 }}
               >
+                <Box px="8px" pt="4px" pb="6px">
+                  <Text fontSize="md" fontWeight="bold" color="gray.600">
+                    Invoice Fields and Advice
+                  </Text>
+                </Box>
+
                 <AccordionItem borderWidth="1px" borderColor="#D8D8D8">
                   <h2>
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text fontSize="lg" fontWeight="bold">
-                          Invoice
+                          Common
                         </Text>
                       </Box>
                       <AccordionIcon />
                     </AccordionButton>
                   </h2>
                   <AccordionPanel px="0" pt="8px">
-                    <Flex gap="18px" align="center" wrap="wrap" mb="8px">
-                      <Tooltip
-                        label={`${currentStatusCopy.hint} Technical status: ${currentStatus || 'unknown'}.`}
-                        hasArrow
-                      >
-                        <Text fontSize="md" fontWeight="bold" textTransform="uppercase">
-                          Status: {currentStatusCopy.label}
-                        </Text>
-                      </Tooltip>
-                      {readData?.invoice_versionno != null && (
-                        <Text fontSize="md" fontWeight="bold" textTransform="uppercase">
-                          Version {String(readData.invoice_versionno)}
-                        </Text>
-                      )}
-                    </Flex>
                     <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
                       {DI_FIELDS.map((field) => {
                         const raw = readData?.[field.valueKey];
@@ -1896,6 +1887,15 @@ export default function ContractorInvoiceReviewScreen() {
                         );
                       })}
                     </Box>
+                    {commonInvoiceFields.length > 0 && (
+                      <Box mt="6px" pt="6px" borderTopWidth="1px" borderColor="gray.200">
+                        <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
+                          {commonInvoiceFields.map((row: any) =>
+                            renderLocatedFieldRow(row, `common-${row.id ?? row.field_key}`),
+                          )}
+                        </Box>
+                      </Box>
+                    )}
                   </AccordionPanel>
                 </AccordionItem>
 
@@ -1904,7 +1904,7 @@ export default function ContractorInvoiceReviewScreen() {
                     <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                       <Box flex="1" textAlign="left">
                         <Text fontSize="lg" fontWeight="bold">
-                          Upgrade details
+                          Upgrades
                         </Text>
                       </Box>
                       <AccordionIcon />
@@ -1916,24 +1916,12 @@ export default function ContractorInvoiceReviewScreen() {
                         {genAiError}
                       </Text>
                     )}
-                    {!genAiError && commonInvoiceFields.length === 0 && detailsGroups.length === 0 ? (
+                    {!genAiError && detailsGroups.length === 0 ? (
                       <Text fontSize="md" opacity={0.7}>
                         No upgrade details found.
                       </Text>
                     ) : (
                       <Box display="flex" flexDirection="column" gap="14px">
-                        {commonInvoiceFields.length > 0 && (
-                          <Box>
-                            <Text fontSize="md" fontWeight="bold" mb="6px">
-                              General details
-                            </Text>
-                            <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
-                              {commonInvoiceFields.map((row: any) =>
-                                renderLocatedFieldRow(row, `common-${row.id ?? row.field_key}`),
-                              )}
-                            </Box>
-                          </Box>
-                        )}
                         {detailsGroups.map((group) => {
                           const meta = getInvoiceUpgradeTypeMeta(group.upgradeTypeKey, group.description);
                           const registryMatches = productMatchDetails.filter((match) =>
@@ -1976,6 +1964,12 @@ export default function ContractorInvoiceReviewScreen() {
                   </AccordionPanel>
                 </AccordionItem>
 
+                <Box px="8px" pt="24px" pb="6px">
+                  <Text fontSize="md" fontWeight="bold" color="gray.600">
+                    Supporting Documents
+                  </Text>
+                </Box>
+
                 {supportingDocumentEvidenceSections.length === 0 ? (
                   <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                     <h2>
@@ -1999,11 +1993,12 @@ export default function ContractorInvoiceReviewScreen() {
                   </AccordionItem>
                 ) : (
                   supportingDocumentEvidenceSections.flatMap((section) =>
-                    section.documents.map((doc: any) => {
+                    section.documents.map((doc: any, documentIndex: number) => {
                       const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
                       const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
                       const filename = String(doc?.original_filename || 'Unnamed file');
-                      const showFilename = section.documents.length > 1;
+                      const documentCount = section.documents.length;
+                      const documentOrdinal = documentCount > 1 ? ` ${documentIndex + 1} of ${documentCount}` : '';
 
                       return (
                         <AccordionItem
@@ -2015,7 +2010,7 @@ export default function ContractorInvoiceReviewScreen() {
                             <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                               <Box flex="1" textAlign="left" minW={0}>
                                 <Text fontSize="lg" fontWeight="bold" noOfLines={1}>
-                                  {`Supporting document - ${section.title}${showFilename ? ` - ${filename}` : ''}`}
+                                  {`${section.title}${documentOrdinal}`}
                                 </Text>
                               </Box>
                               <AccordionIcon />
@@ -2059,6 +2054,12 @@ export default function ContractorInvoiceReviewScreen() {
                                 pl="12px"
                                 mt="2px"
                               >
+                                <Text fontSize="md" opacity={0.7} noOfLines={1}>
+                                  Original file name
+                                </Text>
+                                <Text fontSize="md" noOfLines={1} title={filename}>
+                                  {filename}
+                                </Text>
                                 <Text fontSize="md" opacity={0.7} noOfLines={1}>
                                   details
                                 </Text>

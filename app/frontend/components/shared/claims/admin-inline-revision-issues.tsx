@@ -13,10 +13,21 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Flex,
   FormControl,
   FormLabel,
-  IconButton,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
   Select,
   Spinner,
   Text,
@@ -24,15 +35,7 @@ import {
   Tooltip,
   useToast,
 } from '@chakra-ui/react';
-import {
-  ArrowCounterClockwise,
-  CaretDown,
-  CaretRight,
-  CheckCircle,
-  FloppyDiskBack,
-  PaperPlaneTilt,
-  Trash,
-} from '@phosphor-icons/react';
+import { CaretDown, CaretRight, CheckCircle, FloppyDiskBack, PaperPlaneTilt } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RevisionIssue, RevisionIssueComment, RevisionSourceIdentity, RevisionTrackerData } from './revision-tracker';
 
@@ -173,7 +176,7 @@ const draftBaseline = (issue: RevisionIssue, data: RevisionTrackerData | null): 
 };
 
 const draftDiffers = (draft: AdminDraft, baseline: AdminDraft): boolean =>
-  draft.remedy !== baseline.remedy || draft.text !== baseline.text;
+  draft.remedy !== baseline.remedy || draft.text.trim() !== baseline.text.trim();
 
 export const revisionSourceIdentityKey = (identity?: RevisionSourceIdentity | null): string => {
   if (!identity?.kind) return '';
@@ -679,9 +682,39 @@ export const adminRevisionIssueStage = (
 };
 
 export type AdminRevisionListStatus = {
-  key: 'in_development' | 'saved' | 'with_contractor' | 'closed';
-  label: 'Action Needed' | 'Unsaved Action Needed' | 'Ready to Send' | 'Awaiting Contractor' | 'Closed';
-  colour: 'yellow' | 'blue' | 'orange' | 'green';
+  key: 'awaiting_action' | 'awaiting_send' | 'closed';
+  label: 'Awaiting action' | 'Awaiting send' | 'Closed';
+  badgeBackground: string;
+  badgeColor: string;
+  accordionBackground: string;
+  accordionBorder: string;
+};
+
+const ADMIN_REVISION_LIST_STATUSES: Record<AdminRevisionListStatus['key'], AdminRevisionListStatus> = {
+  awaiting_action: {
+    key: 'awaiting_action',
+    label: 'Awaiting action',
+    badgeBackground: '#F8BB47',
+    badgeColor: '#2D2D2D',
+    accordionBackground: '#FEF1D8',
+    accordionBorder: '#F8BB47',
+  },
+  awaiting_send: {
+    key: 'awaiting_send',
+    label: 'Awaiting send',
+    badgeBackground: '#42814A',
+    badgeColor: 'white',
+    accordionBackground: '#F6FFF8',
+    accordionBorder: '#42814A',
+  },
+  closed: {
+    key: 'closed',
+    label: 'Closed',
+    badgeBackground: '#605E5C',
+    badgeColor: 'white',
+    accordionBackground: '#F3F2F1',
+    accordionBorder: '#898785',
+  },
 };
 
 export const adminRevisionIssueListStatus = (
@@ -689,17 +722,9 @@ export const adminRevisionIssueListStatus = (
   workspace: AdminInlineRevisionWorkspace,
 ): AdminRevisionListStatus => {
   const stage = adminRevisionIssueStage(issue, workspace);
-  if (stage.key === 'closed') return { key: 'closed', label: 'Closed', colour: 'green' };
-  if (stage.key === 'with_contractor') {
-    return { key: 'with_contractor', label: 'Awaiting Contractor', colour: 'orange' };
-  }
-  if (stage.key === 'unsaved_changes') {
-    return { key: 'in_development', label: 'Unsaved Action Needed', colour: 'yellow' };
-  }
-  if (stage.key === 'needs_decision') {
-    return { key: 'in_development', label: 'Action Needed', colour: 'yellow' };
-  }
-  return { key: 'saved', label: 'Ready to Send', colour: 'blue' };
+  if (stage.key === 'closed') return ADMIN_REVISION_LIST_STATUSES.closed;
+  if (stage.key === 'decision_saved') return ADMIN_REVISION_LIST_STATUSES.awaiting_send;
+  return ADMIN_REVISION_LIST_STATUSES.awaiting_action;
 };
 
 const AdminRevisionOpenedTimelineEvent = ({
@@ -785,21 +810,33 @@ export const AdminRevisionIssueEditor = ({
   listStatus,
   sourceAvailable = false,
   heading,
+  showRecommendationInHeader = true,
 }: {
   issue: RevisionIssue;
   workspace: AdminInlineRevisionWorkspace;
   listStatus: AdminRevisionListStatus;
   sourceAvailable?: boolean;
   heading?: string;
+  showRecommendationInHeader?: boolean;
 }) => {
   const decisionMode = workspace.decisionModeFor(issue);
   const expanded = workspace.expandedIssueIds.has(issue.id);
   const focused = workspace.focusedIssueId === issue.id;
+  const issueContainerRef = useRef<HTMLDivElement>(null);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
   const draft = workspace.draftFor(issue);
+  const editableComment = currentAdminComment(issue, workspace.data);
+  const decisionAlreadySaved =
+    !!editableComment?.can_edit && !draftDiffers(draft, draftBaseline(issue, workspace.data));
+  const saveDecisionDisabledReason = !draft.remedy
+    ? 'Select a recommended fix before saving.'
+    : !draft.text.trim()
+      ? 'Enter a contractor-facing comment before saving.'
+      : decisionAlreadySaved
+        ? 'This decision is already saved.'
+        : '';
   const closeDraft = workspace.closeDraftFor(issue);
   const selectedRecommendation = adminRemedyLabel(draft.remedy);
-  const hasUnsavedChanges = workspace.unsavedIssueIds.includes(issue.id);
-  const editableComment = currentAdminComment(issue, workspace.data);
   const visibleComments = editableComment?.can_edit
     ? issue.comments.filter((comment) => comment.id !== editableComment.id)
     : issue.comments;
@@ -821,18 +858,31 @@ export const AdminRevisionIssueEditor = ({
       .values(),
   ).sort((left, right) => left.number - right.number);
 
+  useEffect(() => {
+    if (focused && decisionMode === 'close_issue' && issue.can_close) setCloseModalOpen(true);
+  }, [decisionMode, focused, issue.can_close]);
+
+  const closeCloseIssueModal = () => {
+    if (workspace.busy) return;
+    setCloseModalOpen(false);
+    if (issue.can_admin_comment) workspace.setDecisionMode(issue.id, 'recommend_action');
+  };
+
+  const submitCloseIssue = async () => {
+    if (await workspace.closeIssue(issue)) setCloseModalOpen(false);
+  };
+
   return (
     <Box
+      ref={issueContainerRef}
       id={revisionIssueElementId(issue.id)}
       tabIndex={-1}
       mt="6px"
       mb="8px"
       borderWidth="1px"
-      borderLeftWidth={hasUnsavedChanges ? '4px' : '1px'}
-      borderColor={focused ? 'blue.500' : expanded ? 'blue.300' : 'gray.200'}
-      borderLeftColor={hasUnsavedChanges ? 'yellow.400' : undefined}
+      borderColor={listStatus.accordionBorder}
       borderRadius="md"
-      bg={focused ? 'gray.100' : '#FAF9F8'}
+      bg={listStatus.accordionBackground}
       boxShadow={
         focused
           ? '0 0 0 3px rgba(49, 130, 206, 0.24), 0 8px 20px rgba(49, 130, 206, 0.16)'
@@ -841,7 +891,7 @@ export const AdminRevisionIssueEditor = ({
             : undefined
       }
       transition="background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease"
-      _focus={{ outline: 'none', borderColor: 'blue.400' }}
+      _focus={{ outline: 'none' }}
     >
       <Flex align="center" gap="4px">
         <Button
@@ -854,6 +904,7 @@ export const AdminRevisionIssueEditor = ({
           justifyContent="flex-start"
           textAlign="left"
           whiteSpace="normal"
+          _hover={{ bg: listStatus.accordionBackground }}
           onClick={() => workspace.toggleIssue(issue.id)}
         >
           <Flex w="100%" align="center" gap="7px" wrap="wrap">
@@ -861,12 +912,14 @@ export const AdminRevisionIssueEditor = ({
             <Text fontSize="sm" fontWeight="700" flex="1" minW="160px">
               {heading || issue.source.friendly_label || pretty(issue.issue_type)}
             </Text>
-            {selectedRecommendation ? (
+            {showRecommendationInHeader && selectedRecommendation ? (
               <Text fontSize="xs" color="gray.700">
                 Recommendation: {selectedRecommendation}
               </Text>
             ) : null}
-            <Badge colorScheme={listStatus.colour}>{listStatus.label}</Badge>
+            <Badge bg={listStatus.badgeBackground} color={listStatus.badgeColor}>
+              {listStatus.label}
+            </Badge>
           </Flex>
         </Button>
         {sourceAvailable ? (
@@ -971,44 +1024,12 @@ export const AdminRevisionIssueEditor = ({
             </Box>
           ) : null}
 
-          {issue.can_admin_comment && issue.can_close ? (
-            <Flex mb="10px" gap="6px" role="group" aria-label="Choose how to handle this revision issue">
-              <Button
-                size="sm"
-                flex="1"
-                colorScheme="blue"
-                variant={decisionMode === 'recommend_action' ? 'solid' : 'outline'}
-                fontWeight={decisionMode === 'recommend_action' ? '700' : '500'}
-                opacity={decisionMode === 'recommend_action' ? 1 : 0.7}
-                aria-pressed={decisionMode === 'recommend_action'}
-                onClick={() => workspace.setDecisionMode(issue.id, 'recommend_action')}
-              >
-                Recommend action
-              </Button>
-              <Button
-                size="sm"
-                flex="1"
-                colorScheme="purple"
-                variant={decisionMode === 'close_issue' ? 'solid' : 'outline'}
-                fontWeight={decisionMode === 'close_issue' ? '700' : '500'}
-                opacity={decisionMode === 'close_issue' ? 1 : 0.7}
-                aria-pressed={decisionMode === 'close_issue'}
-                onClick={() => workspace.setDecisionMode(issue.id, 'close_issue')}
-              >
-                Close issue
-              </Button>
-            </Flex>
-          ) : null}
-
-          {issue.can_admin_comment && (!issue.can_close || decisionMode === 'recommend_action') ? (
+          {issue.can_admin_comment ? (
             <Box bg="white" borderWidth="1px" borderColor="blue.100" borderRadius="md" p="9px" mb="10px">
               <Text fontSize="sm" fontWeight="700">
                 Your decision
               </Text>
-              <Text fontSize="xs" color="gray.600" mb="7px">
-                Send another request to the contractor, or close the issue below.
-              </Text>
-              <FormControl mb="7px">
+              <FormControl mt="7px" mb="7px">
                 <FormLabel fontSize="xs" mb="2px">
                   Recommended fix
                 </FormLabel>
@@ -1037,82 +1058,121 @@ export const AdminRevisionIssueEditor = ({
                 />
               </FormControl>
               <Flex gap="6px" mt="7px" wrap="wrap">
-                <Button
-                  size="xs"
-                  colorScheme="blue"
-                  leftIcon={<FloppyDiskBack size={16} />}
-                  isLoading={workspace.busy}
-                  onClick={() => void workspace.saveIssue(issue)}
+                <Tooltip
+                  label={saveDecisionDisabledReason}
+                  hasArrow
+                  shouldWrapChildren
+                  isDisabled={!saveDecisionDisabledReason}
                 >
-                  Save decision
-                </Button>
-                <IconButton
-                  aria-label="Reset recommendation"
-                  icon={<ArrowCounterClockwise size={17} />}
-                  size="xs"
-                  variant="outline"
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    bg="theme.blueGradient"
+                    _hover={{ bg: 'theme.blueAltGradient' }}
+                    leftIcon={<FloppyDiskBack size={16} />}
+                    isDisabled={workspace.busy || !!saveDecisionDisabledReason}
+                    isLoading={workspace.busy}
+                    onClick={() => void workspace.saveIssue(issue)}
+                  >
+                    Save decision
+                  </Button>
+                </Tooltip>
+                {issue.can_close ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    leftIcon={<CheckCircle size={16} />}
+                    isDisabled={workspace.busy}
+                    onClick={() => setCloseModalOpen(true)}
+                  >
+                    Close issue
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="secondary"
                   title="Reset from rule or field evidence"
                   isDisabled={workspace.busy}
                   onClick={() => void workspace.resetIssue(issue)}
-                />
-                {issue.can_delete ? (
-                  <IconButton
-                    aria-label="Delete unsent issue"
-                    icon={<Trash size={17} />}
-                    size="xs"
-                    variant="outline"
-                    colorScheme="red"
-                    title="Delete this new issue before it is sent"
-                    isDisabled={workspace.busy}
-                    onClick={() => void workspace.deleteIssue(issue)}
-                  />
-                ) : null}
+                >
+                  Reset
+                </Button>
               </Flex>
             </Box>
           ) : null}
 
-          {issue.can_close && (!issue.can_admin_comment || decisionMode === 'close_issue') ? (
-            <Box bg="purple.50" borderWidth="1px" borderColor="purple.100" borderRadius="md" p="9px">
-              <Text fontSize="xs" fontWeight="700" mb="7px">
-                Close issue
-              </Text>
-              <FormControl mb="7px">
-                <FormLabel fontSize="xs" mb="2px">
-                  Final disposition
-                </FormLabel>
-                <Select
-                  size="sm"
-                  value={closeDraft.status}
-                  onChange={(event) => workspace.setCloseDraft(issue.id, { status: event.target.value })}
-                >
-                  <option value="">Select closing outcome</option>
-                  {(issue.status === 'pending_admin_review' ? INTERNAL_CLOSE_STATUSES : CONTRACTOR_CLOSE_STATUSES).map(
-                    ([valueOption, label]) => (
-                      <option key={valueOption} value={valueOption}>
-                        {label}
-                      </option>
-                    ),
-                  )}
-                </Select>
-              </FormControl>
-              <Textarea
-                minH="80px"
-                size="sm"
-                placeholder="Required disposition comment"
-                value={closeDraft.text}
-                onChange={(event) => workspace.setCloseDraft(issue.id, { text: event.target.value })}
-              />
+          {!issue.can_admin_comment && issue.can_close ? (
+            <Flex justify="flex-end">
               <Button
-                size="xs"
-                mt="7px"
+                size="sm"
+                variant="secondary"
                 leftIcon={<CheckCircle size={16} />}
-                isLoading={workspace.busy}
-                onClick={() => void workspace.closeIssue(issue)}
+                isDisabled={workspace.busy}
+                onClick={() => setCloseModalOpen(true)}
               >
                 Close issue
               </Button>
-            </Box>
+            </Flex>
           ) : null}
+
+          <Modal
+            isOpen={closeModalOpen}
+            onClose={closeCloseIssueModal}
+            isCentered
+            finalFocusRef={issueContainerRef}
+            closeOnOverlayClick={!workspace.busy}
+            closeOnEsc={!workspace.busy}
+          >
+            <ModalOverlay />
+            <ModalContent mx="16px">
+              <ModalHeader>Close issue</ModalHeader>
+              <ModalCloseButton isDisabled={workspace.busy} />
+              <ModalBody>
+                <FormControl mb="12px" isRequired>
+                  <FormLabel>Final disposition</FormLabel>
+                  <Select
+                    value={closeDraft.status}
+                    onChange={(event) => workspace.setCloseDraft(issue.id, { status: event.target.value })}
+                  >
+                    <option value="">Select closing outcome</option>
+                    {(issue.status === 'pending_admin_review'
+                      ? INTERNAL_CLOSE_STATUSES
+                      : CONTRACTOR_CLOSE_STATUSES
+                    ).map(([valueOption, label]) => (
+                      <option key={valueOption} value={valueOption}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl isRequired>
+                  <FormLabel>Disposition comment</FormLabel>
+                  <Textarea
+                    minH="120px"
+                    placeholder="Explain why this issue is being closed"
+                    value={closeDraft.text}
+                    onChange={(event) => workspace.setCloseDraft(issue.id, { text: event.target.value })}
+                  />
+                </FormControl>
+              </ModalBody>
+              <ModalFooter gap="8px">
+                <Button variant="ghost" isDisabled={workspace.busy} onClick={closeCloseIssueModal}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  bg="theme.blueGradient"
+                  _hover={{ bg: 'theme.blueAltGradient' }}
+                  leftIcon={<CheckCircle size={16} />}
+                  isLoading={workspace.busy}
+                  isDisabled={!closeDraft.status || !closeDraft.text.trim()}
+                  onClick={() => void submitCloseIssue()}
+                >
+                  Close issue
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
         </Box>
       ) : null}
     </Box>
@@ -1122,7 +1182,13 @@ export const AdminRevisionIssueEditor = ({
 const adminRevisionIssueLabel = (issue: RevisionIssue): string =>
   issue.source.friendly_label || pretty(issue.issue_type);
 
-const ADMIN_REVISION_STATUS_ORDER = { in_development: 0, saved: 1, with_contractor: 2, closed: 3 } as const;
+const ADMIN_REVISION_STATUS_ORDER = { awaiting_action: 0, awaiting_send: 1, closed: 2 } as const;
+
+const ADMIN_REVISION_FILTER_OPTIONS: Array<{ status: AdminRevisionListStatus['key']; label: string }> = [
+  { status: 'awaiting_action', label: 'Awaiting action' },
+  { status: 'awaiting_send', label: 'Awaiting send' },
+  { status: 'closed', label: 'Closed' },
+];
 
 const sortedAdminRevisionIssues = (issues: RevisionIssue[], workspace: AdminInlineRevisionWorkspace): RevisionIssue[] =>
   [...issues].sort((left, right) => {
@@ -1148,7 +1214,7 @@ export const AdminRevisionSendControl = ({ workspace }: { workspace: AdminInline
     <>
       <Button
         size="sm"
-        colorScheme="blue"
+        variant="primary"
         leftIcon={<PaperPlaneTilt size={17} />}
         isDisabled={
           !workspace.data?.capabilities?.can_send_issues || !!workspace.unsavedIssueIds.length || workspace.busy
@@ -1186,7 +1252,7 @@ export const AdminRevisionSendControl = ({ workspace }: { workspace: AdminInline
               <Button ref={cancelRef} onClick={workspace.cancelSend}>
                 Cancel
               </Button>
-              <Button colorScheme="blue" ml={3} isLoading={workspace.busy} onClick={() => void workspace.confirmSend()}>
+              <Button variant="primary" ml={3} isLoading={workspace.busy} onClick={() => void workspace.confirmSend()}>
                 Send to contractor
               </Button>
             </AlertDialogFooter>
@@ -1311,18 +1377,79 @@ export const AdminRevisionSummary = ({
   workspace: AdminInlineRevisionWorkspace;
   sourceIssueIds: Set<string>;
 }) => {
-  const issues = sortedAdminRevisionIssues(workspace.issues, workspace);
+  const [statusFilters, setStatusFilters] = useState<AdminRevisionListStatus['key'][]>([]);
+  const [pendingStatusFilters, setPendingStatusFilters] = useState<AdminRevisionListStatus['key'][]>([]);
+  const toggleStatusFilter = (status: AdminRevisionListStatus['key']) => {
+    setPendingStatusFilters((current) =>
+      current.includes(status) ? current.filter((item) => item !== status) : [...current, status],
+    );
+  };
+  const statusFilterLabel = statusFilters.length
+    ? ADMIN_REVISION_FILTER_OPTIONS.filter((option) => statusFilters.includes(option.status))
+        .map((option) => option.label)
+        .join(', ')
+    : 'All';
+  const visibleIssues = sortedAdminRevisionIssues(
+    workspace.issues.filter(
+      (issue) => !statusFilters.length || statusFilters.includes(adminRevisionIssueListStatus(issue, workspace).key),
+    ),
+    workspace,
+  );
 
   return (
     <Box bg="#FAF9F8" borderWidth="1px" borderColor="#D8D8D8" borderRadius="md" p="10px">
-      <Flex align="center" gap="7px" wrap="wrap">
-        <Text fontWeight="700">Revision Summary</Text>
-        {workspace.unsavedIssueIds.length ? (
-          <Badge colorScheme="orange">
-            {workspace.unsavedIssueIds.length}{' '}
-            {workspace.unsavedIssueIds.length === 1 ? 'unsaved change' : 'unsaved changes'}
-          </Badge>
-        ) : null}
+      <Flex align="flex-start" justify="space-between" gap="10px" wrap="wrap">
+        <Flex direction="column" align="flex-start" gap="8px">
+          <Flex align="center" gap="7px" wrap="wrap">
+            <Text fontWeight="700">Revision Summary</Text>
+            {workspace.unsavedIssueIds.length ? (
+              <Badge colorScheme="orange">
+                {workspace.unsavedIssueIds.length}{' '}
+                {workspace.unsavedIssueIds.length === 1 ? 'unsaved change' : 'unsaved changes'}
+              </Badge>
+            ) : null}
+          </Flex>
+          <AdminRevisionSendControl workspace={workspace} />
+        </Flex>
+        <Menu
+          closeOnSelect={false}
+          placement="bottom-end"
+          onOpen={() => setPendingStatusFilters(statusFilters)}
+          onClose={() => setStatusFilters(pendingStatusFilters)}
+        >
+          <MenuButton
+            as={Button}
+            size="sm"
+            minW="220px"
+            maxW="100%"
+            h="auto"
+            minH="36px"
+            py="4px"
+            whiteSpace="normal"
+            textAlign="left"
+            variant="secondary"
+            rightIcon={<CaretDown size={16} weight="bold" />}
+          >
+            Revision Status: {statusFilterLabel}
+          </MenuButton>
+          <MenuList minW="220px">
+            <MenuItem onClick={() => setPendingStatusFilters([])}>
+              <Checkbox size="sm" isChecked={pendingStatusFilters.length === 0} pointerEvents="none" mr="8px" />
+              <Text fontSize="sm">All</Text>
+            </MenuItem>
+            {ADMIN_REVISION_FILTER_OPTIONS.map((option) => (
+              <MenuItem key={option.status} onClick={() => toggleStatusFilter(option.status)}>
+                <Checkbox
+                  size="sm"
+                  isChecked={pendingStatusFilters.includes(option.status)}
+                  pointerEvents="none"
+                  mr="8px"
+                />
+                <Text fontSize="sm">{option.label}</Text>
+              </MenuItem>
+            ))}
+          </MenuList>
+        </Menu>
       </Flex>
 
       {workspace.loading ? (
@@ -1340,39 +1467,46 @@ export const AdminRevisionSummary = ({
       ) : null}
 
       {!workspace.loading ? (
-        issues.length ? (
+        visibleIssues.length ? (
           <Accordion mt="9px" allowMultiple display="flex" flexDirection="column" gap="7px">
-            {issues.map((issue) => {
+            {visibleIssues.map((issue) => {
               const status = adminRevisionIssueListStatus(issue, workspace);
-              const recommendation = adminRemedyLabel(workspace.draftFor(issue).remedy);
               const sourceAvailable = sourceIssueIds.has(issue.id);
 
               return (
                 <AccordionItem
                   key={issue.id}
-                  bg="white"
+                  bg={status.accordionBackground}
                   borderWidth="1px"
-                  borderColor="#D8D8D8"
+                  borderColor={status.accordionBorder}
                   borderRadius="md"
                   overflow="hidden"
                 >
                   <h3>
-                    <AccordionButton px="9px" py="8px" _hover={{ bg: '#FAF9F8' }} _expanded={{ bg: '#FAF9F8' }}>
+                    <AccordionButton
+                      px="9px"
+                      py="8px"
+                      _hover={{ bg: status.accordionBackground }}
+                      _expanded={{ bg: status.accordionBackground }}
+                    >
                       <Flex align="center" gap="7px" wrap="wrap" flex="1" minW={0} textAlign="left">
-                        <AccordionIcon flexShrink={0} />
                         <Text fontSize="16px" fontWeight="600" flex="1" minW="180px">
                           {adminRevisionIssueLabel(issue)}
                         </Text>
-                        {recommendation ? (
-                          <Text fontSize="16px" color="gray.600">
-                            {recommendation}
-                          </Text>
-                        ) : null}
-                        <Badge colorScheme={status.colour}>{status.label}</Badge>
+                        <Badge bg={status.badgeBackground} color={status.badgeColor}>
+                          {status.label}
+                        </Badge>
                       </Flex>
+                      <AccordionIcon flexShrink={0} ml="8px" />
                     </AccordionButton>
                   </h3>
-                  <AccordionPanel px="10px" pt="9px" pb="10px" borderTopWidth="1px" borderColor="#D8D8D8">
+                  <AccordionPanel
+                    px="10px"
+                    pt="9px"
+                    pb="10px"
+                    borderTopWidth="1px"
+                    borderColor={status.accordionBorder}
+                  >
                     <Flex align="center" justify="space-between" gap="8px" mb="10px" wrap="wrap">
                       <Text fontSize="16px" fontWeight="700">
                         History
@@ -1395,7 +1529,7 @@ export const AdminRevisionSummary = ({
           </Accordion>
         ) : (
           <Text fontSize="sm" color="gray.600" mt="8px">
-            No revision issues.
+            {workspace.issues.length ? 'No revision issues match this status.' : 'No revision issues.'}
           </Text>
         )
       ) : null}
@@ -1410,9 +1544,7 @@ export const AdminRevisionWorkspace = ({
   workspace: AdminInlineRevisionWorkspace;
   sourceIssueIds: Set<string>;
 }) => {
-  const [statusFilter, setStatusFilter] = useState<'all' | 'in_development' | 'saved' | 'with_contractor' | 'closed'>(
-    'all',
-  );
+  const [statusFilter, setStatusFilter] = useState<'all' | AdminRevisionListStatus['key']>('all');
   const visibleIssues = sortedAdminRevisionIssues(
     workspace.issues.filter(
       (issue) => statusFilter === 'all' || adminRevisionIssueListStatus(issue, workspace).key === statusFilter,
@@ -1448,16 +1580,11 @@ export const AdminRevisionWorkspace = ({
                 w="150px"
                 aria-label="Filter revision issues by status"
                 value={statusFilter}
-                onChange={(event) =>
-                  setStatusFilter(
-                    event.target.value as 'all' | 'in_development' | 'saved' | 'with_contractor' | 'closed',
-                  )
-                }
+                onChange={(event) => setStatusFilter(event.target.value as 'all' | AdminRevisionListStatus['key'])}
               >
                 <option value="all">All statuses</option>
-                <option value="in_development">Action Needed</option>
-                <option value="saved">Ready to Send</option>
-                <option value="with_contractor">Awaiting Contractor</option>
+                <option value="awaiting_action">Awaiting action</option>
+                <option value="awaiting_send">Awaiting send</option>
                 <option value="closed">Closed</option>
               </Select>
             </Flex>

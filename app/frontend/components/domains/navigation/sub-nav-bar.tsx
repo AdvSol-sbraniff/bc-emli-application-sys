@@ -93,6 +93,9 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/validation-rules-alphabetic-admin': [
         { href: '/validation-rules-alphabetic-admin', title: 'Advice Checks at a Glance' },
       ],
+      '/validation-fields-alphabetic-admin': [
+        { href: '/validation-fields-alphabetic-admin', title: 'GenAI Fields at a Glance' },
+      ],
       '/validation-rules-config': [{ href: '/validation-rules-config', title: 'System Config' }],
       '/supporting-document-types-admin': [
         { href: '/validation-rules-admin', title: 'Fields and Advice Editor' },

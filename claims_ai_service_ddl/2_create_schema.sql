@@ -2765,6 +2765,10 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   system_record character varying NULL,
   document_triage_system_record character varying NULL,
   supporting_document_extraction_system_record character varying NULL,
+  document_triage_deployment_name character varying(200) NULL,
+  supporting_document_extraction_deployment_name character varying(200) NULL,
+  upgrade_analysis_deployment_name character varying(200) NULL,
+  comparison_deployment_name character varying(200) NULL,
   user_record0 character varying NULL,
   admin_advice_intro character varying NULL,
   admin_advice_closing character varying NULL,
@@ -2778,6 +2782,15 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   CONSTRAINT validationgenai_config_admin_pdf_viewer_ux_mode_check
     CHECK (admin_pdf_viewer_ux_mode IN ('simple', 'enterprise'))
 );
+
+COMMENT ON COLUMN claims.validationgenai_config.document_triage_deployment_name IS
+  'Azure/OpenAI deployment name used for document classification/triage calls.';
+COMMENT ON COLUMN claims.validationgenai_config.supporting_document_extraction_deployment_name IS
+  'Azure/OpenAI deployment name used for supporting-document extraction calls.';
+COMMENT ON COLUMN claims.validationgenai_config.upgrade_analysis_deployment_name IS
+  'Azure/OpenAI deployment name used for upgrade analysis and GenAI rule evaluation calls.';
+COMMENT ON COLUMN claims.validationgenai_config.comparison_deployment_name IS
+  'Azure/OpenAI deployment name used by the test harness to compare baseline and candidate results.';
 
 
 -- ============================================================
@@ -3102,6 +3115,11 @@ CREATE TABLE IF NOT EXISTS claims.ingest_runs (
   status text NOT NULL DEFAULT 'queued',
   cleanup_failed_invoice_artifacts boolean NOT NULL DEFAULT false,
 
+  -- Immutable snapshots of the three selected business-call deployments.
+  document_triage_deployment_name character varying(200) NULL,
+  supporting_document_extraction_deployment_name character varying(200) NULL,
+  upgrade_analysis_deployment_name character varying(200) NULL,
+
   total_files     integer NOT NULL DEFAULT 0,
   completed_files integer NOT NULL DEFAULT 0,
   failed_files    integer NOT NULL DEFAULT 0,
@@ -3238,6 +3256,13 @@ CREATE INDEX IF NOT EXISTS idx_ingest_runs_resolved_invoice_version
 
 CREATE INDEX IF NOT EXISTS idx_ingest_runs_status
   ON claims.ingest_runs (status);
+
+COMMENT ON COLUMN claims.ingest_runs.document_triage_deployment_name IS
+  'Snapshot of the document classification/triage deployment selected when this ingest run was created.';
+COMMENT ON COLUMN claims.ingest_runs.supporting_document_extraction_deployment_name IS
+  'Snapshot of the supporting-document extraction deployment selected when this ingest run was created.';
+COMMENT ON COLUMN claims.ingest_runs.upgrade_analysis_deployment_name IS
+  'Snapshot of the upgrade analysis and GenAI rule evaluation deployment selected when this ingest run was created.';
 
 
 

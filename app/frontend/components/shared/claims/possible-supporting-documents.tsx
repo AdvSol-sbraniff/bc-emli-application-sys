@@ -14,7 +14,7 @@ import React from 'react';
 import { getInvoiceUpgradeTypeMeta, InvoiceUpgradeTypeTile } from './invoice-upgrade-type-visual';
 
 export const PossibleSupportingDocumentsButton = ({ onClick }: { onClick: () => void }) => (
-  <Button size="lg" variant="outline" colorScheme="purple" fontSize="sm" onClick={onClick}>
+  <Button size="lg" variant="secondary" fontSize="sm" onClick={onClick}>
     Possible Supporting Documents
   </Button>
 );

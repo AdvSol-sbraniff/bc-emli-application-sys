@@ -69,12 +69,10 @@ import {
 } from '../../shared/claims/possible-supporting-documents';
 import {
   adminRevisionIssueListStatus,
-  adminRevisionIssueStage,
   AdminRevisionDecisionMode,
   AdminRevisionIssueEditor,
-  AdminRevisionSendControl,
   AdminRevisionSummary,
-  AdminRevisionIssueStage,
+  AdminRevisionListStatus,
   AdminRevisionSourceAnchor,
   AdminRevisionWorkspace,
   diFieldRevisionIdentityKey,
@@ -88,6 +86,7 @@ import { RevisionIssue, RevisionTrackerData } from '../../shared/claims/revision
 import {
   ArrowClockwise,
   ArrowSquareOut,
+  CaretDown,
   CaretLeft,
   CaretRight,
   CheckCircle,
@@ -134,7 +133,7 @@ type FieldRowProps = {
   inline?: boolean;
   textFontSize?: string | number;
   revisionChecked?: boolean;
-  revisionStatus?: AdminRevisionIssueStage;
+  revisionStatus?: AdminRevisionListStatus;
   revisionIssue?: RevisionIssue;
   onOpenRevision?: () => void;
   onSelectRevisionAction?: (mode: AdminRevisionDecisionMode) => void;
@@ -161,7 +160,7 @@ const ProductMatchModal = ({ match, onClose }: { match: ProductMatchDetail | nul
     >
       <ModalHeader>{match?.title}</ModalHeader>
       <ModalCloseButton />
-      <ModalBody pb={6}>
+      <ModalBody pb={6} fontSize="sm">
         <Box display="grid" gridTemplateColumns="1fr 1fr" columnGap="8px" rowGap="0">
           {(match?.rows || [])
             .filter(([, value]) => value != null && value !== '')
@@ -222,8 +221,8 @@ const RevisionAddIconButton = ({ label, included = false, onAdd, disabledReason 
         borderRadius="full"
         colorScheme={included ? 'green' : 'blue'}
         variant={included ? 'outline' : 'solid'}
-        color={included ? 'green.600' : 'white'}
-        bg={included ? 'green.50' : 'blue.600'}
+        color={included ? 'green.600' : 'theme.blue'}
+        bg={included ? 'green.50' : 'white'}
         boxShadow={included ? 'none' : '0 2px 6px rgba(37, 99, 235, 0.35)'}
         isDisabled={disabled}
         opacity={1}
@@ -232,7 +231,7 @@ const RevisionAddIconButton = ({ label, included = false, onAdd, disabledReason 
             ? undefined
             : included
               ? { bg: 'green.100', transform: 'translateY(-1px)' }
-              : { bg: 'blue.700', transform: 'translateY(-1px)' }
+              : { bg: 'theme.blueLight', transform: 'translateY(-1px)' }
         }
         _disabled={{
           opacity: 1,
@@ -250,12 +249,12 @@ const RevisionAddIconButton = ({ label, included = false, onAdd, disabledReason 
   );
 };
 
-const RevisionStatusBadge = ({ status, onOpen }: { status?: AdminRevisionIssueStage; onOpen?: () => void }) =>
+const RevisionStatusBadge = ({ status, onOpen }: { status?: AdminRevisionListStatus; onOpen?: () => void }) =>
   status ? (
     <Badge
       as={onOpen ? 'button' : 'span'}
-      colorScheme={status.colour}
-      variant="subtle"
+      bg={status.badgeBackground}
+      color={status.badgeColor}
       fontSize="9px"
       lineHeight="16px"
       px="5px"
@@ -264,6 +263,7 @@ const RevisionStatusBadge = ({ status, onOpen }: { status?: AdminRevisionIssueSt
       whiteSpace="nowrap"
       flexShrink={0}
       cursor={onOpen ? 'pointer' : 'default'}
+      _hover={{ bg: status.badgeBackground }}
       title={onOpen ? `Open ${status.label.toLowerCase()} in Revision Issues` : undefined}
       onMouseDown={onOpen ? (event) => event.stopPropagation() : undefined}
       onClick={
@@ -286,42 +286,24 @@ const RevisionSourceActions = ({
   issue?: RevisionIssue;
   onSelect?: (mode: AdminRevisionDecisionMode) => void;
 }) => {
-  if (!issue || (!issue.can_admin_comment && !issue.can_close) || !onSelect) return null;
+  if (!issue?.can_close || !onSelect) return null;
 
   return (
     <Flex width="100%" gap="6px" mt="4px" wrap="wrap">
-      {issue.can_admin_comment ? (
-        <Button
-          size="xs"
-          h="24px"
-          colorScheme="blue"
-          variant="outline"
-          fontWeight="600"
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelect('recommend_action');
-          }}
-        >
-          Recommend action
-        </Button>
-      ) : null}
-      {issue.can_close ? (
-        <Button
-          size="xs"
-          h="24px"
-          colorScheme="purple"
-          variant="outline"
-          fontWeight="600"
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelect('close_issue');
-          }}
-        >
-          Close issue
-        </Button>
-      ) : null}
+      <Button
+        size="xs"
+        h="24px"
+        colorScheme="purple"
+        variant="outline"
+        fontWeight="600"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect('close_issue');
+        }}
+      >
+        Close issue
+      </Button>
     </Flex>
   );
 };
@@ -673,9 +655,9 @@ const ClassifiedUpgradeTypesModal = ({
     >
       <ModalHeader>Classified Upgrade Types</ModalHeader>
       <ModalCloseButton />
-      <ModalBody pb={6}>
+      <ModalBody pb={6} fontSize="md">
         {rows.length === 0 ? (
-          <Text fontSize="sm" opacity={0.7}>
+          <Text fontSize="md" opacity={0.7}>
             No upgrade types classified for this invoice.
           </Text>
         ) : (
@@ -711,7 +693,7 @@ const ClassifiedUpgradeTypesModal = ({
                   }
                 >
                   <Flex align="center" gap="8px" wrap="wrap">
-                    <Text fontSize="sm" fontWeight="bold">
+                    <Text fontSize="md" fontWeight="bold">
                       {meta.label}
                     </Text>
                     <InvoiceUpgradeTypeTile
@@ -720,18 +702,13 @@ const ClassifiedUpgradeTypesModal = ({
                       size={24}
                     />
                     {confidence ? (
-                      <Badge colorScheme="blue" textTransform="none">
+                      <Badge colorScheme="blue" textTransform="none" fontSize="md">
                         {confidence}
-                      </Badge>
-                    ) : null}
-                    {clickable ? (
-                      <Badge colorScheme="gray" textTransform="none">
-                        Select to focus in document
                       </Badge>
                     ) : null}
                   </Flex>
                   {explanation ? (
-                    <Text fontSize="sm" mt="5px">
+                    <Text fontSize="md" mt="5px">
                       <Text as="span" fontWeight="bold">
                         Why classified:{' '}
                       </Text>
@@ -739,7 +716,7 @@ const ClassifiedUpgradeTypesModal = ({
                     </Text>
                   ) : null}
                   {evidenceText ? (
-                    <Text fontSize="sm" mt="3px">
+                    <Text fontSize="md" mt="3px">
                       <Text as="span" fontWeight="bold">
                         Evidence:{' '}
                       </Text>
@@ -979,12 +956,12 @@ const INVOICE_STATUS_ACTIONS: Array<{
 }> = [
   {
     key: 'screen_in',
-    label: 'Send to Supervisor',
+    label: 'Send to second level',
     validFrom: ['admin_review_inbox'],
     targetStatus: 'in_review',
     colorScheme: 'blue',
     tooltip:
-      'First approval level. Regular admins use this after reviewing an invoice in admin_review_inbox. Moves status to in_review for supervisor approval.',
+      'First approval level. Regular admins use this after reviewing an invoice in admin_review_inbox. Moves status to in_review for second-level approval.',
   },
   {
     key: 'approve_pending',
@@ -1222,7 +1199,7 @@ export const InvoiceVersionShowScreen = () => {
   const isInvoiceCurrentRoute = !!routeInvoiceId && !sessionId && !isVersionSnapshotRoute;
   const isLegacySessionCurrentRoute = !!routeInvoiceId && !!sessionId && !isVersionSnapshotRoute;
   const canRunWorkflowActions = isInvoiceCurrentRoute;
-  const titleText = isVersionSnapshotRoute ? 'Invoice Version Snapshot' : 'Invoice Review';
+  const titleText = isVersionSnapshotRoute ? 'Invoice Version Snapshot' : '';
 
   // ============================================================
   // SECTION 05.01 - STATE
@@ -1347,7 +1324,14 @@ export const InvoiceVersionShowScreen = () => {
 
   const ruleFilterMenu = (
     <Menu closeOnSelect={false} placement="bottom-end">
-      <MenuButton as={Button} size="xs" variant="outline" onClick={(event) => event.stopPropagation()}>
+      <MenuButton
+        as={Button}
+        size="sm"
+        minW="190px"
+        variant="secondary"
+        rightIcon={<CaretDown size={16} weight="bold" />}
+        onClick={(event) => event.stopPropagation()}
+      >
         Rule filter: {ruleFilterLabel}
       </MenuButton>
       <MenuList minW="190px" onClick={(event) => event.stopPropagation()}>
@@ -1429,7 +1413,7 @@ export const InvoiceVersionShowScreen = () => {
   const revisionIssueForDiField = (fieldKey: string) =>
     revisionIssueByIdentity.get(diFieldRevisionIdentityKey(fieldKey));
   const revisionStatusForIssue = (issue?: RevisionIssue) =>
-    usesEnterpriseRevisionWorkspace && issue ? adminRevisionIssueStage(issue, revisionWorkspace) : undefined;
+    usesEnterpriseRevisionWorkspace && issue ? adminRevisionIssueListStatus(issue, revisionWorkspace) : undefined;
   const revisionSourceActionProps = (issue?: RevisionIssue) => ({
     revisionIssue: issue,
     onOpenRevision: issue ? () => focusRevisionIssue(issue.id) : undefined,
@@ -2539,6 +2523,25 @@ export const InvoiceVersionShowScreen = () => {
             aria-label="Show document"
             colorScheme="blue"
             isChecked={documentVisible}
+            sx={{
+              '--switch-track-width': '58px',
+              '--switch-track-height': '24px',
+              '.chakra-switch__track': { position: 'relative' },
+              '.chakra-switch__track[data-checked]': { bg: 'theme.blue' },
+              '.chakra-switch__track::after': {
+                content: documentVisible ? '"ON"' : '"OFF"',
+                position: 'absolute',
+                top: '50%',
+                left: documentVisible ? '7px' : 'auto',
+                right: documentVisible ? 'auto' : '6px',
+                transform: 'translateY(-50%)',
+                color: documentVisible ? 'white' : 'gray.700',
+                fontSize: '9px',
+                fontWeight: 700,
+                lineHeight: 1,
+                pointerEvents: 'none',
+              },
+            }}
             onChange={(event) => {
               if (event.target.checked !== documentVisible) toggleDocument();
             }}
@@ -2560,8 +2563,27 @@ export const InvoiceVersionShowScreen = () => {
           <Flex as="label" align="center" gap={2} cursor="pointer">
             <Switch
               aria-label="Show revision summary"
-              colorScheme="orange"
+              colorScheme="blue"
               isChecked={simpleRevisionSummaryVisible}
+              sx={{
+                '--switch-track-width': '58px',
+                '--switch-track-height': '24px',
+                '.chakra-switch__track': { position: 'relative' },
+                '.chakra-switch__track[data-checked]': { bg: 'theme.blue' },
+                '.chakra-switch__track::after': {
+                  content: simpleRevisionSummaryVisible ? '"ON"' : '"OFF"',
+                  position: 'absolute',
+                  top: '50%',
+                  left: simpleRevisionSummaryVisible ? '7px' : 'auto',
+                  right: simpleRevisionSummaryVisible ? 'auto' : '6px',
+                  transform: 'translateY(-50%)',
+                  color: simpleRevisionSummaryVisible ? 'white' : 'gray.700',
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                },
+              }}
               onChange={(event) => {
                 if (event.target.checked) closeCommunicationPanel();
                 setSimpleRevisionSummaryVisible(event.target.checked);
@@ -2573,7 +2595,9 @@ export const InvoiceVersionShowScreen = () => {
           </Flex>
         </Tooltip>
       ) : null}
-      {ruleFilterMenu}
+      <Box ml="auto" mr="8px">
+        {ruleFilterMenu}
+      </Box>
     </Flex>
   );
   const enterpriseRevisionWorkspaceContent = showRevisionWorkspace ? (
@@ -2595,6 +2619,7 @@ export const InvoiceVersionShowScreen = () => {
         workspace={revisionWorkspace}
         listStatus={adminRevisionIssueListStatus(issue, revisionWorkspace)}
         heading="Revision Request"
+        showRecommendationInHeader={false}
       />
     );
   };
@@ -2638,7 +2663,7 @@ export const InvoiceVersionShowScreen = () => {
   const generalInvoiceFieldsContent = (
     <Box borderTopWidth="1px" borderColor="gray.200">
       <Text px="10px" py="5px" fontSize="sm" fontWeight="bold">
-        General Invoice Fields
+        Fields
       </Text>
       <Box px="10px" pt="3px" pb="6px">
         <PersonalInformationReviewFlag record={readData} />
@@ -2738,6 +2763,9 @@ export const InvoiceVersionShowScreen = () => {
                   <Flex align="center" gap={2} flexWrap="wrap" justify="flex-end">
                     {INVOICE_STATUS_ACTIONS.map((action) => {
                       const isValidNow = action.validFrom.includes(currentInvoiceStatus);
+                      if (action.key === 'approve_pending' && !isValidNow) return null;
+
+                      const isSecondLevelAction = action.key === 'screen_in';
                       const disabledReason = ' This action is not available for this invoice status.';
                       return (
                         <Tooltip
@@ -2749,8 +2777,8 @@ export const InvoiceVersionShowScreen = () => {
                             leftIcon={invoiceStatusActionIcon(action.key)}
                             size="sm"
                             colorScheme={action.colorScheme}
-                            variant={isValidNow ? 'solid' : 'outline'}
-                            bg={isValidNow ? undefined : 'whiteAlpha.900'}
+                            variant={isSecondLevelAction ? 'secondary' : isValidNow ? 'solid' : 'outline'}
+                            bg={isSecondLevelAction || !isValidNow ? 'whiteAlpha.900' : undefined}
                             onClick={() => runStatusTransition(action.key)}
                             isDisabled={!isValidNow || !!statusActionLoading || !readData?.invoice_id}
                             isLoading={statusActionLoading === action.key}
@@ -2822,9 +2850,6 @@ export const InvoiceVersionShowScreen = () => {
                   </Button>
                 </Tooltip>
               ) : null}
-              {showRevisionWorkspace && !usesEnterpriseRevisionWorkspace ? (
-                <AdminRevisionSendControl workspace={revisionWorkspace} />
-              ) : null}
             </Box>
             {statusActionError && (
               <Box mb="8px">
@@ -2889,12 +2914,19 @@ export const InvoiceVersionShowScreen = () => {
                 <Accordion
                   allowMultiple
                   sx={{
-                    '.chakra-accordion__button .chakra-text, .chakra-accordion__panel .chakra-text': {
+                    '.chakra-accordion__button .chakra-text': {
+                      fontSize: '20px',
+                      fontWeight: 700,
+                    },
+                    '.chakra-accordion__panel .chakra-text': {
                       fontSize: '16px',
                     },
                     '.chakra-accordion__button': {
-                      color: 'blue.800',
+                      color: 'text.primary',
                       fontWeight: 700,
+                      paddingLeft: '8px',
+                      paddingTop: '10px',
+                      paddingBottom: '10px',
                       borderRadius: '6px',
                       borderLeftWidth: '2px',
                       borderLeftStyle: 'solid',
@@ -2902,12 +2934,15 @@ export const InvoiceVersionShowScreen = () => {
                       transition: 'background 180ms ease, border-color 180ms ease, color 180ms ease',
                     },
                     '.chakra-accordion__button:hover': {
-                      color: 'blue.900',
+                      color: 'text.primary',
+                    },
+                    '.chakra-accordion__icon': {
+                      marginRight: '8px',
                     },
                     '.chakra-accordion__button[aria-expanded="true"]': {
-                      background: 'linear-gradient(180deg, rgba(49, 130, 206, 0.12) 0%, rgba(255, 255, 255, 0) 88%)',
-                      borderLeftColor: 'blue.300',
-                      color: 'blue.900',
+                      background: '#F3F2F1',
+                      borderLeftColor: '#898785',
+                      color: 'text.primary',
                     },
                     '.chakra-accordion__panel': {
                       marginLeft: '12px',
@@ -2918,6 +2953,12 @@ export const InvoiceVersionShowScreen = () => {
                     },
                   }}
                 >
+                  <Box px="8px" pt="4px" pb="6px">
+                    <Text fontSize="md" fontWeight="bold" color="gray.600">
+                      Invoice Fields and Advice
+                    </Text>
+                  </Box>
+
                   {classifierDisplayFields.length > 0 && (
                     <AccordionItem borderTopWidth="1px" borderColor="gray.200">
                       <h2>
@@ -3080,16 +3121,10 @@ export const InvoiceVersionShowScreen = () => {
                               <AccordionButton px="0" py="8px" _hover={{ bg: 'transparent' }}>
                                 <Flex flex="1" align="center" gap="8px" textAlign="left" minW={0}>
                                   <Box minW={0}>
-                                    <Text fontSize="md" lineHeight="1.25" fontWeight="bold" noOfLines={1}>
-                                      {group.upgradeTypeKey === 'common' ? 'Common invoice' : meta.label} - Fields &
-                                      Advice
+                                    <Text fontSize="20px" lineHeight="1.25" fontWeight="bold" noOfLines={1}>
+                                      {group.upgradeTypeKey === 'common' ? 'Common' : meta.label}
                                     </Text>
                                   </Box>
-                                  <InvoiceUpgradeTypeTile
-                                    upgradeTypeKey={group.upgradeTypeKey}
-                                    description={group.description}
-                                    size={30}
-                                  />
                                 </Flex>
                                 <AccordionIcon />
                               </AccordionButton>
@@ -3102,8 +3137,7 @@ export const InvoiceVersionShowScreen = () => {
                                     <>
                                       <Button
                                         size="sm"
-                                        variant="outline"
-                                        colorScheme="purple"
+                                        variant="secondary"
                                         onClick={() => setClassifiedUpgradeTypesOpen(true)}
                                       >
                                         Classified Upgrade Types
@@ -3116,9 +3150,8 @@ export const InvoiceVersionShowScreen = () => {
                                   {registryMatches.map((match) => (
                                     <Button
                                       key={match.key}
-                                      size="xs"
-                                      variant="outline"
-                                      colorScheme="blue"
+                                      size="sm"
+                                      variant="secondary"
                                       onClick={() => setProductMatchModal(match)}
                                     >
                                       {match.title}
@@ -3128,11 +3161,13 @@ export const InvoiceVersionShowScreen = () => {
                               ) : null}
                               {group.upgradeTypeKey === 'common' ? generalInvoiceFieldsContent : null}
                               <Box borderTopWidth="1px" borderColor="gray.200">
-                                <Box px="10px" py="5px">
-                                  <Text fontSize="sm" fontWeight="bold">
-                                    Program Located Fields
-                                  </Text>
-                                </Box>
+                                {group.upgradeTypeKey !== 'common' ? (
+                                  <Box px="10px" py="5px">
+                                    <Text fontSize="sm" fontWeight="bold">
+                                      Fields
+                                    </Text>
+                                  </Box>
+                                ) : null}
 
                                 <Box px="10px" pt="3px" pb="6px">
                                   {genAiError && (
@@ -3322,35 +3357,29 @@ export const InvoiceVersionShowScreen = () => {
                     </>
                   )}
 
-                  {supportingDocumentEvidenceSections.length === 0 ? (
-                    <AccordionItem borderTopWidth="1px" borderColor="gray.200">
-                      <h2>
-                        <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
-                          <Box flex="1" textAlign="left">
-                            <Text size="sm" fontWeight="bold">
-                              Supporting documents
-                            </Text>
-                          </Box>
-                          <AccordionIcon />
-                        </AccordionButton>
-                      </h2>
+                  <Box px="8px" pt="24px" pb="6px">
+                    <Text fontSize="md" fontWeight="bold" color="gray.600">
+                      Supporting Documents
+                    </Text>
+                  </Box>
 
-                      <AccordionPanel px="0" pt="8px">
-                        <Flex align="center" justify="space-between" gap="12px" wrap="wrap">
-                          <Text fontSize="sm" opacity={0.7}>
-                            No supporting-document evidence stored for this invoice.
-                          </Text>
-                          <PossibleSupportingDocumentsButton onClick={() => setPossibleSupportingDocumentsOpen(true)} />
-                        </Flex>
-                      </AccordionPanel>
-                    </AccordionItem>
+                  {supportingDocumentEvidenceSections.length === 0 ? (
+                    <Box borderTopWidth="1px" borderColor="gray.200" px="12px" py="12px">
+                      <Flex align="center" justify="space-between" gap="12px" wrap="wrap">
+                        <Text fontSize="sm" opacity={0.7}>
+                          No supporting-document evidence stored for this invoice.
+                        </Text>
+                        <PossibleSupportingDocumentsButton onClick={() => setPossibleSupportingDocumentsOpen(true)} />
+                      </Flex>
+                    </Box>
                   ) : (
                     supportingDocumentEvidenceSections.flatMap((section) =>
-                      section.documents.map((doc: any) => {
+                      section.documents.map((doc: any, documentIndex: number) => {
                         const fields = Array.isArray(doc?.located_fields) ? doc.located_fields : [];
                         const findings = Array.isArray(doc?.visual_findings) ? doc.visual_findings : [];
                         const filename = String(doc?.original_filename || 'Unnamed file');
-                        const showFilename = section.documents.length > 1;
+                        const documentCount = section.documents.length;
+                        const documentOrdinal = documentCount > 1 ? ` ${documentIndex + 1} of ${documentCount}` : '';
 
                         return (
                           <AccordionItem
@@ -3362,7 +3391,7 @@ export const InvoiceVersionShowScreen = () => {
                               <AccordionButton px="0" py="6px" _hover={{ bg: 'transparent' }}>
                                 <Box flex="1" textAlign="left" minW={0}>
                                   <Text size="sm" fontWeight="bold" noOfLines={1}>
-                                    {`Supporting document - ${section.title}${showFilename ? ` - ${filename}` : ''}`}
+                                    {`${section.title}${documentOrdinal}`}
                                   </Text>
                                 </Box>
                                 <AccordionIcon />
@@ -3409,6 +3438,12 @@ export const InvoiceVersionShowScreen = () => {
                                   pl="12px"
                                   mt="2px"
                                 >
+                                  <Text fontSize="sm" opacity={0.7} noOfLines={1}>
+                                    Original file name
+                                  </Text>
+                                  <Text fontSize="sm" noOfLines={1} title={filename}>
+                                    {filename}
+                                  </Text>
                                   <Text fontSize="sm" opacity={0.7} noOfLines={1}>
                                     details
                                   </Text>

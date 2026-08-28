@@ -42,6 +42,9 @@ const ValidationRulesAdminScreen = lazy(() =>
 const ValidationRulesAlphabeticAdminScreen = lazy(() =>
   import('../validation-rules-alphabetic-admin').then((module) => ({ default: module.default })),
 );
+const ValidationFieldsAlphabeticAdminScreen = lazy(() =>
+  import('../validation-fields-alphabetic-admin').then((module) => ({ default: module.default })),
+);
 const ValidationRulesConfigScreen = lazy(() =>
   import('../ruleset-config-editor').then((module) => ({ default: module.default })),
 );
@@ -524,6 +527,7 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/users-admin': 'Users Admin',
   '/validation-rules-admin': 'Validation Rules Admin',
   '/validation-rules-alphabetic-admin': 'Validation Rules Alphabetic Admin',
+  '/validation-fields-alphabetic-admin': 'GenAI Fields at a Glance',
   '/validation-rules-config': 'Validation Rules Config',
   '/welcome': 'Welcome',
   '/welcome/contractor': 'Contractor Welcome',
@@ -1043,6 +1047,7 @@ const AppRoutes = observer(() => {
         >
           <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
           <Route path="/validation-rules-alphabetic-admin" element={<ValidationRulesAlphabeticAdminScreen />} />
+          <Route path="/validation-fields-alphabetic-admin" element={<ValidationFieldsAlphabeticAdminScreen />} />
           <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />
           <Route path="/supporting-document-types-admin" element={<SupportingDocumentTypesAdminScreen />} />
           <Route path="/supporting-document-type-fields-admin" element={<SupportingDocumentTypeFieldsAdminScreen />} />
