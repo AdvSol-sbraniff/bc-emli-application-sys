@@ -102,6 +102,7 @@ module Claims
               total_files: total_file_count(retained_supporting_document_ids),
               completed_files: 0,
               failed_files: 0,
+              **::Claims::Genai::DeploymentConfig.snapshot_attributes,
               created_at: now,
               updated_at: now
             )

@@ -56,6 +56,33 @@ RSpec.describe "Claims validation GenAI config", type: :request do
     expect(config.reload.admin_pdf_viewer_ux_mode).to eq("enterprise")
   end
 
+  it "reads and updates the four deployment names" do
+    config =
+      Claims::ValidationgenaiConfig.order(:created_at).first ||
+        Claims::ValidationgenaiConfig.create!(
+          created_at: Time.current,
+          updated_at: Time.current
+        )
+
+    patch "/api/claims/admin/validationgenai_config",
+          params: {
+            document_triage_deployment_name: "triage-luna",
+            supporting_document_extraction_deployment_name: "extract-terra",
+            upgrade_analysis_deployment_name: "upgrade-terra",
+            comparison_deployment_name: "compare-luna"
+          },
+          as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(json_response).to include(
+      "document_triage_deployment_name" => "triage-luna",
+      "supporting_document_extraction_deployment_name" => "extract-terra",
+      "upgrade_analysis_deployment_name" => "upgrade-terra",
+      "comparison_deployment_name" => "compare-luna"
+    )
+    expect(config.reload.comparison_deployment_name).to eq("compare-luna")
+  end
+
   it "includes the setting in the existing admin invoice read payload" do
     config =
       Claims::ValidationgenaiConfig.order(:created_at).first ||

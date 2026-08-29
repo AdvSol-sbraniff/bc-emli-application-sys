@@ -482,6 +482,10 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
         <>
           {(canUseClaimsOperations || canUseClaimsConfiguration) && <MenuDivider my={0} borderColor="border.light" />}
           <MenuGroup title="Claims Test Tools">
+            <NavMenuItem label="Test Suites" to={'/test-harness/suites'} />
+            <NavMenuItem label="Model Comparison Runs" to={'/test-harness/model-comparisons'} />
+            <NavMenuItem label="Rule Comparison Runs" to={'/test-harness/rule-comparisons'} />
+            <NavMenuItem label="Regression Runs" to={'/test-harness/regressions'} />
             <NavMenuItem label="Test AI Network Connectivity" to={'/hello-ai-admin'} />
             <NavMenuItem label="Contractor Simulator" to={'/submission-simulator-admin'} />
             <NavMenuItem label="Create Test Contractors" to={'/contractors-admin'} />

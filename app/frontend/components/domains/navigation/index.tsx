@@ -80,6 +80,37 @@ const IngestRunsAdminScreen = lazy(() =>
 const ClaimsRbacAdminScreen = lazy(() =>
   import('../claims-rbac-admin').then((module) => ({ default: module.default })),
 );
+const TestSuitesScreen = lazy(() => import('../test-harness').then((module) => ({ default: module.TestSuitesScreen })));
+const TestSuiteCasesScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.TestSuiteCasesScreen })),
+);
+const ModelComparisonsScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.ModelComparisonsScreen })),
+);
+const NewModelComparisonScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.NewModelComparisonScreen })),
+);
+const ModelComparisonResultsScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.ModelComparisonResultsScreen })),
+);
+const RuleComparisonsScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.RuleComparisonsScreen })),
+);
+const NewRuleComparisonScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.NewRuleComparisonScreen })),
+);
+const RuleComparisonResultsScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.RuleComparisonResultsScreen })),
+);
+const RegressionRunsScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.RegressionRunsScreen })),
+);
+const NewRegressionRunScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.NewRegressionRunScreen })),
+);
+const RegressionRunResultsScreen = lazy(() =>
+  import('../test-harness').then((module) => ({ default: module.RegressionRunResultsScreen })),
+);
 
 // the invoicesadmin is in ../invoices-admin/
 // below is the code for it
@@ -529,6 +560,13 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/validation-rules-alphabetic-admin': 'Validation Rules Alphabetic Admin',
   '/validation-fields-alphabetic-admin': 'GenAI Fields at a Glance',
   '/validation-rules-config': 'Validation Rules Config',
+  '/test-harness/suites': 'Test Suites',
+  '/test-harness/model-comparisons': 'Model Comparison Runs',
+  '/test-harness/model-comparisons/new': 'New Model Comparison',
+  '/test-harness/rule-comparisons': 'Rule Comparison Runs',
+  '/test-harness/rule-comparisons/new': 'New Rule Comparison',
+  '/test-harness/regressions': 'Regression Runs',
+  '/test-harness/regressions/new': 'New Regression Run',
   '/welcome': 'Welcome',
   '/welcome/contractor': 'Contractor Welcome',
   '/welcome/contractor/invite': 'Contractor Invite',
@@ -570,6 +608,10 @@ const ROUTE_TITLE_PATTERNS: Array<[RegExp, string]> = [
   [/^\/invoice-versions\/[^/]+\/review$/, 'Invoice Version Review'],
   [/^\/invoice-versions-by-version\/[^/]+\/read$/, 'Invoice Version Read'],
   [/^\/invoices\/[^/]+\/review$/, 'Invoice Review'],
+  [/^\/test-harness\/suites\/[^/]+\/cases$/, 'Test Suite Cases'],
+  [/^\/test-harness\/model-comparisons\/[^/]+$/, 'Model Comparison Results'],
+  [/^\/test-harness\/rule-comparisons\/[^/]+$/, 'Rule Comparison Results'],
+  [/^\/test-harness\/regressions\/[^/]+$/, 'Regression Run Results'],
   [/^\/jurisdictions\/[^/]+$/, 'Jurisdiction'],
   [/^\/jurisdictions\/[^/]+\/api-settings\/api-mappings\/digital-building-permits\/[^/]+\/edit$/, 'Edit API Mapping'],
   [/^\/jurisdictions\/[^/]+\/configuration-management$/, 'Jurisdiction Configuration'],
@@ -1078,6 +1120,17 @@ const AppRoutes = observer(() => {
           <Route path="/users-admin" element={<UsersAdminScreen />} />
           <Route path="/user-editor" element={<UserEditorScreen />} />
           <Route path="/eligibilitycode-editor" element={<EligibilitycodeEditorScreen />} />
+          <Route path="/test-harness/suites" element={<TestSuitesScreen />} />
+          <Route path="/test-harness/suites/:testsuiteId/cases" element={<TestSuiteCasesScreen />} />
+          <Route path="/test-harness/model-comparisons" element={<ModelComparisonsScreen />} />
+          <Route path="/test-harness/model-comparisons/new" element={<NewModelComparisonScreen />} />
+          <Route path="/test-harness/model-comparisons/:modelComparisonId" element={<ModelComparisonResultsScreen />} />
+          <Route path="/test-harness/rule-comparisons" element={<RuleComparisonsScreen />} />
+          <Route path="/test-harness/rule-comparisons/new" element={<NewRuleComparisonScreen />} />
+          <Route path="/test-harness/rule-comparisons/:ruleComparisonId" element={<RuleComparisonResultsScreen />} />
+          <Route path="/test-harness/regressions" element={<RegressionRunsScreen />} />
+          <Route path="/test-harness/regressions/new" element={<NewRegressionRunScreen />} />
+          <Route path="/test-harness/regressions/:regressionRunId" element={<RegressionRunResultsScreen />} />
         </Route>
 
         <Route

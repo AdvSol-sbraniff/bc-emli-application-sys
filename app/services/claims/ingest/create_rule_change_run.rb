@@ -90,6 +90,7 @@ module Claims
               total_files: 0,
               completed_files: 0,
               failed_files: 0,
+              **::Claims::Genai::DeploymentConfig.snapshot_attributes,
               created_at: now,
               updated_at: now
             )

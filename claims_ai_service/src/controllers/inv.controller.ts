@@ -54,6 +54,10 @@ class GenAiDto {
   @IsOptional()
   @IsObject()
   diagnostic_context?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  deployment_name?: string;
 }
 
 class MintSasDto {
@@ -199,6 +203,7 @@ export class InvController {
       dto.contextwindowjson,
       dto.attachments || [],
       dto.diagnostic_context || {},
+      dto.deployment_name,
     );
   }
 

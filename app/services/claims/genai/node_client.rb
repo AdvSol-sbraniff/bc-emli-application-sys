@@ -88,15 +88,26 @@ module Claims
         end
       end
 
-      def self.call(contextwindowjson:, attachments: [], diagnostic_context: {})
+      def self.call(
+        contextwindowjson:,
+        attachments: [],
+        diagnostic_context: {},
+        deployment_name: nil
+      )
         new.call(
           contextwindowjson: contextwindowjson,
           attachments: attachments,
-          diagnostic_context: diagnostic_context
+          diagnostic_context: diagnostic_context,
+          deployment_name: deployment_name
         )
       end
 
-      def call(contextwindowjson:, attachments: [], diagnostic_context: {})
+      def call(
+        contextwindowjson:,
+        attachments: [],
+        diagnostic_context: {},
+        deployment_name: nil
+      )
         uri = URI("#{ENV.fetch("INV_NODE_BASE_URL")}/inv/genai")
         request = Net::HTTP::Post.new(uri)
         request["Content-Type"] = "application/json"
@@ -104,7 +115,8 @@ module Claims
           JSON.generate(
             contextwindowjson: contextwindowjson,
             attachments: attachments,
-            diagnostic_context: diagnostic_context
+            diagnostic_context: diagnostic_context,
+            deployment_name: deployment_name.to_s.strip.presence
           )
 
         http = Net::HTTP.new(uri.host, uri.port)

@@ -586,13 +586,14 @@ export class InvService {
     attachments: any[],
     diagnosticContext: Record<string, any>,
     diagnosticId: string,
+    deployment: string = this.genaiDeployment,
   ): Record<string, any> {
     const contextText = this.boundedString(contextwindowjson, 200_000) || '';
     return {
       event_source: 'claims_ai_service',
       diagnostic_id: diagnosticId,
       api_style: this.genaiApiStyle,
-      deployment: this.genaiDeployment,
+      deployment,
       endpoint_host: this.genAiEndpointHost(),
       context_chars: contextText.length,
       diagnostic_context: this.safeDiagnosticContext(diagnosticContext),
@@ -706,7 +707,10 @@ export class InvService {
     contextwindowjson: any,
     attachments: any[] = [],
     diagnosticContext: Record<string, any> = {},
+    deploymentName?: string,
   ): Promise<any> {
+    const selectedDeployment =
+      (deploymentName || '').trim() || this.genaiDeployment;
     const diagnosticId = this.genAiDiagnosticId();
     const startedAt = Date.now();
     const diagnosticBase = this.genAiInputSummary(
@@ -714,6 +718,7 @@ export class InvService {
       attachments,
       diagnosticContext,
       diagnosticId,
+      selectedDeployment,
     );
     let raw = '';
     let parsed: any;
@@ -732,7 +737,7 @@ export class InvService {
         const result = await this.withGenAiRetries(async () => {
           providerAttempt += 1;
           const resp = await this.genaiClient.responses.create({
-            model: this.genaiDeployment,
+            model: selectedDeployment,
             instructions: responsesPrompt.instructions,
             input: responsesInput,
           });
@@ -748,7 +753,7 @@ export class InvService {
         const result = await this.withGenAiRetries(async () => {
           providerAttempt += 1;
           const resp = await this.genaiClient.chat.completions.create({
-            model: this.genaiDeployment,
+            model: selectedDeployment,
             messages: toChatMessages(contextwindowjson),
           });
           return this.parseGenAiResponse(

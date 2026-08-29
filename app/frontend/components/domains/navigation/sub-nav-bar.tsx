@@ -97,6 +97,22 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
         { href: '/validation-fields-alphabetic-admin', title: 'GenAI Fields at a Glance' },
       ],
       '/validation-rules-config': [{ href: '/validation-rules-config', title: 'System Config' }],
+      '/test-harness/suites': [{ href: '/test-harness/suites', title: 'Test Suites' }],
+      '/test-harness/model-comparisons': [{ href: '/test-harness/model-comparisons', title: 'Model Comparison Runs' }],
+      '/test-harness/model-comparisons/new': [
+        { href: '/test-harness/model-comparisons', title: 'Model Comparison Runs' },
+        { href: '/test-harness/model-comparisons/new', title: 'New Model Comparison' },
+      ],
+      '/test-harness/rule-comparisons': [{ href: '/test-harness/rule-comparisons', title: 'Rule Comparison Runs' }],
+      '/test-harness/rule-comparisons/new': [
+        { href: '/test-harness/rule-comparisons', title: 'Rule Comparison Runs' },
+        { href: '/test-harness/rule-comparisons/new', title: 'New Rule Comparison' },
+      ],
+      '/test-harness/regressions': [{ href: '/test-harness/regressions', title: 'Regression Runs' }],
+      '/test-harness/regressions/new': [
+        { href: '/test-harness/regressions', title: 'Regression Runs' },
+        { href: '/test-harness/regressions/new', title: 'New Regression Run' },
+      ],
       '/supporting-document-types-admin': [
         { href: '/validation-rules-admin', title: 'Fields and Advice Editor' },
         { href: '/supporting-document-types-admin', title: 'Supporting Document Types' },
@@ -249,6 +265,42 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
     if (claimsBreadcrumbs[path]) {
       setIncludeHome(false);
       setBreadcrumbs(claimsBreadcrumbs[path]);
+      return;
+    }
+
+    if (/^\/test-harness\/suites\/[^/]+\/cases$/.test(path)) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/test-harness/suites', title: 'Test Suites' },
+        { href: path, title: 'Test Suite Cases' },
+      ]);
+      return;
+    }
+
+    if (/^\/test-harness\/model-comparisons\/[^/]+$/.test(path)) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/test-harness/model-comparisons', title: 'Model Comparison Runs' },
+        { href: path, title: 'Model Comparison Results' },
+      ]);
+      return;
+    }
+
+    if (/^\/test-harness\/rule-comparisons\/[^/]+$/.test(path)) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/test-harness/rule-comparisons', title: 'Rule Comparison Runs' },
+        { href: path, title: 'Rule Comparison Results' },
+      ]);
+      return;
+    }
+
+    if (/^\/test-harness\/regressions\/[^/]+$/.test(path)) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/test-harness/regressions', title: 'Regression Runs' },
+        { href: path, title: 'Regression Run Results' },
+      ]);
       return;
     }
 

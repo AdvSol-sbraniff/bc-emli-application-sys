@@ -94,6 +94,15 @@ describe('InvService Responses API attachments', () => {
     expect(JSON.stringify(request)).toContain('data:image/jpeg;base64');
   });
 
+  it('uses an explicit deployment for one request without changing the fallback', async () => {
+    await service.genai(prompt(), [], {}, 'candidate-luna');
+
+    expect(responsesCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'candidate-luna' }),
+    );
+    expect(service.genaiDeployment).toBe('test-deployment');
+  });
+
   it('keeps PDF attachments inline without a provider file upload', async () => {
     service.downloadBlob.mockResolvedValue({
       content_type: 'application/pdf',

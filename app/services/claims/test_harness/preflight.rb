@@ -1,0 +1,119 @@
+# frozen_string_literal: true
+
+module Claims
+  module TestHarness
+    class Preflight
+      RUN_DEPLOYMENTS = %i[
+        document_triage_deployment_name
+        supporting_document_extraction_deployment_name
+        upgrade_analysis_deployment_name
+      ].freeze
+
+      def self.suite!(suite)
+        cases =
+          suite
+            .test_suite_cases
+            .includes(baseline_ingest_run: :ingest_documents)
+            .order(:name)
+            .to_a
+        raise ArgumentError, "The test suite has no cases." if cases.empty?
+
+        cases.each do |test_case|
+          run = test_case.baseline_ingest_run
+          unless run.status == "succeeded"
+            raise ArgumentError,
+                  "#{test_case.name}: baseline ingest run did not succeed."
+          end
+          unless run.resolved_invoice_version_id ==
+                   test_case.baseline_invoice_version_id
+            raise ArgumentError,
+                  "#{test_case.name}: baseline version was not produced by its selected ingest run."
+          end
+          if run.ingest_documents.none?
+            raise ArgumentError,
+                  "#{test_case.name}: baseline run has no source package."
+          end
+        end
+        cases
+      end
+
+      def self.model_compare!(suite)
+        cases = suite!(suite)
+        reference = deployment_values(cases.first.baseline_ingest_run)
+        missing =
+          RUN_DEPLOYMENTS.select { |attribute| reference[attribute].blank? }
+        if missing.any?
+          raise ArgumentError,
+                "#{cases.first.name}: baseline run is missing #{missing.map { |v| v.to_s.humanize }.to_sentence}."
+        end
+
+        cases
+          .drop(1)
+          .each do |test_case|
+            values = deployment_values(test_case.baseline_ingest_run)
+            next if values == reference
+
+            raise ArgumentError,
+                  "#{test_case.name}: baseline models do not match the rest of the suite."
+          end
+        [cases, reference]
+      end
+
+      def self.rule_compare!(suite:, baseline_history:, candidate_rule:)
+        cases = suite!(suite)
+        unless baseline_history.source_id == candidate_rule.id
+          raise ArgumentError,
+                "The baseline history and candidate must belong to the same logical rule."
+        end
+
+        rule_key = candidate_rule.genai_rule_key
+        cases.each do |test_case|
+          version = test_case.baseline_invoice_version
+          unless version
+                   .rulechecks
+                   .where(source_engine: "genai", rule_key: rule_key)
+                   .exists?
+            raise ArgumentError,
+                  "#{test_case.name}: baseline version did not evaluate #{rule_key}."
+          end
+
+          prompt_seen =
+            test_case
+              .baseline_ingest_run
+              .ingest_step_runs
+              .where(step_type: "evaluate_genai_ruleset", status: "succeeded")
+              .where(
+                "context_window_json::text LIKE ?",
+                "%#{sanitize_like(baseline_history.prompt_text)}%"
+              )
+              .exists?
+          unless prompt_seen
+            raise ArgumentError,
+                  "#{test_case.name}: baseline run does not contain the selected historical rule definition."
+          end
+
+          missing =
+            RUN_DEPLOYMENTS.select do |attribute|
+              test_case.baseline_ingest_run.public_send(attribute).blank?
+            end
+          if missing.any?
+            raise ArgumentError,
+                  "#{test_case.name}: baseline run is missing model provenance."
+          end
+        end
+        cases
+      end
+
+      def self.deployment_values(run)
+        RUN_DEPLOYMENTS.index_with do |attribute|
+          run.public_send(attribute).to_s
+        end
+      end
+
+      def self.sanitize_like(value)
+        ActiveRecord::Base.sanitize_sql_like(value.to_s.strip.first(500))
+      end
+      private_class_method :sanitize_like
+    end
+  end
+end

@@ -40,6 +40,7 @@ module Api
             admin_advice_closing: "",
             admin_pdf_viewer_ux_mode: "simple",
             show_admin_field_revision_plus: true,
+            **::Claims::Genai::DeploymentConfig.current,
             created_at: Time.current,
             updated_at: Time.current
           )
@@ -56,11 +57,16 @@ module Api
           admin_advice_closing
           admin_pdf_viewer_ux_mode
           show_admin_field_revision_plus
+          document_triage_deployment_name
+          supporting_document_extraction_deployment_name
+          upgrade_analysis_deployment_name
+          comparison_deployment_name
         ].each { |key| attrs[key] = params[key] if params.key?(key) }
         attrs
       end
 
       def serialize_config(config)
+        deployments = ::Claims::Genai::DeploymentConfig.current
         {
           id: config.id,
           system_record: config.system_record,
@@ -72,6 +78,18 @@ module Api
           admin_advice_closing: config.admin_advice_closing,
           admin_pdf_viewer_ux_mode: config.admin_pdf_viewer_ux_mode,
           show_admin_field_revision_plus: config.show_admin_field_revision_plus,
+          document_triage_deployment_name:
+            config.document_triage_deployment_name.presence ||
+              deployments[:document_triage_deployment_name],
+          supporting_document_extraction_deployment_name:
+            config.supporting_document_extraction_deployment_name.presence ||
+              deployments[:supporting_document_extraction_deployment_name],
+          upgrade_analysis_deployment_name:
+            config.upgrade_analysis_deployment_name.presence ||
+              deployments[:upgrade_analysis_deployment_name],
+          comparison_deployment_name:
+            config.comparison_deployment_name.presence ||
+              deployments[:comparison_deployment_name],
           created_at: config.created_at,
           updated_at: config.updated_at
         }

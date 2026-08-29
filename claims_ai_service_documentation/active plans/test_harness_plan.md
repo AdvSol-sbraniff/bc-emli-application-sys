@@ -21,6 +21,8 @@ All three modes are now in scope. The executable schema consists of eight harnes
 
 The three modes share suites and source packages, but each has its own run table, case table, workflow, and user experience. This keeps the screens understandable and avoids a generic run table full of mode-dependent nullable columns.
 
+Implementation status: the schema, System Config integration, all four screen routes, authorized APIs, replay orchestration, three workflows, deployment selection, and initial automated coverage are implemented locally. Live testing also established the need for deliberately paced harness calls; harness packages and GenAI stages run sequentially with bounded retries so they do not flood a low-capacity Azure deployment.
+
 ## 2. Source of Truth and Scope Boundary
 
 The database source of truth is:
@@ -313,6 +315,7 @@ Regression case failure codes:
 - `configuration_invalid`
 - `ingest_run_creation_failed`
 - `processing_failed`
+- `expectation_failed`
 - `internal_error`
 
 ## 6. Model Configuration and Runtime Contract
@@ -381,7 +384,7 @@ Draft run creation never creates child rows. Starting any run revalidates the su
 2. Reconstruct each source package and create a fresh candidate invoice version and ingest run.
 3. Process it through the real pipeline using the parent candidate deployments.
 4. Perform three evaluator calls: classification, supporting-document extraction, and upgrade analysis.
-5. Store the three readable analyses on the case only after all three calls succeed.
+5. Store each readable analysis as its call succeeds so retries resume idempotently without repeating completed comparison calls.
 6. After every case is terminal, perform one finalization call and store three suite-wide analyses.
 7. Complete the parent only when every case completed and all three overall fields are nonblank.
 
@@ -404,12 +407,12 @@ One failed case does not stop remaining cases from reaching a terminal state.
 1. Create one rule-comparison case per suite case and copy its exact baseline IDs.
 2. Reconstruct each package and create a fresh candidate invoice version and ingest run.
 3. Copy that case's baseline deployments to the candidate run so the models remain unchanged.
-4. Execute the candidate using an isolated per-run override of the selected candidate rule; do not globally publish or mutate rule configuration as part of harness execution.
+4. Execute the real pipeline using the current candidate definition already stored in `genai_rules`; the harness does not publish or mutate rule configuration during execution.
 5. Compare the selected baseline and candidate rule results with one evaluator call.
 6. Store one readable case comparison.
 7. After all cases complete, perform one finalization call and store `overall_rule_comparison`.
 
-The normal invoice-version, rulecheck, and ingest-step tables remain the source of detailed evidence. Do not add rule-history provenance to `invoice_version_rulechecks` merely for the harness.
+The normal invoice-version, rulecheck, and ingest-step tables remain the source of detailed evidence. The evaluator reports only the selected logical rule. Do not add rule-history provenance to `invoice_version_rulechecks` merely for the harness.
 
 ## 10. Regression Workflow
 
@@ -434,7 +437,7 @@ System Config
 
 Test Harness
   Test Suites
-    Suite Cases
+    Test Suite Cases (opened from a suite row)
 
   Model Comparisons
     New Model Comparison
@@ -454,7 +457,10 @@ Test Harness
 
 ### Test Suites and Suite Cases
 
-- Full CRUD for suite name/description and suite-case membership.
+- `Test Suites` is a standard parent-table grid with a small, labelled add section for the physical `name` and `description` fields.
+- `Test Suite Cases` is a separate child-table grid opened only from an `Edit/View Cases` action on a suite row.
+- Its bookmarkable route contains the parent suite UUID; the screen manages only that suite and has no suite search or selector.
+- Adding a case opens a modal: search accepted invoice versions, choose a result, then manually enter the required case `name` and optional `description` before adding it.
 - Add only existing successfully processed invoice versions.
 - Resolve and validate the exact producing ingest run.
 - Show invoice/version identity, processing deployments, and links to normal inspection screens.
@@ -462,9 +468,9 @@ Test Harness
 
 ### Model Comparisons
 
-- Grid: read-only history filtered by suite and status.
-- New screen: suite, derived baseline deployments, three candidate deployments, evaluator deployment, preflight, draft, and explicit run action.
-- Detail: configuration, status/progress, three overall analyses, and combined expandable case results.
+- `Model Comparisons` is a read-only history grid filtered by suite and status, with a single `New Model Comparison` action.
+- `New Model Comparison` is a dedicated screen for suite selection, derived baseline deployments, three candidate deployments, evaluator deployment, and draft creation.
+- `Model Comparison Results` is a bookmarkable detail screen for configuration, status/progress, explicit run action, three overall analyses, and expandable case results.
 
 ### Rule Comparisons
 
@@ -504,10 +510,10 @@ Add authorized endpoints and services for:
 - Preflight, draft creation, submission, history, and detail for each mode.
 - Package reconstruction and fresh pipeline execution.
 - Model-comparison evidence assembly and finalization.
-- Rule-definition validation, isolated rule override, comparison evidence assembly, and finalization.
+- Rule-definition validation, current candidate-rule execution, comparison evidence assembly, and finalization.
 - Regression health checks and result summaries.
 
-All harness endpoints require the existing `claims.test_tools` authorization. The browser never sends an unchecked deployment directly to Node.
+All harness endpoints require the existing `claims.test_tools` authorization. The browser never calls the Node service directly; Rails validates and freezes each submitted deployment name before server-side execution.
 
 ### Background jobs
 
@@ -516,7 +522,8 @@ Use a parent orchestration job and per-case jobs for each mode:
 - Parent jobs create missing case rows idempotently and monitor terminal state.
 - Case jobs process one complete package.
 - Comparison finalization jobs run only after every applicable case completes.
-- Concurrency is bounded to protect provider quotas and normal application work.
+- Harness cases, document classifications, supporting-document extractions, rulesets, evaluator calls, and finalization calls are sequenced to protect provider quotas and normal application work.
+- Retryable harness GenAI failures use at most four attempts with exponential backoff. The base interval defaults to 60 seconds and can be tuned with `TEST_HARNESS_GENAI_INTERVAL_SECONDS` without changing normal processing concurrency.
 - Status boundaries prevent duplicate invoice versions, ingest runs, and evaluator calls.
 
 ## 13. Integrity and Operational Rules
@@ -543,7 +550,7 @@ Use a parent orchestration job and per-case jobs for each mode:
 7. Build suite and suite-case APIs, validation, and screens.
 8. Implement shared package reconstruction and safe fresh-run orchestration.
 9. Build model-comparison preflight, jobs, evaluator calls, finalization, and screens.
-10. Build isolated rule-override support, rule-comparison preflight, jobs, evaluator calls, finalization, and screens.
+10. Build current-candidate rule-comparison preflight, jobs, evaluator calls, finalization, and screens.
 11. Build regression preflight, full-pipeline jobs, health checks, summaries, and screens.
 12. Add authorization and audit-safe diagnostics across all modes.
 13. Add database, model, service, job, request, Node-contract, and UI tests.
@@ -585,7 +592,7 @@ Rule-comparison tests:
 - Suite case missing the selected rule.
 - Baseline compiled-prompt mismatch.
 - Model deployments held constant between baseline and candidate.
-- Isolated candidate-rule override without global configuration mutation.
+- Current candidate-rule execution without harness-time configuration mutation.
 - Case comparison and suite finalization failures.
 
 Regression tests:
@@ -624,7 +631,7 @@ Regression tests:
 
 - The user can select two definitions of the same logical rule.
 - Every suite package is proven to contain the selected baseline rule before the run is created.
-- Candidate execution changes only the selected rule definition while preserving the baseline models.
+- Candidate execution preserves the baseline models, and the comparison analysis is restricted to the selected logical rule.
 - Every successful case and completed parent store a readable comparison.
 
 ### Regression
@@ -640,3 +647,13 @@ Regression tests:
 - All three harness modes have their own screens and workflows.
 - No JSON or separate expectation/comparison-result tables are introduced.
 - Normal application evidence remains the source of truth.
+
+## 17. Local Verification Record
+
+Verified on August 28, 2026:
+
+- The harness DDL ran twice with `ON_ERROR_STOP=1`; all eight tables exist with 61 constraints and zero JSON/JSONB harness columns.
+- The focused Rails suite passed 35 examples with zero failures, including preflight, API submission, deployment snapshots, pacing, duplicate-job protection, incremental evaluator persistence, and parent finalization.
+- The Node service passed 10 Jest tests and its Nest build.
+- The Vite production build, Rails route load, and Zeitwerk eager-load check passed. The harness frontend has no ESLint findings.
+- A direct minimal request proved that the configured Azure endpoint accepts server-selected deployments. Full document-sized smoke requests were rejected by Azure with HTTP 429 during this verification window. The controlled live smoke therefore verified serialization, exponential backoff, the four-attempt ceiling, and clean terminal failure, but a successful provider-backed package run remains to be repeated when deployment capacity is available.

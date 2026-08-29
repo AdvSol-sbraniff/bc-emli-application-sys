@@ -238,6 +238,49 @@ Rails.application.routes.draw do
           to: "validation_rules_admin#upgrade_types"
       get "admin/validationgenai_config", to: "validationgenai_config#show"
       patch "admin/validationgenai_config", to: "validationgenai_config#update"
+      get "admin/test_harness/bootstrap", to: "test_harness#bootstrap"
+      get "admin/test_harness/invoice_versions",
+          to: "test_harness#invoice_versions"
+      get "admin/test_harness/suites", to: "test_harness#suites_index"
+      post "admin/test_harness/suites", to: "test_harness#suites_create"
+      get "admin/test_harness/suites/:id", to: "test_harness#suites_show"
+      patch "admin/test_harness/suites/:id", to: "test_harness#suites_update"
+      delete "admin/test_harness/suites/:id", to: "test_harness#suites_destroy"
+      post "admin/test_harness/suites/:testsuite_id/cases",
+           to: "test_harness#suite_cases_create"
+      patch "admin/test_harness/suite_cases/:id",
+            to: "test_harness#suite_cases_update"
+      delete "admin/test_harness/suite_cases/:id",
+             to: "test_harness#suite_cases_destroy"
+      get "admin/test_harness/model_compares",
+          to: "test_harness#model_compares_index"
+      post "admin/test_harness/model_compares",
+           to: "test_harness#model_compares_create"
+      get "admin/test_harness/model_compares/:id",
+          to: "test_harness#model_compares_show"
+      post "admin/test_harness/model_compares/:id/submit",
+           to: "test_harness#model_compares_submit"
+      delete "admin/test_harness/model_compares/:id",
+             to: "test_harness#model_compares_destroy"
+      get "admin/test_harness/rule_compares",
+          to: "test_harness#rule_compares_index"
+      post "admin/test_harness/rule_compares",
+           to: "test_harness#rule_compares_create"
+      get "admin/test_harness/rule_compares/:id",
+          to: "test_harness#rule_compares_show"
+      post "admin/test_harness/rule_compares/:id/submit",
+           to: "test_harness#rule_compares_submit"
+      delete "admin/test_harness/rule_compares/:id",
+             to: "test_harness#rule_compares_destroy"
+      get "admin/test_harness/regressions", to: "test_harness#regressions_index"
+      post "admin/test_harness/regressions",
+           to: "test_harness#regressions_create"
+      get "admin/test_harness/regressions/:id",
+          to: "test_harness#regressions_show"
+      post "admin/test_harness/regressions/:id/submit",
+           to: "test_harness#regressions_submit"
+      delete "admin/test_harness/regressions/:id",
+             to: "test_harness#regressions_destroy"
       get "admin/supporting_document_types",
           to: "supporting_document_types_admin#index"
       get "admin/supporting_document_types/:id",

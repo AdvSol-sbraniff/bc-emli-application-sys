@@ -2,9 +2,13 @@ import {
   Box,
   Container,
   Flex,
+  FormControl,
+  FormHelperText,
+  FormLabel,
   Heading,
   IconButton,
   Spinner,
+  Stack,
   Switch,
   Tab,
   TabList,
@@ -14,6 +18,7 @@ import {
   Text,
   Textarea,
   Tooltip,
+  Input,
 } from '@chakra-ui/react';
 import { ArrowCounterClockwise, FloppyDiskBack } from '@phosphor-icons/react';
 import React, { useEffect, useState } from 'react';
@@ -30,6 +35,10 @@ type ConfigDto = {
   admin_advice_closing: string | null;
   admin_pdf_viewer_ux_mode: AdminPdfViewerUxMode;
   show_admin_field_revision_plus: boolean;
+  document_triage_deployment_name: string | null;
+  supporting_document_extraction_deployment_name: string | null;
+  upgrade_analysis_deployment_name: string | null;
+  comparison_deployment_name: string | null;
   updated_at?: string | null;
 };
 
@@ -46,6 +55,10 @@ export default function RulesetConfigEditorScreen() {
   const [adminAdviceClosing, setAdminAdviceClosing] = useState<string>('');
   const [adminPdfViewerUxMode, setAdminPdfViewerUxMode] = useState<AdminPdfViewerUxMode>('simple');
   const [showAdminFieldRevisionPlus, setShowAdminFieldRevisionPlus] = useState<boolean>(true);
+  const [documentTriageDeploymentName, setDocumentTriageDeploymentName] = useState('');
+  const [supportingDocumentExtractionDeploymentName, setSupportingDocumentExtractionDeploymentName] = useState('');
+  const [upgradeAnalysisDeploymentName, setUpgradeAnalysisDeploymentName] = useState('');
+  const [comparisonDeploymentName, setComparisonDeploymentName] = useState('');
   const [initialValues, setInitialValues] = useState({
     systemRecord: '',
     documentTriageSystemRecord: '',
@@ -55,6 +68,10 @@ export default function RulesetConfigEditorScreen() {
     adminAdviceClosing: '',
     adminPdfViewerUxMode: 'simple' as AdminPdfViewerUxMode,
     showAdminFieldRevisionPlus: true,
+    documentTriageDeploymentName: '',
+    supportingDocumentExtractionDeploymentName: '',
+    upgradeAnalysisDeploymentName: '',
+    comparisonDeploymentName: '',
   });
 
   const isDirty =
@@ -65,7 +82,11 @@ export default function RulesetConfigEditorScreen() {
     adminAdviceIntro !== initialValues.adminAdviceIntro ||
     adminAdviceClosing !== initialValues.adminAdviceClosing ||
     adminPdfViewerUxMode !== initialValues.adminPdfViewerUxMode ||
-    showAdminFieldRevisionPlus !== initialValues.showAdminFieldRevisionPlus;
+    showAdminFieldRevisionPlus !== initialValues.showAdminFieldRevisionPlus ||
+    documentTriageDeploymentName !== initialValues.documentTriageDeploymentName ||
+    supportingDocumentExtractionDeploymentName !== initialValues.supportingDocumentExtractionDeploymentName ||
+    upgradeAnalysisDeploymentName !== initialValues.upgradeAnalysisDeploymentName ||
+    comparisonDeploymentName !== initialValues.comparisonDeploymentName;
 
   function applyConfig(data: ConfigDto) {
     const values = {
@@ -77,6 +98,10 @@ export default function RulesetConfigEditorScreen() {
       adminAdviceClosing: data.admin_advice_closing ?? '',
       adminPdfViewerUxMode: normalizeAdminPdfViewerUxMode(data.admin_pdf_viewer_ux_mode),
       showAdminFieldRevisionPlus: data.show_admin_field_revision_plus !== false,
+      documentTriageDeploymentName: data.document_triage_deployment_name ?? '',
+      supportingDocumentExtractionDeploymentName: data.supporting_document_extraction_deployment_name ?? '',
+      upgradeAnalysisDeploymentName: data.upgrade_analysis_deployment_name ?? '',
+      comparisonDeploymentName: data.comparison_deployment_name ?? '',
     };
 
     setConfig(data);
@@ -88,6 +113,10 @@ export default function RulesetConfigEditorScreen() {
     setAdminAdviceClosing(values.adminAdviceClosing);
     setAdminPdfViewerUxMode(values.adminPdfViewerUxMode);
     setShowAdminFieldRevisionPlus(values.showAdminFieldRevisionPlus);
+    setDocumentTriageDeploymentName(values.documentTriageDeploymentName);
+    setSupportingDocumentExtractionDeploymentName(values.supportingDocumentExtractionDeploymentName);
+    setUpgradeAnalysisDeploymentName(values.upgradeAnalysisDeploymentName);
+    setComparisonDeploymentName(values.comparisonDeploymentName);
     setInitialValues(values);
   }
 
@@ -134,6 +163,10 @@ export default function RulesetConfigEditorScreen() {
           admin_advice_closing: adminAdviceClosing,
           admin_pdf_viewer_ux_mode: adminPdfViewerUxMode,
           show_admin_field_revision_plus: showAdminFieldRevisionPlus,
+          document_triage_deployment_name: documentTriageDeploymentName,
+          supporting_document_extraction_deployment_name: supportingDocumentExtractionDeploymentName,
+          upgrade_analysis_deployment_name: upgradeAnalysisDeploymentName,
+          comparison_deployment_name: comparisonDeploymentName,
         }),
       });
 
@@ -218,6 +251,7 @@ export default function RulesetConfigEditorScreen() {
                 <Tab>Advice Intro</Tab>
                 <Tab>Advice Close</Tab>
                 <Tab>Admin PDF Viewer</Tab>
+                <Tab>AI Models</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel px={0} pt={3}>
@@ -346,6 +380,49 @@ export default function RulesetConfigEditorScreen() {
                       onChange={(event) => setShowAdminFieldRevisionPlus(event.target.checked)}
                     />
                   </Flex>
+                </TabPanel>
+
+                <TabPanel px={0} pt={3}>
+                  <Text fontSize="sm" opacity={0.75} mb={4}>
+                    Deployment names are configuration, not credentials. New processing runs snapshot these values so
+                    their exact model provenance remains inspectable after this screen changes.
+                  </Text>
+                  <Stack spacing={5} maxW="760px">
+                    <FormControl isRequired>
+                      <FormLabel>Document classification model</FormLabel>
+                      <Input
+                        value={documentTriageDeploymentName}
+                        onChange={(event) => setDocumentTriageDeploymentName(event.target.value)}
+                      />
+                      <FormHelperText>Used to classify invoice and supporting-document files.</FormHelperText>
+                    </FormControl>
+                    <FormControl isRequired>
+                      <FormLabel>Supporting document extraction model</FormLabel>
+                      <Input
+                        value={supportingDocumentExtractionDeploymentName}
+                        onChange={(event) => setSupportingDocumentExtractionDeploymentName(event.target.value)}
+                      />
+                      <FormHelperText>Used to extract configured evidence from supporting documents.</FormHelperText>
+                    </FormControl>
+                    <FormControl isRequired>
+                      <FormLabel>Upgrade analysis model</FormLabel>
+                      <Input
+                        value={upgradeAnalysisDeploymentName}
+                        onChange={(event) => setUpgradeAnalysisDeploymentName(event.target.value)}
+                      />
+                      <FormHelperText>Used for upgrade-type rules, findings, and advice.</FormHelperText>
+                    </FormControl>
+                    <FormControl isRequired>
+                      <FormLabel>Test comparison model</FormLabel>
+                      <Input
+                        value={comparisonDeploymentName}
+                        onChange={(event) => setComparisonDeploymentName(event.target.value)}
+                      />
+                      <FormHelperText>
+                        Used only by the test harness to evaluate baseline and candidate results.
+                      </FormHelperText>
+                    </FormControl>
+                  </Stack>
                 </TabPanel>
               </TabPanels>
             </Tabs>

@@ -37,6 +37,7 @@ module Claims
         call_node_genai!(
           contextwindowjson: contextwindowjson,
           attachments: attachments,
+          ingest_run_id: ingest_run_id,
           diagnostic_context:
             genai_diagnostic_context(
               document: document,
@@ -74,7 +75,18 @@ module Claims
         ),
         updated_at: Time.current
       )
-      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+      if ::Claims::Ingest::RetryPolicy.retryable?(e)
+        scheduled =
+          ::Claims::TestHarness::Scheduling.retry_job(
+            self.class,
+            ingest_run_id,
+            ingest_document_id,
+            ingest_run_id,
+            attempt_count:
+              ::Claims::Ingest::StepOutcome.for_step(step).attempt_count
+          )
+        raise unless scheduled
+      end
     ensure
       advance_run!(ingest_run_id: ingest_run_id)
     end
@@ -145,12 +157,18 @@ module Claims
     def call_node_genai!(
       contextwindowjson:,
       attachments: [],
+      ingest_run_id:,
       diagnostic_context: {}
     )
       ::Claims::Genai::NodeClient.call(
         contextwindowjson: contextwindowjson,
         attachments: attachments,
-        diagnostic_context: diagnostic_context
+        diagnostic_context: diagnostic_context,
+        deployment_name:
+          ::Claims::Genai::DeploymentConfig.for_run(
+            ingest_run_id,
+            :document_triage_deployment_name
+          )
       )
     end
 
@@ -205,7 +223,7 @@ module Claims
     def advance_run!(ingest_run_id:)
       return if ingest_run_id.blank?
 
-      ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
+      ::Claims::TestHarness::Scheduling.advance_run(ingest_run_id)
     end
   end
 end

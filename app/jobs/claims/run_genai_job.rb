@@ -68,15 +68,15 @@ module Claims
 
       common_upgrade_type = upgrade_type_by_key!("common")
 
-      enqueue_genai_ruleset_job!(
-        ingest_run_id: ingest_run_id,
-        session_id: sess.id,
-        invoice_version: iv,
-        step_type: "evaluate_genai_ruleset",
-        upgrade_type: common_upgrade_type
-      )
+      ruleset_upgrade_types = [common_upgrade_type, *upgrade_types].uniq(&:id)
+      if ::Claims::TestHarness::Scheduling.harness_run?(ingest_run_id)
+        # The harness coordinator schedules rulesets one at a time after the
+        # configured cooling interval. This protects low-capacity comparison
+        # deployments from a case-facts/ruleset burst.
+        ruleset_upgrade_types = []
+      end
 
-      upgrade_types.each do |upgrade_type|
+      ruleset_upgrade_types.each do |upgrade_type|
         enqueue_genai_ruleset_job!(
           ingest_run_id: ingest_run_id,
           session_id: sess.id,
@@ -111,10 +111,23 @@ module Claims
         nil
       end
 
-      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+      if ::Claims::Ingest::RetryPolicy.retryable?(e)
+        scheduled =
+          ::Claims::TestHarness::Scheduling.retry_job(
+            self.class,
+            ingest_run_id,
+            session_id,
+            invoice_version_id,
+            ingest_run_id,
+            mode,
+            attempt_count:
+              ::Claims::Ingest::StepOutcome.for_step(failed_step).attempt_count
+          )
+        raise unless scheduled
+      end
     ensure
       if ingest_run_id.present?
-        ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
+        ::Claims::TestHarness::Scheduling.advance_run(ingest_run_id)
       end
     end
 
@@ -177,10 +190,23 @@ module Claims
       rescue StandardError
         nil
       end
-      raise if ::Claims::Ingest::RetryPolicy.retryable?(e)
+      if ::Claims::Ingest::RetryPolicy.retryable?(e)
+        scheduled =
+          ::Claims::TestHarness::Scheduling.retry_job(
+            ::Claims::RunGenaiRulesetJob,
+            ingest_run_id,
+            session_id,
+            invoice_version_id,
+            ingest_run_id,
+            invoice_upgrade_type_id,
+            attempt_count:
+              ::Claims::Ingest::StepOutcome.for_step(failed_step).attempt_count
+          )
+        raise unless scheduled
+      end
     ensure
       if ingest_run_id.present?
-        ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
+        ::Claims::TestHarness::Scheduling.advance_run(ingest_run_id)
       end
     end
 
@@ -633,10 +659,19 @@ module Claims
       step
     end
 
-    def call_node_genai!(contextwindowjson:, diagnostic_context: {})
+    def call_node_genai!(
+      contextwindowjson:,
+      ingest_run_id:,
+      diagnostic_context: {}
+    )
       ::Claims::Genai::NodeClient.call(
         contextwindowjson: contextwindowjson,
-        diagnostic_context: diagnostic_context
+        diagnostic_context: diagnostic_context,
+        deployment_name:
+          ::Claims::Genai::DeploymentConfig.for_run(
+            ingest_run_id,
+            :upgrade_analysis_deployment_name
+          )
       )
     end
 
@@ -676,6 +711,7 @@ module Claims
       payload =
         call_node_genai!(
           contextwindowjson: contextwindowjson,
+          ingest_run_id: ingest_run_id,
           diagnostic_context:
             genai_diagnostic_context(
               step_type: step_type,
