@@ -282,11 +282,8 @@ CREATE INDEX IF NOT EXISTS idx_testrunmodelcompare_cases_candidate_ingest_run
 -- RULE COMPARISON
 --
 -- claims.testrunrulecompares is the parent
--- run table. baseline_genai_rule_history_id identifies the prior definition
--- that produced the accepted baseline behavior. candidate_genai_rule_id
--- identifies the current registry rule whose changed definition is being
--- tested. The baseline history row's source_id must equal the candidate rule
--- ID so that both definitions belong to the same logical rule.
+-- run table. candidate_genai_rule_id identifies the current registry rule
+-- whose behavior is being tested against the accepted baseline evidence.
 --
 -- Before creating a rule-comparison record, every suite invoice version must
 -- use the selected logical rule at least once: it MUST contain at least one
@@ -294,12 +291,9 @@ CREATE INDEX IF NOT EXISTS idx_testrunmodelcompare_cases_candidate_ingest_run
 -- selected candidate genai_rules.genai_rule_key. Creation fails if any suite
 -- case is missing that rule; cases are never silently skipped.
 --
--- Do not add rule-history provenance to invoice_version_rulechecks. Those rows
--- are frozen results belonging to an exact invoice version and identify the
--- logical rule by immutable rule_key. When exact definition validation is
--- needed, use the compiled prompt already frozen in the matching baseline
--- ingest_step_runs.context_window_json and confirm that it contains the
--- selected baseline history definition. Candidate executions likewise retain
+-- The baseline is the accepted invoice-version result for the immutable
+-- rule_key. Rule-history records are not selected after processing because an
+-- ingest run does not persist a rule-history UUID. Candidate executions retain
 -- the exact prompt actually used in their ingest-step context snapshots.
 --
 -- ============================================================
@@ -307,7 +301,6 @@ CREATE INDEX IF NOT EXISTS idx_testrunmodelcompare_cases_candidate_ingest_run
 CREATE TABLE IF NOT EXISTS claims.testrunrulecompares (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   testsuite_id uuid NOT NULL,
-  baseline_genai_rule_history_id uuid NOT NULL,
   candidate_genai_rule_id uuid NOT NULL,
   status character varying(30) NOT NULL DEFAULT 'draft',
   comparison_deployment_name character varying(200) NOT NULL,
@@ -335,10 +328,6 @@ CREATE TABLE IF NOT EXISTS claims.testrunrulecompares (
     FOREIGN KEY (testsuite_id)
     REFERENCES claims.testsuites(id)
     ON DELETE RESTRICT,
-  CONSTRAINT fk_testrunrulecompares_baseline_rule_history
-    FOREIGN KEY (baseline_genai_rule_history_id)
-    REFERENCES claims.genai_rule_history(id)
-    ON DELETE RESTRICT,
   CONSTRAINT fk_testrunrulecompares_candidate_rule
     FOREIGN KEY (candidate_genai_rule_id)
     REFERENCES claims.genai_rules(id)
@@ -346,7 +335,7 @@ CREATE TABLE IF NOT EXISTS claims.testrunrulecompares (
 );
 
 COMMENT ON TABLE claims.testrunrulecompares IS
-  'Validated single-rule comparisons with an immutable baseline history reference and selected candidate rule.';
+  'Validated single-rule comparisons between accepted baseline evidence and the selected current rule.';
 
 CREATE INDEX IF NOT EXISTS idx_testrunrulecompares_suite_created
   ON claims.testrunrulecompares (testsuite_id, created_at DESC);
@@ -354,11 +343,8 @@ CREATE INDEX IF NOT EXISTS idx_testrunrulecompares_suite_created
 CREATE INDEX IF NOT EXISTS idx_testrunrulecompares_status_created
   ON claims.testrunrulecompares (status, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_testrunrulecompares_rule_pair
-  ON claims.testrunrulecompares (
-    baseline_genai_rule_history_id,
-    candidate_genai_rule_id
-  );
+CREATE INDEX IF NOT EXISTS idx_testrunrulecompares_candidate_rule
+  ON claims.testrunrulecompares (candidate_genai_rule_id);
 
 -- ============================================================
 -- testrunrulecompare_cases

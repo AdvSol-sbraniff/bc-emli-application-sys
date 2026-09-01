@@ -68,11 +68,7 @@ module Claims
 
         if kind != "regression" && test_case.candidate_invoice_version_id.blank?
           test_case.update!(candidate_invoice_version_id: version.id)
-          self.class.perform_in(
-            ::Claims::TestHarness::Scheduling.genai_interval,
-            kind,
-            test_case.id
-          )
+          self.class.perform_async(kind, test_case.id)
           return
         end
 
@@ -173,11 +169,7 @@ module Claims
             deployment_name: parent.comparison_deployment_name
           )
         test_case.update!(column => comparison)
-        self.class.perform_in(
-          ::Claims::TestHarness::Scheduling.genai_interval,
-          "model_compare",
-          test_case.id
-        )
+        self.class.perform_async("model_compare", test_case.id)
         false
       end
 
@@ -246,18 +238,10 @@ module Claims
       end
 
       def finalize(kind, test_case)
-        if %w[model_compare rule_compare].include?(kind)
-          ::Claims::TestHarness::FinalizeRunJob.perform_in(
-            ::Claims::TestHarness::Scheduling.genai_interval,
-            kind,
-            test_case.test_run.id
-          )
-        else
-          ::Claims::TestHarness::FinalizeRunJob.perform_async(
-            kind,
-            test_case.test_run.id
-          )
-        end
+        ::Claims::TestHarness::FinalizeRunJob.perform_async(
+          kind,
+          test_case.test_run.id
+        )
       end
 
       def terminal?(status)

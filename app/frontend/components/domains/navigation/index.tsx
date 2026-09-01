@@ -609,7 +609,7 @@ const ROUTE_TITLE_PATTERNS: Array<[RegExp, string]> = [
   [/^\/invoice-versions-by-version\/[^/]+\/read$/, 'Invoice Version Read'],
   [/^\/invoices\/[^/]+\/review$/, 'Invoice Review'],
   [/^\/test-harness\/suites\/[^/]+\/cases$/, 'Test Suite Cases'],
-  [/^\/test-harness\/model-comparisons\/[^/]+$/, 'Model Comparison Results'],
+  [/^\/test-harness\/model-comparisons\/[^/]+(?:\/results)?$/, 'Model Comparison Results'],
   [/^\/test-harness\/rule-comparisons\/[^/]+$/, 'Rule Comparison Results'],
   [/^\/test-harness\/regressions\/[^/]+$/, 'Regression Run Results'],
   [/^\/jurisdictions\/[^/]+$/, 'Jurisdiction'],
@@ -1124,6 +1124,10 @@ const AppRoutes = observer(() => {
           <Route path="/test-harness/suites/:testsuiteId/cases" element={<TestSuiteCasesScreen />} />
           <Route path="/test-harness/model-comparisons" element={<ModelComparisonsScreen />} />
           <Route path="/test-harness/model-comparisons/new" element={<NewModelComparisonScreen />} />
+          <Route
+            path="/test-harness/model-comparisons/:modelComparisonId/results"
+            element={<ModelComparisonResultsScreen />}
+          />
           <Route path="/test-harness/model-comparisons/:modelComparisonId" element={<ModelComparisonResultsScreen />} />
           <Route path="/test-harness/rule-comparisons" element={<RuleComparisonsScreen />} />
           <Route path="/test-harness/rule-comparisons/new" element={<NewRuleComparisonScreen />} />

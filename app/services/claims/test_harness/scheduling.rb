@@ -23,14 +23,7 @@ module Claims
       def advance_run(ingest_run_id)
         return if ingest_run_id.blank?
 
-        if harness_run?(ingest_run_id)
-          ::Claims::Ingest::AdvanceRunJob.perform_in(
-            genai_interval,
-            ingest_run_id
-          )
-        else
-          ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
-        end
+        ::Claims::Ingest::AdvanceRunJob.perform_async(ingest_run_id)
       end
 
       def retry_job(job_class, ingest_run_id, *, attempt_count:)

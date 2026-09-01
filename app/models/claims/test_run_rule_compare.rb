@@ -9,9 +9,6 @@ module Claims
     belongs_to :test_suite,
                class_name: "Claims::TestSuite",
                foreign_key: :testsuite_id
-    belongs_to :baseline_rule_history,
-               class_name: "Claims::GenaiRuleHistory",
-               foreign_key: :baseline_genai_rule_history_id
     belongs_to :candidate_rule,
                class_name: "Claims::GenaiRule",
                foreign_key: :candidate_genai_rule_id

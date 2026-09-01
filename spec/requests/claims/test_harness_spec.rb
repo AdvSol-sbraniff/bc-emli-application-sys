@@ -109,9 +109,254 @@ RSpec.describe "Claims test harness", type: :request do
     )
   end
 
-  it "returns model, suite, and historical-rule bootstrap data" do
+  it "reruns only comparison jobs using completed candidate invoice records" do
+    baseline = create_baseline
+    candidate = create_baseline(deployment: "candidate-luna")
+    suite = create_suite_case(baseline)
+    parent =
+      suite.model_compares.create!(
+        status: "completed",
+        baseline_document_triage_deployment_name: "baseline-terra",
+        baseline_supporting_document_extraction_deployment_name:
+          "baseline-terra",
+        baseline_upgrade_analysis_deployment_name: "baseline-terra",
+        candidate_document_triage_deployment_name: "candidate-luna",
+        candidate_supporting_document_extraction_deployment_name:
+          "candidate-luna",
+        candidate_upgrade_analysis_deployment_name: "candidate-luna",
+        comparison_deployment_name: "evaluator-terra",
+        overall_document_classification_comparison: "Old classification",
+        overall_supporting_document_extraction_comparison: "Old extraction",
+        overall_upgrade_analysis_comparison: "Old upgrade"
+      )
+    comparison_case =
+      parent.test_cases.create!(
+        test_suite_case: suite.test_suite_cases.first,
+        baseline_invoice_version: baseline.fetch(:version),
+        baseline_ingest_run: baseline.fetch(:run),
+        candidate_invoice_version: candidate.fetch(:version),
+        candidate_ingest_run: candidate.fetch(:run),
+        status: "completed",
+        document_classification_comparison: "Old classification",
+        supporting_document_extraction_comparison: "Old extraction",
+        upgrade_analysis_comparison: "Old upgrade"
+      )
+    ingest_run_count = Claims::IngestRun.count
+
+    post "/api/claims/admin/test_harness/model_compares/#{parent.id}/rerun_comparisons",
+         params: {
+         },
+         as: :json
+
+    expect(response).to have_http_status(:accepted)
+    expect(json_response).to include(
+      "status" => "queued",
+      "overall_document_classification_comparison" => nil,
+      "overall_supporting_document_extraction_comparison" => nil,
+      "overall_upgrade_analysis_comparison" => nil
+    )
+    expect(json_response.fetch("cases")).to contain_exactly(
+      hash_including(
+        "id" => comparison_case.id,
+        "status" => "queued",
+        "candidate_invoice_version_id" => candidate.fetch(:version).id,
+        "candidate_ingest_run_id" => candidate.fetch(:run).id,
+        "document_classification_comparison" => nil,
+        "supporting_document_extraction_comparison" => nil,
+        "upgrade_analysis_comparison" => nil
+      )
+    )
+    expect(Claims::IngestRun.count).to eq(ingest_run_count)
+    expect(Claims::TestHarness::StartRunJob).to have_received(
+      :perform_async
+    ).with("model_compare", parent.id)
+  end
+
+  it "does not rerun comparisons when reusable candidate records are missing" do
+    baseline = create_baseline
+    suite = create_suite_case(baseline)
+    parent =
+      suite.model_compares.create!(
+        status: "completed",
+        baseline_document_triage_deployment_name: "baseline-terra",
+        baseline_supporting_document_extraction_deployment_name:
+          "baseline-terra",
+        baseline_upgrade_analysis_deployment_name: "baseline-terra",
+        candidate_document_triage_deployment_name: "candidate-luna",
+        candidate_supporting_document_extraction_deployment_name:
+          "candidate-luna",
+        candidate_upgrade_analysis_deployment_name: "candidate-luna",
+        comparison_deployment_name: "evaluator-terra",
+        overall_document_classification_comparison: "Old classification",
+        overall_supporting_document_extraction_comparison: "Old extraction",
+        overall_upgrade_analysis_comparison: "Old upgrade"
+      )
+    parent.test_cases.create!(
+      test_suite_case: suite.test_suite_cases.first,
+      baseline_invoice_version: baseline.fetch(:version),
+      baseline_ingest_run: baseline.fetch(:run),
+      status: "completed",
+      document_classification_comparison: "Old classification",
+      supporting_document_extraction_comparison: "Old extraction",
+      upgrade_analysis_comparison: "Old upgrade"
+    )
+
+    post "/api/claims/admin/test_harness/model_compares/#{parent.id}/rerun_comparisons",
+         params: {
+         },
+         as: :json
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(json_response.fetch("error")).to include(
+      "does not have a completed candidate invoice to reuse"
+    )
+    expect(parent.reload.status).to eq("completed")
+    expect(Claims::TestHarness::StartRunJob).not_to have_received(
+      :perform_async
+    )
+  end
+
+  it "returns persisted baseline and candidate evidence for a model comparison case" do
+    baseline = create_baseline
+    candidate = create_baseline(deployment: "candidate-luna")
+    suite = create_suite_case(baseline)
+    suite_case = suite.test_suite_cases.first
+    upgrade_type =
+      Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common")
+    supporting_document_type =
+      Claims::SupportingDocumentType.create!(
+        type_key: "harness_photo_#{SecureRandom.hex(4)}",
+        description: "Before and after photographs"
+      )
+
+    [baseline, candidate].each_with_index do |source, index|
+      Claims::InvoiceVersionUpgradeType.create!(
+        invoice_version_id: source.fetch(:version).id,
+        invoice_upgrade_type_id: upgrade_type.id,
+        confidence: 90 + index,
+        evidence_text: "Classifier evidence #{index}",
+        classification_explanation: "Classifier explanation #{index}"
+      )
+      Claims::SupportingDocument.create!(
+        invoice_version_id: source.fetch(:version).id,
+        supporting_document_type_id: supporting_document_type.id,
+        storage_provider: "azure_blob",
+        storage_key: "harness/#{SecureRandom.uuid}/photos.pdf",
+        original_filename: "photos.pdf",
+        content_type: "application/pdf",
+        sha256: "shared-document-sha",
+        classification_confidence: 95 + index,
+        classification_reason: "Supporting classification #{index}",
+        supporting_document_routing_quality: "usable",
+        supporting_document_routing_quality_reason: "Readable evidence",
+        created_at: Time.current,
+        updated_at: Time.current
+      )
+    end
+    %w[genai code].each do |source_engine|
+      Claims::InvoiceVersionLocatedField.create!(
+        invoice_version_id: baseline.fetch(:version).id,
+        invoice_upgrade_type_id: upgrade_type.id,
+        source_engine: source_engine,
+        field_key: "#{source_engine}.field",
+        value_type: "text",
+        value_text: "#{source_engine} value",
+        confidence: 90
+      )
+      Claims::InvoiceVersionRulecheck.create!(
+        invoice_version_id: baseline.fetch(:version).id,
+        invoice_upgrade_type_id: upgrade_type.id,
+        source_engine: source_engine,
+        rule_key: "#{source_engine}_rule",
+        contractor_display_name: "#{source_engine} rule",
+        rule_result: "pass"
+      )
+    end
+
+    parent =
+      suite.model_compares.create!(
+        status: "running",
+        baseline_document_triage_deployment_name: "baseline-terra",
+        baseline_supporting_document_extraction_deployment_name:
+          "baseline-terra",
+        baseline_upgrade_analysis_deployment_name: "baseline-terra",
+        candidate_document_triage_deployment_name: "candidate-luna",
+        candidate_supporting_document_extraction_deployment_name:
+          "candidate-luna",
+        candidate_upgrade_analysis_deployment_name: "candidate-luna",
+        comparison_deployment_name: "evaluator-terra"
+      )
+    comparison_case =
+      parent.test_cases.create!(
+        test_suite_case: suite_case,
+        baseline_invoice_version: baseline.fetch(:version),
+        baseline_ingest_run: baseline.fetch(:run),
+        candidate_invoice_version: candidate.fetch(:version),
+        candidate_ingest_run: candidate.fetch(:run),
+        status: "running"
+      )
+
+    get "/api/claims/admin/test_harness/model_compares/#{parent.id}/cases/#{comparison_case.id}/evidence",
+        as: :json
+
+    expect(response).to have_http_status(:ok)
+    expect(
+      json_response.dig("classification", "baseline", "upgrade_types").first
+    ).to include(
+      "invoice_upgrade_type_id" => upgrade_type.id,
+      "confidence" => 90,
+      "evidence_text" => "Classifier evidence 0"
+    )
+    expect(
+      json_response.dig("classification", "candidate", "upgrade_types").first
+    ).to include("confidence" => 91)
+    expect(
+      json_response.dig(
+        "classification",
+        "baseline",
+        "supporting_documents"
+      ).first
+    ).to include(
+      "original_filename" => "photos.pdf",
+      "supporting_document_type_key" => supporting_document_type.type_key,
+      "supporting_document_type_description" =>
+        supporting_document_type.description,
+      "classification_confidence" => 95,
+      "classification_reason" => "Supporting classification 0",
+      "supporting_document_routing_quality" => "usable"
+    )
+    expect(
+      json_response.dig(
+        "classification",
+        "candidate",
+        "supporting_documents"
+      ).first
+    ).to include("classification_confidence" => 96)
+    expect(
+      json_response
+        .dig("extraction", "baseline", "documents")
+        .first
+        .fetch("document")
+    ).not_to include(
+      "classification_confidence",
+      "classification_reason",
+      "supporting_document_routing_quality",
+      "supporting_document_routing_quality_reason"
+    )
+    expect(
+      json_response.dig("upgrade_analysis", "baseline", "located_fields").pluck(
+        "source_engine"
+      )
+    ).to eq(["genai"])
+    expect(
+      json_response.dig("upgrade_analysis", "baseline", "rulechecks").pluck(
+        "source_engine"
+      )
+    ).to eq(["genai"])
+  end
+
+  it "returns model, suite, and rule bootstrap data" do
     rule = create_rule
-    history = create_rule_history(rule)
 
     get "/api/claims/admin/test_harness/bootstrap", as: :json
 
@@ -119,12 +364,7 @@ RSpec.describe "Claims test harness", type: :request do
     expect(json_response.fetch("rules")).to include(
       hash_including("id" => rule.id)
     )
-    expect(json_response.fetch("rule_histories")).to include(
-      hash_including(
-        "id" => history.id,
-        "created_at" => history.history_created_at.as_json
-      )
-    )
+    expect(json_response).not_to have_key("rule_histories")
   end
 
   it "creates and submits a regression run" do
@@ -187,7 +427,6 @@ RSpec.describe "Claims test harness", type: :request do
     baseline = create_baseline
     suite = create_suite_case(baseline)
     rule = create_rule
-    history = create_rule_history(rule)
     common = Claims::InvoiceUpgradeType.find_by!(upgrade_type_key: "common")
     Claims::InvoiceVersionRulecheck.create!(
       invoice_version: baseline.fetch(:version),
@@ -197,25 +436,9 @@ RSpec.describe "Claims test harness", type: :request do
       contractor_display_name: rule.contractor_display_name,
       rule_result: "pass"
     )
-    Claims::IngestStepRun.create!(
-      ingest_run_id: baseline.fetch(:run).id,
-      session_id: baseline.fetch(:run).session_id,
-      invoice_version_id: baseline.fetch(:version).id,
-      invoice_upgrade_type_id: common.id,
-      step_type: "evaluate_genai_ruleset",
-      status: "succeeded",
-      context_window_json: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: history.prompt_text }]
-        }
-      ]
-    )
-
     post "/api/claims/admin/test_harness/rule_compares",
          params: {
            testsuite_id: suite.id,
-           baseline_genai_rule_history_id: history.id,
            candidate_genai_rule_id: rule.id,
            comparison_deployment_name: "evaluator-terra"
          },
@@ -235,11 +458,29 @@ RSpec.describe "Claims test harness", type: :request do
     ).with("rule_compare", run_id)
   end
 
+  it "rejects a rule comparison when the baseline lacks that rule" do
+    baseline = create_baseline
+    suite = create_suite_case(baseline)
+    rule = create_rule
+
+    post "/api/claims/admin/test_harness/rule_compares",
+         params: {
+           testsuite_id: suite.id,
+           candidate_genai_rule_id: rule.id,
+           comparison_deployment_name: "evaluator-terra"
+         },
+         as: :json
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(json_response.fetch("error")).to include(
+      "baseline version did not evaluate #{rule.genai_rule_key}"
+    )
+  end
+
   it "deletes inactive test runs and preserves active runs" do
     suite =
       Claims::TestSuite.create!(name: "Deletable runs #{SecureRandom.hex(4)}")
     rule = create_rule
-    history = create_rule_history(rule)
     model_compare =
       suite.model_compares.create!(
         status: "draft",
@@ -256,7 +497,6 @@ RSpec.describe "Claims test harness", type: :request do
     rule_compare =
       suite.rule_compares.create!(
         status: "failed",
-        baseline_rule_history: history,
         candidate_rule: rule,
         comparison_deployment_name: "evaluator-terra"
       )
@@ -381,21 +621,6 @@ RSpec.describe "Claims test harness", type: :request do
       contractor_visibility: "fail_only",
       contractor_blocking_policy: "non_blocking",
       admin_workflow_policy: "fail_only"
-    )
-  end
-
-  def create_rule_history(rule)
-    Claims::GenaiRuleHistory.create!(
-      source_id: rule.id,
-      genai_rule_key: rule.genai_rule_key,
-      contractor_display_name: rule.contractor_display_name,
-      prompt_text: "Baseline prompt #{SecureRandom.hex(8)}",
-      enabled: true,
-      source_quote: rule.source_quote,
-      contractor_visibility: rule.contractor_visibility,
-      contractor_blocking_policy: rule.contractor_blocking_policy,
-      admin_workflow_policy: rule.admin_workflow_policy,
-      history_created_at: Time.current
     )
   end
 end

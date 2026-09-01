@@ -39,51 +39,72 @@ module Claims
       private
 
       def classification
-        documents =
-          @ingest_run
-            .ingest_documents
-            .order(:created_at, :id)
-            .map do |document|
+        upgrade_types =
+          ::Claims::InvoiceVersionUpgradeType
+            .joins(
+              "LEFT JOIN claims.invoice_upgrade_types iut " \
+                "ON iut.id = claims.invoice_version_upgrade_types.invoice_upgrade_type_id"
+            )
+            .where(invoice_version_id: @invoice_version.id)
+            .select(
+              "claims.invoice_version_upgrade_types.*",
+              "iut.upgrade_type_key AS upgrade_type_key",
+              "iut.description AS upgrade_type_description"
+            )
+            .order("iut.upgrade_type_key", :id)
+            .map do |row|
+              select(
+                row,
+                %w[
+                  invoice_upgrade_type_id
+                  confidence
+                  evidence_text
+                  classification_explanation
+                  page
+                  raw_json
+                ]
+              ).merge(
+                "upgrade_type_key" => row.read_attribute("upgrade_type_key"),
+                "upgrade_type_description" =>
+                  row.read_attribute("upgrade_type_description")
+              )
+            end
+        {
+          invoice_version_id: @invoice_version.id,
+          supporting_documents: supporting_document_classifications,
+          upgrade_types: upgrade_types
+        }
+      end
+
+      def supporting_document_classifications
+        @invoice_version
+          .supporting_documents
+          .includes(:supporting_document_type)
+          .order(:created_at, :id)
+          .map do |document|
+            supporting_document_identity(document).merge(
               select(
                 document,
                 %w[
-                  original_filename
-                  content_type
-                  byte_size
-                  document_kind
-                  document_kind_confidence
-                  document_kind_reason
-                  supporting_document_type_id
                   classification_confidence
                   classification_reason
                   supporting_document_routing_quality
                   supporting_document_routing_quality_reason
-                  classifier_raw_json
                 ]
               )
-            end
-        { ingest_run_id: @ingest_run.id, documents: documents }
+            )
+          end
       end
 
       def supporting_document_extraction
         documents =
           @invoice_version
             .supporting_documents
+            .includes(:supporting_document_type)
             .order(:created_at, :id)
             .map do |document|
               {
-                document:
-                  select(
-                    document,
-                    %w[
-                      original_filename
-                      supporting_document_type_id
-                      classification_confidence
-                      classification_reason
-                      supporting_document_routing_quality
-                      supporting_document_routing_quality_reason
-                    ]
-                  ),
+                document: supporting_document_identity(document),
                 located_fields:
                   document
                     .supporting_document_located_fields
@@ -119,25 +140,77 @@ module Claims
         { invoice_version_id: @invoice_version.id, documents: documents }
       end
 
+      def supporting_document_identity(document)
+        select(
+          document,
+          %w[original_filename sha256 supporting_document_type_id]
+        ).merge(
+          "supporting_document_type_key" =>
+            document.supporting_document_type&.type_key,
+          "supporting_document_type_description" =>
+            document.supporting_document_type&.description
+        )
+      end
+
       def upgrade_analysis
         {
           invoice_version_id: @invoice_version.id,
-          located_fields:
-            @invoice_version
-              .located_fields
-              .order(:field_key)
-              .map do |field|
-                select(
-                  field,
-                  field.attributes.keys -
-                    %w[id invoice_version_id created_at updated_at]
-                )
-              end,
-          rulechecks:
-            @invoice_version
-              .rulechecks
-              .order(:source_engine, :rule_key)
-              .map { |row| select(row, rulecheck_fields) }
+          located_fields: located_fields,
+          rulechecks: rulechecks
+        }
+      end
+
+      def located_fields
+        ::Claims::InvoiceVersionLocatedField
+          .joins(
+            "LEFT JOIN claims.invoice_upgrade_types iut " \
+              "ON iut.id = claims.invoice_version_located_fields.invoice_upgrade_type_id"
+          )
+          .where(
+            invoice_version_id: @invoice_version.id,
+            source_engine: "genai"
+          )
+          .select(
+            "claims.invoice_version_located_fields.*",
+            "iut.upgrade_type_key AS upgrade_type_key",
+            "iut.description AS upgrade_type_description"
+          )
+          .order("iut.upgrade_type_key", :source_engine, :field_key)
+          .map do |field|
+            select(
+              field,
+              field.attributes.keys -
+                %w[id invoice_version_id created_at updated_at]
+            ).merge(upgrade_type_labels(field))
+          end
+      end
+
+      def rulechecks
+        ::Claims::InvoiceVersionRulecheck
+          .joins(
+            "LEFT JOIN claims.invoice_upgrade_types iut " \
+              "ON iut.id = claims.invoice_version_rulechecks.invoice_upgrade_type_id"
+          )
+          .where(
+            invoice_version_id: @invoice_version.id,
+            source_engine: "genai"
+          )
+          .select(
+            "claims.invoice_version_rulechecks.*",
+            "iut.upgrade_type_key AS upgrade_type_key",
+            "iut.description AS upgrade_type_description"
+          )
+          .order("iut.upgrade_type_key", :source_engine, :rule_key)
+          .map do |row|
+            select(row, rulecheck_fields).merge(upgrade_type_labels(row))
+          end
+      end
+
+      def upgrade_type_labels(row)
+        {
+          "upgrade_type_key" => row.read_attribute("upgrade_type_key"),
+          "upgrade_type_description" =>
+            row.read_attribute("upgrade_type_description")
         }
       end
 

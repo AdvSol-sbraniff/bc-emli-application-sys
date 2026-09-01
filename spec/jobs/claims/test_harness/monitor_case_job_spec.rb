@@ -3,7 +3,7 @@ require "rails_helper"
 RSpec.describe Claims::TestHarness::MonitorCaseJob do
   subject(:job) { described_class.new }
 
-  it "persists one model-comparison domain before scheduling the next" do
+  it "persists one model-comparison domain before immediately scheduling the next" do
     parent = double(comparison_deployment_name: "evaluator-terra")
     baseline_version = double
     baseline_run = double
@@ -32,14 +32,10 @@ RSpec.describe Claims::TestHarness::MonitorCaseJob do
     allow(Claims::TestHarness::Evaluator).to receive(:compare).and_return(
       "Equivalent evidence"
     )
-    allow(Claims::TestHarness::Scheduling).to receive(
-      :genai_interval
-    ).and_return(60.seconds)
     expect(test_case).to receive(:update!).with(
       document_classification_comparison: "Equivalent evidence"
     )
-    expect(described_class).to receive(:perform_in).with(
-      60.seconds,
+    expect(described_class).to receive(:perform_async).with(
       "model_compare",
       test_case.id
     )

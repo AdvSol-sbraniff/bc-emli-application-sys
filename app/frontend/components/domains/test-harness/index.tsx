@@ -10,11 +10,18 @@ import {
   Box,
   Button,
   Container,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
   Flex,
   FormControl,
   FormLabel,
   Grid,
   Heading,
+  IconButton,
   Input,
   Modal,
   ModalBody,
@@ -26,7 +33,12 @@ import {
   Select,
   Spinner,
   Stack,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
   Table,
+  Tabs,
   Tbody,
   Td,
   Text,
@@ -35,6 +47,7 @@ import {
   Tooltip,
   Tr,
 } from '@chakra-ui/react';
+import { Eye, Info, Trash } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
@@ -72,18 +85,15 @@ type Suite = {
 
 type Rule = {
   id: string;
-  source_id?: string;
   rule_key: string;
   name?: string;
   prompt_text?: string;
-  created_at?: string;
 };
 type Bootstrap = {
   deployments: DeploymentMap;
   deployment_options: string[];
   suites: Suite[];
   rules: Rule[];
-  rule_histories: Rule[];
 };
 
 type EligibleVersion = {
@@ -101,6 +111,7 @@ type HarnessCase = {
   status: string;
   failure_code?: string | null;
   baseline_invoice_version_id?: string;
+  baseline_ingest_run_id?: string;
   candidate_invoice_version_id?: string | null;
   invoice_version_id?: string | null;
   candidate_ingest_run_id?: string | null;
@@ -472,15 +483,13 @@ export function TestSuiteCasesScreen() {
                     <Td fontWeight="600">{testCase.name}</Td>
                     <Td>{testCase.description || '—'}</Td>
                     <Td>
-                      <RouterLink
-                        to={`/invoice-versions-by-version/${testCase.baseline_invoice_version_id}/read`}
-                        color="blue.600"
-                        fontWeight="600"
-                      >
-                        {testCase.invoice_reference_number
-                          ? `#${testCase.invoice_reference_number}`
-                          : testCase.baseline_invoice_version_id}
-                      </RouterLink>
+                      <Text as="span" color="blue.600" fontWeight="600">
+                        <RouterLink to={`/invoice-versions-by-version/${testCase.baseline_invoice_version_id}/read`}>
+                          {testCase.invoice_reference_number
+                            ? `#${testCase.invoice_reference_number}`
+                            : testCase.baseline_invoice_version_id}
+                        </RouterLink>
+                      </Text>
                     </Td>
                     <Td fontSize="xs">{testCase.baseline_ingest_run_id}</Td>
                     <Td>
@@ -652,14 +661,8 @@ function RunDetail({ mode, run, onRun, busy }: { mode: Mode; run: HarnessRun; on
         ]
       : mode === 'rule_compares'
         ? [
-            ['Rule', run.rule_key],
-            [
-              'Baseline definition',
-              run.baseline_rule_history_created_at
-                ? new Date(run.baseline_rule_history_created_at).toLocaleString()
-                : run.baseline_genai_rule_history_id,
-            ],
-            ['Candidate rule', run.candidate_rule_name || run.candidate_genai_rule_id],
+            ['GenAI Rule Display Name', run.candidate_rule_name || run.candidate_genai_rule_id],
+            ['GenAI Rule Key', run.rule_key],
             ['Comparison model', run.comparison_deployment_name],
           ]
         : [
@@ -772,9 +775,9 @@ function CaseResult({ mode, testCase }: { mode: Mode; testCase: HarnessCase }) {
       <Text fontSize="xs" color="gray.500">
         Generated invoice version:{' '}
         {generatedVersionId ? (
-          <RouterLink to={`/invoice-versions-by-version/${generatedVersionId}/read`} color="blue.600" fontWeight="600">
-            {generatedVersionId}
-          </RouterLink>
+          <Text as="span" color="blue.600" fontWeight="600">
+            <RouterLink to={`/invoice-versions-by-version/${generatedVersionId}/read`}>{generatedVersionId}</RouterLink>
+          </Text>
         ) : (
           'pending'
         )}
@@ -782,6 +785,18 @@ function CaseResult({ mode, testCase }: { mode: Mode; testCase: HarnessCase }) {
         Generated ingest run: {testCase.candidate_ingest_run_id || testCase.ingest_run_id || 'pending'}
       </Text>
     </Stack>
+  );
+}
+
+function DeploymentNameCell({ value }: { value: string }) {
+  return (
+    <Td px={2}>
+      <Tooltip label={value} placement="top" hasArrow>
+        <Text fontSize="xs" noOfLines={2} wordBreak="break-all">
+          {value}
+        </Text>
+      </Tooltip>
+    </Td>
   );
 }
 
@@ -793,13 +808,30 @@ export function ModelComparisonsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [infoRun, setInfoRun] = useState<HarnessRun | null>(null);
+
+  const loadRuns = useCallback(async () => {
+    try {
+      const data = await request<{ rows: HarnessRun[] }>('/model_compares');
+      setRuns(data.rows);
+    } catch (reason: any) {
+      setError(reason.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    request<{ rows: HarnessRun[] }>('/model_compares')
-      .then((data) => setRuns(data.rows))
-      .catch((reason: any) => setError(reason.message))
-      .finally(() => setLoading(false));
-  }, []);
+    void loadRuns();
+  }, [loadRuns]);
+
+  const hasActiveRuns = runs.some((run) => ['queued', 'running'].includes(run.status));
+
+  useEffect(() => {
+    if (!hasActiveRuns) return;
+    const timer = window.setInterval(() => void loadRuns(), 5000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveRuns, loadRuns]);
 
   const suites = useMemo(
     () => Array.from(new Map(runs.map((run) => [run.testsuite_id, run.suite_name])).entries()),
@@ -809,9 +841,18 @@ export function ModelComparisonsScreen() {
   const visibleRuns = runs.filter((run) => {
     const matchesSearch =
       !normalizedSearchQuery ||
-      [run.suite_name, run.id, run.status.replace(/_/g, ' ')].some((value) =>
-        value.toLowerCase().includes(normalizedSearchQuery),
-      );
+      [
+        run.suite_name,
+        run.id,
+        run.status.replace(/_/g, ' '),
+        run.baseline_document_triage_deployment_name,
+        run.baseline_supporting_document_extraction_deployment_name,
+        run.baseline_upgrade_analysis_deployment_name,
+        run.candidate_document_triage_deployment_name,
+        run.candidate_supporting_document_extraction_deployment_name,
+        run.candidate_upgrade_analysis_deployment_name,
+        run.comparison_deployment_name,
+      ].some((value) => String(value).toLowerCase().includes(normalizedSearchQuery));
 
     return matchesSearch && (!suiteId || run.testsuite_id === suiteId);
   });
@@ -838,7 +879,7 @@ export function ModelComparisonsScreen() {
   return (
     <Box>
       <ThinBlueTitleBar title="Model Comparison Runs" />
-      <Container maxW="7xl" py={6}>
+      <Container maxW="none" w="full" px={{ base: 4, md: 6 }} py={6}>
         {error && (
           <Alert status="error" mb={4}>
             <AlertIcon />
@@ -879,36 +920,102 @@ export function ModelComparisonsScreen() {
         {loading ? (
           <Spinner />
         ) : (
-          <Box borderWidth="1px" borderRadius="lg" overflowX="auto" bg="white">
-            <Table>
+          <Box borderWidth="1px" borderRadius="lg" overflow="hidden" bg="white">
+            <Table size="sm" w="full" sx={{ tableLayout: 'fixed' }}>
               <Thead>
                 <Tr>
-                  <Th>Test Suite</Th>
-                  <Th>Status</Th>
-                  <Th>Created</Th>
-                  <Th />
+                  <Th w="12%" px={2} whiteSpace="normal">
+                    Test Suite
+                  </Th>
+                  <Th w="7%" px={2} whiteSpace="normal">
+                    Status
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Baseline Classification
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Candidate Classification
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Baseline Extraction
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Candidate Extraction
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Baseline Upgrade
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Candidate Upgrade
+                  </Th>
+                  <Th w="8.5%" px={2} whiteSpace="normal">
+                    Evaluator Model
+                  </Th>
+                  <Th w="7.5%" px={2} whiteSpace="normal">
+                    Created
+                  </Th>
+                  <Th w="14%" px={2} />
                 </Tr>
               </Thead>
               <Tbody>
                 {visibleRuns.map((run) => (
                   <Tr key={run.id}>
-                    <Td fontWeight="600">{run.suite_name}</Td>
-                    <Td>
+                    <Td px={2} fontWeight="600">
+                      <Tooltip label={run.suite_name} placement="top" hasArrow>
+                        <Text noOfLines={2}>{run.suite_name}</Text>
+                      </Tooltip>
+                    </Td>
+                    <Td px={2}>
                       <StatusBadge status={run.status} />
                     </Td>
-                    <Td>{new Date(run.created_at).toLocaleString()}</Td>
-                    <Td textAlign="right">
-                      <Flex gap={2} justify="flex-end">
-                        <Button
-                          as={RouterLink}
-                          to={`/test-harness/model-comparisons/${run.id}`}
-                          size="sm"
-                          variant="outline"
+                    <DeploymentNameCell value={run.baseline_document_triage_deployment_name} />
+                    <DeploymentNameCell value={run.candidate_document_triage_deployment_name} />
+                    <DeploymentNameCell value={run.baseline_supporting_document_extraction_deployment_name} />
+                    <DeploymentNameCell value={run.candidate_supporting_document_extraction_deployment_name} />
+                    <DeploymentNameCell value={run.baseline_upgrade_analysis_deployment_name} />
+                    <DeploymentNameCell value={run.candidate_upgrade_analysis_deployment_name} />
+                    <DeploymentNameCell value={run.comparison_deployment_name} />
+                    <Td px={2} whiteSpace="nowrap">
+                      <Text fontSize="xs">{new Date(run.created_at).toLocaleDateString()}</Text>
+                      <Text fontSize="xs" color="gray.600">
+                        {new Date(run.created_at).toLocaleTimeString()}
+                      </Text>
+                    </Td>
+                    <Td px={2} textAlign="right">
+                      <Flex gap={1} justify="flex-end">
+                        <Tooltip label="Open run information">
+                          <IconButton
+                            aria-label={`Open information for ${run.suite_name}`}
+                            icon={<Info size={16} />}
+                            size="xs"
+                            variant="outline"
+                            onClick={() => setInfoRun(run)}
+                          />
+                        </Tooltip>
+                        <Tooltip
+                          label={
+                            run.status === 'draft'
+                              ? 'View run details and launch this draft'
+                              : ['queued', 'running'].includes(run.status)
+                                ? 'View live results'
+                                : run.status === 'completed'
+                                  ? 'View results'
+                                  : 'View run details'
+                          }
                         >
-                          View
-                        </Button>
-                        <Button
-                          size="sm"
+                          <IconButton
+                            aria-label={`View model comparison for ${run.suite_name}`}
+                            icon={<Eye size={16} />}
+                            as={RouterLink}
+                            to={`/test-harness/model-comparisons/${run.id}/results`}
+                            size="xs"
+                            variant="outline"
+                          />
+                        </Tooltip>
+                        <IconButton
+                          aria-label={`Delete model comparison run for ${run.suite_name}`}
+                          icon={<Trash size={16} />}
+                          size="xs"
                           colorScheme="red"
                           variant="outline"
                           onClick={() => deleteRun(run)}
@@ -917,18 +1024,16 @@ export function ModelComparisonsScreen() {
                           title={
                             ['queued', 'running'].includes(run.status)
                               ? 'Queued or running test runs cannot be deleted.'
-                              : undefined
+                              : 'Delete run'
                           }
-                        >
-                          Delete
-                        </Button>
+                        />
                       </Flex>
                     </Td>
                   </Tr>
                 ))}
                 {visibleRuns.length === 0 && (
                   <Tr>
-                    <Td colSpan={4} textAlign="center" color="gray.600" py={8}>
+                    <Td colSpan={11} textAlign="center" color="gray.600" py={8}>
                       No model comparison runs found.
                     </Td>
                   </Tr>
@@ -938,6 +1043,106 @@ export function ModelComparisonsScreen() {
           </Box>
         )}
       </Container>
+
+      <Drawer isOpen={Boolean(infoRun)} placement="right" onClose={() => setInfoRun(null)} size="lg">
+        <DrawerOverlay />
+        <DrawerContent>
+          <DrawerCloseButton />
+          <DrawerHeader>Model Comparison Run Information</DrawerHeader>
+          <DrawerBody>
+            {infoRun && (
+              <Stack spacing={6} pb={6}>
+                <Box>
+                  <Flex align="center" justify="space-between" gap={3} mb={2}>
+                    <Heading size="sm">{infoRun.suite_name}</Heading>
+                    <StatusBadge status={infoRun.status} />
+                  </Flex>
+                  <Text fontSize="xs" color="gray.500" wordBreak="break-all">
+                    Run ID: {infoRun.id}
+                  </Text>
+                  <Text fontSize="sm" mt={2}>
+                    Created: {new Date(infoRun.created_at).toLocaleString()}
+                  </Text>
+                  <Text fontSize="sm">Updated: {new Date(infoRun.updated_at).toLocaleString()}</Text>
+                </Box>
+
+                <Box>
+                  <Heading size="sm" mb={3}>
+                    Deployment Configuration
+                  </Heading>
+                  <Box borderWidth="1px" borderRadius="md" overflow="hidden">
+                    <Table size="sm">
+                      <Thead>
+                        <Tr>
+                          <Th>Stage</Th>
+                          <Th>Baseline</Th>
+                          <Th>Candidate</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        <Tr>
+                          <Td fontWeight="600">Document classification</Td>
+                          <Td wordBreak="break-word">{infoRun.baseline_document_triage_deployment_name}</Td>
+                          <Td wordBreak="break-word">{infoRun.candidate_document_triage_deployment_name}</Td>
+                        </Tr>
+                        <Tr>
+                          <Td fontWeight="600">Supporting extraction</Td>
+                          <Td wordBreak="break-word">
+                            {infoRun.baseline_supporting_document_extraction_deployment_name}
+                          </Td>
+                          <Td wordBreak="break-word">
+                            {infoRun.candidate_supporting_document_extraction_deployment_name}
+                          </Td>
+                        </Tr>
+                        <Tr>
+                          <Td fontWeight="600">Upgrade analysis</Td>
+                          <Td wordBreak="break-word">{infoRun.baseline_upgrade_analysis_deployment_name}</Td>
+                          <Td wordBreak="break-word">{infoRun.candidate_upgrade_analysis_deployment_name}</Td>
+                        </Tr>
+                      </Tbody>
+                    </Table>
+                  </Box>
+                  <Text fontSize="sm" mt={3}>
+                    <Text as="span" fontWeight="700">
+                      Comparison model:{' '}
+                    </Text>
+                    {infoRun.comparison_deployment_name}
+                  </Text>
+                </Box>
+
+                <Box>
+                  <Heading size="sm" mb={3}>
+                    Overall Comparison Summaries
+                  </Heading>
+                  <Stack spacing={4}>
+                    {[
+                      ['Document classification', infoRun.overall_document_classification_comparison],
+                      ['Supporting document extraction', infoRun.overall_supporting_document_extraction_comparison],
+                      ['Upgrade analysis', infoRun.overall_upgrade_analysis_comparison],
+                    ].map(([label, value]) => (
+                      <Box key={label} borderLeftWidth="4px" borderColor={value ? 'blue.500' : 'gray.300'} pl={3}>
+                        <Text fontWeight="700">{label}</Text>
+                        <Text whiteSpace="pre-wrap" color={value ? 'inherit' : 'gray.500'}>
+                          {value || 'Not available yet.'}
+                        </Text>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+
+                <Button
+                  as={RouterLink}
+                  to={`/test-harness/model-comparisons/${infoRun.id}/results`}
+                  colorScheme="blue"
+                  onClick={() => setInfoRun(null)}
+                >
+                  {infoRun.status === 'completed' ? 'Open Results' : 'Open Run Details'}
+                </Button>
+              </Stack>
+            )}
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Box>
   );
 }
@@ -993,7 +1198,7 @@ export function NewModelComparisonScreen() {
     setBusy(true);
     setError(null);
     try {
-      const row = await request<HarnessRun>('/model_compares', {
+      await request<HarnessRun>('/model_compares', {
         method: 'POST',
         body: JSON.stringify({
           testsuite_id: suiteId,
@@ -1004,7 +1209,7 @@ export function NewModelComparisonScreen() {
           comparison_deployment_name: models.comparison_deployment_name,
         }),
       });
-      navigate(`/test-harness/model-comparisons/${row.id}`);
+      navigate('/test-harness/model-comparisons');
     } catch (reason: any) {
       setError(reason.message);
     } finally {
@@ -1122,16 +1327,404 @@ export function NewModelComparisonScreen() {
   );
 }
 
+function ComparisonAvailabilityBadge({ value, status }: { value?: string | null; status: string }) {
+  if (value) return <Badge colorScheme="green">Available</Badge>;
+  if (status === 'failed') return <Badge colorScheme="red">Failed</Badge>;
+  return <Badge colorScheme="gray">Pending</Badge>;
+}
+
+function InvoiceVersionLink({ id }: { id?: string | null }) {
+  if (!id) return <Text color="gray.500">Pending</Text>;
+  return (
+    <Tooltip label={id} placement="top" hasArrow>
+      <Text noOfLines={1} fontSize="xs" color="blue.600" textDecoration="underline">
+        <RouterLink to={`/invoice-versions-by-version/${id}/read`}>{id}</RouterLink>
+      </Text>
+    </Tooltip>
+  );
+}
+
+type ModelEvidencePair = {
+  baseline: any | null;
+  candidate: any | null;
+};
+
+type ModelCaseEvidence = {
+  id: string;
+  baseline_invoice_version_id: string;
+  candidate_invoice_version_id?: string | null;
+  classification: ModelEvidencePair;
+  extraction: ModelEvidencePair;
+  upgrade_analysis: ModelEvidencePair;
+};
+
+type EvidenceField = { key: string; label: string };
+
+function evidenceValue(value: any): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'object') return JSON.stringify(value, null, 2);
+  return String(value);
+}
+
+function EvidenceRecordCell({ row, fields }: { row?: any; fields: EvidenceField[] }) {
+  if (!row) return <Text color="gray.500">Missing</Text>;
+  return (
+    <Stack spacing={2}>
+      {fields.map((field) => {
+        const value = evidenceValue(row[field.key]);
+        return (
+          <Box key={field.key}>
+            <Text fontSize="10px" color="gray.500" fontWeight="700" textTransform="uppercase">
+              {field.label}
+            </Text>
+            <Text fontSize="xs" whiteSpace="pre-wrap" noOfLines={4} title={value}>
+              {value}
+            </Text>
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
+function AlignedEvidenceTable({
+  title,
+  baselineRows,
+  candidateRows,
+  rowKey,
+  rowLabel,
+  fields,
+}: {
+  title: string;
+  baselineRows: any[];
+  candidateRows: any[] | null;
+  rowKey: (row: any) => string;
+  rowLabel: (row: any) => string;
+  fields: EvidenceField[];
+}) {
+  const baseline = new Map(baselineRows.map((row) => [rowKey(row), row]));
+  const candidate = new Map((candidateRows || []).map((row) => [rowKey(row), row]));
+  const keys = Array.from(new Set([...baseline.keys(), ...candidate.keys()])).sort();
+
+  return (
+    <Box>
+      <Heading size="xs" mb={2}>
+        {title}
+      </Heading>
+      <Box borderWidth="1px" borderRadius="md" overflow="hidden">
+        <Table size="sm" w="full" sx={{ tableLayout: 'fixed' }}>
+          <Thead>
+            <Tr>
+              <Th w="20%">Evidence</Th>
+              <Th w="34%">Baseline</Th>
+              <Th w="34%">Candidate</Th>
+              <Th w="12%">Change</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {keys.map((key) => {
+              const baselineRow = baseline.get(key);
+              const candidateRow = candidate.get(key);
+              const comparable = (row: any) => fields.map((field) => row?.[field.key] ?? null);
+              const isSame =
+                Boolean(baselineRow && candidateRow) &&
+                JSON.stringify(comparable(baselineRow)) === JSON.stringify(comparable(candidateRow));
+              const change =
+                candidateRows === null
+                  ? 'Pending'
+                  : !baselineRow
+                    ? 'Added'
+                    : !candidateRow
+                      ? 'Missing'
+                      : isSame
+                        ? 'Same'
+                        : 'Changed';
+              const color =
+                change === 'Same' ? 'green' : change === 'Pending' ? 'gray' : change === 'Changed' ? 'orange' : 'red';
+              return (
+                <Tr key={key}>
+                  <Td verticalAlign="top" fontWeight="700" wordBreak="break-word">
+                    {rowLabel(baselineRow || candidateRow)}
+                  </Td>
+                  <Td verticalAlign="top" bg={change === 'Changed' ? 'orange.50' : undefined}>
+                    <EvidenceRecordCell row={baselineRow} fields={fields} />
+                  </Td>
+                  <Td verticalAlign="top" bg={change === 'Changed' ? 'orange.50' : undefined}>
+                    {candidateRows === null ? (
+                      <Text color="gray.500">Candidate evidence is not available yet.</Text>
+                    ) : (
+                      <EvidenceRecordCell row={candidateRow} fields={fields} />
+                    )}
+                  </Td>
+                  <Td verticalAlign="top">
+                    <Badge colorScheme={color}>{change}</Badge>
+                  </Td>
+                </Tr>
+              );
+            })}
+            {keys.length === 0 && (
+              <Tr>
+                <Td colSpan={4} textAlign="center" color="gray.500" py={5}>
+                  No persisted evidence records are available.
+                </Td>
+              </Tr>
+            )}
+          </Tbody>
+        </Table>
+      </Box>
+    </Box>
+  );
+}
+
+function supportingDocumentKey(entry: any): string {
+  const document = entry?.document || entry || {};
+  return String(
+    document.sha256 || [document.supporting_document_type_id || '', document.original_filename || ''].join('|'),
+  );
+}
+
+function flattenSupportingEvidence(snapshot: any, child: 'located_fields' | 'visual_findings'): any[] {
+  return (snapshot?.documents || []).flatMap((entry: any) => {
+    const document = entry.document || {};
+    return (entry[child] || []).map((row: any, index: number) => ({
+      ...row,
+      _document_key: supportingDocumentKey(entry),
+      _document_name: document.original_filename || document.supporting_document_type_description || 'Document',
+      _sequence: index,
+    }));
+  });
+}
+
+function evidenceTypeLabel(row: any): string {
+  return row?.upgrade_type_description || row?.upgrade_type_key || row?.invoice_upgrade_type_id || 'Evidence';
+}
+
+function ModelCaseEvidencePanel({
+  testCase,
+  evidence,
+  loading,
+  error,
+  onClose,
+}: {
+  testCase: HarnessCase;
+  evidence: ModelCaseEvidence | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const classificationBaseline = evidence?.classification.baseline?.upgrade_types || [];
+  const classificationCandidate = evidence?.classification.candidate
+    ? evidence.classification.candidate.upgrade_types || []
+    : null;
+  const classificationBaselineDocuments = (evidence?.classification.baseline?.supporting_documents || []).map(
+    (document: any) => ({ ...document, _key: supportingDocumentKey(document) }),
+  );
+  const classificationCandidateDocuments = evidence?.classification.candidate
+    ? (evidence.classification.candidate.supporting_documents || []).map((document: any) => ({
+        ...document,
+        _key: supportingDocumentKey(document),
+      }))
+    : null;
+  const extractionBaselineFields = flattenSupportingEvidence(evidence?.extraction.baseline, 'located_fields');
+  const extractionCandidateFields = evidence?.extraction.candidate
+    ? flattenSupportingEvidence(evidence.extraction.candidate, 'located_fields')
+    : null;
+  const extractionBaselineFindings = flattenSupportingEvidence(evidence?.extraction.baseline, 'visual_findings');
+  const extractionCandidateFindings = evidence?.extraction.candidate
+    ? flattenSupportingEvidence(evidence.extraction.candidate, 'visual_findings')
+    : null;
+  const upgradeBaseline = evidence?.upgrade_analysis.baseline;
+  const upgradeCandidate = evidence?.upgrade_analysis.candidate;
+
+  const comparisonNarrative = (value?: string | null) => (
+    <Box bg="blue.50" borderLeftWidth="4px" borderColor={value ? 'blue.500' : 'gray.300'} p={4} mb={5}>
+      <Text fontSize="xs" fontWeight="700" color="gray.600" textTransform="uppercase" mb={1}>
+        Comparison narrative
+      </Text>
+      <Text whiteSpace="pre-wrap" color={value ? 'inherit' : 'gray.500'}>
+        {value || 'Not available yet.'}
+      </Text>
+    </Box>
+  );
+
+  const evidenceState = loading ? (
+    <Flex align="center" gap={3} py={4}>
+      <Spinner size="sm" />
+      <Text>Loading persisted evidence…</Text>
+    </Flex>
+  ) : error ? (
+    <Alert status="error" my={4}>
+      <AlertIcon />
+      {error}
+    </Alert>
+  ) : null;
+
+  return (
+    <Box borderWidth="2px" borderColor="blue.200" borderRadius="lg" p={5} bg="white">
+      <Flex justify="space-between" align="flex-start" gap={4} mb={4}>
+        <Box>
+          <Flex align="center" gap={3} mb={1}>
+            <Heading size="sm">Case Evidence: {testCase.name}</Heading>
+            <StatusBadge status={testCase.status} />
+          </Flex>
+          <Text fontSize="xs" color="gray.500">
+            Baseline {testCase.baseline_invoice_version_id} · Candidate{' '}
+            {testCase.candidate_invoice_version_id || 'pending'}
+          </Text>
+        </Box>
+        <Button size="xs" variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      </Flex>
+
+      <Tabs variant="line" colorScheme="blue" isFitted>
+        <TabList>
+          <Tab>Classification</Tab>
+          <Tab>Extraction</Tab>
+          <Tab>Upgrade Analysis</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel px={0} pt={5}>
+            {comparisonNarrative(testCase.document_classification_comparison)}
+            {evidenceState}
+            {!loading && !error && (
+              <Stack spacing={6}>
+                <AlignedEvidenceTable
+                  title="Supporting Document Classifications"
+                  baselineRows={classificationBaselineDocuments}
+                  candidateRows={classificationCandidateDocuments}
+                  rowKey={(row) => String(row._key)}
+                  rowLabel={(row) => row.original_filename || 'Supporting document'}
+                  fields={[
+                    { key: 'supporting_document_type_description', label: 'Document type' },
+                    { key: 'classification_confidence', label: 'Classification confidence' },
+                    { key: 'classification_reason', label: 'Classification reason' },
+                    { key: 'supporting_document_routing_quality', label: 'Routing quality' },
+                    { key: 'supporting_document_routing_quality_reason', label: 'Routing reason' },
+                  ]}
+                />
+                <AlignedEvidenceTable
+                  title="Detected Upgrade Types"
+                  baselineRows={classificationBaseline}
+                  candidateRows={classificationCandidate}
+                  rowKey={(row) => String(row.invoice_upgrade_type_id)}
+                  rowLabel={evidenceTypeLabel}
+                  fields={[
+                    { key: 'confidence', label: 'Confidence' },
+                    { key: 'evidence_text', label: 'Evidence' },
+                    { key: 'classification_explanation', label: 'Explanation' },
+                    { key: 'page', label: 'Page' },
+                    { key: 'raw_json', label: 'Raw classifier output' },
+                  ]}
+                />
+              </Stack>
+            )}
+          </TabPanel>
+
+          <TabPanel px={0} pt={5}>
+            {comparisonNarrative(testCase.supporting_document_extraction_comparison)}
+            {evidenceState}
+            {!loading && !error && (
+              <Stack spacing={6}>
+                <AlignedEvidenceTable
+                  title="Located Fields"
+                  baselineRows={extractionBaselineFields}
+                  candidateRows={extractionCandidateFields}
+                  rowKey={(row) => `${row._document_key}|${row.source_engine}|${row.field_key}`}
+                  rowLabel={(row) => `${row._document_name} · ${row.field_key}`}
+                  fields={[
+                    { key: 'source_engine', label: 'Source' },
+                    { key: 'value_text', label: 'Value' },
+                    { key: 'value_json', label: 'JSON value' },
+                    { key: 'confidence', label: 'Confidence' },
+                    { key: 'page', label: 'Page' },
+                    { key: 'evidence_text', label: 'Evidence' },
+                  ]}
+                />
+                <AlignedEvidenceTable
+                  title="Visual Findings"
+                  baselineRows={extractionBaselineFindings}
+                  candidateRows={extractionCandidateFindings}
+                  rowKey={(row) =>
+                    `${row._document_key}|${row.source_engine}|${row.finding_type}|${row.finding_seqno || row._sequence}`
+                  }
+                  rowLabel={(row) => `${row._document_name} · ${row.finding_type}`}
+                  fields={[
+                    { key: 'summary', label: 'Summary' },
+                    { key: 'legibility', label: 'Legibility' },
+                    { key: 'confidence', label: 'Confidence' },
+                    { key: 'page', label: 'Page' },
+                  ]}
+                />
+              </Stack>
+            )}
+          </TabPanel>
+
+          <TabPanel px={0} pt={5}>
+            {comparisonNarrative(testCase.upgrade_analysis_comparison)}
+            {evidenceState}
+            {!loading && !error && (
+              <Stack spacing={6}>
+                <AlignedEvidenceTable
+                  title="Located Invoice Fields"
+                  baselineRows={upgradeBaseline?.located_fields || []}
+                  candidateRows={upgradeCandidate ? upgradeCandidate.located_fields || [] : null}
+                  rowKey={(row) => `${row.invoice_upgrade_type_id}|${row.source_engine}|${row.field_key}`}
+                  rowLabel={(row) => `${evidenceTypeLabel(row)} · ${row.field_key}`}
+                  fields={[
+                    { key: 'source_engine', label: 'Source' },
+                    { key: 'value_text', label: 'Value' },
+                    { key: 'value_json', label: 'JSON value' },
+                    { key: 'confidence', label: 'Confidence' },
+                    { key: 'page', label: 'Page' },
+                    { key: 'evidence_text', label: 'Evidence' },
+                  ]}
+                />
+                <AlignedEvidenceTable
+                  title="Rule Results and Reasons"
+                  baselineRows={upgradeBaseline?.rulechecks || []}
+                  candidateRows={upgradeCandidate ? upgradeCandidate.rulechecks || [] : null}
+                  rowKey={(row) => `${row.invoice_upgrade_type_id}|${row.source_engine}|${row.rule_key}`}
+                  rowLabel={(row) => `${evidenceTypeLabel(row)} · ${row.contractor_display_name || row.rule_key}`}
+                  fields={[
+                    { key: 'source_engine', label: 'Source' },
+                    { key: 'rule_result', label: 'Result' },
+                    { key: 'compliance_score', label: 'Compliance score' },
+                    { key: 'expected_text', label: 'Expected' },
+                    { key: 'calculation', label: 'Calculation' },
+                    { key: 'evidence_text', label: 'Evidence' },
+                    { key: 'reason_and_likely_causes', label: 'Reason and likely causes' },
+                  ]}
+                />
+              </Stack>
+            )}
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
+  );
+}
+
 export function ModelComparisonResultsScreen() {
   const { modelComparisonId = '' } = useParams<{ modelComparisonId: string }>();
   const [run, setRun] = useState<HarnessRun | null>(null);
+  const [selectedCase, setSelectedCase] = useState<HarnessCase | null>(null);
+  const [caseEvidence, setCaseEvidence] = useState<ModelCaseEvidence | null>(null);
+  const [caseEvidenceError, setCaseEvidenceError] = useState<string | null>(null);
+  const [caseEvidenceLoading, setCaseEvidenceLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [rerunningComparisons, setRerunningComparisons] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setRun(await request<HarnessRun>(`/model_compares/${modelComparisonId}`));
+      setError(null);
+      const updated = await request<HarnessRun>(`/model_compares/${modelComparisonId}`);
+      setRun(updated);
+      setSelectedCase((current) =>
+        current ? updated.cases?.find((testCase) => testCase.id === current.id) || current : null,
+      );
     } catch (reason: any) {
       setError(reason.message);
     } finally {
@@ -1140,17 +1733,47 @@ export function ModelComparisonResultsScreen() {
   }, [modelComparisonId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   useEffect(() => {
     if (!run || !['queued', 'running'].includes(run.status)) return;
-    const timer = window.setInterval(load, 5000);
+    const timer = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(timer);
   }, [load, run]);
 
+  const selectedCaseId = selectedCase?.id;
+  const selectedCandidateVersionId = selectedCase?.candidate_invoice_version_id;
+
+  useEffect(() => {
+    if (!selectedCaseId) {
+      setCaseEvidence(null);
+      setCaseEvidenceError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCaseEvidenceLoading(true);
+    setCaseEvidenceError(null);
+    request<ModelCaseEvidence>(`/model_compares/${modelComparisonId}/cases/${selectedCaseId}/evidence`)
+      .then((data) => {
+        if (!cancelled) setCaseEvidence(data);
+      })
+      .catch((reason: any) => {
+        if (!cancelled) setCaseEvidenceError(reason.message);
+      })
+      .finally(() => {
+        if (!cancelled) setCaseEvidenceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modelComparisonId, selectedCandidateVersionId, selectedCaseId]);
+
   async function submitRun() {
     if (!run) return;
+    if (!window.confirm(`Run the model comparison for “${run.suite_name}” using its saved configuration?`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -1167,10 +1790,38 @@ export function ModelComparisonResultsScreen() {
     }
   }
 
+  async function rerunComparisonJobs() {
+    if (!run) return;
+    const comparisonCallCount = run.case_count * 3 + 1;
+    if (
+      !window.confirm(
+        `Rerun the ${comparisonCallCount} comparison evaluator calls for “${run.suite_name}”? ` +
+          'The existing baseline and candidate invoice records will be reused. ' +
+          'This replaces the current case and overall comparison narratives but does not rerun invoice processing.',
+      )
+    )
+      return;
+
+    setRerunningComparisons(true);
+    setError(null);
+    try {
+      const updated = await request<HarnessRun>(`/model_compares/${run.id}/rerun_comparisons`, {
+        method: 'POST',
+        body: '{}',
+      });
+      setRun(updated);
+      setSelectedCase(null);
+    } catch (reason: any) {
+      setError(reason.message);
+    } finally {
+      setRerunningComparisons(false);
+    }
+  }
+
   return (
     <Box>
       <ThinBlueTitleBar title="Model Comparison Results" />
-      <Container maxW="7xl" py={6}>
+      <Container maxW="none" w="full" px={{ base: 4, md: 6 }} py={6}>
         {error && (
           <Alert status="error" mb={4}>
             <AlertIcon />
@@ -1186,7 +1837,248 @@ export function ModelComparisonResultsScreen() {
         {loading ? (
           <Spinner />
         ) : run ? (
-          <RunDetail mode="model_compares" run={run} onRun={submitRun} busy={busy} />
+          <Stack spacing={5}>
+            {!['completed', 'failed', 'cancelled'].includes(run.status) && (
+              <Alert status="info">
+                <AlertIcon />
+                {run.status === 'draft'
+                  ? 'This draft has not been run. Launch it from Model Comparison Runs.'
+                  : 'This run is still processing. Results refresh automatically.'}
+              </Alert>
+            )}
+
+            <Box borderWidth="1px" borderRadius="lg" p={5} bg="white">
+              <Flex justify="space-between" align="flex-start" gap={4} mb={4}>
+                <Box>
+                  <Heading size="sm">{run.suite_name}</Heading>
+                  <Text fontSize="xs" color="gray.500" wordBreak="break-all">
+                    Run ID: {run.id}
+                  </Text>
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    Created {new Date(run.created_at).toLocaleString()}
+                    {run.updated_at ? ` · Updated ${new Date(run.updated_at).toLocaleString()}` : ''}
+                  </Text>
+                </Box>
+                <Flex gap={3} align="center">
+                  <StatusBadge status={run.status} />
+                  <Tooltip
+                    shouldWrapChildren
+                    hasArrow
+                    label={
+                      run.status === 'draft'
+                        ? 'Run this model comparison.'
+                        : run.status === 'queued'
+                          ? 'This model comparison is queued and cannot be launched again.'
+                          : run.status === 'running'
+                            ? 'This model comparison is currently running.'
+                            : run.status === 'completed'
+                              ? 'This model comparison has already run. Create a new run to run it again.'
+                              : run.status === 'failed'
+                                ? 'This model comparison failed. Create a new run to try again.'
+                                : 'This model comparison cannot be launched in its current status.'
+                    }
+                  >
+                    <Button
+                      colorScheme="blue"
+                      size="sm"
+                      onClick={submitRun}
+                      isLoading={busy}
+                      isDisabled={run.status !== 'draft'}
+                    >
+                      Run
+                    </Button>
+                  </Tooltip>
+                  <Tooltip
+                    shouldWrapChildren
+                    hasArrow
+                    label={
+                      ['completed', 'failed'].includes(run.status)
+                        ? `Reuse the existing candidate invoices and rerun only the ${run.case_count * 3 + 1} comparison evaluator calls.`
+                        : run.status === 'draft'
+                          ? 'Run the candidate invoice processing before rerunning comparisons.'
+                          : ['queued', 'running'].includes(run.status)
+                            ? 'Comparison work is already queued or running.'
+                            : 'Comparison jobs cannot be rerun in the current status.'
+                    }
+                  >
+                    <Button
+                      colorScheme="blue"
+                      variant="outline"
+                      size="sm"
+                      onClick={rerunComparisonJobs}
+                      isLoading={rerunningComparisons}
+                      isDisabled={!['completed', 'failed'].includes(run.status) || busy}
+                    >
+                      Rerun Comparisons
+                    </Button>
+                  </Tooltip>
+                </Flex>
+              </Flex>
+              <Box borderWidth="1px" borderRadius="md" overflow="hidden">
+                <Table size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th>Stage</Th>
+                      <Th>Baseline</Th>
+                      <Th>Candidate</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    <Tr>
+                      <Td fontWeight="600">Document classification</Td>
+                      <Td>{run.baseline_document_triage_deployment_name}</Td>
+                      <Td>{run.candidate_document_triage_deployment_name}</Td>
+                    </Tr>
+                    <Tr>
+                      <Td fontWeight="600">Supporting extraction</Td>
+                      <Td>{run.baseline_supporting_document_extraction_deployment_name}</Td>
+                      <Td>{run.candidate_supporting_document_extraction_deployment_name}</Td>
+                    </Tr>
+                    <Tr>
+                      <Td fontWeight="600">Upgrade analysis</Td>
+                      <Td>{run.baseline_upgrade_analysis_deployment_name}</Td>
+                      <Td>{run.candidate_upgrade_analysis_deployment_name}</Td>
+                    </Tr>
+                    <Tr>
+                      <Td fontWeight="600">Evaluator</Td>
+                      <Td colSpan={2}>{run.comparison_deployment_name}</Td>
+                    </Tr>
+                  </Tbody>
+                </Table>
+              </Box>
+            </Box>
+
+            <Box borderWidth="1px" borderRadius="lg" p={5} bg="white">
+              <Heading size="sm" mb={3}>
+                Overall Comparison Summaries
+              </Heading>
+              <Tabs variant="line" colorScheme="blue" isFitted>
+                <TabList>
+                  <Tab>Classification</Tab>
+                  <Tab>Extraction</Tab>
+                  <Tab>Upgrade Analysis</Tab>
+                </TabList>
+                <TabPanels>
+                  {[
+                    run.overall_document_classification_comparison,
+                    run.overall_supporting_document_extraction_comparison,
+                    run.overall_upgrade_analysis_comparison,
+                  ].map((value, index) => (
+                    <TabPanel key={index} px={1} pt={5} pb={1}>
+                      <Text whiteSpace="pre-wrap" color={value ? 'inherit' : 'gray.500'}>
+                        {value || 'Not available yet.'}
+                      </Text>
+                    </TabPanel>
+                  ))}
+                </TabPanels>
+              </Tabs>
+            </Box>
+
+            <Box borderWidth="1px" borderRadius="lg" overflow="hidden" bg="white">
+              <Table size="sm" w="full" sx={{ tableLayout: 'fixed' }}>
+                <Thead>
+                  <Tr>
+                    <Th w="16%">Test Case</Th>
+                    <Th w="9%">Status</Th>
+                    <Th w="12%">Baseline Invoice</Th>
+                    <Th w="12%">Candidate Invoice</Th>
+                    <Th w="14%">Candidate Ingest Run</Th>
+                    <Th w="9%">Classification Result</Th>
+                    <Th w="9%">Extraction Result</Th>
+                    <Th w="9%">Upgrade Result</Th>
+                    <Th w="10%">Inspect</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {(run.cases || []).map((testCase) => (
+                    <React.Fragment key={testCase.id}>
+                      <Tr
+                        bg={selectedCase?.id === testCase.id ? 'blue.50' : undefined}
+                        cursor="pointer"
+                        _hover={{ bg: selectedCase?.id === testCase.id ? 'blue.50' : 'gray.50' }}
+                        onClick={() => setSelectedCase(testCase)}
+                        aria-selected={selectedCase?.id === testCase.id}
+                      >
+                        <Td fontWeight="600">
+                          <Tooltip label={testCase.name} placement="top" hasArrow>
+                            <Text noOfLines={2}>{testCase.name}</Text>
+                          </Tooltip>
+                        </Td>
+                        <Td>
+                          <StatusBadge status={testCase.status} />
+                        </Td>
+                        <Td>
+                          <InvoiceVersionLink id={testCase.baseline_invoice_version_id} />
+                        </Td>
+                        <Td>
+                          <InvoiceVersionLink id={testCase.candidate_invoice_version_id} />
+                        </Td>
+                        <Td>
+                          <Tooltip label={testCase.candidate_ingest_run_id || 'Pending'} placement="top" hasArrow>
+                            <Text noOfLines={1} fontSize="xs">
+                              {testCase.candidate_ingest_run_id || 'Pending'}
+                            </Text>
+                          </Tooltip>
+                        </Td>
+                        <Td>
+                          <ComparisonAvailabilityBadge
+                            value={testCase.document_classification_comparison}
+                            status={testCase.status}
+                          />
+                        </Td>
+                        <Td>
+                          <ComparisonAvailabilityBadge
+                            value={testCase.supporting_document_extraction_comparison}
+                            status={testCase.status}
+                          />
+                        </Td>
+                        <Td>
+                          <ComparisonAvailabilityBadge
+                            value={testCase.upgrade_analysis_comparison}
+                            status={testCase.status}
+                          />
+                        </Td>
+                        <Td textAlign="right">
+                          <Tooltip label="Inspect case evidence">
+                            <IconButton
+                              aria-label={`Inspect evidence for ${testCase.name}`}
+                              icon={<Info size={16} />}
+                              size="xs"
+                              variant="outline"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedCase(testCase);
+                              }}
+                            />
+                          </Tooltip>
+                        </Td>
+                      </Tr>
+                      {selectedCase?.id === testCase.id && (
+                        <Tr>
+                          <Td colSpan={9} p={4} bg="blue.50">
+                            <ModelCaseEvidencePanel
+                              testCase={selectedCase}
+                              evidence={caseEvidence}
+                              loading={caseEvidenceLoading}
+                              error={caseEvidenceError}
+                              onClose={() => setSelectedCase(null)}
+                            />
+                          </Td>
+                        </Tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  {(run.cases || []).length === 0 && (
+                    <Tr>
+                      <Td colSpan={9} textAlign="center" color="gray.600" py={8}>
+                        No case results are available yet.
+                      </Td>
+                    </Tr>
+                  )}
+                </Tbody>
+              </Table>
+            </Box>
+          </Stack>
         ) : null}
       </Container>
     </Box>
@@ -1383,7 +2275,6 @@ export function NewRuleComparisonScreen() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [suiteId, setSuiteId] = useState('');
   const [candidateRuleId, setCandidateRuleId] = useState('');
-  const [historyId, setHistoryId] = useState('');
   const [comparisonDeploymentName, setComparisonDeploymentName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1401,14 +2292,7 @@ export function NewRuleComparisonScreen() {
 
   const selectedSuite = bootstrap?.suites.find((suite) => suite.id === suiteId);
   const selectedRule = bootstrap?.rules.find((rule) => rule.id === candidateRuleId);
-  const validHistories = useMemo(
-    () => bootstrap?.rule_histories.filter((history) => history.source_id === candidateRuleId) || [],
-    [bootstrap, candidateRuleId],
-  );
-  const selectedHistory = validHistories.find((history) => history.id === historyId);
-  const canCreate = Boolean(
-    suiteId && selectedSuite?.case_count && candidateRuleId && historyId && comparisonDeploymentName.trim(),
-  );
+  const canCreate = Boolean(suiteId && selectedSuite?.case_count && candidateRuleId && comparisonDeploymentName.trim());
 
   async function createRun() {
     setBusy(true);
@@ -1418,7 +2302,6 @@ export function NewRuleComparisonScreen() {
         method: 'POST',
         body: JSON.stringify({
           testsuite_id: suiteId,
-          baseline_genai_rule_history_id: historyId,
           candidate_genai_rule_id: candidateRuleId,
           comparison_deployment_name: comparisonDeploymentName,
         }),
@@ -1470,71 +2353,28 @@ export function NewRuleComparisonScreen() {
 
             <Box borderWidth="1px" borderRadius="lg" p={5} bg="white">
               <Heading size="sm" mb={4}>
-                Rule Definitions
+                Rule to Compare
               </Heading>
-              <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={4}>
-                <FormControl isRequired>
-                  <FormLabel>Current Candidate Rule</FormLabel>
-                  <Select
-                    value={candidateRuleId}
-                    onChange={(event) => {
-                      setCandidateRuleId(event.target.value);
-                      setHistoryId('');
-                    }}
-                  >
-                    <option value="">Select a rule</option>
-                    {bootstrap?.rules.map((rule) => (
-                      <option key={rule.id} value={rule.id}>
-                        {rule.rule_key} — {rule.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl isRequired isDisabled={!candidateRuleId}>
-                  <FormLabel>Historical Baseline Definition</FormLabel>
-                  <Select value={historyId} onChange={(event) => setHistoryId(event.target.value)}>
-                    <option value="">Select a prior definition</option>
-                    {validHistories.map((history) => (
-                      <option key={history.id} value={history.id}>
-                        {history.created_at ? new Date(history.created_at).toLocaleString() : history.id}
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              {candidateRuleId && validHistories.length === 0 && (
-                <Alert status="warning" mt={4}>
-                  <AlertIcon />
-                  This rule has no historical definitions available for comparison.
-                </Alert>
-              )}
-              {(selectedRule || selectedHistory) && (
-                <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={4} mt={5}>
-                  <Box borderWidth="1px" borderRadius="md" p={4}>
-                    <Text fontWeight="700" mb={2}>
-                      Candidate Prompt
-                    </Text>
-                    <Text
-                      whiteSpace="pre-wrap"
-                      fontSize="sm"
-                      color={selectedRule?.prompt_text ? 'inherit' : 'gray.500'}
-                    >
-                      {selectedRule?.prompt_text || 'Not available.'}
-                    </Text>
-                  </Box>
-                  <Box borderWidth="1px" borderRadius="md" p={4}>
-                    <Text fontWeight="700" mb={2}>
-                      Baseline Prompt
-                    </Text>
-                    <Text
-                      whiteSpace="pre-wrap"
-                      fontSize="sm"
-                      color={selectedHistory?.prompt_text ? 'inherit' : 'gray.500'}
-                    >
-                      {selectedHistory?.prompt_text || 'Select a historical definition.'}
-                    </Text>
-                  </Box>
-                </Grid>
+              <FormControl isRequired>
+                <FormLabel>Current Rule</FormLabel>
+                <Select value={candidateRuleId} onChange={(event) => setCandidateRuleId(event.target.value)}>
+                  <option value="">Select a rule</option>
+                  {bootstrap?.rules.map((rule) => (
+                    <option key={rule.id} value={rule.id}>
+                      {rule.rule_key} — {rule.name}
+                    </option>
+                  ))}
+                </Select>
+              </FormControl>
+              {selectedRule && (
+                <Box borderWidth="1px" borderRadius="md" p={4} mt={5}>
+                  <Text fontWeight="700" mb={2}>
+                    Current Rule Prompt
+                  </Text>
+                  <Text whiteSpace="pre-wrap" fontSize="sm" color={selectedRule.prompt_text ? 'inherit' : 'gray.500'}>
+                    {selectedRule.prompt_text || 'Not available.'}
+                  </Text>
+                </Box>
               )}
             </Box>
 

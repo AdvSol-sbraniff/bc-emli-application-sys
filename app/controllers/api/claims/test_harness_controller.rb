@@ -43,19 +43,6 @@ module Api
                          name: rule.contractor_display_name,
                          prompt_text: rule.prompt_text
                        }
-                     end,
-                 rule_histories:
-                   ::Claims::GenaiRuleHistory
-                     .order(history_created_at: :desc)
-                     .map do |row|
-                       {
-                         id: row.id,
-                         source_id: row.source_id,
-                         rule_key: row.genai_rule_key,
-                         name: row.contractor_display_name,
-                         prompt_text: row.prompt_text,
-                         created_at: row.history_created_at
-                       }
                      end
                },
                status: :ok
@@ -248,6 +235,82 @@ module Api
         submit!("model_compare", row)
       end
 
+      def model_compares_rerun_comparisons
+        row = ::Claims::TestRunModelCompare.find(params[:id])
+
+        row.with_lock do
+          unless %w[completed failed].include?(row.status)
+            raise ArgumentError,
+                  "Only a completed or failed model comparison can rerun its comparison jobs."
+          end
+
+          cases = row.test_cases.lock.order(:created_at, :id).to_a
+          if cases.empty?
+            raise ArgumentError,
+                  "This model comparison has no cases to compare."
+          end
+
+          unavailable_case =
+            cases.find do |test_case|
+              candidate_run = test_case.candidate_ingest_run
+              test_case.candidate_invoice_version_id.blank? ||
+                candidate_run.blank? || candidate_run.status != "succeeded" ||
+                candidate_run.resolved_invoice_version_id !=
+                  test_case.candidate_invoice_version_id
+            end
+          if unavailable_case
+            raise ArgumentError,
+                  "Case #{unavailable_case.test_suite_case.name} does not have a completed candidate invoice to reuse."
+          end
+
+          cases.each do |test_case|
+            test_case.update!(
+              status: "queued",
+              failure_code: nil,
+              document_classification_comparison: nil,
+              supporting_document_extraction_comparison: nil,
+              upgrade_analysis_comparison: nil
+            )
+          end
+          row.update!(
+            status: "queued",
+            overall_document_classification_comparison: nil,
+            overall_supporting_document_extraction_comparison: nil,
+            overall_upgrade_analysis_comparison: nil
+          )
+        end
+
+        ::Claims::TestHarness::StartRunJob.perform_async(
+          "model_compare",
+          row.id
+        )
+        render json: serialize_model_compare(row.reload, include_cases: true),
+               status: :accepted
+      end
+
+      def model_compare_case_evidence
+        parent = ::Claims::TestRunModelCompare.find(params[:model_compare_id])
+        test_case = parent.test_cases.find(params[:case_id])
+
+        render json: {
+                 id: test_case.id,
+                 baseline_invoice_version_id:
+                   test_case.baseline_invoice_version_id,
+                 candidate_invoice_version_id:
+                   test_case.candidate_invoice_version_id,
+                 classification:
+                   model_evidence_pair(test_case, :document_classification),
+                 extraction:
+                   model_evidence_pair(
+                     test_case,
+                     :supporting_document_extraction
+                   ),
+                 upgrade_analysis:
+                   model_evidence_pair(test_case, :upgrade_analysis)
+               },
+               status: :ok
+      end
+
       def model_compares_destroy
         destroy_run!(::Claims::TestRunModelCompare.find(params[:id]))
       end
@@ -267,21 +330,15 @@ module Api
 
       def rule_compares_create
         suite = ::Claims::TestSuite.find(params.require(:testsuite_id))
-        history =
-          ::Claims::GenaiRuleHistory.find(
-            params.require(:baseline_genai_rule_history_id)
-          )
         rule =
           ::Claims::GenaiRule.find(params.require(:candidate_genai_rule_id))
         ::Claims::TestHarness::Preflight.rule_compare!(
           suite: suite,
-          baseline_history: history,
           candidate_rule: rule
         )
         row =
           ::Claims::TestRunRuleCompare.create!(
             testsuite_id: suite.id,
-            baseline_genai_rule_history_id: history.id,
             candidate_genai_rule_id: rule.id,
             comparison_deployment_name:
               params.require(:comparison_deployment_name),
@@ -299,7 +356,6 @@ module Api
 
         ::Claims::TestHarness::Preflight.rule_compare!(
           suite: row.test_suite,
-          baseline_history: row.baseline_rule_history,
           candidate_rule: row.candidate_rule
         )
         submit!("rule_compare", row)
@@ -357,6 +413,25 @@ module Api
       end
 
       private
+
+      def model_evidence_pair(test_case, domain)
+        baseline =
+          ::Claims::TestHarness::EvidenceSnapshot.for_domain(
+            domain: domain,
+            invoice_version: test_case.baseline_invoice_version,
+            ingest_run: test_case.baseline_ingest_run
+          )
+        candidate =
+          if test_case.candidate_invoice_version &&
+               test_case.candidate_ingest_run
+            ::Claims::TestHarness::EvidenceSnapshot.for_domain(
+              domain: domain,
+              invoice_version: test_case.candidate_invoice_version,
+              ingest_run: test_case.candidate_ingest_run
+            )
+          end
+        { baseline: baseline, candidate: candidate }
+      end
 
       def suite_params
         params.permit(:name, :description)
@@ -552,6 +627,7 @@ module Api
           status: row.status,
           failure_code: row.failure_code,
           baseline_invoice_version_id: row.baseline_invoice_version_id,
+          baseline_ingest_run_id: row.baseline_ingest_run_id,
           candidate_invoice_version_id: row.candidate_invoice_version_id,
           candidate_ingest_run_id: row.candidate_ingest_run_id,
           document_classification_comparison:
@@ -565,12 +641,9 @@ module Api
       def serialize_rule_compare(row, include_cases: false)
         payload =
           base_run(row).merge(
-            baseline_genai_rule_history_id: row.baseline_genai_rule_history_id,
             candidate_genai_rule_id: row.candidate_genai_rule_id,
             rule_key: row.candidate_rule.genai_rule_key,
             candidate_rule_name: row.candidate_rule.contractor_display_name,
-            baseline_rule_history_created_at:
-              row.baseline_rule_history.history_created_at,
             comparison_deployment_name: row.comparison_deployment_name,
             overall_rule_comparison: row.overall_rule_comparison
           )

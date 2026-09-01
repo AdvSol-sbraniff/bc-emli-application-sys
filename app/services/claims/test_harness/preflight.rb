@@ -59,13 +59,8 @@ module Claims
         [cases, reference]
       end
 
-      def self.rule_compare!(suite:, baseline_history:, candidate_rule:)
+      def self.rule_compare!(suite:, candidate_rule:)
         cases = suite!(suite)
-        unless baseline_history.source_id == candidate_rule.id
-          raise ArgumentError,
-                "The baseline history and candidate must belong to the same logical rule."
-        end
-
         rule_key = candidate_rule.genai_rule_key
         cases.each do |test_case|
           version = test_case.baseline_invoice_version
@@ -75,21 +70,6 @@ module Claims
                    .exists?
             raise ArgumentError,
                   "#{test_case.name}: baseline version did not evaluate #{rule_key}."
-          end
-
-          prompt_seen =
-            test_case
-              .baseline_ingest_run
-              .ingest_step_runs
-              .where(step_type: "evaluate_genai_ruleset", status: "succeeded")
-              .where(
-                "context_window_json::text LIKE ?",
-                "%#{sanitize_like(baseline_history.prompt_text)}%"
-              )
-              .exists?
-          unless prompt_seen
-            raise ArgumentError,
-                  "#{test_case.name}: baseline run does not contain the selected historical rule definition."
           end
 
           missing =
@@ -109,11 +89,6 @@ module Claims
           run.public_send(attribute).to_s
         end
       end
-
-      def self.sanitize_like(value)
-        ActiveRecord::Base.sanitize_sql_like(value.to_s.strip.first(500))
-      end
-      private_class_method :sanitize_like
     end
   end
 end

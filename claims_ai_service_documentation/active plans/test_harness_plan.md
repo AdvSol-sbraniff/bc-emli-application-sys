@@ -5,7 +5,7 @@
 Build one test-harness subsystem with three distinct modes:
 
 1. **Model comparison** — hold the package and rules constant while comparing independently selected models for document classification, supporting-document extraction, and upgrade analysis.
-2. **Rule comparison** — hold the package and models constant while comparing one historical GenAI rule definition with its current candidate definition.
+2. **Rule comparison** — hold the package and models constant while comparing accepted baseline evidence for one GenAI rule with a fresh execution of its current registry definition.
 3. **Regression** — process a suite of packages through the complete pipeline to detect crashes, failed steps, missing outputs, and other broad stability problems before a release.
 
 All three modes are now in scope. The executable schema consists of eight harness tables:
@@ -21,7 +21,7 @@ All three modes are now in scope. The executable schema consists of eight harnes
 
 The three modes share suites and source packages, but each has its own run table, case table, workflow, and user experience. This keeps the screens understandable and avoids a generic run table full of mode-dependent nullable columns.
 
-Implementation status: the schema, System Config integration, all four screen routes, authorized APIs, replay orchestration, three workflows, deployment selection, and initial automated coverage are implemented locally. Live testing also established the need for deliberately paced harness calls; harness packages and GenAI stages run sequentially with bounded retries so they do not flood a low-capacity Azure deployment.
+Implementation status: the schema, System Config integration, all four screen routes, authorized APIs, replay orchestration, three workflows, deployment selection, and initial automated coverage are implemented locally. Harness suite cases run one package at a time, while the stages within a package use normal processing concurrency and bounded retry backoff.
 
 ## 2. Source of Truth and Scope Boundary
 
@@ -81,7 +81,7 @@ The parent freezes three derived baseline deployments, three selected candidate 
 
 ### Rule-comparison run and case
 
-The parent identifies one historical rule definition, the current candidate rule belonging to the same logical rule, the evaluator deployment, and one suite-wide analysis. Each case records one fresh candidate execution and one readable comparison of the selected rule's baseline and candidate results.
+The parent identifies the current logical rule, the evaluator deployment, and one suite-wide analysis. Each case records one fresh candidate execution and one readable comparison of the selected rule's accepted baseline and candidate results.
 
 ### Regression run and case
 
@@ -198,12 +198,11 @@ Rules:
 
 ### 4.5 `testrunrulecompares`
 
-Purpose: one validated comparison of two definitions of the same logical GenAI rule.
+Purpose: compare the accepted baseline evidence for one logical GenAI rule with a fresh execution of its current registry definition.
 
 Fields:
 
 - `testsuite_id`
-- `baseline_genai_rule_history_id`
 - `candidate_genai_rule_id`
 - `comparison_deployment_name`
 - `overall_rule_comparison`
@@ -211,15 +210,13 @@ Fields:
 
 Rules:
 
-- The baseline history row is immutable historical content.
-- The candidate ID points to the current rule registry row.
-- The history row's `source_id` must equal the candidate rule ID.
+- The candidate ID identifies the current logical rule by its immutable rule key.
 - Every suite invoice version must contain at least one rulecheck for the selected logical rule.
-- The frozen baseline step context must prove that the selected historical definition produced the baseline behavior.
-- The candidate rule and evaluator deployment are revalidated when the draft is submitted.
+- The accepted invoice-version rulecheck is the baseline answer key; administrators do not select a historical definition after processing.
+- The current rule and evaluator deployment are revalidated when the draft is submitted.
 - A completed run requires a nonblank overall comparison.
 
-The logical-rule and compiled-prompt checks cross normal application tables and therefore belong in transactional application preflight rather than a row-level SQL check constraint.
+The baseline rulecheck check crosses normal application tables and therefore belongs in transactional application preflight rather than a row-level SQL check constraint.
 
 ### 4.6 `testrunrulecompare_cases`
 
@@ -394,13 +391,11 @@ One failed case does not stop remaining cases from reaching a terminal state.
 
 ### Create and validate
 
-1. Select a suite, one historical rule definition, its current candidate rule, and the evaluator deployment.
-2. Confirm `genai_rule_history.source_id` equals the candidate `genai_rules.id`.
-3. Confirm every suite invoice version used that logical rule at least once.
-4. Confirm each baseline ingest-step context contains the selected historical definition.
-5. Confirm each baseline ingest run contains all three model snapshots.
-6. Create the draft parent without child rows.
-7. Revalidate the suite and candidate definition when submitted.
+1. Select a suite, the current logical rule, and the evaluator deployment.
+2. Confirm every suite invoice version contains accepted GenAI rulecheck evidence for that rule key.
+3. Confirm each baseline ingest run contains all three model snapshots.
+4. Create the draft parent without child rows.
+5. Revalidate the suite and current rule when submitted.
 
 ### Execute and compare
 
@@ -412,7 +407,7 @@ One failed case does not stop remaining cases from reaching a terminal state.
 6. Store one readable case comparison.
 7. After all cases complete, perform one finalization call and store `overall_rule_comparison`.
 
-The normal invoice-version, rulecheck, and ingest-step tables remain the source of detailed evidence. The evaluator reports only the selected logical rule. Do not add rule-history provenance to `invoice_version_rulechecks` merely for the harness.
+The normal invoice-version, rulecheck, and ingest-step tables remain the source of detailed evidence. The evaluator reports only the selected logical rule, and the accepted invoice-version rulecheck is the baseline answer key.
 
 ## 10. Regression Workflow
 
@@ -475,8 +470,8 @@ Test Harness
 ### Rule Comparisons
 
 - Grid: read-only history filtered by suite, rule, and status.
-- New screen: suite, historical baseline rule, current candidate rule, evaluator deployment, preflight, draft, and explicit run action.
-- Detail: rule definitions, provenance validation, status/progress, overall analysis, and combined expandable case results.
+- New screen: suite, current rule, evaluator deployment, preflight, draft, and explicit run action.
+- Detail: selected rule, status/progress, overall analysis, and combined expandable case results.
 
 ### Regression Runs
 
@@ -522,8 +517,8 @@ Use a parent orchestration job and per-case jobs for each mode:
 - Parent jobs create missing case rows idempotently and monitor terminal state.
 - Case jobs process one complete package.
 - Comparison finalization jobs run only after every applicable case completes.
-- Harness cases, document classifications, supporting-document extractions, rulesets, evaluator calls, and finalization calls are sequenced to protect provider quotas and normal application work.
-- Retryable harness GenAI failures use at most four attempts with exponential backoff. The base interval defaults to 60 seconds and can be tuned with `TEST_HARNESS_GENAI_INTERVAL_SECONDS` without changing normal processing concurrency.
+- Harness suite cases run one package at a time. Within each replay package, document classifications, supporting-document extractions, and rulesets use the same internal concurrency and orchestration as contractor processing.
+- Retryable harness GenAI failures use at most four attempts with exponential backoff. After a retryable failure, the base retry interval defaults to 60 seconds and can be tuned with `TEST_HARNESS_GENAI_INTERVAL_SECONDS` without changing normal processing concurrency.
 - Status boundaries prevent duplicate invoice versions, ingest runs, and evaluator calls.
 
 ## 13. Integrity and Operational Rules
@@ -588,11 +583,9 @@ Model-comparison tests:
 
 Rule-comparison tests:
 
-- History/candidate logical-rule mismatch.
 - Suite case missing the selected rule.
-- Baseline compiled-prompt mismatch.
 - Model deployments held constant between baseline and candidate.
-- Current candidate-rule execution without harness-time configuration mutation.
+- Current rule execution without harness-time configuration mutation.
 - Case comparison and suite finalization failures.
 
 Regression tests:
@@ -607,7 +600,7 @@ Regression tests:
 
 1. Create a small suite with two or three accepted packages.
 2. Run an equivalent model comparison using the same models, then change one model and rerun.
-3. Compare one historical rule with its current definition while proving models remain constant.
+3. Compare accepted baseline evidence for one rule with its current definition while proving models remain constant.
 4. Run the suite in regression mode and inspect every generated application record and summary.
 5. Force one controlled failure in each mode and confirm remaining cases settle normally.
 
@@ -629,7 +622,7 @@ Regression tests:
 
 ### Rule comparison
 
-- The user can select two definitions of the same logical rule.
+- The user selects one current logical rule; no unverifiable historical UUID is chosen after processing.
 - Every suite package is proven to contain the selected baseline rule before the run is created.
 - Candidate execution preserves the baseline models, and the comparison analysis is restricted to the selected logical rule.
 - Every successful case and completed parent store a readable comparison.

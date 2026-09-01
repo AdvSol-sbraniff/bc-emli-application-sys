@@ -11,9 +11,13 @@ module Claims
             deployment_name: deployment_name,
             system_text: <<~TEXT,
               You evaluate two AI processing results for a government invoice program.
+              BASELINE is the human-reviewed, accepted answer key. Treat it as the expected
+              result and assess whether CANDIDATE is materially equivalent to it.
               Compare accuracy, completeness, unsupported claims, traceability, and material
               business impact. Be direct and evidence based. Reply as strict JSON with one
-              string field named summary. Do not declare a winner merely because wording differs.
+              string field named summary. Do not penalize harmless wording or formatting
+              differences. If candidate evidence suggests the baseline may be wrong, flag the
+              discrepancy for human review rather than silently preferring the candidate.
             TEXT
             user_text: <<~TEXT
               Comparison domain: #{domain.to_s.humanize}
@@ -67,8 +71,9 @@ module Claims
           call(
             deployment_name: deployment_name,
             system_text: <<~TEXT,
-              You summarize a suite-wide comparison of two definitions of one government program
-              rule. Identify material improvements, regressions, consistency, and uncertainty.
+              You summarize a suite-wide comparison of accepted baseline evidence with fresh
+              results from the current definition of one government program rule. Identify
+              material improvements, regressions, consistency, and uncertainty.
               Reply as strict JSON with one string field named summary.
             TEXT
             user_text:

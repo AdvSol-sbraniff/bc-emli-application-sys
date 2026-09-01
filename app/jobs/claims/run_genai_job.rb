@@ -69,13 +69,6 @@ module Claims
       common_upgrade_type = upgrade_type_by_key!("common")
 
       ruleset_upgrade_types = [common_upgrade_type, *upgrade_types].uniq(&:id)
-      if ::Claims::TestHarness::Scheduling.harness_run?(ingest_run_id)
-        # The harness coordinator schedules rulesets one at a time after the
-        # configured cooling interval. This protects low-capacity comparison
-        # deployments from a case-facts/ruleset burst.
-        ruleset_upgrade_types = []
-      end
-
       ruleset_upgrade_types.each do |upgrade_type|
         enqueue_genai_ruleset_job!(
           ingest_run_id: ingest_run_id,

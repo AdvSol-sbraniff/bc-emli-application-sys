@@ -277,7 +277,7 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       return;
     }
 
-    if (/^\/test-harness\/model-comparisons\/[^/]+$/.test(path)) {
+    if (/^\/test-harness\/model-comparisons\/[^/]+(?:\/results)?$/.test(path)) {
       setIncludeHome(false);
       setBreadcrumbs([
         { href: '/test-harness/model-comparisons', title: 'Model Comparison Runs' },

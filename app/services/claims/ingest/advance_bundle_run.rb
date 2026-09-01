@@ -106,41 +106,12 @@ module Claims
             documents: context.documents
           )
         steps = latest_classifier_steps_map(context.run.id, documents)
-        if harness_run?(context.run)
-          failed = steps.values.find { |row| row.status == "failed" }
-          if failed
-            if step_failure_retry_pending?(failed)
-              return wait_for_work!(context)
-            end
-
-            return(
-              fail_context!(
-                context,
-                failed_step: failed,
-                failure_category:
-                  failure_category_from_step(
-                    failed,
-                    fallback: "technical_failure"
-                  ),
-                fallback_subtype: "genai_unexpected_exception",
-                fallback_code: "bundle_triage_failed"
-              )
-            )
-          end
-        end
         missing = documents.reject { |document| steps.key?(document.id) }
         if missing.any?
-          if harness_run?(context.run)
-            enqueue_next_harness_classifier_job!(
-              documents: documents,
-              step_type: "classify_document"
-            )
-          else
-            enqueue_classifier_jobs!(
-              documents: missing,
-              step_type: "classify_document"
-            )
-          end
+          enqueue_classifier_jobs!(
+            documents: missing,
+            step_type: "classify_document"
+          )
           return wait_for_work!(context)
         end
 
@@ -304,40 +275,13 @@ module Claims
             type_ids,
             "extract_supporting_document"
           )
-        if harness_run?(context.run)
-          failed = steps.values.find { |row| row.status == "failed" }
-          if failed
-            return :waiting if step_failure_retry_pending?(failed)
-
-            fail_context!(
-              context,
-              failed_step: failed,
-              failure_category:
-                failure_category_from_step(
-                  failed,
-                  fallback: "technical_failure"
-                ),
-              fallback_subtype: "genai_unexpected_exception",
-              fallback_code: "bundle_extract_supporting_document_failed"
-            )
-            return :failed
-          end
-        end
         missing = type_ids.reject { |type_id| steps.key?(type_id) }
         if missing.any?
-          if harness_run?(context.run)
-            enqueue_next_harness_supporting_extraction_job!(
-              invoice_version_id: context.resolved_invoice_version_id,
-              supporting_document_type_ids: type_ids,
-              step_type: "extract_supporting_document"
-            )
-          else
-            enqueue_extract_supporting_document_jobs!(
-              invoice_version_id: context.resolved_invoice_version_id,
-              supporting_document_type_ids: missing,
-              step_type: "extract_supporting_document"
-            )
-          end
+          enqueue_extract_supporting_document_jobs!(
+            invoice_version_id: context.resolved_invoice_version_id,
+            supporting_document_type_ids: missing,
+            step_type: "extract_supporting_document"
+          )
           return :waiting
         end
         return :waiting if steps.size < type_ids.size
@@ -410,15 +354,6 @@ module Claims
             invoice_version: invoice_version
           )
           return wait_for_work!(context)
-        end
-        if harness_run?(context.run) && validation.active?
-          ruleset_state =
-            enqueue_next_harness_ruleset!(
-              run: context.run,
-              invoice_version: invoice_version,
-              required_rulesets: validation.required_rulesets
-            )
-          return wait_for_work!(context) if ruleset_state == :waiting
         end
         if validation.failed?
           status =
@@ -499,15 +434,6 @@ module Claims
 
       def fix_upload?(run)
         run.run_kind == "fix_upload"
-      end
-
-      def harness_run?(run)
-        @harness_run_by_id ||= {}
-        @harness_run_by_id.fetch(run.id) do
-          @harness_run_by_id[
-            run.id
-          ] = ::Claims::TestHarness::RunLookup.harness_run?(run.id)
-        end
       end
 
       def documents_requiring_read(run:, documents:)
@@ -681,48 +607,6 @@ module Claims
         end
       end
 
-      # OCR jobs can finish at almost the same time and each completion asks the
-      # pipeline to advance. Claim the next harness classification while holding
-      # the ingest-run row lock so those callbacks cannot launch several GenAI
-      # requests concurrently.
-      def enqueue_next_harness_classifier_job!(documents:, step_type:)
-        target_document = nil
-
-        ::Claims::IngestRun
-          .find(@ingest_run_id)
-          .with_lock do
-            current_steps =
-              latest_classifier_steps_map(@ingest_run_id, documents)
-            active =
-              current_steps.values.any? do |step|
-                %w[queued in_progress].include?(step.status)
-              end
-            next if active
-
-            target_document =
-              documents.find { |document| !current_steps.key?(document.id) }
-            next unless target_document
-
-            ::Claims::IngestStepRun.create!(
-              ingest_run_id: @ingest_run_id,
-              session_id: target_document.session_id,
-              ingest_document_id: target_document.id,
-              step_type: step_type,
-              status: "queued",
-              error_text: nil,
-              created_at: Time.current,
-              updated_at: Time.current
-            )
-          end
-
-        return unless target_document
-
-        ::Claims::RunIngestTriageJob.perform_async(
-          target_document.id,
-          @ingest_run_id
-        )
-      end
-
       def enqueue_extract_supporting_document_jobs!(
         invoice_version_id:,
         supporting_document_type_ids:,
@@ -751,123 +635,6 @@ module Claims
             @ingest_run_id
           )
         end
-      end
-
-      def enqueue_next_harness_supporting_extraction_job!(
-        invoice_version_id:,
-        supporting_document_type_ids:,
-        step_type:
-      )
-        target_type_id = nil
-
-        ::Claims::IngestRun
-          .find(@ingest_run_id)
-          .with_lock do
-            current_steps =
-              latest_type_steps_map(
-                @ingest_run_id,
-                invoice_version_id,
-                supporting_document_type_ids,
-                step_type
-              )
-            active =
-              current_steps.values.any? do |step|
-                %w[queued in_progress].include?(step.status)
-              end
-            next if active
-
-            target_type_id =
-              supporting_document_type_ids.find do |type_id|
-                !current_steps.key?(type_id)
-              end
-            next unless target_type_id
-
-            invoice_version = ::Claims::InvoiceVersion.find(invoice_version_id)
-            ::Claims::IngestStepRun.create!(
-              ingest_run_id: @ingest_run_id,
-              invoice_version_id: invoice_version_id,
-              supporting_document_type_id: target_type_id,
-              session_id: invoice_version.invoice.session_id,
-              step_type: step_type,
-              status: "queued",
-              error_text: nil,
-              created_at: Time.current,
-              updated_at: Time.current
-            )
-          end
-
-        return unless target_type_id
-
-        ::Claims::RunSupportingDocumentTypeExtractionJob.perform_async(
-          invoice_version_id,
-          target_type_id,
-          @ingest_run_id
-        )
-      end
-
-      def enqueue_next_harness_ruleset!(
-        run:,
-        invoice_version:,
-        required_rulesets:
-      )
-        case_facts =
-          ::Claims::Ingest::StepOutcome.for_target(
-            ingest_run_id: run.id,
-            invoice_version_id: invoice_version.id,
-            step_type: "case_facts"
-          )
-        return :waiting unless case_facts.succeeded?
-
-        target = nil
-        state = :complete
-        run.with_lock do
-          outcomes =
-            required_rulesets.map do |ruleset|
-              [
-                ruleset,
-                ::Claims::Ingest::StepOutcome.for_target(
-                  ingest_run_id: run.id,
-                  invoice_version_id: invoice_version.id,
-                  step_type: ruleset.fetch(:step_type),
-                  invoice_upgrade_type_id:
-                    ruleset.fetch(:invoice_upgrade_type_id)
-                )
-              ]
-            end
-          if outcomes.any? { |_ruleset, outcome|
-               outcome.active? || outcome.retrying?
-             }
-            state = :waiting
-            next
-          end
-
-          target = outcomes.find { |_ruleset, outcome| outcome.missing? }&.first
-          next unless target
-
-          state = :waiting
-
-          ::Claims::IngestStepRun.create!(
-            ingest_run_id: run.id,
-            session_id: invoice_version.invoice.session_id,
-            invoice_version_id: invoice_version.id,
-            invoice_upgrade_type_id: target.fetch(:invoice_upgrade_type_id),
-            step_type: target.fetch(:step_type),
-            status: "queued",
-            error_text: nil,
-            created_at: Time.current,
-            updated_at: Time.current
-          )
-        end
-
-        return state unless target
-
-        ::Claims::RunGenaiRulesetJob.perform_async(
-          invoice_version.invoice.session_id,
-          invoice_version.id,
-          run.id,
-          target.fetch(:invoice_upgrade_type_id)
-        )
-        :waiting
       end
 
       def cloned_invoice_ocr_step?(step)

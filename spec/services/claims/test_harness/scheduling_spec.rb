@@ -11,6 +11,18 @@ RSpec.describe Claims::TestHarness::Scheduling do
     )
   end
 
+  it "advances successful harness work immediately" do
+    allow(Claims::Ingest::AdvanceRunJob).to receive(:perform_async)
+    allow(Claims::Ingest::AdvanceRunJob).to receive(:perform_in)
+
+    described_class.advance_run("run-id")
+
+    expect(Claims::Ingest::AdvanceRunJob).to have_received(:perform_async).with(
+      "run-id"
+    )
+    expect(Claims::Ingest::AdvanceRunJob).not_to have_received(:perform_in)
+  end
+
   it "paces a harness retry with exponential backoff" do
     job_class = class_double(Claims::RunIngestTriageJob)
     allow(job_class).to receive(:perform_in)

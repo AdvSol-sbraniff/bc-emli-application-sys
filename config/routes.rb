@@ -258,8 +258,12 @@ Rails.application.routes.draw do
            to: "test_harness#model_compares_create"
       get "admin/test_harness/model_compares/:id",
           to: "test_harness#model_compares_show"
+      get "admin/test_harness/model_compares/:model_compare_id/cases/:case_id/evidence",
+          to: "test_harness#model_compare_case_evidence"
       post "admin/test_harness/model_compares/:id/submit",
            to: "test_harness#model_compares_submit"
+      post "admin/test_harness/model_compares/:id/rerun_comparisons",
+           to: "test_harness#model_compares_rerun_comparisons"
       delete "admin/test_harness/model_compares/:id",
              to: "test_harness#model_compares_destroy"
       get "admin/test_harness/rule_compares",
