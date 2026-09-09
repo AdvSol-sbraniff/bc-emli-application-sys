@@ -461,12 +461,22 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
       {canUseClaimsOperations && (
         <MenuGroup title={t('home.claimsAdminSectionTitle')}>
           <NavMenuItem label={t('home.invoicesAdminTitle')} to={'/invoices-admin'} />
-          <NavMenuItem label="Reports" to={'/reports-volume-value'} />
         </MenuGroup>
+      )}
+      {(canUseClaimsOperations || canUseClaimsConfiguration) && (
+        <>
+          {canUseClaimsOperations && <MenuDivider my={0} borderColor="border.light" />}
+          <MenuGroup title="Reports">
+            {canUseClaimsOperations && <NavMenuItem label="Volume and Value Report" to={'/reports-volume-value'} />}
+            {canUseClaimsConfiguration && (
+              <NavMenuItem label="Rule Improvement Report" to={'/reports-rule-improvement'} />
+            )}
+          </MenuGroup>
+        </>
       )}
       {canUseClaimsConfiguration && (
         <>
-          {canUseClaimsOperations && <MenuDivider my={0} borderColor="border.light" />}
+          <MenuDivider my={0} borderColor="border.light" />
           <MenuGroup title="Claims Configuration">
             <NavMenuItem label="Fields and Advice Editor" to={'/validation-rules-admin'} />
             <NavMenuItem label="Advice Checks at a Glance" to={'/validation-rules-alphabetic-admin'} />

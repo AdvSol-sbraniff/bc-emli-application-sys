@@ -16,6 +16,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS claims.testsuites (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
 
+  name character varying(200) NOT NULL,
   description text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),

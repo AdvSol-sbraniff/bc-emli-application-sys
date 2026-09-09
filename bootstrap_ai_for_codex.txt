@@ -53,6 +53,12 @@ Known-good sanity query
 - Set-Location C:\; docker compose -f "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\docker-compose.yml" exec -T postgres psql -U postgres -d app_development -tAc "select count(*) from claims.invoices;"
 
 Known-good local validation commands
+- Critical test-database safety rule:
+  - the compose `app` service hard-codes `DATABASE_URL` to `app_development`
+  - setting only `RAILS_ENV=test` does **not** redirect Rails to `app_test`
+  - every RSpec command run in the compose app container must also set:
+    `DATABASE_URL=postgres://postgres:password@postgres:5432/app_test`
+  - otherwise Rails test schema maintenance can purge the local development database
 - Important shell nuance:
   - for compose exec into app containers, prefer `bash -c`, not `bash -lc`
   - `bash -lc` can reset `PATH` and accidentally pick `/usr/bin/node` (Node 12) instead of `/usr/local/node/bin/node`

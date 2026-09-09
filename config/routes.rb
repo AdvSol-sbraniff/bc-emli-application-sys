@@ -198,6 +198,20 @@ Rails.application.routes.draw do
           to: "invoice_versions_admin#pdf_url_by_version"
       get "admin/invoice_versions/:id/pdf",
           to: "invoice_versions_admin#pdf_by_version"
+      patch "admin/invoice_version_rulechecks/:id/reason_complaint",
+            to: "invoice_version_rulechecks_admin#update_reason_complaint"
+
+      get "admin/reports/rule_improvement", to: "reports_rule_improvement#index"
+      get "admin/reports/rule_improvement/summary",
+          to: "reports_rule_improvement#summary"
+      get "admin/reports/rule_improvement/chart",
+          to: "reports_rule_improvement#chart"
+      get "admin/reports/rule_improvement/:source_engine/:rule_key",
+          to: "reports_rule_improvement#show"
+      get "admin/reports/rule_improvement/:source_engine/:rule_key/timeline",
+          to: "reports_rule_improvement#timeline"
+      get "admin/reports/rule_improvement/:source_engine/:rule_key/evidence",
+          to: "reports_rule_improvement#evidence"
 
       # ============================================================
       # SECTION 60 — RULESET EDITOR (admin)

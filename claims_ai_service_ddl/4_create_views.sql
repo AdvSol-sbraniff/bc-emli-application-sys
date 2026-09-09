@@ -719,3 +719,74 @@ CREATE INDEX IF NOT EXISTS idx_invoices_on_created_at
 
 CREATE INDEX IF NOT EXISTS idx_invoices_on_status_created
   ON claims.invoices (status, created_at);
+
+-- Rule-improvement reporting read model. The issue/round CTE deliberately
+-- collapses comment fan-out before one row is joined back to each rulecheck.
+
+DROP VIEW IF EXISTS claims.v_rule_improvement_reporting;
+
+CREATE OR REPLACE VIEW claims.v_rule_improvement_reporting AS
+WITH issue_round_metrics AS (
+  SELECT
+    ric.revision_issue_id,
+    COUNT(DISTINCT rr.id) FILTER (
+      WHERE rr.admin_sent_at IS NOT NULL
+    )::integer AS sent_round_count,
+    MIN(rr.admin_sent_at) FILTER (
+      WHERE rr.admin_sent_at IS NOT NULL
+    ) AS first_admin_sent_at,
+    MAX(rr.contractor_response_submitted_at) FILTER (
+      WHERE rr.contractor_response_submitted_at IS NOT NULL
+    ) AS latest_contractor_response_at
+  FROM claims.revision_issue_comments ric
+  JOIN claims.revision_rounds rr
+    ON rr.id = ric.revision_round_id
+  GROUP BY ric.revision_issue_id
+)
+SELECT
+  rc.id AS rulecheck_id,
+  rc.invoice_version_id,
+  iv.invoice_id,
+  iv.invoice_versionno AS version_number,
+  i.status AS invoice_status,
+  i.reference_number AS invoice_reference_number,
+  i.contractor_id,
+  c.business_name AS contractor_business_name,
+  c.number AS contractor_number,
+  rc.source_engine,
+  rc.rule_key,
+  rc.contractor_display_name,
+  rc.invoice_upgrade_type_id,
+  iut.upgrade_type_key,
+  iut.description AS upgrade_type_description,
+  rc.rule_result,
+  rc.compliance_score,
+  rc.expected_text,
+  rc.calculation,
+  rc.evidence_text,
+  rc.reason_and_likely_causes,
+  rc.reason_complaint_code,
+  rc.reason_complaint_text,
+  rc.created_at AS rulecheck_created_at,
+  ri.id AS revision_issue_id,
+  ri.status AS revision_issue_status,
+  ri.disposition_comment,
+  ri.created_at AS revision_issue_created_at,
+  ri.updated_at AS revision_issue_updated_at,
+  COALESCE(irm.sent_round_count, 0) AS sent_round_count,
+  irm.first_admin_sent_at,
+  irm.latest_contractor_response_at
+FROM claims.invoice_version_rulechecks rc
+JOIN claims.invoice_versions iv
+  ON iv.id = rc.invoice_version_id
+JOIN claims.invoices i
+  ON i.id = iv.invoice_id
+JOIN public.contractors c
+  ON c.id = i.contractor_id
+JOIN claims.invoice_upgrade_types iut
+  ON iut.id = rc.invoice_upgrade_type_id
+LEFT JOIN claims.revision_issues ri
+  ON ri.opened_from_invoice_version_rulecheck_id = rc.id
+ AND ri.issue_type = 'rule'
+LEFT JOIN issue_round_metrics irm
+  ON irm.revision_issue_id = ri.id;

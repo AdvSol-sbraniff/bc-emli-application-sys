@@ -38,14 +38,17 @@ import {
   ModalBody,
   ModalCloseButton,
   ModalContent,
+  ModalFooter,
   ModalHeader,
   ModalOverlay,
+  Select,
   Tab,
   TabList,
   TabPanel,
   TabPanels,
   Tabs,
   Switch,
+  Textarea,
   Tooltip,
   useToast,
 } from '@chakra-ui/react';
@@ -112,6 +115,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+
+const REASON_COMPLAINT_OPTIONS = [
+  ['unclear_or_confusing', 'Unclear or confusing'],
+  ['too_vague', 'Too vague'],
+  ['missing_evidence_explanation', 'Missing evidence explanation'],
+  ['incorrect_evidence_or_reasoning', 'Incorrect evidence or reasoning'],
+  ['likely_causes_unhelpful', 'Likely causes are unhelpful'],
+  ['required_action_unclear', 'Required action is unclear'],
+  ['irrelevant_or_duplicative', 'Irrelevant or duplicative'],
+  ['too_verbose_or_repetitive', 'Too verbose or repetitive'],
+  ['other', 'Other'],
+] as const;
 
 //import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs-url";
 //pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -1308,6 +1323,66 @@ export const InvoiceVersionShowScreen = () => {
   const [genAiRulechecksError, setGenAiRulechecksError] = useState<string | null>(null);
   const [ruleResultFilters, setRuleResultFilters] = useState<RuleResultFilter[]>([]);
   const [ruleDetailsDrawerRulecheck, setRuleDetailsDrawerRulecheck] = useState<any | null>(null);
+  const [reasonComplaintRulecheck, setReasonComplaintRulecheck] = useState<any | null>(null);
+  const [reasonComplaintCode, setReasonComplaintCode] = useState('');
+  const [reasonComplaintText, setReasonComplaintText] = useState('');
+  const [reasonComplaintSaving, setReasonComplaintSaving] = useState(false);
+
+  const openReasonComplaint = (rulecheck: any) => {
+    setReasonComplaintRulecheck(rulecheck);
+    setReasonComplaintCode(String(rulecheck?.reason_complaint_code || ''));
+    setReasonComplaintText(String(rulecheck?.reason_complaint_text || ''));
+  };
+
+  const closeReasonComplaint = () => {
+    if (reasonComplaintSaving) return;
+    setReasonComplaintRulecheck(null);
+    setReasonComplaintCode('');
+    setReasonComplaintText('');
+  };
+
+  const saveReasonComplaint = async () => {
+    const rulecheckId = String(reasonComplaintRulecheck?.id || '');
+    if (!rulecheckId) return;
+    setReasonComplaintSaving(true);
+    try {
+      const response = await fetch(`/api/claims/admin/invoice_version_rulechecks/${rulecheckId}/reason_complaint`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason_complaint_code: reasonComplaintCode || null,
+          reason_complaint_text: reasonComplaintText.trim() || null,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.errors?.join(', ') || data?.error || `HTTP ${response.status}`);
+      const applyUpdate = (row: any) =>
+        String(row?.id) === rulecheckId
+          ? {
+              ...row,
+              reason_complaint_code: data.reason_complaint_code,
+              reason_complaint_text: data.reason_complaint_text,
+            }
+          : row;
+      setGenAiRulechecks((current) => current.map(applyUpdate));
+      setRuleDetailsDrawerRulecheck((current: any) => (current ? applyUpdate(current) : current));
+      toast({ title: 'Reason feedback saved', status: 'success', duration: 3000, isClosable: true });
+      setReasonComplaintRulecheck(null);
+      setReasonComplaintCode('');
+      setReasonComplaintText('');
+    } catch (saveError: any) {
+      toast({
+        title: 'Could not save reason feedback',
+        description: saveError?.message || 'Please try again.',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setReasonComplaintSaving(false);
+    }
+  };
 
   const toggleRuleResultFilter = (result: RuleResultFilter) => {
     setRuleResultFilters((current) =>
@@ -3324,16 +3399,32 @@ export const InvoiceVersionShowScreen = () => {
                                               />
                                             </Box>
 
-                                            {reason && (
-                                              <Box mt="2px">
+                                            <Box mt="2px">
+                                              <Flex align="center" gap="6px" wrap="wrap" mb="2px">
                                                 <Text as="span" fontSize="sm" fontWeight="bold">
-                                                  Reason:{' '}
+                                                  Reason:
                                                 </Text>
-                                                <Text as="span" fontSize="sm">
-                                                  {String(reason)}
-                                                </Text>
-                                              </Box>
-                                            )}
+                                                <Button
+                                                  size="xs"
+                                                  variant="ghost"
+                                                  colorScheme={r.reason_complaint_code ? 'orange' : 'blue'}
+                                                  leftIcon={<NotePencil size={14} />}
+                                                  onClick={() => openReasonComplaint(r)}
+                                                >
+                                                  {r.reason_complaint_code
+                                                    ? 'Edit reason feedback'
+                                                    : 'Give reason feedback'}
+                                                </Button>
+                                                {r.reason_complaint_code && (
+                                                  <Badge colorScheme="orange" variant="subtle">
+                                                    Reason needs improvement
+                                                  </Badge>
+                                                )}
+                                              </Flex>
+                                              <Text fontSize="sm">
+                                                {reason ? String(reason) : 'No reason was recorded for this finding.'}
+                                              </Text>
+                                            </Box>
                                             {usesEnterpriseRevisionWorkspace ? (
                                               <RevisionSourceActions
                                                 issue={issue}
@@ -4573,6 +4664,72 @@ export const InvoiceVersionShowScreen = () => {
           setLineItemsOpen(false);
         }}
       />
+      <Modal isOpen={!!reasonComplaintRulecheck} onClose={closeReasonComplaint} size="lg" isCentered>
+        <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(6px)" />
+        <ModalContent mx={4}>
+          <ModalHeader pr="48px">Help improve this reason</ModalHeader>
+          <ModalCloseButton isDisabled={reasonComplaintSaving} />
+          <ModalBody>
+            <Box bg="blue.50" borderLeftWidth="4px" borderColor="blue.500" p="12px" mb="18px">
+              <Text fontWeight="bold" fontSize="sm">
+                The finding can be correct while its explanation is still unhelpful.
+              </Text>
+              <Text mt="4px" fontSize="sm" color="gray.700">
+                Record what should be clearer here. Workflow outcomes are tracked separately and help determine whether
+                the rule itself or contractor guidance needs attention.
+              </Text>
+            </Box>
+
+            <Text fontSize="sm" fontWeight="bold" mb="6px">
+              What is wrong with the reason?
+            </Text>
+            <Select
+              value={reasonComplaintCode}
+              onChange={(event) => setReasonComplaintCode(event.target.value)}
+              placeholder="No reason complaint"
+              isDisabled={reasonComplaintSaving}
+            >
+              {REASON_COMPLAINT_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+
+            <Text fontSize="sm" fontWeight="bold" mt="18px" mb="6px">
+              Helpful detail {reasonComplaintCode === 'other' ? '(required)' : '(optional)'}
+            </Text>
+            <Textarea
+              value={reasonComplaintText}
+              onChange={(event) => setReasonComplaintText(event.target.value)}
+              placeholder="Describe what was confusing, missing, incorrect, or not actionable."
+              rows={5}
+              isDisabled={reasonComplaintSaving}
+            />
+            {!reasonComplaintCode && reasonComplaintText.trim() && (
+              <Text color="red.600" fontSize="sm" mt="6px">
+                Choose a complaint category or clear the detail.
+              </Text>
+            )}
+          </ModalBody>
+          <ModalFooter gap="10px">
+            <Button variant="ghost" onClick={closeReasonComplaint} isDisabled={reasonComplaintSaving}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="blue"
+              onClick={() => void saveReasonComplaint()}
+              isLoading={reasonComplaintSaving}
+              isDisabled={
+                (!reasonComplaintCode && !!reasonComplaintText.trim()) ||
+                (reasonComplaintCode === 'other' && !reasonComplaintText.trim())
+              }
+            >
+              {reasonComplaintCode ? 'Save feedback' : 'Clear feedback'}
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
       <Drawer
         isOpen={!!ruleDetailsDrawerRulecheck}
         placement="right"

@@ -538,7 +538,7 @@ export default function ValidationRulesAdminScreen() {
   }, []);
 
   useEffect(() => {
-    if (!isEditorScreen || !selectedUpgradeTypeId || editor) return;
+    if (!isEditorScreen || !selectedUpgradeTypeId || editor || upgradeTypes.length === 0) return;
 
     if (editorMode === 'create' && editorRecordTypeParam) {
       if (CREATEABLE_RECORD_TYPES.includes(editorRecordTypeParam)) {
@@ -625,6 +625,7 @@ export default function ValidationRulesAdminScreen() {
     isEditorScreen,
     rows,
     selectedUpgradeTypeId,
+    upgradeTypes.length,
   ]);
 
   const updateMapping = (invoiceUpgradeTypeId: string, patch: Partial<MappingEditorRow>) => {

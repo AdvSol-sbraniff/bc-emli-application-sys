@@ -1229,10 +1229,14 @@ Important columns are:
 - `calculation`: date math, product-list comparison, rebate calculation, or other structured explanation.
 - `evidence_text`: short evidence summary.
 - `reason_and_likely_causes`: fuller explanation for review and advice.
+- `reason_complaint_code`: optional controlled admin feedback about the usefulness or clarity of the stored reason.
+- `reason_complaint_text`: optional detail for that feedback; it cannot exist without a complaint code, and it is required when the code is `other`.
 
 The unique key is `(invoice_version_id, invoice_upgrade_type_id, source_engine, rule_key)`. This lets a GenAI rule and a code rule with the same key remain distinct by engine while preventing duplicate rows from the same engine for the same rule.
 
-GenAI persistence replaces existing GenAI rulechecks for the same invoice version and upgrade type before inserting the latest response. Code-rule services similarly replace their own code outputs for the scoped check they own. This keeps reruns readable: the current invoice version shows the latest output for each engine/scope, while previous invoice versions preserve their older outputs.
+The rulecheck is evidence attached to one exact invoice version. A corrected submission creates a new invoice version and therefore new rulecheck rows; the application does not reinterpret an older invoice version in place. Admin reason feedback annotates the existing rulecheck without changing its result, evidence, reason, invoice version, or workflow state.
+
+Reason feedback is deliberately separate from Workflow Management. It means “the finding may be accurate, but this explanation was not useful enough.” It is not a false-positive/false-negative verdict and saving it does not create a revision issue.
 
 ### 7.7 Common claim-level checks
 
@@ -3410,3 +3414,13 @@ This document is now broad enough to explain the claims AI model, but a few area
 - More realistic sample rows could be added after stable anonymized test data exists.
 - The alphabetical catalog is intentionally concise; it does not list every column or every index.
 - This document only summarizes legacy `public.*` tables at the level needed to explain claims AI identity, ownership, and why the invoice model changed.
+
+### Rule-improvement reporting read model
+
+`claims.v_rule_improvement_reporting` is a read-only, flattened view used by the Rule Improvement Report and Rule Improvement Detail screens. It keeps one row per `claims.invoice_version_rulechecks` row and adds its exact invoice/version, contractor, upgrade type, optional complaint, revision-issue disposition, and rule-specific count of distinct sent revision rounds.
+
+The view aggregates issue comments and rounds before joining them to rulechecks so multiple comments in one round cannot multiply a finding. Draft rounds are excluded. A no-action closure may legitimately have zero contractor rounds.
+
+The Rule Improvement Report is intentionally limited to GenAI rules. It does not split or filter results by upgrade type and it does not include code rules. For each GenAI rule, the current observation period starts at the latest `claims.genai_rule_history.history_created_at`, or at the rule's `created_at` when it has never been changed. The overview and the Complaints, False-positive candidates, False-negative candidates, and Contractor follow-up tabs count only rulechecks created during that current period. The Rule history tab reconstructs every earlier effective period from the existing pre-change history snapshots plus the current rule.
+
+A false-positive candidate is a `warn` or `fail` followed by a rule issue closed with no contractor action required. A false-negative candidate is a `pass` or `info` followed by substantive rule workflow that was not closed as no-action-required or withdrawn. These are investigation signals, not adjudicated errors. Contractor rounds are distinct sent revision rounds linked to the rule issue; repeated rounds can point to unclear instructions or a contractor-training opportunity. Closure outcomes help distinguish correctable documentation patterns, attestations, exceptions, no-action closures, withdrawals, and work still open. The screens are available at `/reports-rule-improvement` and `/reports-rule-improvement/genai/:ruleKey` to admins with `claims.configuration` access.

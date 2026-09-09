@@ -162,6 +162,12 @@ const ConversationMessagesAdminScreen = lazy(() =>
 const ReportsVolumeValueScreen = lazy(() =>
   import('../reports-volume-value').then((module) => ({ default: module.default })),
 );
+const RuleImprovementReportScreen = lazy(() =>
+  import('../rule-improvement-report').then((module) => ({ default: module.default })),
+);
+const RuleImprovementDetailScreen = lazy(() =>
+  import('../rule-improvement-report/detail').then((module) => ({ default: module.default })),
+);
 
 // end sbra20260130
 
@@ -542,7 +548,8 @@ const ROUTE_TITLE_BY_PATH: Record<string, string> = {
   '/programs/new-program': 'New Program',
   '/reporting': 'Reporting',
   '/reporting/export-template-summary': 'Export Template Summary',
-  '/reports-volume-value': 'Volume Value Report',
+  '/reports-volume-value': 'Volume and Value Report',
+  '/reports-rule-improvement': 'Rule Improvement Report',
   '/requirement-templates': 'Requirement Templates',
   '/requirement-templates/new-template': 'New Requirement Template',
   '/requirements-library': 'Requirements Library',
@@ -1088,6 +1095,8 @@ const AppRoutes = observer(() => {
           }
         >
           <Route path="/validation-rules-admin" element={<ValidationRulesAdminScreen />} />
+          <Route path="/reports-rule-improvement" element={<RuleImprovementReportScreen />} />
+          <Route path="/reports-rule-improvement/:sourceEngine/:ruleKey" element={<RuleImprovementDetailScreen />} />
           <Route path="/validation-rules-alphabetic-admin" element={<ValidationRulesAlphabeticAdminScreen />} />
           <Route path="/validation-fields-alphabetic-admin" element={<ValidationFieldsAlphabeticAdminScreen />} />
           <Route path="/validation-rules-config" element={<ValidationRulesConfigScreen />} />

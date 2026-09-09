@@ -672,6 +672,8 @@ module Api
               calculation
               evidence_text
               reason_and_likely_causes
+              reason_complaint_code
+              reason_complaint_text
               created_at
               updated_at
             ]

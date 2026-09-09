@@ -87,8 +87,9 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
       '/claims-rbac-admin': [{ href: '/claims-rbac-admin', title: 'Role Based Access Control' }],
       '/reports-volume-value': [
         { href: '/invoices-admin', title: t('home.invoicesAdminTitle') },
-        { href: '/reports-volume-value', title: 'Reports - Volume and Value' },
+        { href: '/reports-volume-value', title: 'Volume and Value Report' },
       ],
+      '/reports-rule-improvement': [{ href: '/reports-rule-improvement', title: 'Rule Improvement Report' }],
       '/validation-rules-admin': [{ href: '/validation-rules-admin', title: 'Fields and Advice Editor' }],
       '/validation-rules-alphabetic-admin': [
         { href: '/validation-rules-alphabetic-admin', title: 'Advice Checks at a Glance' },
@@ -265,6 +266,15 @@ const DynamicBreadcrumb = observer(({ path }: IDynamicBreadcrumbProps) => {
     if (claimsBreadcrumbs[path]) {
       setIncludeHome(false);
       setBreadcrumbs(claimsBreadcrumbs[path]);
+      return;
+    }
+
+    if (/^\/reports-rule-improvement\/[^/]+\/[^/]+$/.test(path)) {
+      setIncludeHome(false);
+      setBreadcrumbs([
+        { href: '/reports-rule-improvement', title: 'Rule Improvement Report' },
+        { href: path, title: 'Rule Improvement Detail' },
+      ]);
       return;
     }
 

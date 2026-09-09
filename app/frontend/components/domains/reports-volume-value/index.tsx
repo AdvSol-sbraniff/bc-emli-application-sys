@@ -268,7 +268,7 @@ export default function ReportsVolumeValueScreen() {
 
   return (
     <Flex as="main" direction="column" w="full" bg="greys.white" pb="24" minH="100vh">
-      <ThinBlueTitleBar title="Reports - Volume and Value" />
+      <ThinBlueTitleBar title="Volume and Value Report" />
 
       <Container maxW="container.xl" pb={4} flex="1" pt={6}>
         <Box borderWidth="1px" borderColor="greys.grey20" borderRadius="lg" p={5} bg="white">

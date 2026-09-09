@@ -1829,6 +1829,8 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   evidence_text text NULL,
 
   reason_and_likely_causes text NULL,
+  reason_complaint_code text NULL,
+  reason_complaint_text text NULL,
 
   created_at timestamp(6) without time zone NOT NULL DEFAULT now(),
   updated_at timestamp(6) without time zone NOT NULL DEFAULT now(),
@@ -1853,6 +1855,40 @@ CREATE INDEX IF NOT EXISTS idx_ivlf_engine
   CONSTRAINT invoice_version_rulechecks_compliance_score_chk
     CHECK (compliance_score IS NULL OR compliance_score BETWEEN 0 AND 100),
 
+  CONSTRAINT invoice_version_rulechecks_reason_complaint_code_chk
+    CHECK (
+      reason_complaint_code IS NULL OR
+      reason_complaint_code IN (
+        'unclear_or_confusing',
+        'too_vague',
+        'missing_evidence_explanation',
+        'incorrect_evidence_or_reasoning',
+        'likely_causes_unhelpful',
+        'required_action_unclear',
+        'irrelevant_or_duplicative',
+        'too_verbose_or_repetitive',
+        'other'
+      )
+    ),
+
+  CONSTRAINT invoice_version_rulechecks_reason_complaint_text_chk
+    CHECK (
+      reason_complaint_text IS NULL OR
+      (
+        reason_complaint_code IS NOT NULL AND
+        btrim(reason_complaint_text) <> ''
+      )
+    ),
+
+  CONSTRAINT invoice_version_rulechecks_other_complaint_text_chk
+    CHECK (
+      reason_complaint_code IS DISTINCT FROM 'other' OR
+      (
+        reason_complaint_text IS NOT NULL AND
+        btrim(reason_complaint_text) <> ''
+      )
+    ),
+
   CONSTRAINT invoice_version_rulechecks_uniq
     UNIQUE (invoice_version_id, invoice_upgrade_type_id, source_engine, rule_key)
 );
@@ -1868,6 +1904,13 @@ CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_invoice_version_i
 
 CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_rule_key
   ON claims.invoice_version_rulechecks (rule_key);
+
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_reason_complaint_code
+  ON claims.invoice_version_rulechecks (reason_complaint_code)
+  WHERE reason_complaint_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS index_invoice_version_rulechecks_on_engine_key_created
+  ON claims.invoice_version_rulechecks (source_engine, rule_key, created_at);
 
 CREATE OR REPLACE FUNCTION claims.set_invoice_version_rulecheck_contractor_display_name()
 RETURNS trigger
