@@ -591,7 +591,7 @@ const NavBarMenu = observer(function NavBarMenu({ loginPath }: INavBarMenuProps)
             id="main-navigation-menu"
             role="menu"
             aria-label="menu-button"
-            zIndex={99}
+            zIndex="overlay"
             boxShadow="2xl"
             onKeyDown={handleMenuKeyDown}
           >

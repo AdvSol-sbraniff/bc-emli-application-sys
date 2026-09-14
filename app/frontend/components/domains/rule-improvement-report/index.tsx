@@ -18,7 +18,7 @@ import {
   Thead,
   Tr,
 } from '@chakra-ui/react';
-import { ArrowClockwise, CaretRight } from '@phosphor-icons/react';
+import { CaretRight } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
@@ -92,26 +92,11 @@ export default function RuleImprovementReportScreen() {
     <>
       <ThinBlueTitleBar title="Rule Improvement Report" />
       <Container maxW="container.xl" py={6}>
-        <Flex
-          justify="space-between"
-          align={{ base: 'start', md: 'center' }}
-          direction={{ base: 'column', md: 'row' }}
-          gap={3}
-          mb={5}
-        >
-          <Box>
-            <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold">
-              Which rule should I investigate next?
-            </Text>
-            <Text color="gray.600">
-              GenAI rules are measured from their latest prompt version. Code rules are measured by their distinct
-              implementation key and record.
-            </Text>
-          </Box>
-          <Button leftIcon={<ArrowClockwise />} size="sm" variant="outline" onClick={() => void load()}>
-            Refresh
-          </Button>
-        </Flex>
+        <Box mb={5}>
+          <Text fontSize={{ base: 'xl', md: '2xl' }} fontWeight="bold">
+            Which rule should I investigate next?
+          </Text>
+        </Box>
 
         {error && (
           <Alert status="error" mb={5}>
@@ -130,9 +115,8 @@ export default function RuleImprovementReportScreen() {
             gap={3}
           >
             <Box>
-              <Text fontWeight="bold">Rule implementations</Text>
               <Text fontSize="sm" color="gray.600">
-                {total} rules. GenAI metrics reset after a prompt change; code metrics remain with that code-rule key.
+                {total} rules
               </Text>
             </Box>
             <Flex gap={3} direction={{ base: 'column', md: 'row' }}>
@@ -154,7 +138,7 @@ export default function RuleImprovementReportScreen() {
                 <option value="complaint_count:desc">Most complaints</option>
                 <option value="candidate_false_positive_count:desc">Most false-positive candidates</option>
                 <option value="candidate_false_negative_count:desc">Most false-negative candidates</option>
-                <option value="total_round_count:desc">Most contractor rounds</option>
+                <option value="average_rounds:desc">Highest average workflow rounds</option>
                 <option value="invoice_count:desc">Most invoices assessed</option>
                 <option value="last_changed_at:desc">Most recently changed</option>
                 <option value="contractor_display_name:asc">Rule name A–Z</option>
@@ -173,7 +157,7 @@ export default function RuleImprovementReportScreen() {
                   <Th isNumeric>Complaints</Th>
                   <Th isNumeric>False-positive candidates</Th>
                   <Th isNumeric>False-negative candidates</Th>
-                  <Th isNumeric>Contractor rounds</Th>
+                  <Th isNumeric>Average workflow rounds</Th>
                   <Th aria-label="Open rule" />
                 </Tr>
               </Thead>
@@ -187,12 +171,11 @@ export default function RuleImprovementReportScreen() {
                   >
                     <Td minW="300px">
                       <Text fontWeight="semibold">{row.contractor_display_name}</Text>
-                      <HStack mt={1}>
-                        {!row.enabled && <Badge colorScheme="gray">Disabled</Badge>}
-                        <Text fontSize="xs" color="gray.500" noOfLines={1}>
-                          {row.rule_key}
-                        </Text>
-                      </HStack>
+                      {!row.enabled && (
+                        <Badge mt={1} colorScheme="gray">
+                          Disabled
+                        </Badge>
+                      )}
                     </Td>
                     <Td>
                       <Badge colorScheme={row.source_engine === 'genai' ? 'blue' : 'purple'}>
@@ -204,12 +187,7 @@ export default function RuleImprovementReportScreen() {
                     <Td isNumeric>{row.complaint_count}</Td>
                     <Td isNumeric>{row.candidate_false_positive_count}</Td>
                     <Td isNumeric>{row.candidate_false_negative_count}</Td>
-                    <Td isNumeric>
-                      <Text fontWeight="semibold">{row.total_round_count}</Text>
-                      <Text fontSize="xs" color="gray.500">
-                        {row.average_rounds || '—'} average
-                      </Text>
-                    </Td>
+                    <Td isNumeric>{row.average_rounds > 0 ? row.average_rounds.toFixed(1) : '—'}</Td>
                     <Td>
                       <CaretRight aria-hidden />
                     </Td>

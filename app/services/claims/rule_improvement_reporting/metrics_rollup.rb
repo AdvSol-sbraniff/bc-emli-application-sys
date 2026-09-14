@@ -66,11 +66,10 @@ module Claims
       def by_rule
         scope = @filters.apply_events(::Claims::VRuleImprovementReporting.all)
         scope = CurrentRulePeriod.apply(scope)
-        expressions = METRIC_EXPRESSIONS.map { |sql| Arel.sql(sql) }
 
         scope
           .group(:source_engine, :rule_key)
-          .pluck(:source_engine, :rule_key, *expressions)
+          .pluck(:source_engine, :rule_key, *metric_selections)
           .to_h do |values|
             engine, key, *metrics = values
             [[engine, key], build_metrics(metrics)]
@@ -92,8 +91,7 @@ module Claims
           scope = scope.where("rulecheck_created_at < ?", period_end)
         end
 
-        values =
-          scope.pluck(*METRIC_EXPRESSIONS.map { |sql| Arel.sql(sql) }).first
+        values = scope.pluck(*metric_selections).first
         build_metrics(values || Array.new(METRIC_KEYS.length, 0))
       end
 
@@ -130,6 +128,12 @@ module Claims
       end
 
       private
+
+      def metric_selections
+        METRIC_EXPRESSIONS
+          .zip(METRIC_KEYS)
+          .map { |sql, key| Arel.sql("#{sql} AS rule_improvement_#{key}") }
+      end
 
       def build_metrics(values)
         metrics = METRIC_KEYS.zip(values).to_h

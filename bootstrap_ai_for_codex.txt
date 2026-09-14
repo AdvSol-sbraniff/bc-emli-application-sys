@@ -3,6 +3,7 @@ BOOTSTRAP FOR CODEX - REBOOT RUNBOOK
 Purpose
 - Persist operational memory across conversation compression and reboot.
 - Restore reliable execution for local DB work and OpenShift deploys quickly.
+- Last verified and cleaned up: 2026-09-10.
 
 Workspace
 - Repo path: \\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys
@@ -141,23 +142,20 @@ OpenShift DB access pattern (confirmed working)
   1) `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc whoami'`
   2) `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc project ce8baa-dev'`
   3) `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev get pods'`
-- Primary Postgres pod observed in ce8baa-dev:
+- Primary Postgres pod verified in ce8baa-dev on 2026-09-10 (discover it again after a restart or rollout rather than assuming the name is permanent):
   - `hesp-crunchydb-ha-6bxt-0`
+  - discovery command: `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev get pods -l postgres-operator.crunchydata.com/role=master -o name'`
 - Database secret / target DB observed in ce8baa-dev:
   - Secret: `hesp-crunchydb-pguser-postgres`
   - DB: `hesp-crunchydb`
 - Reliable file-run pattern for SQL against OpenShift DB:
   1) Copy repo SQL file into DB pod:
-     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev cp /home/sbraniff/bc-emli-application-sys/claims_ai_service_ddl/<file>.sql hesp-crunchydb-ha-6bxt-0:/tmp/<file>.sql -c database'`
+     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev cp /home/sbraniff/bc-emli-application-sys/claims_ai_service_ddl/<file>.sql <primary-postgres-pod>:/tmp/<file>.sql -c database'`
   2) Execute it with psql inside the DB pod:
-     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev exec hesp-crunchydb-ha-6bxt-0 -c database -- psql -v ON_ERROR_STOP=1 -U postgres -d hesp-crunchydb -f /tmp/<file>.sql'`
-- Confirmed on 2026-03-17:
-  - Ran `claims_ai_service_ddl/6_views.sql`
-  - Ran `claims_ai_service_ddl/7_reporting_views.sql`
-  - This fixed `Reports - Volume and Value` 500s in OpenShift.
-- Root cause captured from live app logs:
-  - `PG::UndefinedTable: relation "claims.v_reporting_invoice_business" does not exist`
-- Verification pattern for this exact issue:
+     `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev exec <primary-postgres-pod> -c database -- psql -v ON_ERROR_STOP=1 -U postgres -d hesp-crunchydb -f /tmp/<file>.sql'`
+- Historical note from 2026-03-17: missing reporting views caused `Reports - Volume and Value` 500s with `PG::UndefinedTable: relation "claims.v_reporting_invoice_business" does not exist`.
+- The old `6_views.sql` and `7_reporting_views.sql` files are now archived. Their current consolidated source is `claims_ai_service_ddl/4_create_views.sql`; do not use the archived files as current deployment instructions.
+- Verification pattern for this issue:
   1) Hit endpoints:
      - `/api/claims/admin/reports/volume_value/summary`
      - `/api/claims/admin/reports/volume_value/trend?grain=week`
@@ -165,8 +163,7 @@ OpenShift DB access pattern (confirmed working)
   2) Check app logs:
      `wsl -d Ubuntu -e sh -lc '/home/sbraniff/.asdf/shims/oc -n ce8baa-dev logs hesp-app-<pod> --since=5m | tail -n 200'`
 - Important dependency note:
-  - `7_reporting_views.sql` depends on `claims.v_invoice_grid`
-  - If reporting endpoints fail because `claims.v_reporting_invoice_business` is missing, run `6_views.sql` first, then `7_reporting_views.sql`
+  - `claims.v_reporting_invoice_business` depends on `claims.v_invoice_grid`; both are defined in `claims_ai_service_ddl/4_create_views.sql`.
 
 ============================================================
 SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
@@ -174,7 +171,7 @@ SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
 
 1) Read this file first.
 2) Re-establish Git/SSH context before any push:
-   - Repo current preferred working branch after mainline integration:
+   - Last-known preferred working branch after mainline integration (verify with `git status -sb` before using it):
      - `test-update-mainline-2026-04-22`
    - Safety branches to preserve:
      - `backup-2026-04-22` = frozen pre-integration safety snapshot
@@ -199,19 +196,6 @@ SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
      - the private key file existing on disk is **not** enough
      - a successful push requires a live `ssh-agent` in that session plus the key loaded into it
      - one terminal proving auth does **not** mean a different shell or tool session inherits that auth
-   - Known failure pattern that caused confusion on 2026-05-27:
-     - Codex initially ran `wsl` without `-d Ubuntu`
-     - this landed in `docker-desktop`
-     - symptoms included:
-       - repo path translation failures
-       - `/home/sbraniff/.ssh/...` appearing missing
-       - `git` appearing missing
-       - `ssh -T git@github.com` failing with `Permission denied (publickey)`
-     - fix was:
-       1) explicitly use `wsl.exe -d Ubuntu`
-       2) start `ssh-agent`
-       3) load `~/.ssh/id_advsol_sbraniff`
-       4) verify with `ssh -T git@github.com`
    - Known-good SSH key identity:
      - file: `~/.ssh/id_advsol_sbraniff`
      - fingerprint: `SHA256:GXLPDu/nI/0qi4VvSMTBeaqffPAL4lsHQTkUpJJJWjo`
@@ -222,11 +206,6 @@ SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
    - Sanity check branch state:
      - `git status -sb`
      - `git branch -vv`
-   - Confirmed good state on 2026-05-27:
-     - `ssh -T git@github.com` returned:
-       - `Hi AdvSol-sbraniff! You've successfully authenticated, but GitHub does not provide shell access.`
-     - both local and remote branch heads matched:
-       - `e8d2aa9cf93566760e9d38e9cc512d1da87d4929`
 3) Confirm local DB command path works with compose -f UNC pattern.
 4) Confirm oc access with explicit shim path and namespace selection.
 5) Confirm app route responds (curl -I app URL).
@@ -234,7 +213,7 @@ SECTION C - REBOOT CHECKLIST (USE EVERY TIME)
 7) Before deploying frontend changes, verify deployed image tag and build freshness.
 
 ============================================================
-SECTION H - CLAIMS INGEST STAGING / SIMULATOR SHAPE
+SECTION D - CLAIMS INGEST STAGING / SIMULATOR SHAPE
 ============================================================
 
 Current local design (2026-05-27)
@@ -319,14 +298,14 @@ Parallel extraction update verified on 2026-08-20
     audit examples
 
 ============================================================
-SECTION D - MEMORY INTENT
+SECTION E - MEMORY INTENT
 ============================================================
 
 - This file is the durable runbook to survive VS Code conversation compression.
-- Prefer updating this file whenever a new blocker/fix pattern is discovered.
+- Update this file only with durable facts that help a new session recover after a power cycle. Fold corrections into existing entries instead of appending duplicate incident history.
 
 ============================================================
-SECTION I - LOCAL LEGACY APP / CONTRACTOR FLOW BOOTSTRAP
+SECTION F - LOCAL LEGACY APP / CONTRACTOR FLOW BOOTSTRAP
 ============================================================
 
 Problem context
@@ -347,7 +326,7 @@ Key routing/behavior facts
 
 Local bootstrap script created
 - File:
-  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql`
+  - `claims_ai_service_ddl/public_legacy_seed/seed_old_app_minimal.sql`
 - Purpose:
   - rerunnable minimal bootstrap for the old app flow
   - creates/normalizes `energy-savings-program`
@@ -357,7 +336,7 @@ Local bootstrap script created
     - participant application
     - all invoice variants
 - Known-good run command:
-  - `wsl -d Ubuntu -e bash -lc 'cd /home/sbraniff/bc-emli-application-sys && PGPASSWORD=password psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d app_development -f claims_ai_service_ddl/3_seed_old_app_minimal.sql'`
+  - `wsl -d Ubuntu -e bash -lc 'cd /home/sbraniff/bc-emli-application-sys && PGPASSWORD=password psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d app_development -f claims_ai_service_ddl/public_legacy_seed/seed_old_app_minimal.sql'`
 - Important local schema nuance:
   - original script version failed because local DB lacked the expected unique constraint on `permit_classifications.code`
   - script was patched to use `MERGE` instead of `ON CONFLICT (code)`
@@ -398,13 +377,13 @@ MiniMe1 failure sequence learned
 
 Reusable local user reset script created
 - File:
-  - `claims_ai_service_ddl/delete_user_and_related.rb`
+  - `claims_ai_service_ddl/dev_tools/delete_user_and_related.rb`
 - Purpose:
   - delete a user and their related local records for a true reset
   - identifier comes from `USER_IDENTIFIER`
   - resolves by UUID, email, omniauth username, then unique first_name
 - Known-good run pattern:
-  - `docker exec -e USER_IDENTIFIER=MiniMe1 bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/delete_user_and_related.rb"`
+  - `docker exec -e USER_IDENTIFIER=MiniMe1 bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/dev_tools/delete_user_and_related.rb"`
 - What it cleans up:
   - user row
   - contractor rows where user is `contact_id`
@@ -416,27 +395,17 @@ Reusable local user reset script created
   - `Contractor`
   - `PermitApplication`
 
-MiniMe1 specific reset history
-- One orphan contractor was deleted first by direct runner:
-  - contractor id `60bcd334-8632-4f1e-abc3-380e3f78da93`
-- Later full user reset was performed successfully:
-  - user id `98e6633f-d5d3-4a72-b506-f63b86f9e141`
-  - email `minime1@gmail.com`
-  - username `MiniMe1`
-  - contractor id deleted during reset: `f0f57ea8-eb46-474e-9aa8-20493e6a6082`
-  - onboarding permit application deleted during reset: `3d795a0f-39f8-40c4-9ad1-7e59de760f2c`
-
 Cold-boot guidance for this local legacy-flow issue
 1) If contractor login lands on `/welcome` or spins at `/?currentPage=1`, check Rails logs first:
    - `docker logs --tail 200 bc-emli-application-sys-app-1`
 2) If log shows missing `RequirementTemplate`, rerun:
-   - `claims_ai_service_ddl/3_seed_old_app_minimal.sql`
+   - `claims_ai_service_ddl/public_legacy_seed/seed_old_app_minimal.sql`
 3) If log/user state suggests an orphan contractor/onboarding mismatch, use:
-   - `claims_ai_service_ddl/delete_user_and_related.rb`
+   - `claims_ai_service_ddl/dev_tools/delete_user_and_related.rb`
 4) Then let the user log in again from scratch.
 
 ============================================================
-SECTION E - FAST DEPLOY METHOD (PREFERRED)
+SECTION G - FAST DEPLOY METHOD (PREFERRED)
 ============================================================
 
 Goal
@@ -468,7 +437,7 @@ Notes
 - Use in-cluster BuildConfig only if local build/push is blocked.
 
 ============================================================
-SECTION F - HELM/VALUES AFTER UPSTREAM REBASE
+SECTION H - HELM/VALUES AFTER UPSTREAM REBASE
 ============================================================
 
 - Important repo nuance discovered on 2026-04-27:
@@ -482,7 +451,7 @@ SECTION F - HELM/VALUES AFTER UPSTREAM REBASE
   - Before a Helm upgrade in `ce8baa-dev`, ensure `helm/main/values-ce8baa-dev.yaml` overrides `sharedConfig` for gold routes, auth, AWS, and S3 so Helm does not fall back to generic base defaults.
 
 ============================================================
-SECTION G - WSL NODE/ASDF RECOVERY
+SECTION I - WSL NODE/ASDF RECOVERY
 ============================================================
 
 - On 2026-04-27 the WSL Node toolchain was broken because:
@@ -504,189 +473,93 @@ SECTION G - WSL NODE/ASDF RECOVERY
   - `npm config get prefix` => `/home/sbraniff/.asdf/installs/nodejs/20.10.0`
 
 ============================================================
-SECTION H - AZURE GOV SUBSCRIPTION VS SBRANIFF SUBSCRIPTION
+SECTION J - AZURE ACCOUNTS AND LOCAL VS GOLD CONFIGURATION
 ============================================================
 
-- Azure CLI was installed on Windows on 2026-04-28/29.
+- Azure CLI is installed on Windows.
   - Path: `C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd`
   - If `az` is not on PATH in a fresh PowerShell, call the full path directly.
   - Prefer running Azure CLI from `C:\` rather than a WSL UNC working dir to avoid the `CMD.EXE ... UNC paths are not supported` warning.
 - Auth pattern:
   - Use `az login --use-device-code` when needed.
-  - Verified gov account: `SBRANIFF@gov.bc.ca`
-  - Verified dev subscription: `cbdb71-dev - Savings Program Application AI`
+  - Gov account: `SBRANIFF@gov.bc.ca`
+  - Dev subscription: `cbdb71-dev - Savings Program Application AI`
   - Subscription ID: `55da4745-0ca8-4993-834e-f368541ac85b`
+  - BC Gov conditional-access policy may prevent Azure CLI authentication from this workstation. If so, use the Azure web portal for model-deployment changes.
 - Gov Azure resource groups seen:
   - `rg-energy-savings-program`
   - `rg-energy-savings-program-dev`
   - networking RG: `cbdb71-dev-networking`
 
-Gov subscription findings
-- Important contrast:
-  - Existing working Azure endpoint in local `.env` is the older/personal `sbraniff` Azure OpenAI subscription:
-    - `GENAI_BASE_URL=https://sbran-mkremrzw-eastus2.openai.azure.com/openai/v1/`
-    - `GENAI_DEPLOYMENT=gpt-5.2-chat`
-  - That older/personal Azure setup is already complete enough to be callable from OpenShift and has been used by the app for months.
-  - Policy direction from user on 2026-05-11: moving forward local dev should also use gov Azure, not the personal Azure endpoint.
-  - This creates a local networking problem because the compliant gov Azure OpenAI endpoint is expected to be private-only.
-- When attempting to create Azure OpenAI in gov subscription:
-  - RG creation succeeded.
-  - Resource create failed at validation because policy denied public network access on `Microsoft.CognitiveServices/accounts`.
-  - Denied resource name seen in activity log: `energy-savings-program-resource`
-  - Key deny policy set: `Deny-PublicPaaSEndpoints`
-  - Specific denies seen:
-    - `Cognitive Services accounts should disable public network access`
-    - `Azure AI Services resources should restrict network access`
-- Once `Network = Disabled` was selected in portal, Azure exposed private endpoint setup as expected.
-- The blocker is not user error in portal. Public Azure OpenAI endpoints are policy-denied; private endpoint is the compliant path.
+Local versus Gold AI configuration (verified 2026-09-10)
+- Local `claims_ai_service/.env`:
+  - `GENAI_BASE_URL=https://sbx-ai-foundry-shared.cognitiveservices.azure.com/openai/v1/`
+  - `GENAI_DEPLOYMENT=gpt-5.6-terra`
+  - `GENAI_API_STYLE=responses`
+- Gold secret `hesp`:
+  - `GENAI_BASE_URL=https://aoai-esp-dev.openai.azure.com/openai/v1/`
+  - `GENAI_DEPLOYMENT=gpt-5.6-terra`
+  - `GENAI_API_STYLE=responses`
+- The older personal `sbraniff` Azure OpenAI endpoint is historical and is no longer the configured local or Gold endpoint.
 
-Gov Azure IaC/Bicep status as of 2026-05-11
-- Added rerunnable Bicep package under:
-  - `devops/azure/main.bicep`
-  - `devops/azure/modules/azure-openai.bicep`
-  - `devops/azure/modules/subnet-nsg.bicep`
-  - `devops/azure/modules/private-endpoint.bicep`
-  - `devops/azure/modules/private-dns.bicep`
-  - `devops/azure/modules/model-deployment.bicep`
-  - `devops/azure/params/dev.bicepparam`
-  - `devops/azure/scripts/update-local-env-from-aoai.ps1`
-  - `devops/azure/README.md`
-- `.gitignore` now ignores generated Bicep JSON artifacts:
-  - `devops/azure/*.json`
-- Bicep compile command that passed:
-  - `az bicep build --file "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\main.bicep"`
-- Read-only what-if command that passed:
-  - `az deployment sub what-if --location canadaeast --template-file "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\main.bicep" --parameters "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\params\dev.bicepparam" --result-format ResourceIdOnly`
-- Current what-if creates:
-  - Azure OpenAI account: `aoai-esp-dev`
-  - NSG: `nsg-aoai-private-endpoints`
-  - subnet: `aoai-private-endpoints`
-  - private endpoint: `pe-aoai-esp-dev`
-- The template intentionally sets Azure OpenAI:
+Current gov Azure configuration
+- Account: `aoai-esp-dev`
+- Endpoint: `https://aoai-esp-dev.openai.azure.com/`
+- Private endpoint IP: `10.46.78.4`
+- Active deployment/model documented on 2026-07-13: `gpt-5.6-terra`, version `2026-07-09`, SKU `GlobalStandard`
+- Rollback deployment retained: `gpt-5-4-chat` (`gpt-5.4`, version `2026-03-05`)
+- Gold uses Helm `claimsAi.hostAliases` to map the Azure OpenAI hostname to the private endpoint IP.
+- Gold secret configuration and pod health were rechecked on 2026-09-10. A successful data-plane inference through the private endpoint was last documented on 2026-07-13.
+- `GlobalStandard` can process inference outside Canada; this is not a Canada-only deployment.
+
+Durable gov policy and networking facts
+- Public Azure AI access is policy-denied. The compliant account configuration is:
   - `publicNetworkAccess = Disabled`
   - `networkAcls.defaultAction = Deny`
-- Model deployment is parameterized but disabled by default:
-  - `createModelDeployment = false`
-  - reason: exact GPT model/version/SKU/region availability still needs confirmation before deployment.
-- Private DNS is also disabled by default:
-  - `createPrivateDnsZone = false`
-  - reason: BC Gov policy rejected private DNS zone creation with message:
-    - `Private DNS must be created centrally in the connectivity subscription.`
-  - If platform provides the central zone resource id, set:
-    - `existingPrivateDnsZoneId = '/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/privateDnsZones/privatelink.openai.azure.com'`
+- Private DNS zones must be created centrally in the connectivity subscription.
+- Long-term platform task: central private DNS/routing so callers resolve `aoai-esp-dev.openai.azure.com` through `privatelink.openai.azure.com` to `10.46.78.4` without host aliases.
+- The laptop needs both a private route (normally VPN) and private DNS to reach the gov endpoint directly. Test with:
+  1) `nslookup aoai-esp-dev.openai.azure.com`
+  2) `curl -I https://aoai-esp-dev.openai.azure.com/`
+- Gold/OpenShift cannot use a service running only on the developer laptop unless explicit network and DNS reachability exists.
 
-Gov networking facts verified via Azure CLI
-- Only one VNet visible in the subscription:
-  - `cbdb71-dev-vwan-spoke`
-  - RG: `cbdb71-dev-networking`
-  - Region: `canadacentral`
-  - Address space: `10.46.78.0/24`
-  - DNS server: `10.53.244.4`
-  - It is peered to a central hub VNet in another subscription / managed landing-zone area.
-- As of 2026-05-11, before deploying Bicep:
-  - VNet still showed no subnets.
-  - no Cognitive Services/Azure OpenAI accounts were visible.
-  - no private DNS zones were visible in the app subscription.
-- Policy discoveries:
-  - Creating a subnet without an NSG fails policy:
-    - `Subnets must have a Network Security Group.`
-  - Creating subnet + NSG passes what-if.
-  - Creating Azure OpenAI with public access disabled passes what-if.
-  - Creating private DNS zone in the app/networking RG fails policy because private DNS must be central.
-- Interpretation:
-  - subscription has landing-zone network shell plus inherited permissions sufficient to deploy subnet/NSG/private endpoint.
-  - heavier shared network infra and private DNS still appear to live in the managed hub/connectivity area.
-  - the remaining unknown is DNS/routing from OpenShift and from the developer laptop to the private endpoint after it exists.
+Gov Azure IaC/Bicep
+- Rerunnable package and detailed current notes are under `devops/azure/`; start with `devops/azure/README.md`.
+- Read-only what-if command:
+  - `az deployment sub what-if --location canadaeast --template-file "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\main.bicep" --parameters "\\wsl.localhost\Ubuntu\home\sbraniff\bc-emli-application-sys\devops\azure\params\dev.bicepparam" --result-format ResourceIdOnly`
+- The Bicep model deployment and private DNS creation remain disabled by default; model deployments may require the portal, and private DNS is centrally managed.
 
-Gov RBAC facts verified
-- Visible direct role assignments for `SBRANIFF@gov.bc.ca`:
-  - `Azure AI User` at subscription scope
-  - `Azure AI User` on `rg-energy-savings-program-dev`
-  - `Azure AI User` on `rg-energy-savings-program`
-- Direct Azure AI User assignments were created on 2026-04-29 UTC.
-- On 2026-05-11, an inherited `Owner` role was found:
-  - role: `Owner`
-  - principal type: `Group`
-  - group id: `7aa83f2c-1f4b-4194-923e-e165aae7b570`
-  - scope: `/providers/Microsoft.Management/managementGroups/cbdb71`
-  - role assignment created: `2025-07-03T17:34:28Z`
-- Meaning:
-  - the Owner role assignment itself is old.
-  - if access changed recently, likely the user was added to that group, not that the role assignment was newly created.
-  - exact group-membership date could not be checked because Microsoft Graph required a fresh Graph-scoped login.
-- Current working assumption:
-  - user likely has enough permission to deploy the gov Azure OpenAI private-endpoint path.
-  - policy, not RBAC, is now the main constraint.
-
-OpenShift + Azure reachability facts
-- Important distinction:
-  - OpenShift **cannot** reach local Qwen/vLLM endpoint at `chat.advsol.tech:8000`.
-    - DNS from pod to `chat.advsol.tech` failed with `ENOTFOUND`
-    - direct IP `159.249.137.22:8000` failed with `EHOSTUNREACH`
-  - OpenShift **can** reach public Azure endpoints.
-- Verified from `ce8baa-dev` `hesp-claims-ai` pod:
-  - DNS OK for:
-    - `sbran-mkremrzw-eastus2.openai.azure.com`
-    - `braniff-di.cognitiveservices.azure.com`
-  - TCP 443 OK to those hosts
-  - actual HTTPS GET to Azure OpenAI models endpoint returned HTTP 200
-- Verified again on 2026-05-11 from Gold `hesp-app` pod:
-  - public Azure OpenAI DNS resolved:
-    - `sbran-mkremrzw-eastus2.openai.azure.com -> 20.62.58.5`
-  - HTTPS to current public Azure endpoint returned `401`, which is good for reachability because it means Azure was reached without a valid test key.
-  - planned gov endpoint did not resolve yet:
-    - `aoai-esp-dev.openai.azure.com`
-    - expected because the gov Azure OpenAI account/private endpoint has not been created yet.
-  - random private VNet IP probe `10.46.78.4:443` timed out; this is not conclusive.
-- Therefore:
-  - current/personal public Azure endpoint is reachable from cluster
-  - future gov Azure OpenAI endpoint will only be known reachable after it exists
-  - if gov endpoint is private-only, reachability from OpenShift cannot be assumed and must be tested after creation / DNS setup
-
-Local laptop + gov Azure private endpoint mental model
-- User is non-technical; explain simply:
-  - Azure OpenAI private endpoint = private door inside gov/Azure network.
-  - laptop on Shaw cable = outside the building.
-  - VPN/private network access = hallway from laptop into the private network.
-  - private DNS = directory telling laptop that `aoai-esp-dev.openai.azure.com` should resolve to a private IP.
-- Laptop does not "become a private endpoint."
-- Laptop needs:
-  - network route to the private endpoint IP
-  - DNS that resolves the Azure OpenAI hostname to the private endpoint IP
-- User turned on company VPN just before reboot on 2026-05-11.
-  - Not yet tested after VPN was enabled.
-  - After reboot, if asked, test from laptop:
-    1) `nslookup aoai-esp-dev.openai.azure.com`
-    2) only after endpoint exists, verify it resolves to a private IP.
-    3) `curl -I https://aoai-esp-dev.openai.azure.com/`
-  - But endpoint does not exist yet, so pre-deploy tests are limited.
+Gov RBAC facts
+- `SBRANIFF@gov.bc.ca` has visible `Azure AI User` assignments and an inherited group-based `Owner` role at management-group scope.
+- Policy and conditional access, rather than basic resource permissions, have been the practical constraints.
 
 Local `.env` / secrets note
 - `claims_ai_service/.env` currently contains real secrets and must never be committed.
 - It is ignored by Git.
-- After gov Azure deployment, `devops/azure/scripts/update-local-env-from-aoai.ps1` can write:
+- `devops/azure/scripts/update-local-env-from-aoai.ps1` can write:
   - `GENAI_BASE_URL`
   - `GENAI_KEY`
   - `GENAI_DEPLOYMENT`
   - `GENAI_API_STYLE`
 - That helper intentionally does not print the key.
 - Do not store Azure API keys in committed Bicep, bicepparam, README, or SQL files.
+- An Azure OpenAI account key was pasted into chat during the 2026-07-13 deployment handoff. If rotation has not been confirmed, treat it as exposed: move Gold to a fresh alternate key, verify inference, and then regenerate the disclosed key.
 
 ============================================================
-SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
+SECTION K - SILVER TEMPLATE EXPORT / LOCAL IMPORT
 ============================================================
 
-- Upstream Silver OpenShift access verified on 2026-04-30/05-01:
+- Upstream Silver OpenShift access was last verified on 2026-04-30/05-01:
   - cluster: `https://api.silver.devops.gov.bc.ca:6443`
   - projects visible:
     - `bfc7dd-dev`
     - `bfc7dd-test`
-  - current Silver working project was `bfc7dd-dev`
-- Silver app/DB pod names observed:
+  - working project was `bfc7dd-dev`
+- Historical Silver app/DB pod names (rediscover current names before use):
   - app: `hesp-app-74b9ff4ddd-8xqg9`
   - postgres: `hesp-crunchydb-ha-62hq-0`
   - db name: `hesp-crunchydb`
-- Silver export bundles created under `claims_ai_service_ddl/`:
+- Silver export bundles are archived under `claims_ai_service_ddl/archived_sql/reference_data/silver_templates/`:
   - `silver_template_windows_and_doors.json`
   - `silver_template_heat_pump.json`
   - `silver_template_heat_pump_water_heater.json`
@@ -701,13 +574,13 @@ SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
     - `requirement_blocks_json`
     - `denormalized_template_json`
 - The local import helper is:
-  - `claims_ai_service_ddl/import_silver_invoice_templates.rb`
+  - `claims_ai_service_ddl/archived_sql/dev_tools/import_silver_invoice_templates.rb`
 - Important importer fix:
   - parse the bundle as raw JSON first
   - only fall back to splitting on the first `|` if JSON parsing fails
   - reason: real exported FormIO keys themselves contain `|`
 - Known-good local run command:
-  - `docker exec bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/import_silver_invoice_templates.rb"`
+  - `docker exec bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/archived_sql/dev_tools/import_silver_invoice_templates.rb"`
 - What the importer does:
   - finds local invoice templates by:
     - program slug `energy-savings-program`
@@ -726,7 +599,7 @@ SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
   - this workflow imports runtime template JSON into local template versions
   - it does **not** recreate the full normalized builder tables from Silver
   - goal is realistic local contractor invoice rendering/testing, not a perfect admin-builder clone
-  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql` must not clobber richer imported invoice template versions on rerun
+  - `claims_ai_service_ddl/public_legacy_seed/seed_old_app_minimal.sql` must not clobber richer imported invoice template versions on rerun
   - bootstrap preservation rule now is:
     - only overwrite the published template version when it is blank or still contains the bootstrap sentinel text `Local bootstrap block`
 - Additional lookup/config parity work completed:
@@ -739,7 +612,7 @@ SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
     - local `permit_classifications` were already sufficient for invoice/onboarding flows
     - extra Silver `programs` looked like test noise and were not imported
     - worthwhile local gap was singleton site configuration normalization plus revision reason attachment
-  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql` now also:
+  - `claims_ai_service_ddl/public_legacy_seed/seed_old_app_minimal.sql` now also:
     - ensures a `site_configurations` singleton row exists
     - normalizes `display_sitewide_message = false`
     - defaults `sitewide_message_color = theme.softRose`
@@ -753,55 +626,12 @@ SECTION J - SILVER TEMPLATE EXPORT / LOCAL IMPORT
     - local `site_configurations.sitewide_message_color = theme.softRose`
     - local revision reasons all point at the singleton config and are not discarded
 
-Model/region caution
-- `Canada Central` is supported as an Azure AI Foundry region generally, but GPT-5 availability there was not confirmed from published Microsoft region/model tables during investigation.
-- Do not assume GPT-5.x is available in `Canada Central`.
-- App has been tested against GPT-5.x; GPT-4.x may work but may be insufficient as workflow complexity increases.
-
-Practical memory for next time
-- If asked to revisit gov Azure setup:
-  1) use Azure CLI on Windows with device-code login
-  2) if Microsoft Graph calls fail, run:
-     - `az logout`
-     - `az login --tenant "6fdb5200-3d0d-4a8a-b036-d3685e359adc" --scope "https://graph.microsoft.com//.default"`
-  3) do not waste time trying to force public Azure OpenAI creation; policy will deny it
-  4) use `devops/azure` Bicep and run what-if before any deploy
-  5) remember private DNS zone creation is centrally managed and currently omitted from Bicep by default
-  6) after private endpoint exists, test DNS/reachability from both:
-     - Gold/OpenShift pod
-     - laptop with company VPN enabled
-  7) current dev Azure OpenAI deployment (updated 2026-07-13):
-     - account: `aoai-esp-dev`
-     - endpoint: `https://aoai-esp-dev.openai.azure.com/`
-     - app base URL: `https://aoai-esp-dev.openai.azure.com/openai/v1/`
-     - private endpoint IP: `10.46.78.4`
-     - active deployment: `gpt-5.6-terra`
-     - model: `gpt-5.6-terra` version `2026-07-09`
-     - SKU: `GlobalStandard`
-     - rollback deployment retained: `gpt-5-4-chat` (`gpt-5.4`, version `2026-03-05`)
-     - Gold secret `hesp` has `GENAI_DEPLOYMENT=gpt-5.6-terra`
-     - confirmed from the Gold `hesp-claims-ai` pod with Responses API HTTP 200 and output `GOLD_TERRA_OK`
-     - Global Standard can process inference outside Canada; this is not a Canada-only deployment
-     - BC Gov conditional-access policy currently prevents Azure CLI authentication from this workstation, so Azure model deployments must be created manually in the web portal
-  8) current private-network status:
-     - Gold/OpenShift uses Helm `claimsAi.hostAliases` to map the Azure OpenAI hostname to private endpoint IP `10.46.78.4`
-     - Gold data-plane access is working through the private endpoint
-     - local laptop DNS/private routing may still differ and should be tested separately when needed
-     - long-term platform task is central private DNS/routing so callers resolve the endpoint through `privatelink.openai.azure.com` to `10.46.78.4` without host aliases
-  9) Azure key security note from 2026-07-13:
-     - an Azure OpenAI account key was pasted into chat during the manual deployment handoff
-     - never copy that value into source files or the runbook
-     - identify whether the disclosed value is Key 1 or Key 2 in the Azure portal
-     - regenerate the other, unexposed key first; update Gold secret `hesp` / `GENAI_KEY` to that fresh key and verify inference
-     - only after Gold is confirmed on the fresh key, regenerate the disclosed key so the exposed value becomes invalid without downtime
-
 ============================================================
-SECTION I - LOCAL LEGACY CONTRACTOR ONBOARDING LESSONS
+SECTION L - LOCAL LEGACY FORM AND ONBOARDING LESSONS
 ============================================================
 
-- The local old-app bootstrap script is:
-  - `claims_ai_service_ddl/3_seed_old_app_minimal.sql`
-- That script must do more than create program/template rows. For contractor onboarding to work end-to-end, the seeded `form_json` must mimic the old legacy structure closely enough for both:
+Additional form-shape requirements for the Section F bootstrap script
+- For contractor onboarding to work end-to-end, the seeded `form_json` must mimic the old legacy structure closely enough for both:
   - page load / `lookup_props`
   - submit / signoff
   - approval / onboarding processor extraction
@@ -818,44 +648,36 @@ Known required legacy form characteristics
 - A shallow key like just `business_name` is not enough for `PermitApplication::ContractorOnboardingProcessor#find_value_by_key_end`.
 
 MiniMe1 debugging history
-- First failure mode:
-  - login created orphan contractor rows before templates were valid
-  - result: redirect/spinner issues
-- Reusable reset script created:
-  - `claims_ai_service_ddl/delete_user_and_related.rb`
-  - run via:
-    - `docker exec -e USER_IDENTIFIER=MiniMe1 bc-emli-application-sys-app-1 bash -lc "cd /app && bundle exec rails runner /app/claims_ai_service_ddl/delete_user_and_related.rb"`
-- Second failure mode:
+- Login/orphan-contractor recovery and the reset command are documented once in Section F.
+- Another failure mode:
   - onboarding page loaded but submit only jitter-scrolled downward
   - root cause: bootstrap template was missing the completion/signoff section
-- Third failure mode:
+- Another failure mode:
   - staff clicked `Ready for training`, but `Approve` was unsafe
   - root cause: approval processor extracted nil contractor fields because submission data lacked real legacy nested keys
 
 Known local MiniMe1 / contractor test data
-- Current successful onboarding record:
+- Verified on 2026-09-10:
   - permit application id: `5f1c0935-f5c8-4163-b1ca-8688c578ef6d`
+  - permit application status: `approved`
   - contractor id: `506f4e39-a648-4f2f-b5b3-a0efee9c9695`
-- After staff clicked `Ready for training`, permit application status became:
-  - `training_pending` (`status = 9`)
-- To make approval safe, current record submission_data was patched to include:
+  - contractor business name: `Mini Home Energy Solutions`
+- Before approval, the record's `submission_data` was patched to include:
   - section key:
     - `sectionbbb20000000000000000000000002`
   - nested legacy keys:
     - `formSubmissionDataRSTsectionbbb20000000000000000000000000002|RBbbb30000000000000000000000000002|business_name`
     - `formSubmissionDataRSTsectionbbb20000000000000000000000000002|RBbbb30000000000000000000000000002|business_name_notes`
-- After that patch, approval precheck succeeded:
-  - extracted contractor details returned `business_name => "Mini Windows and Heatpumps"`
-  - contractor validation passed for approval
+- That patch allowed the approval precheck and final approval to succeed. The contractor name was subsequently changed to its current value above.
 
 Local staff role helpers
 - `sbraniff` local user:
-  - id: `3e282c6c-56b6-469d-88c5-15c89e0f3e75`
+  - id: `d6108f3f-6295-474e-a3b0-38cb2e678a2a`
   - email: `sbraniff@gov.bc.ca`
   - omniauth username: `SBRANIFF`
 - Role switch helper scripts:
-  - `claims_ai_service_ddl/set_sbraniff_regular_admin.sql`
-  - `claims_ai_service_ddl/set_sbraniff_system_admin.sql`
+  - `claims_ai_service_ddl/archived_sql/one_off_sql/set_sbraniff_regular_admin.sql`
+  - `claims_ai_service_ddl/archived_sql/one_off_sql/set_sbraniff_system_admin.sql`
 - User enum reminder from `app/models/user.rb`:
   - `admin = 2`
   - `system_admin = 3`

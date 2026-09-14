@@ -122,6 +122,12 @@ RSpec.describe "Claims rule improvement reporting", type: :request do
         status: "closed_no_contractor_action_required",
         disposition_comment: "The evidence was already sufficient."
       )
+    add_sent_round(
+      issue: false_positive_issue,
+      invoice_version: false_positive.invoice_version,
+      round_number: 1,
+      sent_at: current_time + 1.minute
+    )
     second_session =
       Claims::Session.create!(
         created_at: current_time,
@@ -214,8 +220,10 @@ RSpec.describe "Claims rule improvement reporting", type: :request do
       "no_action_count" => 1,
       "candidate_false_positive_count" => 1,
       "candidate_false_negative_count" => 1,
-      "total_round_count" => 2,
+      "total_round_count" => 3,
       "repeat_round_count" => 1,
+      "average_rounds" => 1.5,
+      "median_rounds" => 1.5,
       "attention_signal" => "rule_review"
     )
     expect(Time.zone.parse(row.fetch("current_effective_at"))).to be >
@@ -251,12 +259,12 @@ RSpec.describe "Claims rule improvement reporting", type: :request do
     expect(
       json_response.dig("breakdowns", "admin_requests")
     ).to contain_exactly(
-      { "value" => "upload_supporting_document", "count" => 2 }
+      { "value" => "upload_supporting_document", "count" => 3 }
     )
     expect(
       json_response.dig("breakdowns", "contractor_responses")
     ).to contain_exactly(
-      { "value" => "supporting_document_uploaded", "count" => 1 },
+      { "value" => "supporting_document_uploaded", "count" => 2 },
       { "value" => "unable_to_resolve", "count" => 1 }
     )
 
