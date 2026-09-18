@@ -27,6 +27,7 @@ import {
   providerStatus,
   sanitizedGenAiError,
 } from './genai-error-policy';
+import { AuditAttachment, runRuleAudit } from './rule-audit';
 
 import {
   BlobSASPermissions,
@@ -438,6 +439,97 @@ export class InvService {
         'application/pdf',
       byte_size: buffer.length,
       filename: storageKey.split('/').pop() || 'document.pdf',
+      buffer,
+    };
+  }
+
+  async ruleAudit(
+    contextwindowjson: any[],
+    attachments: AuditAttachment[] = [],
+    diagnosticContext: Record<string, any> = {},
+    deploymentName?: string,
+    signal?: AbortSignal,
+  ) {
+    return runRuleAudit(
+      {
+        contextwindowjson,
+        attachments,
+        diagnostic_context: diagnosticContext,
+        deployment_name: deploymentName,
+        signal,
+      },
+      {
+        apiStyle: this.genaiApiStyle,
+        defaultDeployment: this.genaiDeployment,
+        createResponse: (body, options) =>
+          this.genaiClient.responses.create(body, options),
+        downloadFile: (attachment, maxBytes, abortSignal) =>
+          this.downloadAuditSource(attachment, maxBytes, abortSignal),
+      },
+    );
+  }
+
+  private async downloadAuditSource(
+    attachment: AuditAttachment,
+    maxBytes: number,
+    abortSignal: AbortSignal,
+  ) {
+    const container = (attachment.container || this.defaultContainer).trim();
+    const blobClient = this.blobSvc
+      .getContainerClient(container)
+      .getBlockBlobClient(attachment.storageKey.trim());
+    const properties = await blobClient.getProperties({ abortSignal });
+    const byteSize = properties.contentLength;
+    if (!Number.isSafeInteger(byteSize) || byteSize < 0) {
+      throw new HttpException(
+        {
+          code: 'rule_audit_source_size_unknown',
+          message:
+            'A source file size could not be verified. No file was omitted.',
+          category: 'rule_audit',
+          retryable: false,
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+    if (byteSize > maxBytes) {
+      throw new HttpException(
+        {
+          code: 'rule_audit_files_too_large',
+          message:
+            'The source files exceed the audit file-size limit. No files were sent or truncated.',
+          category: 'rule_audit',
+          retryable: false,
+        },
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
+    }
+    // Pin the version checked above so a concurrent blob replacement cannot
+    // evade admission limits or change the evidence while it is downloaded.
+    const buffer = byteSize
+      ? await blobClient.downloadToBuffer(0, byteSize, {
+          abortSignal,
+          conditions: { ifMatch: properties.etag },
+        })
+      : Buffer.alloc(0);
+    if (buffer.length !== byteSize) {
+      throw new HttpException(
+        {
+          code: 'rule_audit_source_integrity_mismatch',
+          message:
+            'A source download did not match its declared size. The audit was stopped before inference.',
+          category: 'rule_audit',
+          retryable: false,
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+    return {
+      content_type:
+        properties.contentType ||
+        this.contentTypeFromStorageKey(attachment.storageKey) ||
+        'application/octet-stream',
+      filename: attachment.storageKey.split('/').pop() || 'source-file',
       buffer,
     };
   }

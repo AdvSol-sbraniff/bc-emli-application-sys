@@ -1,9 +1,4 @@
 import {
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
   Alert,
   AlertIcon,
   Badge,
@@ -17,10 +12,8 @@ import {
   DrawerHeader,
   DrawerOverlay,
   Flex,
-  HStack,
   IconButton,
   Link,
-  ListItem,
   Select,
   SimpleGrid,
   Spinner,
@@ -37,16 +30,29 @@ import {
   Thead,
   Tr,
   Tooltip,
-  UnorderedList,
   VStack,
   useDisclosure,
 } from '@chakra-ui/react';
-import { ArrowLeft, ArrowSquareOut, Info, PencilSimple, Question } from '@phosphor-icons/react';
+import { ArrowSquareOut, Info } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
-import { COMPLAINT_LABELS, EvidenceRow, RuleMetrics, RuleRow, shortDate, titleize } from './types';
+import { REVISION_CLOSURE_LABELS } from '../../shared/claims/revision-closure-guidance';
+import { buildImprovementActions } from './action-signals';
+import { ActionSignalsOverview } from './action-signals-overview';
+import { RuleImprovementProcess } from './improvement-process';
+import { RulePackageAudits } from './package-audits';
+import {
+  BreakdownRow,
+  COMPLAINT_LABELS,
+  EvidenceRow,
+  RuleBreakdowns,
+  RuleMetrics,
+  RuleRow,
+  shortDate,
+  titleize,
+} from './types';
 
 type ChangedField = { field: string; label: string; before: unknown; after: unknown };
 type Period = {
@@ -61,17 +67,9 @@ type Timeline = {
   periods: Period[];
   milestones: Array<{ sequence: number; changed_at: string; label: string; changed_fields: ChangedField[] }>;
 };
-type BreakdownRow = { value: string; count: number };
-type Breakdowns = {
-  complaint_types: BreakdownRow[];
-  closure_types: BreakdownRow[];
-  admin_requests: BreakdownRow[];
-  contractor_responses: BreakdownRow[];
-  round_distribution: Array<{ rounds: number; count: number }>;
-};
 type EvidenceKind = 'complaints' | 'false_positives' | 'false_negatives' | 'contractor_follow_up' | 'closure_outcomes';
 
-const EMPTY_BREAKDOWNS: Breakdowns = {
+const EMPTY_BREAKDOWNS: RuleBreakdowns = {
   complaint_types: [],
   closure_types: [],
   admin_requests: [],
@@ -82,20 +80,10 @@ const EMPTY_BREAKDOWNS: Breakdowns = {
 const CLOSURE_LABELS: Record<string, string> = {
   pending_admin_review: 'Pending admin review',
   open: 'Open',
-  closed_no_contractor_action_required: 'No contractor action required',
-  closed_via_corrected_documentation: 'Corrected documentation',
-  closed_via_attestation: 'Contractor attestation',
-  closed_via_exception: 'Approved exception',
-  closed_as_withdrawn: 'Invoice withdrawn',
+  ...REVISION_CLOSURE_LABELS,
 };
 
-const CLOSED_OUTCOME_LABELS: Record<string, string> = {
-  closed_no_contractor_action_required: 'No contractor action required',
-  closed_via_corrected_documentation: 'Corrected documentation',
-  closed_via_attestation: 'Contractor attestation',
-  closed_via_exception: 'Approved exception',
-  closed_as_withdrawn: 'Invoice withdrawn',
-};
+const CLOSED_OUTCOME_LABELS = REVISION_CLOSURE_LABELS;
 
 const COMMON_RULE_DETAIL_FIELDS = [
   ['contractor_display_name', 'Contractor-facing name'],
@@ -129,12 +117,10 @@ function closureLabel(value?: string | null) {
 
 export default function RuleImprovementDetailScreen() {
   const { sourceEngine = '', ruleKey = '' } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const help = useDisclosure();
   const [rule, setRule] = useState<RuleRow | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
-  const [breakdowns, setBreakdowns] = useState<Breakdowns>(EMPTY_BREAKDOWNS);
+  const [breakdowns, setBreakdowns] = useState<RuleBreakdowns>(EMPTY_BREAKDOWNS);
+  const [evidenceTab, setEvidenceTab] = useState(0);
   const [evidence, setEvidence] = useState<Record<EvidenceKind, EvidenceRow[]>>({
     complaints: [],
     false_positives: [],
@@ -156,7 +142,6 @@ export default function RuleImprovementDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const returnQuery = new URLSearchParams(location.search).get('return_query') ?? '';
   const encodedRule = encodeURIComponent(ruleKey);
   const encodedEngine = encodeURIComponent(sourceEngine);
   const base = `/api/claims/admin/reports/rule_improvement/${encodedEngine}/${encodedRule}`;
@@ -295,30 +280,16 @@ export default function RuleImprovementDetailScreen() {
     setEvidenceTotals((current) => ({ ...current, [kind]: data.meta?.total ?? current[kind] }));
   };
 
-  const editorLink = useMemo(() => {
-    if (!rule) return '';
-    const params = new URLSearchParams({ mode: 'edit', record_type: rule.record_type, record_id: rule.rule_id });
-    const firstUpgradeTypeId = rule.upgrade_types[0]?.id;
-    if (firstUpgradeTypeId) params.set('invoice_upgrade_type_id', firstUpgradeTypeId);
-    return `/validation-rules-admin?${params}`;
-  }, [rule]);
-
   const isCodeRule = rule?.source_engine === 'code';
   const scopeLabel = isCodeRule ? 'this code implementation' : 'current rule version';
+  const actions = useMemo(() => (rule ? buildImprovementActions(rule, breakdowns) : []), [rule, breakdowns]);
 
   return (
     <>
-      <ThinBlueTitleBar title="Rule Improvement Detail" />
+      <ThinBlueTitleBar
+        title={rule ? `Rule Improvement Detail - ${rule.contractor_display_name}` : 'Rule Improvement Detail'}
+      />
       <Container maxW="full" px={6} pb={4} pt={6}>
-        <Button
-          leftIcon={<ArrowLeft />}
-          variant="ghost"
-          mb={4}
-          onClick={() => navigate(`/reports-rule-improvement${returnQuery}`)}
-        >
-          Back to rules
-        </Button>
-
         {error && (
           <Alert status="error" mb={5}>
             <AlertIcon />
@@ -332,37 +303,11 @@ export default function RuleImprovementDetailScreen() {
         )}
 
         {!loading && rule && (
-          <>
-            <Flex
-              justify="space-between"
-              align={{ base: 'start', md: 'center' }}
-              direction={{ base: 'column', md: 'row' }}
-              gap={4}
-              mb={5}
-            >
-              <Box>
-                <HStack mb={2}>
-                  <Badge colorScheme={isCodeRule ? 'purple' : 'blue'}>{isCodeRule ? 'Code' : 'GenAI'}</Badge>
-                  <Badge colorScheme={rule.enabled ? 'green' : 'gray'}>{rule.enabled ? 'Enabled' : 'Disabled'}</Badge>
-                </HStack>
-                <Text fontSize="2xl" fontWeight="bold">
-                  {rule.contractor_display_name}
-                </Text>
-                <Text fontFamily="mono" fontSize="sm" color="gray.600">
-                  {rule.rule_key}
-                </Text>
-              </Box>
-              <HStack>
-                <Button leftIcon={<Question />} variant="outline" onClick={help.onOpen}>
-                  How to use this report
-                </Button>
-                <Button as={RouterLink} to={editorLink} leftIcon={<PencilSimple />} colorScheme="blue">
-                  Edit rule
-                </Button>
-              </HStack>
-            </Flex>
-
+          <RuleImprovementProcess key={base} isCodeRule={isCodeRule} rule={rule} actions={actions}>
+            <ActionSignalsOverview actions={actions} />
             <Tabs
+              index={evidenceTab}
+              onChange={setEvidenceTab}
               variant="line"
               isFitted
               colorScheme="gray"
@@ -378,11 +323,11 @@ export default function RuleImprovementDetailScreen() {
                 },
               }}
             >
-              <TabList overflowX="auto" overflowY="hidden">
+              <TabList aria-label="Evidence details" overflowX="auto" overflowY="hidden">
                 <Tab whiteSpace="nowrap">Rule history</Tab>
                 <Tab whiteSpace="nowrap">Complaints</Tab>
-                <Tab whiteSpace="nowrap">False-positive candidates</Tab>
-                <Tab whiteSpace="nowrap">False-negative candidates</Tab>
+                <Tab whiteSpace="nowrap">False-positives</Tab>
+                <Tab whiteSpace="nowrap">False-negatives</Tab>
                 <Tab whiteSpace="nowrap">Workflow management rounds</Tab>
                 <Tab whiteSpace="nowrap">Requests and responses</Tab>
                 <Tab whiteSpace="nowrap">Closure outcomes</Tab>
@@ -390,20 +335,10 @@ export default function RuleImprovementDetailScreen() {
 
               <TabPanels>
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    {isCodeRule
-                      ? 'This tab shows one executable-code implementation period. Use the row information icon to inspect the complete database configuration for this record; it does not show the executable source code.'
-                      : 'This history shows how the rule changed over time. Each row is one effective rule period; only the current period feeds the other tabs. Use a row information icon to see the complete rule values that applied during that version.'}
-                  </CandidateNotice>
                   <RuleHistoryTable periods={timeline?.periods ?? []} isCodeRule={isCodeRule} ruleKey={rule.rule_key} />
                 </TabPanel>
 
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    Complaints concern the usefulness of the written reason, not necessarily whether the rule passed or
-                    failed correctly. The finding may be accurate while its explanation, evidence, likely cause or
-                    required action still needs improvement.
-                  </CandidateNotice>
                   <ComplaintTypeChart
                     rows={breakdowns.complaint_types}
                     scopeLabel={scopeLabel}
@@ -427,6 +362,13 @@ export default function RuleImprovementDetailScreen() {
                           {label}
                         </option>
                       ))}
+                      {breakdowns.complaint_types
+                        .filter((row) => !Object.prototype.hasOwnProperty.call(COMPLAINT_LABELS, row.value))
+                        .map((row) => (
+                          <option key={row.value} value={row.value}>
+                            {titleize(row.value)}
+                          </option>
+                        ))}
                     </Select>
                   </Box>
                   <EvidenceTable
@@ -444,46 +386,32 @@ export default function RuleImprovementDetailScreen() {
                 </TabPanel>
 
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    A warning or failure closed with no contractor action is worth reviewing, but it is not proof that
-                    the rule was wrong.
-                  </CandidateNotice>
                   <Text fontSize="sm" fontWeight="semibold" mb={4}>
-                    Total false-positive candidates: {evidenceTotals.false_positives}
+                    Total false-positives: {evidenceTotals.false_positives}
                   </Text>
                   <EvidenceTable
                     kind="false_positives"
                     rows={evidence.false_positives}
                     total={evidenceTotals.false_positives}
-                    empty={`No false-positive candidates are present for ${scopeLabel}.`}
+                    empty={`No false-positives are present for ${scopeLabel}.`}
                     onLoadMore={() => void loadMoreEvidence('false_positives')}
                   />
                 </TabPanel>
 
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    A pass or informational result with a linked rule issue may indicate a miss, but it remains a
-                    candidate rather than proof. Review whether the workflow required real corrective action.
-                  </CandidateNotice>
                   <Text fontSize="sm" fontWeight="semibold" mb={4}>
-                    Total false-negative candidates: {evidenceTotals.false_negatives}
+                    Total false-negatives: {evidenceTotals.false_negatives}
                   </Text>
                   <EvidenceTable
                     kind="false_negatives"
                     rows={evidence.false_negatives}
                     total={evidenceTotals.false_negatives}
-                    empty={`No false-negative candidates are present for ${scopeLabel}.`}
+                    empty={`No false-negatives are present for ${scopeLabel}.`}
                     onLoadMore={() => void loadMoreEvidence('false_negatives')}
                   />
                 </TabPanel>
 
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    Several rounds are a signal of effort, not proof that contractor training is needed. Repeated
-                    corrected-documentation closures for the same mistake may point to clearer guidance or training.
-                    No-action or exception closures may instead expose a rule or policy problem. Open or pending cases
-                    do not yet provide an outcome.
-                  </CandidateNotice>
                   <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mb={6}>
                     <SummaryValue label="Invoice versions with follow-up" value={rule.follow_up_invoice_count} />
                     <SummaryValue label="Total rounds" value={rule.total_round_count} />
@@ -523,12 +451,6 @@ export default function RuleImprovementDetailScreen() {
                 </TabPanel>
 
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    This tab counts pull-down selections in sent workflow rounds. It shows what administrators asked
-                    contractors to do and how contractors responded before closure. Multiple rounds on one issue can
-                    contribute multiple selections, so compare the patterns rather than treating the two charts as
-                    one-to-one pairs.
-                  </CandidateNotice>
                   <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={5}>
                     <VerticalCategoryChart
                       title={`Admin requests — ${scopeLabel}`}
@@ -550,12 +472,6 @@ export default function RuleImprovementDetailScreen() {
                 </TabPanel>
 
                 <TabPanel p={3}>
-                  <CandidateNotice>
-                    This chart contains closed issues only. Open and pending issues are excluded because their outcomes
-                    are not known yet. Repeated corrected-documentation outcomes may support clearer contractor
-                    guidance, while repeated no-action outcomes may point to an over-broad rule. Exceptions can expose
-                    recurring edge cases.
-                  </CandidateNotice>
                   <ClosureOutcomeChart
                     rows={breakdowns.closure_types}
                     scopeLabel={scopeLabel}
@@ -598,11 +514,10 @@ export default function RuleImprovementDetailScreen() {
                 </TabPanel>
               </TabPanels>
             </Tabs>
-          </>
+            <RulePackageAudits rule={rule} evidenceUrl={apiUrl('/evidence')} auditUrl={apiUrl('/audit')} />
+          </RuleImprovementProcess>
         )}
       </Container>
-
-      <RuleImprovementHelp isOpen={help.isOpen} onClose={help.onClose} isCodeRule={isCodeRule} />
     </>
   );
 }
@@ -656,8 +571,8 @@ function RuleHistoryTable({
               <Th>Effective period</Th>
               <Th isNumeric>Invoices</Th>
               <Th isNumeric>Complaints</Th>
-              <Th isNumeric>FP candidates</Th>
-              <Th isNumeric>FN candidates</Th>
+              <Th isNumeric>False-positives</Th>
+              <Th isNumeric>False-negatives</Th>
               <Th isNumeric>Rounds</Th>
               <Th textAlign="center">Details</Th>
             </Tr>
@@ -750,26 +665,6 @@ function RuleHistoryTable({
   );
 }
 
-const COMPLAINT_CHART_LABELS: Record<string, string> = {
-  unclear_or_confusing: 'Unclear',
-  too_vague: 'Too vague',
-  missing_evidence_explanation: 'Missing evidence',
-  incorrect_evidence_or_reasoning: 'Incorrect evidence or reasoning',
-  likely_causes_unhelpful: 'Unhelpful likely causes',
-  required_action_unclear: 'Unclear required action',
-  irrelevant_or_duplicative: 'Irrelevant or duplicate',
-  too_verbose_or_repetitive: 'Too verbose',
-  other: 'Other',
-};
-
-const CLOSURE_CHART_LABELS: Record<string, string> = {
-  closed_no_contractor_action_required: 'No action required',
-  closed_via_corrected_documentation: 'Corrected documentation',
-  closed_via_attestation: 'Attestation',
-  closed_via_exception: 'Exception',
-  closed_as_withdrawn: 'Withdrawn',
-};
-
 const ADMIN_REQUEST_LABELS: Record<string, string> = {
   correct_and_reupload_invoice: 'Correct and re-upload invoice',
   upload_supporting_document: 'Upload supporting document',
@@ -817,7 +712,6 @@ function ComplaintTypeChart({
       totalLabel="Total complaints"
       rows={rows}
       fullLabels={COMPLAINT_LABELS}
-      shortLabels={COMPLAINT_CHART_LABELS}
       empty={`No reason complaints have been recorded for ${scopeLabel}.`}
       selectedValue={selectedValue}
       onSelect={onSelect}
@@ -842,7 +736,6 @@ function ClosureOutcomeChart({
       totalLabel="Total closed issues"
       rows={rows}
       fullLabels={CLOSED_OUTCOME_LABELS}
-      shortLabels={CLOSURE_CHART_LABELS}
       empty={`No closed workflow issues are available for ${scopeLabel}.`}
       selectedValue={selectedValue}
       onSelect={onSelect}
@@ -864,7 +757,7 @@ function VerticalCategoryChart({
   totalLabel: string;
   rows: BreakdownRow[];
   fullLabels: Record<string, string>;
-  shortLabels: Record<string, string>;
+  shortLabels?: Record<string, string>;
   empty: string;
   selectedValue?: string;
   onSelect?: (value: string) => void;
@@ -908,7 +801,7 @@ function VerticalCategoryChart({
                   />
                 </Flex>
                 <Text fontSize="xs" textAlign="center" lineHeight="short" minH="48px" pt={2}>
-                  {shortLabels[row.value] || fullLabel}
+                  {shortLabels?.[row.value] || fullLabel}
                 </Text>
               </>
             );
@@ -1093,392 +986,5 @@ function EvidenceTable({
         </Flex>
       )}
     </Box>
-  );
-}
-
-function HelpSection({ title, children }: React.PropsWithChildren<{ title: string }>) {
-  return (
-    <AccordionItem borderWidth="1px" borderColor="gray.200" borderRadius="md" mb={3} overflow="hidden">
-      <h3>
-        <AccordionButton py={4} _expanded={{ bg: 'blue.50', color: 'blue.900' }}>
-          <Text flex="1" textAlign="left" fontWeight="bold">
-            {title}
-          </Text>
-          <AccordionIcon />
-        </AccordionButton>
-      </h3>
-      <AccordionPanel pb={5} fontSize="sm" color="gray.700">
-        {children}
-      </AccordionPanel>
-    </AccordionItem>
-  );
-}
-
-function RuleImprovementHelp({
-  isOpen,
-  onClose,
-  isCodeRule,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  isCodeRule: boolean;
-}) {
-  return (
-    <Drawer isOpen={isOpen} placement="right" onClose={onClose} size="lg">
-      <DrawerOverlay />
-      <DrawerContent>
-        <DrawerCloseButton />
-        <DrawerHeader>How to investigate a {isCodeRule ? 'code' : 'GenAI'} rule</DrawerHeader>
-        <DrawerBody pb={8}>
-          <Alert status="info" mb={4} alignItems="start">
-            <AlertIcon mt={1} />
-            <Text fontSize="sm">
-              Use this report to choose one next step: tune the rule or its reason, improve contractor guidance or
-              training, or keep observing. Start with a signal, inspect several underlying invoices, and act only when
-              the evidence shows a repeatable pattern.
-            </Text>
-          </Alert>
-          <Text fontSize="sm" color="gray.600" mb={4}>
-            Open the section for the tab you are reviewing. All sections start collapsed so the guidance stays out of
-            the way until you need it.
-          </Text>
-
-          <Accordion allowMultiple>
-            <HelpSection title="Rule history">
-              <Text mb={2}>
-                Use this tab for more than identifying what changed. It connects each rule definition or implementation
-                period to the results produced while it was effective, so you can judge whether a change actually
-                improved the rule. Compare invoice volume, complaints, false-positive and false-negative candidates,
-                follow-up and rounds between periods.
-              </Text>
-              {isCodeRule ? (
-                <>
-                  <Text mb={2}>
-                    This table represents one executable-code implementation identified by its code-rule key. The row
-                    information icon shows the complete database configuration—labels, messages, visibility and workflow
-                    policy—but not the executable source code.
-                  </Text>
-                  <Text mb={2}>
-                    When a code release changes the rule’s behaviour, development practice must create a new code-rule
-                    key and database record. The application keeps keys unique and immutable, but cannot inspect source
-                    code and enforce that release practice itself. A new record creates a clean measurement boundary so
-                    the old and new implementations are not evaluated as if they were one rule.
-                  </Text>
-                </>
-              ) : (
-                <Text mb={2}>
-                  Every saved GenAI rule change creates a new effective period. Use a row’s information icon to inspect
-                  the complete rule values that applied during that period, including the prompt, messages, evidence
-                  instructions and workflow settings. The other report tabs deliberately use only the current period;
-                  this history table is where you compare it with earlier periods.
-                </Text>
-              )}
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Check sample size first:</strong> zero candidates across six assessed invoice versions is much
-                  weaker evidence than zero across sixty comparable versions.
-                </ListItem>
-                <ListItem>
-                  <strong>Compare rates as well as counts:</strong> five complaints after 200 checks may be an
-                  improvement over four complaints after 20 checks. The table supplies counts and volume so you can make
-                  that judgement rather than reading a raw total alone.
-                </ListItem>
-                <ListItem>
-                  <strong>Check what changed:</strong> if false positives fall after narrowing applicability, that is a
-                  plausible effect. If only contractor-facing wording changed, improved complaint and round patterns are
-                  more meaningful than a change in detection accuracy.
-                </ListItem>
-                <ListItem>
-                  <strong>Example:</strong> a prior period produced 12 false-positive candidates across 80 assessed
-                  versions. The current period has none across only six. That is encouraging, but too early to conclude
-                  that the change worked; keep observing until the current period has a credible sample and case mix.
-                </ListItem>
-                <ListItem>
-                  <strong>Act on the comparison:</strong> retain a change when the intended measure improves without a
-                  new adverse pattern. Investigate or reverse it when results worsen. Keep observing when volume is too
-                  small or the invoice mix is not comparable.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-
-            <HelpSection title="Complaints">
-              <Text mb={2}>
-                Complaints concern the usefulness of the written reason, not necessarily the pass/fail result. The
-                vertical chart always shows the full complaint vocabulary, including zeroes. The grid beneath it
-                contains the exact reasons and comments behind the counts. Select a chart bar or use the complaint-type
-                filter to narrow the grid while keeping the full distribution visible.
-              </Text>
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Start with the distribution:</strong> one dominant complaint type usually gives a clearer next
-                  step than an even mix. Then filter to that type and read several comments to confirm that
-                  administrators used the pull-down consistently.
-                </ListItem>
-                <ListItem>
-                  <strong>Separate correctness from helpfulness:</strong> if the rule correctly fails an invoice but the
-                  reason does not say what is missing or how to fix it, improve the reason rather than weakening the
-                  detection logic.
-                </ListItem>
-                <ListItem>
-                  <strong>Possibly fine:</strong> an administrator prefers shorter wording, but the reason cites the
-                  correct evidence and required action. A single stylistic complaint does not establish a pattern.
-                </ListItem>
-                <ListItem>
-                  <strong>Likely needs improvement:</strong> repeated complaints say that the reason cites the wrong
-                  document or never explains what the contractor must provide.
-                </ListItem>
-                <ListItem>
-                  <strong>Useful interpretation:</strong> repeated <strong>Too verbose</strong> complaints usually
-                  suggest a reason-writing change, while repeated <strong>Incorrect evidence or reasoning</strong>{' '}
-                  complaints may require changes to evidence selection or the rule prompt.{' '}
-                  <strong>Irrelevant or duplicate</strong> can expose an applicability or overlapping-rule problem.
-                </ListItem>
-                <ListItem>
-                  <strong>Check concentration:</strong> complaints from one administrator may reflect a usage
-                  difference; the same complaint across several administrators and contractors is stronger evidence of a
-                  systemic problem.
-                </ListItem>
-                <ListItem>
-                  <strong>Example action:</strong> when results are usually correct but administrators repeatedly select
-                  <strong>Required action is unclear</strong>, rewrite the contractor-facing action and examples while
-                  leaving the pass/fail logic alone. Review later periods to see whether that complaint declines.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-
-            <HelpSection title="False-positive candidates">
-              <Text mb={2}>
-                These began as warnings or failures and their rule issue closed with no contractor action required. That
-                makes them candidates—not confirmed false positives.
-              </Text>
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Review the complete chain:</strong> open the invoice version, read the original rule result
-                  and evidence, then compare the workflow discussion and disposition comment. The closure label alone
-                  cannot tell you why no contractor action was required.
-                </ListItem>
-                <ListItem>
-                  <strong>Possibly fine:</strong> an administrator found acceptable evidence elsewhere, decided that no
-                  action was needed for a legitimate case-specific reason, or used the no-action close type imprecisely.
-                </ListItem>
-                <ListItem>
-                  <strong>Likely a rule problem:</strong> the same rule repeatedly fails invoices where the required
-                  evidence is visibly present or the rule does not apply.
-                </ListItem>
-                <ListItem>
-                  <strong>Example:</strong> 9 of 14 failures close with no action, and reviewers repeatedly state that
-                  the model number was present on page two. That pattern supports narrowing the rule or improving how it
-                  locates the evidence.
-                </ListItem>
-                <ListItem>
-                  <strong>Use the denominator:</strong> three candidates across five assessed versions is a different
-                  signal from three across five hundred. Confirm that the affected invoices were actually eligible for
-                  the rule before treating the ratio as meaningful.
-                </ListItem>
-                <ListItem>
-                  <strong>Look for a shared cause:</strong> repeated acceptable evidence in the same document location
-                  suggests an evidence-search change; repeated inapplicability suggests a scope condition; inconsistent
-                  no-action closures may instead require administrator guidance.
-                </ListItem>
-                <ListItem>
-                  <strong>Choose the smallest action:</strong> tune rule logic only when the records show a repeatable
-                  incorrect trigger. Improve the reason if detection is correct but the explanation caused confusion, or
-                  keep observing when the cases do not share a cause.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-
-            <HelpSection title="False-negative candidates">
-              <Text mb={2}>
-                These checks passed or returned information, but a workflow issue is linked to that exact rulecheck.
-                That link is why the row is a candidate: it suggests an administrator may have identified a problem the
-                rule did not. It is still not proof of a false negative; review the original result, the workflow
-                activity and the outcome together.
-              </Text>
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Confirm the issue matches the rule:</strong> read the passing or informational result and the
-                  linked workflow record. Treat it as a miss only when the later corrective request concerns the same
-                  requirement this rule was meant to assess.
-                </ListItem>
-                <ListItem>
-                  <strong>Possibly fine:</strong> the issue was created automatically by an all-results workflow policy,
-                  remained pending without human follow-up, was opened as a precaution, or was linked to the wrong
-                  source by an administrator.
-                </ListItem>
-                <ListItem>
-                  <strong>Likely a rule problem:</strong> administrators repeatedly open issues for the exact defect
-                  that the rule was designed to catch.
-                </ListItem>
-                <ListItem>
-                  <strong>Example:</strong> the rule passes because an invoice mentions a permit, but administrators
-                  repeatedly request the missing permit document itself. That suggests the rule is checking for the word
-                  rather than the required evidence.
-                </ListItem>
-                <ListItem>
-                  <strong>Distinguish severity from frequency:</strong> a rare miss involving a high-value or mandatory
-                  requirement may still justify action. Several low-impact candidates may first warrant closer
-                  monitoring or a targeted test case.
-                </ListItem>
-                <ListItem>
-                  <strong>Look for what was missed:</strong> recurring missing attachments may require evidence-presence
-                  logic; recurring wrong values may require a validation change; issues unrelated to the rule should be
-                  corrected in workflow linkage or administrator practice instead.
-                </ListItem>
-                <ListItem>
-                  <strong>After a change:</strong> add the confirmed examples to rule testing, then monitor the new
-                  period for fewer equivalent misses without creating new false positives.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-
-            <HelpSection title="Workflow management rounds">
-              <Text mb={2}>
-                This tab measures operational effort, not blame. Compare how many invoice versions required follow-up
-                with the total and average sent rounds, then inspect the grid to see what contractors were asked to
-                correct. Use the minimum-round filter to start with the cases that required the most exchanges.
-              </Text>
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Read the measures correctly:</strong> invoice versions with follow-up are distinct assessed
-                  versions that produced a rule issue. Total rounds count sent administrator-to-contractor exchanges;
-                  internal drafts do not count. Average rounds is calculated across issues with at least one sent round.
-                </ListItem>
-                <ListItem>
-                  <strong>Start with the outliers:</strong> raise the minimum-round filter to find the invoices
-                  requiring the most back-and-forth. Read their requests, responses and final disposition before
-                  assuming that the contractor misunderstood the rule.
-                </ListItem>
-                <ListItem>
-                  <strong>Likely straightforward:</strong> 30 invoice versions require follow-up, with 32 total rounds
-                  and a 1.1 average. Most requests appear to be understood and resolved in one exchange.
-                </ListItem>
-                <ListItem>
-                  <strong>Possible guidance or training problem:</strong> 8 versions require 21 rounds, and the records
-                  show repeated omissions of the same equipment-specification page. Add a submission example or train
-                  contractors on that requirement.
-                </ListItem>
-                <ListItem>
-                  <strong>Target the response:</strong> if one contractor accounts for most repeated rounds, targeted
-                  coaching may be appropriate. If many contractors make the same mistake, the program’s written
-                  instructions or form design may be the real problem.
-                </ListItem>
-                <ListItem>
-                  <strong>Do not equate rounds with rule accuracy:</strong> a correct rule can generate many rounds when
-                  submission instructions are poor, and an incorrect rule can close in one round through an exception.
-                  Use Complaints, Requests and responses, and Closure outcomes to identify the cause.
-                </ListItem>
-                <ListItem>
-                  <strong>Example action:</strong> if many contractors repeatedly omit the same specification page, add
-                  a checklist example or pre-submission instruction. If the same rule request itself changes from round
-                  to round, improve administrator guidance or the rule’s required-action text.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-
-            <HelpSection title="Requests and responses">
-              <Text mb={2}>
-                These charts describe how the rule was used during the workflow before closure: the action
-                administrators selected when sending a round and the response method contractors selected when replying.
-                Every selection in a sent round is counted during the current measurement period, so an issue with
-                several exchanges can be counted several times. The two totals need not match and the columns are not
-                one-to-one pairings.
-              </Text>
-              <Text fontWeight="bold" mb={2}>
-                What a recurring pattern can suggest
-              </Text>
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Use the charts as a workflow map:</strong> first identify the most common administrator
-                  request, then compare the response distribution and closure outcomes. Because the charts are
-                  aggregates, open representative workflow records on the rounds or closure tabs before concluding that
-                  two selections belonged to the same exchange.
-                </ListItem>
-                <ListItem>
-                  <strong>Likely contractor guidance opportunity:</strong> admins repeatedly request a supporting
-                  document, contractors then upload it, and the issues close through corrected documentation. The rule
-                  may be working correctly, while the submission checklist or examples need improvement.
-                </ListItem>
-                <ListItem>
-                  <strong>Possible requirement or rule problem:</strong> admins repeatedly request explanations, but
-                  contractors frequently select <strong>Unable to resolve</strong>. Inspect the comments to learn
-                  whether the evidence is unavailable, the requirement is unclear, or the rule is asking for something
-                  unreasonable.
-                </ListItem>
-                <ListItem>
-                  <strong>Possible communication mismatch:</strong> admins usually request a corrected invoice, while
-                  contractors usually provide an explanation. The admin request wording, contractor instructions, or
-                  workflow choices may not be expressing the intended next step clearly.
-                </ListItem>
-                <ListItem>
-                  <strong>Healthy expected path:</strong> attestation requests are normally answered with attestations
-                  and close through the attestation outcome. A stable matching pattern may require no change.
-                </ListItem>
-                <ListItem>
-                  <strong>Watch for pull-down misuse:</strong> broad or inconsistent selections can obscure the real
-                  pattern. If comments describe document requests while administrators select explanation, clarify the
-                  pull-down definitions or train users before changing the rule.
-                </ListItem>
-                <ListItem>
-                  <strong>Separate local and systemic patterns:</strong> one contractor repeatedly choosing Unable to
-                  resolve may need direct support. The same response across contractors may mean that required evidence
-                  is unavailable, the instruction is unclear, or the rule demands something the program cannot
-                  reasonably substantiate.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-
-            <HelpSection title="Closure outcomes">
-              <Text mb={2}>
-                This chart contains only terminal closure outcomes. <strong>Pending admin review</strong> and{' '}
-                <strong>Open</strong> are workflow states, not outcomes, so they are excluded from the chart and
-                evidence total. Each bar counts closed issues, not invoices or rounds. Select a chart bar or choose an
-                outcome to inspect the underlying invoice records and disposition comments.
-              </Text>
-              <UnorderedList spacing={2}>
-                <ListItem>
-                  <strong>Start with the dominant outcome:</strong> select its bar or filter, then sample the
-                  disposition comments. Confirm that administrators are using the closure type consistently before
-                  treating the chart as evidence about the rule.
-                </ListItem>
-                <ListItem>
-                  <strong>Corrected documentation:</strong> the request was actionable; repeated occurrences may justify
-                  clearer examples or training. Example: contractors repeatedly resubmit the same form with the missing
-                  signature added.
-                </ListItem>
-                <ListItem>
-                  <strong>Contractor attestation:</strong> the requirement may rely on information that is difficult to
-                  document. Example: the contractor confirms an installation condition that photographs cannot
-                  establish.
-                </ListItem>
-                <ListItem>
-                  <strong>Approved exception:</strong> a legitimate case falls outside the ordinary rule. Repeated
-                  similar exceptions may justify an explicit rule exception or policy clarification.
-                </ListItem>
-                <ListItem>
-                  <strong>No contractor action required:</strong> investigate possible over-triggering or inconsistent
-                  administration. A concentration here strengthens the false-positive signal but still requires record
-                  review.
-                </ListItem>
-                <ListItem>
-                  <strong>Invoice withdrawn:</strong> the invoice left the process. This is operational context, not
-                  evidence by itself that either the rule or contractor was wrong.
-                </ListItem>
-                <ListItem>
-                  <strong>Compare with other tabs:</strong> no-action closures strengthen the false-positive signal;
-                  corrected-documentation closures plus repeated rounds suggest a submission-guidance problem; approved
-                  exceptions concentrated around one scenario may justify an explicit applicability exception.
-                </ListItem>
-                <ListItem>
-                  <strong>Do not force an action from a small sample:</strong> one unusual closure can be legitimate.
-                  Look for repeated reasoning across several invoices, then decide whether to tune the rule, clarify
-                  policy, improve training or keep observing.
-                </ListItem>
-              </UnorderedList>
-            </HelpSection>
-          </Accordion>
-        </DrawerBody>
-      </DrawerContent>
-    </Drawer>
   );
 }

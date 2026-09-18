@@ -1,5 +1,9 @@
 BEGIN;
 
+-- rule_audit_system_record is intentionally not overwritten by this seed.
+-- NULL/blank uses the maintained application default in
+-- config/prompts/rule_package_audit_system.txt; System Config can override it.
+
 -- Depends on 3_insert_invoice_upgrade_types.sql.
 WITH config_row (
   id,

@@ -28,7 +28,7 @@ module Claims
         "COALESCE(MAX(sent_round_count) FILTER (WHERE revision_issue_id IS NOT NULL), 0)::integer",
         "COUNT(*) FILTER (WHERE revision_issue_id IS NOT NULL AND sent_round_count > 1)::integer",
         "COUNT(*) FILTER (WHERE rule_result IN ('warn', 'fail') AND revision_issue_status = 'closed_no_contractor_action_required')::integer",
-        "COUNT(*) FILTER (WHERE rule_result IN ('pass', 'info') AND revision_issue_id IS NOT NULL AND COALESCE(revision_issue_status, '') NOT IN ('closed_no_contractor_action_required', 'closed_as_withdrawn'))::integer"
+        "COUNT(*) FILTER (WHERE rule_result IN ('pass', 'info') AND revision_issue_id IS NOT NULL)::integer"
       ].freeze
 
       METRIC_KEYS = %i[

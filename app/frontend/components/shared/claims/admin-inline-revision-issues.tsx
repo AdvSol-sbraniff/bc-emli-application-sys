@@ -16,6 +16,7 @@ import {
   Checkbox,
   Flex,
   FormControl,
+  FormHelperText,
   FormLabel,
   Menu,
   MenuButton,
@@ -37,6 +38,7 @@ import {
 } from '@chakra-ui/react';
 import { CaretDown, CaretRight, CheckCircle, FloppyDiskBack, PaperPlaneTilt } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { REVISION_CLOSURE_LABELS, revisionClosureGuidance } from './revision-closure-guidance';
 import { RevisionIssue, RevisionIssueComment, RevisionSourceIdentity, RevisionTrackerData } from './revision-tracker';
 
 type AdminDraft = { remedy: string; text: string };
@@ -61,16 +63,18 @@ const CONTRACTOR_RESPONSE_METHODS = [
   ['unable_to_resolve', 'Unable to resolve'],
 ];
 
-const INTERNAL_CLOSE_STATUSES = [['closed_no_contractor_action_required', 'Confirmed - no contractor action required']];
+const INTERNAL_CLOSE_STATUSES = [
+  ['closed_no_contractor_action_required', REVISION_CLOSURE_LABELS.closed_no_contractor_action_required],
+];
 const CONTRACTOR_CLOSE_STATUSES = [
-  ['closed_via_corrected_documentation', 'Corrected documentation accepted'],
-  ['closed_via_attestation', 'Attestation accepted'],
-  ['closed_via_exception', 'Exception granted'],
-  ['closed_as_withdrawn', 'Issue withdrawn'],
+  ['closed_via_corrected_documentation', REVISION_CLOSURE_LABELS.closed_via_corrected_documentation],
+  ['closed_via_attestation', REVISION_CLOSURE_LABELS.closed_via_attestation],
+  ['closed_via_exception', REVISION_CLOSURE_LABELS.closed_via_exception],
+  ['closed_as_withdrawn', REVISION_CLOSURE_LABELS.closed_as_withdrawn],
 ];
 
 const dispositionStatusLabel = (status: RevisionIssue['status']): string =>
-  [...INTERNAL_CLOSE_STATUSES, ...CONTRACTOR_CLOSE_STATUSES].find(([value]) => value === status)?.[1] || pretty(status);
+  REVISION_CLOSURE_LABELS[status] || pretty(status);
 
 const adminRemedyLabel = (remedy?: string | null): string =>
   ADMIN_REMEDIES.find(([value]) => value === remedy)?.[1] || (remedy ? pretty(remedy) : '');
@@ -1144,6 +1148,7 @@ export const AdminRevisionIssueEditor = ({
                       </option>
                     ))}
                   </Select>
+                  <FormHelperText color="gray.600">{revisionClosureGuidance(closeDraft.status)}</FormHelperText>
                 </FormControl>
                 <FormControl isRequired>
                   <FormLabel>Disposition comment</FormLabel>

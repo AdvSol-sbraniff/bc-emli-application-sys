@@ -120,12 +120,6 @@ module Claims
           scope
             .where(rule_result: %w[pass info])
             .where.not(revision_issue_id: nil)
-            .where.not(
-              revision_issue_status: %w[
-                closed_no_contractor_action_required
-                closed_as_withdrawn
-              ]
-            )
         else
           scope
         end

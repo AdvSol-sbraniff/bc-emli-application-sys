@@ -1,6 +1,7 @@
 require "rails_helper"
 
 RSpec.describe "Claims rule improvement reporting", type: :request do
+  include ActiveSupport::Testing::TimeHelpers
   before do
     host! "localhost"
     allow_any_instance_of(
@@ -415,6 +416,206 @@ RSpec.describe "Claims rule improvement reporting", type: :request do
     expect(false_positive_issue).to be_closed
   end
 
+  it "includes every workflow outcome in false-negative counts and evidence" do
+    package = build_package
+    checked_at = package[:rule].reload.updated_at + 1.minute
+    candidates =
+      %w[pass info]
+        .product(Claims::RevisionIssue::STATUSES)
+        .map do |result, status|
+          invoice =
+            Claims::Invoice.create!(
+              session_id: Claims::Session.create!.id,
+              contractor_id: package[:contractor].id,
+              status: "admin_review_inbox",
+              status_updated_at: checked_at
+            )
+          rulecheck =
+            add_rulecheck(
+              package: package,
+              invoice: invoice,
+              version_number: 1,
+              result: result,
+              created_at: checked_at
+            )
+          add_issue(
+            package: package,
+            rulecheck: rulecheck,
+            status: status,
+            disposition_comment:
+              (
+                if Claims::RevisionIssue::UNRESOLVED_STATUSES.include?(status)
+                  nil
+                else
+                  "Recorded workflow outcome."
+                end
+              )
+          )
+          rulecheck.id
+        end
+
+    # A linked fail and pass/info checks without an issue are not candidates.
+    add_issue(
+      package: package,
+      rulecheck: package[:rulecheck],
+      status: "open",
+      disposition_comment: nil
+    )
+    %w[pass info].each_with_index do |result, index|
+      add_rulecheck(
+        package: package,
+        version_number: index + 2,
+        result: result,
+        created_at: checked_at
+      )
+    end
+
+    rule_path =
+      "/api/claims/admin/reports/rule_improvement/genai/#{package[:rule].genai_rule_key}"
+    get(rule_path)
+    expect(response).to have_http_status(:ok)
+    expect(json_response.dig("rule", "candidate_false_negative_count")).to eq(
+      candidates.length
+    )
+
+    get("#{rule_path}/evidence", params: { evidence_type: "false_negatives" })
+    expect(response).to have_http_status(:ok)
+    expect(json_response.dig("meta", "total")).to eq(candidates.length)
+    expect(json_response.fetch("rows").pluck("rulecheck_id")).to match_array(
+      candidates
+    )
+  end
+
+  it "counts distinct invoices for signal percentages across versions and workflow selections" do
+    package = build_package(complaint_code: "too_vague")
+    checked_at = package[:rule].reload.updated_at + 1.minute
+    add_rulecheck(
+      package: package,
+      version_number: 2,
+      result: "fail",
+      created_at: checked_at,
+      complaint_code: "too_vague"
+    )
+    add_rulecheck(
+      package: package,
+      version_number: 3,
+      result: "warn",
+      created_at: checked_at + 1.minute,
+      complaint_code: "unclear_or_confusing"
+    )
+    add_rulecheck(
+      package: package,
+      version_number: 4,
+      result: "fail",
+      created_at: checked_at + 2.minutes,
+      complaint_code: "other",
+      complaint_text: "A different concern on an invoice already counted."
+    )
+    issue =
+      add_issue(
+        package: package,
+        rulecheck: package[:rulecheck],
+        status: "closed_no_contractor_action_required",
+        disposition_comment: "The evidence was sufficient."
+      )
+    3.times do |index|
+      response_comment =
+        add_sent_round(
+          issue: issue,
+          invoice_version: package[:version],
+          round_number: index + 1,
+          sent_at: checked_at + (index + 2).minutes
+        )
+      if index == 1
+        response_comment
+          .revision_round
+          .comments
+          .find_by!(author_type: "admin")
+          .update!(admin_recommended_remedy: "correct_and_reupload_invoice")
+      end
+    end
+
+    other_invoice =
+      Claims::Invoice.create!(
+        session_id: Claims::Session.create!.id,
+        contractor_id: package[:contractor].id,
+        status: "admin_review_inbox",
+        status_updated_at: checked_at
+      )
+    other_check =
+      add_rulecheck(
+        package: package,
+        invoice: other_invoice,
+        version_number: 1,
+        result: "pass",
+        created_at: checked_at,
+        complaint_code: "other",
+        complaint_text: "This invoice has only an Other complaint."
+      )
+    add_issue(
+      package: package,
+      rulecheck: other_check,
+      status: "closed_as_withdrawn",
+      disposition_comment: "Invoice withdrawn."
+    )
+    build_package(complaint_code: "too_vague") # Unrelated rule is outside the denominator.
+
+    rule_path =
+      "/api/claims/admin/reports/rule_improvement/genai/#{package[:rule].genai_rule_key}"
+    get(rule_path)
+    expect(response).to have_http_status(:ok)
+    expect(json_response.dig("rule", "check_count")).to eq(5)
+    expect(json_response.dig("rule", "complaint_count")).to eq(5)
+    expect(json_response.dig("rule", "total_round_count")).to eq(3)
+    coverage = json_response.dig("rule", "invoice_coverage")
+    expect(coverage.fetch("total_invoice_count")).to eq(2)
+    expect(coverage.fetch("signal_invoice_counts")).to include(
+      "checks" => 2,
+      "versions" => 2,
+      "complaints" => 2,
+      "complaint:too_vague" => 1,
+      "complaint:unclear_or_confusing" => 1,
+      "complaint:required_action_unclear" => 0,
+      "complaint:other" => 2,
+      "explanation_complaints" => 2,
+      "false_positive" => 1,
+      "false_negative" => 1,
+      "closure:closed_no_contractor_action_required" => 1,
+      "closure:closed_as_withdrawn" => 1,
+      "result:pass" => 1,
+      "result:fail" => 1,
+      "result:warn" => 1,
+      "result:info" => 0,
+      "workflow_issues" => 2,
+      "closed" => 2,
+      "open" => 0,
+      "follow_up" => 2,
+      "sent_issues" => 1,
+      "multi_round" => 1,
+      "total_rounds" => 1,
+      "repeat_rounds" => 1,
+      "admin_requests:upload_supporting_document" => 1,
+      "admin_requests:correct_and_reupload_invoice" => 1,
+      "contractor_responses:supporting_document_uploaded" => 1,
+      "document_requests" => 1
+    )
+
+    get(rule_path, params: { reason_complaint_code: "too_vague" })
+    expect(response).to have_http_status(:ok)
+    expect(
+      json_response.dig("rule", "invoice_coverage", "total_invoice_count")
+    ).to eq(1)
+
+    package[:rule].update!(
+      prompt_text: "A new rule definition with no evaluations yet."
+    )
+    get(rule_path)
+    expect(response).to have_http_status(:ok)
+    coverage = json_response.dig("rule", "invoice_coverage")
+    expect(coverage.fetch("total_invoice_count")).to eq(0)
+    expect(coverage.fetch("signal_invoice_counts").values).to all(eq(0))
+  end
+
   it "reports each code-rule record as one executable implementation" do
     package = build_package
     implementation_started_at = package[:rule].created_at + 1.minute
@@ -536,7 +737,440 @@ RSpec.describe "Claims rule improvement reporting", type: :request do
     expect(response).to have_http_status(:not_found)
   end
 
+  describe "pre-check package metrics" do
+    it "keeps the first-submission failure even after a successful refresh and resubmission" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      record_submission(package, version: package[:version], at: at + 1.minute)
+      refreshed =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 2.minutes
+        )
+      record_submission(
+        package,
+        version: refreshed.invoice_version,
+        at: at + 3.minutes,
+        from: "contractor_revision_inbox"
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unresolved_package_count" => 1,
+        "cleared_package_count" => 0,
+        "unknown_outcome_package_count" => 0,
+        "unresolved_rate" => 1.0,
+        "cleared_rate" => 0.0
+      )
+    end
+
+    it "counts several pre-check versions as one cleared package and ignores a later failure" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      add_rulecheck(
+        package: package,
+        version_number: 2,
+        result: "warn",
+        created_at: at + 1.minute
+      )
+      clear =
+        add_rulecheck(
+          package: package,
+          version_number: 3,
+          result: "info",
+          created_at: at + 2.minutes
+        )
+      record_submission(
+        package,
+        version: clear.invoice_version,
+        at: at + 3.minutes
+      )
+      add_rulecheck(
+        package: package,
+        version_number: 4,
+        result: "fail",
+        created_at: at + 4.minutes
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "cleared_package_count" => 1,
+        "unresolved_package_count" => 0,
+        "unknown_outcome_package_count" => 0,
+        "cleared_rate" => 1.0
+      )
+    end
+
+    it "does not treat a hidden warning as a contractor-visible finding" do
+      package = build_package
+      package[:rulecheck].update_columns(rule_result: "warn")
+      record_submission(
+        package,
+        version: package[:version],
+        at: package[:rulecheck].created_at + 1.minute
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 0,
+        "no_visible_finding_package_count" => 1,
+        "unresolved_package_count" => 0,
+        "cleared_package_count" => 0,
+        "unresolved_rate" => nil,
+        "cleared_rate" => nil
+      )
+    end
+
+    it "does not count a missing matching upgrade check as cleared" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      final =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 1.minute
+        )
+      other_upgrade =
+        Claims::InvoiceUpgradeType.create!(
+          upgrade_type_key: "precheck_other_#{SecureRandom.hex(5)}",
+          description: "Another upgrade"
+        )
+      final.update_columns(invoice_upgrade_type_id: other_upgrade.id)
+      record_submission(
+        package,
+        version: final.invoice_version,
+        at: at + 2.minutes
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "cleared_package_count" => 0,
+        "unresolved_package_count" => 0,
+        "unknown_outcome_package_count" => 1,
+        "cleared_rate" => 0.0
+      )
+    end
+
+    it "counts a warning when warn-and-fail visibility was configured" do
+      package = build_package
+      package[:rule].update_columns(contractor_visibility: "warn_and_fail")
+      package[:rulecheck].update_columns(rule_result: "warn")
+      record_submission(
+        package,
+        version: package[:version],
+        at: package[:rulecheck].created_at + 1.minute
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unresolved_package_count" => 1,
+        "no_visible_finding_package_count" => 0
+      )
+    end
+
+    it "counts a package with mixed upgrade outcomes once and requires every finding to clear" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      other_upgrade =
+        Claims::InvoiceUpgradeType.create!(
+          upgrade_type_key: "precheck_mixed_#{SecureRandom.hex(5)}",
+          description: "Another upgrade"
+        )
+      other_finding = package[:rulecheck].dup
+      other_finding.invoice_upgrade_type_id = other_upgrade.id
+      other_finding.created_at = at
+      other_finding.save!
+      final =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 1.minute
+        )
+      other_final = final.dup
+      other_final.assign_attributes(
+        invoice_upgrade_type_id: other_upgrade.id,
+        rule_result: "fail"
+      )
+      other_final.created_at = at + 1.minute
+      other_final.save!
+      record_submission(
+        package,
+        version: final.invoice_version,
+        at: at + 2.minutes
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unresolved_package_count" => 1,
+        "cleared_package_count" => 0
+      )
+
+      other_final.destroy!
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unresolved_package_count" => 0,
+        "cleared_package_count" => 0,
+        "unknown_outcome_package_count" => 1
+      )
+    end
+
+    it "uses historical visibility when the code rule was hidden after submission" do
+      package = build_package
+      switch_to_code_rule(package)
+      at = package[:rulecheck].created_at
+      record_submission(package, version: package[:version], at: at + 1.minute)
+      change_rule_at(package, at + 2.minutes, contractor_visibility: "hidden")
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unresolved_package_count" => 1,
+        "unknown_history_package_count" => 0
+      )
+    end
+
+    it "does not treat hiding a finding before submission as clearing it" do
+      package = build_package
+      switch_to_code_rule(package)
+      at = package[:rulecheck].created_at
+      change_rule_at(package, at + 1.minute, contractor_visibility: "hidden")
+      record_submission(package, version: package[:version], at: at + 2.minutes)
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unresolved_package_count" => 0,
+        "cleared_package_count" => 0,
+        "unknown_outcome_package_count" => 1
+      )
+    end
+
+    it "does not credit a clear result across a recorded rule revision" do
+      package = build_package
+      switch_to_code_rule(package)
+      at = package[:rulecheck].created_at
+      change_rule_at(package, at + 1.minute, description: "Changed requirement")
+      final =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 2.minutes
+        )
+      record_submission(
+        package,
+        version: final.invoice_version,
+        at: at + 3.minutes
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "cleared_package_count" => 0,
+        "unknown_outcome_package_count" => 1
+      )
+    end
+
+    it "distinguishes missing submission history from a package that has not been submitted" do
+      package = build_package
+      expect(precheck_metrics(package)).to include(
+        "unknown_history_package_count" => 1,
+        "finding_package_count" => 0,
+        "cleared_rate" => nil
+      )
+
+      package[:invoice].update_columns(status: "contractor_precheck")
+      expect(precheck_metrics(package)).to include(
+        "unknown_history_package_count" => 0,
+        "unsubmitted_package_count" => 1
+      )
+    end
+
+    it "does not substitute a later resubmission when the first submission has no version" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      record_submission(package, version: nil, at: at + 1.minute)
+      final =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 2.minutes
+        )
+      record_submission(
+        package,
+        version: final.invoice_version,
+        at: at + 3.minutes,
+        from: "contractor_revision_inbox"
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "unknown_history_package_count" => 1,
+        "finding_package_count" => 0,
+        "cleared_package_count" => 0
+      )
+    end
+
+    it "does not use checks produced after the submission to fill a missing outcome" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      final =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 1.minute
+        )
+      record_submission(
+        package,
+        version: final.invoice_version,
+        at: at + 2.minutes
+      )
+      final.update_columns(created_at: at + 3.minutes)
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 1,
+        "unknown_outcome_package_count" => 1,
+        "cleared_package_count" => 0
+      )
+    end
+
+    it "uses current-period observations and excludes findings produced only after first submission" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      record_submission(package, version: package[:version], at: at + 1.minute)
+      change_rule_at(package, at + 2.minutes, prompt_text: "A new prompt")
+      add_rulecheck(
+        package: package,
+        version_number: 2,
+        result: "fail",
+        created_at: at + 3.minutes
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 0,
+        "post_submission_only_package_count" => 1,
+        "unresolved_package_count" => 0,
+        "cleared_package_count" => 0
+      )
+    end
+
+    it "applies report filters to observations without filtering away the submitted outcome" do
+      package = build_package(complaint_code: "required_action_unclear")
+      at = package[:rulecheck].created_at
+      final =
+        add_rulecheck(
+          package: package,
+          version_number: 2,
+          result: "pass",
+          created_at: at + 1.day
+        )
+      record_submission(
+        package,
+        version: final.invoice_version,
+        at: at + 1.day + 1.minute
+      )
+
+      expect(
+        precheck_metrics(
+          package,
+          params: {
+            reason_complaint_code: "required_action_unclear",
+            date_to: at.to_date.iso8601,
+            contractor_id: package[:contractor].id,
+            invoice_upgrade_type_id: package[:upgrade_type].id
+          }
+        )
+      ).to include(
+        "finding_package_count" => 1,
+        "cleared_package_count" => 1,
+        "unresolved_package_count" => 0
+      )
+    end
+
+    it "reports unknown visibility instead of using current settings for a gap in history" do
+      package = build_package
+      at = package[:rulecheck].created_at
+      record_submission(package, version: package[:version], at: at + 1.minute)
+      package[:rule].update_columns(
+        contractor_visibility: "hidden",
+        updated_at: at + 2.minutes
+      )
+
+      expect(precheck_metrics(package)).to include(
+        "finding_package_count" => 0,
+        "unknown_history_package_count" => 1,
+        "cleared_package_count" => 0,
+        "no_visible_finding_package_count" => 0
+      )
+    end
+  end
+
   private
+
+  def record_submission(package, version:, at:, from: "contractor_precheck")
+    package[:invoice].update_columns(
+      status: "admin_review_inbox",
+      submitted_at: package[:invoice].submitted_at || at
+    )
+    Claims::InvoiceStatusTransition.create!(
+      invoice_id: package[:invoice].id,
+      invoice_version_id: version&.id,
+      from_status: from,
+      to_status: "admin_review_inbox",
+      created_at: at
+    )
+  end
+
+  def change_rule_at(package, at, **attributes)
+    travel_to(at) { package[:rule].update!(attributes) }
+    model =
+      (
+        if package[:rule].is_a?(Claims::CodeRule)
+          Claims::CodeRuleHistory
+        else
+          Claims::GenaiRuleHistory
+        end
+      )
+    # History timestamps use PostgreSQL's now() default; travel_to only changes
+    # the Ruby clock. Align the saved fixture with the simulated edit time.
+    model
+      .where(source_id: package[:rule].id)
+      .order(history_created_at: :desc)
+      .first!
+      .update_columns(history_created_at: at)
+  end
+
+  def precheck_metrics(package, params: {})
+    code = package[:rule].is_a?(Claims::CodeRule)
+    key = code ? package[:rule].code_rule_key : package[:rule].genai_rule_key
+    get(
+      "/api/claims/admin/reports/rule_improvement/#{code ? "code" : "genai"}/#{key}",
+      params: params
+    )
+    expect(response).to have_http_status(:ok)
+    json_response.fetch("rule").fetch("precheck_metrics")
+  end
+
+  def switch_to_code_rule(package)
+    at = package[:rule].created_at
+    package[:rule] = Claims::CodeRule.create!(
+      code_rule_key: "precheck_code_#{SecureRandom.hex(5)}",
+      contractor_display_name: "Code evidence check",
+      description: "Check evidence",
+      source_quote: "Evidence requirement",
+      enabled: true,
+      contractor_visibility: "fail_only",
+      contractor_blocking_policy: "non_blocking",
+      admin_workflow_policy: "fail_only",
+      created_at: at,
+      updated_at: at
+    )
+    package[:rulecheck].update_columns(
+      source_engine: "code",
+      rule_key: package[:rule].code_rule_key
+    )
+  end
 
   def build_package(complaint_code: nil, complaint_text: nil)
     now = Time.zone.parse("2026-09-01 12:00:00")
@@ -634,11 +1268,13 @@ RSpec.describe "Claims rule improvement reporting", type: :request do
         created_at: created_at,
         updated_at: created_at
       )
+    code = package[:rule].is_a?(Claims::CodeRule)
     Claims::InvoiceVersionRulecheck.create!(
       invoice_version_id: version.id,
       invoice_upgrade_type_id: package[:upgrade_type].id,
-      source_engine: "genai",
-      rule_key: package[:rule].genai_rule_key,
+      source_engine: code ? "code" : "genai",
+      rule_key:
+        code ? package[:rule].code_rule_key : package[:rule].genai_rule_key,
       contractor_display_name: package[:rule].contractor_display_name,
       rule_result: result,
       reason_and_likely_causes: "Current-version evidence explanation.",

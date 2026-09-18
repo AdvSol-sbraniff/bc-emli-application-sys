@@ -4,6 +4,12 @@ module Claims
 
     ADMIN_PDF_VIEWER_UX_MODES = %w[simple enterprise].freeze
 
+    validates :rule_audit_system_record,
+              length: {
+                maximum: 60_000
+              },
+              allow_blank: true
+
     validates :admin_pdf_viewer_ux_mode,
               inclusion: {
                 in: ADMIN_PDF_VIEWER_UX_MODES

@@ -2808,6 +2808,7 @@ CREATE TABLE IF NOT EXISTS claims.validationgenai_config (
   system_record character varying NULL,
   document_triage_system_record character varying NULL,
   supporting_document_extraction_system_record character varying NULL,
+  rule_audit_system_record text NULL,
   document_triage_deployment_name character varying(200) NULL,
   supporting_document_extraction_deployment_name character varying(200) NULL,
   upgrade_analysis_deployment_name character varying(200) NULL,
@@ -2833,7 +2834,9 @@ COMMENT ON COLUMN claims.validationgenai_config.supporting_document_extraction_d
 COMMENT ON COLUMN claims.validationgenai_config.upgrade_analysis_deployment_name IS
   'Azure/OpenAI deployment name used for upgrade analysis and GenAI rule evaluation calls.';
 COMMENT ON COLUMN claims.validationgenai_config.comparison_deployment_name IS
-  'Azure/OpenAI deployment name used by the test harness to compare baseline and candidate results.';
+  'Azure/OpenAI deployment name used by the test harness to compare baseline/candidate results and by single-package rule audits.';
+COMMENT ON COLUMN claims.validationgenai_config.rule_audit_system_record IS
+  'Editable single-package rule audit instruction. NULL/blank uses config/prompts/rule_package_audit_system.txt. Audits use comparison_deployment_name.';
 
 
 -- ============================================================

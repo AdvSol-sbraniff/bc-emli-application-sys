@@ -120,7 +120,7 @@ const REASON_COMPLAINT_OPTIONS = [
   ['unclear_or_confusing', 'Unclear or confusing'],
   ['too_vague', 'Too vague'],
   ['missing_evidence_explanation', 'Missing evidence explanation'],
-  ['incorrect_evidence_or_reasoning', 'Incorrect evidence or reasoning'],
+  ['incorrect_evidence_or_reasoning', 'Incorrect decision'],
   ['likely_causes_unhelpful', 'Likely causes are unhelpful'],
   ['required_action_unclear', 'Required action is unclear'],
   ['irrelevant_or_duplicative', 'Irrelevant or duplicative'],
@@ -4667,26 +4667,27 @@ export const InvoiceVersionShowScreen = () => {
       <Modal isOpen={!!reasonComplaintRulecheck} onClose={closeReasonComplaint} size="lg" isCentered>
         <ModalOverlay bg="rgba(15, 23, 42, 0.34)" backdropFilter="blur(6px)" />
         <ModalContent mx={4}>
-          <ModalHeader pr="48px">Help improve this reason</ModalHeader>
+          <ModalHeader pr="48px">Help improve this result or reason</ModalHeader>
           <ModalCloseButton isDisabled={reasonComplaintSaving} />
           <ModalBody>
             <Box bg="blue.50" borderLeftWidth="4px" borderColor="blue.500" p="12px" mb="18px">
               <Text fontWeight="bold" fontSize="sm">
-                The finding can be correct while its explanation is still unhelpful.
+                Distinguish an incorrect result from an unhelpful explanation.
               </Text>
               <Text mt="4px" fontSize="sm" color="gray.700">
-                Record what should be clearer here. Workflow outcomes are tracked separately and help determine whether
-                the rule itself or contractor guidance needs attention.
+                Select Incorrect decision when you believe the rule’s Pass/Info/Warn/Fail result is wrong. State the
+                expected result and explain why in the detail below. If the result is correct, choose the category that
+                describes the problem with its explanation or corrective instructions.
               </Text>
             </Box>
 
             <Text fontSize="sm" fontWeight="bold" mb="6px">
-              What is wrong with the reason?
+              What is wrong with the result or reason?
             </Text>
             <Select
               value={reasonComplaintCode}
               onChange={(event) => setReasonComplaintCode(event.target.value)}
-              placeholder="No reason complaint"
+              placeholder="No complaint"
               isDisabled={reasonComplaintSaving}
             >
               {REASON_COMPLAINT_OPTIONS.map(([value, label]) => (
@@ -4702,7 +4703,11 @@ export const InvoiceVersionShowScreen = () => {
             <Textarea
               value={reasonComplaintText}
               onChange={(event) => setReasonComplaintText(event.target.value)}
-              placeholder="Describe what was confusing, missing, incorrect, or not actionable."
+              placeholder={
+                reasonComplaintCode === 'incorrect_evidence_or_reasoning'
+                  ? 'State the expected Pass/Info/Warn/Fail result and explain why the recorded result is incorrect.'
+                  : 'Describe what was confusing, missing, incorrect, or not actionable.'
+              }
               rows={5}
               isDisabled={reasonComplaintSaving}
             />

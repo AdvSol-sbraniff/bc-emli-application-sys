@@ -212,6 +212,8 @@ Rails.application.routes.draw do
           to: "reports_rule_improvement#timeline"
       get "admin/reports/rule_improvement/:source_engine/:rule_key/evidence",
           to: "reports_rule_improvement#evidence"
+      post "admin/reports/rule_improvement/:source_engine/:rule_key/audit",
+           to: "reports_rule_improvement#audit"
 
       # ============================================================
       # SECTION 60 — RULESET EDITOR (admin)

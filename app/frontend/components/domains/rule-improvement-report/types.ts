@@ -1,6 +1,10 @@
 export type RuleMetrics = {
   check_count: number;
   invoice_count: number;
+  pass_count?: number;
+  info_count?: number;
+  warn_count?: number;
+  fail_count?: number;
   complaint_count: number;
   complaint_rate?: number | null;
   workflow_issue_count: number;
@@ -24,7 +28,34 @@ export type RuleMetrics = {
 
 export type UpgradeType = { id: string; key: string; description: string };
 
+export type BreakdownRow = { value: string; count: number };
+export type RuleBreakdowns = {
+  complaint_types: BreakdownRow[];
+  closure_types: BreakdownRow[];
+  admin_requests: BreakdownRow[];
+  contractor_responses: BreakdownRow[];
+  round_distribution: Array<{ rounds: number; count: number }>;
+};
+
+export type PrecheckMetrics = {
+  finding_package_count: number;
+  unresolved_package_count: number;
+  cleared_package_count: number;
+  unknown_outcome_package_count: number;
+  unknown_history_package_count: number;
+  no_visible_finding_package_count: number;
+  unsubmitted_package_count: number;
+  post_submission_only_package_count: number;
+  unresolved_rate: number | null;
+  cleared_rate: number | null;
+};
+
 export type RuleRow = RuleMetrics & {
+  precheck_metrics?: PrecheckMetrics;
+  invoice_coverage?: {
+    total_invoice_count: number;
+    signal_invoice_counts: Record<string, number>;
+  };
   rule_id: string;
   record_type: 'genai_rule' | 'code_rule';
   source_engine: 'genai' | 'code';
@@ -69,17 +100,17 @@ export type EvidenceRow = {
   sent_round_count: number;
 };
 
-export const COMPLAINT_LABELS: Record<string, string> = {
+export const COMPLAINT_LABELS = {
   unclear_or_confusing: 'Unclear or confusing',
   too_vague: 'Too vague',
   missing_evidence_explanation: 'Missing evidence explanation',
-  incorrect_evidence_or_reasoning: 'Incorrect evidence or reasoning',
+  incorrect_evidence_or_reasoning: 'Incorrect decision',
   likely_causes_unhelpful: 'Likely causes are unhelpful',
   required_action_unclear: 'Required action is unclear',
   irrelevant_or_duplicative: 'Irrelevant or duplicative',
   too_verbose_or_repetitive: 'Too verbose or repetitive',
   other: 'Other',
-};
+} as const;
 
 export const SIGNAL_LABELS: Record<string, string> = {
   rule_review: 'Review rule applicability',

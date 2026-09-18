@@ -21,6 +21,7 @@ import {
   DrawerOverlay,
   Flex,
   FormControl,
+  FormHelperText,
   FormLabel,
   IconButton,
   Select,
@@ -31,6 +32,7 @@ import {
 } from '@chakra-ui/react';
 import { ArrowCounterClockwise, CheckCircle, FloppyDiskBack, Info, PaperPlaneTilt, Trash } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { REVISION_CLOSURE_LABELS, revisionClosureGuidance } from './revision-closure-guidance';
 
 export type RevisionSource = {
   source_key?: string | null;
@@ -179,12 +181,14 @@ const CONTRACTOR_METHODS = [
   ['explanation_provided', 'Explanation provided'],
   ['unable_to_resolve', 'Unable to resolve'],
 ];
-const INTERNAL_CLOSE_STATUSES = [['closed_no_contractor_action_required', 'Confirmed - no contractor action required']];
+const INTERNAL_CLOSE_STATUSES = [
+  ['closed_no_contractor_action_required', REVISION_CLOSURE_LABELS.closed_no_contractor_action_required],
+];
 const CONTRACTOR_CLOSE_STATUSES = [
-  ['closed_via_corrected_documentation', 'Close: corrected documentation accepted'],
-  ['closed_via_attestation', 'Close: attestation accepted'],
-  ['closed_via_exception', 'Close: exception granted'],
-  ['closed_as_withdrawn', 'Close: issue withdrawn'],
+  ['closed_via_corrected_documentation', REVISION_CLOSURE_LABELS.closed_via_corrected_documentation],
+  ['closed_via_attestation', REVISION_CLOSURE_LABELS.closed_via_attestation],
+  ['closed_via_exception', REVISION_CLOSURE_LABELS.closed_via_exception],
+  ['closed_as_withdrawn', REVISION_CLOSURE_LABELS.closed_as_withdrawn],
 ];
 
 const pretty = (value: unknown): string =>
@@ -208,8 +212,7 @@ const issueStatusColour = (status: RevisionIssue['status']): string =>
 
 const issueStatusLabel = (status: RevisionIssue['status']): string => {
   if (status === 'pending_admin_review') return 'Awaiting admin decision';
-  if (status === 'closed_no_contractor_action_required') return 'No contractor action required';
-  return pretty(status);
+  return REVISION_CLOSURE_LABELS[status] || pretty(status);
 };
 
 const issueUnresolved = (issue: RevisionIssue): boolean => ['pending_admin_review', 'open'].includes(issue.status);
@@ -231,8 +234,11 @@ const dispositionMismatchNotice = (status: string, response: RevisionIssueCommen
   const responseLabel = response?.contractor_response_method
     ? pretty(response.contractor_response_method)
     : 'No contractor response is recorded';
-  if (status === 'closed_via_attestation' && response?.contractor_response_method !== 'attestation_provided') {
-    return `${responseLabel}. You selected attestation accepted; this will not prevent closing the issue.`;
+  if (
+    status === 'closed_via_attestation' &&
+    !['attestation_provided', 'explanation_provided'].includes(response?.contractor_response_method || '')
+  ) {
+    return `${responseLabel}. You selected explanation or attestation accepted; this will not prevent closing the issue.`;
   }
   if (
     status === 'closed_via_corrected_documentation' &&
@@ -892,6 +898,9 @@ export const RevisionTracker = ({
                               ))}
                             </Select>
                           </Flex>
+                          <FormHelperText fontSize="xs" color="gray.600">
+                            {revisionClosureGuidance(closeDrafts[issue.id]?.status || '')}
+                          </FormHelperText>
                         </FormControl>
                         {dispositionNotice ? (
                           <Box

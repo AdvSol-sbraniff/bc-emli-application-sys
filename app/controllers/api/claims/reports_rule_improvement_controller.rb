@@ -46,7 +46,20 @@ module Api
 
       # GET /api/claims/admin/reports/rule_improvement/:source_engine/:rule_key
       def show
-        rule = requested_rule
+        rule =
+          requested_rule.merge(
+            precheck_metrics:
+              ::Claims::RuleImprovementReporting::PrecheckMetricsQuery.new(
+                rule: requested_rule,
+                filters: filters
+              ).call,
+            invoice_coverage:
+              ::Claims::RuleImprovementReporting::InvoiceCoverageQuery.new(
+                filters: filters,
+                source_engine: requested_rule[:source_engine],
+                rule_key: requested_rule[:rule_key]
+              ).call
+          )
         breakdowns =
           ::Claims::RuleImprovementReporting::BreakdownQuery.new(
             filters: filters,
@@ -119,11 +132,107 @@ module Api
         render json: { error: error.message }, status: :unprocessable_entity
       end
 
+      # POST .../:source_engine/:rule_key/audit
+      # Context and model configuration are loaded by the server, never from client evidence.
+      def audit
+        result =
+          ::Claims::RuleAudits::Audit.new(
+            source_engine: params[:source_engine],
+            rule_key: params[:rule_key],
+            invoice_id: params.require(:invoice_id),
+            selected_invoice_version_id: params[:selected_invoice_version_id]
+          ).call
+        render json: result
+      rescue ActionController::ParameterMissing
+        render json: {
+                 error: "Select an invoice package to audit."
+               },
+               status: :bad_request
+      rescue ::Claims::RuleAudits::ContextBuilder::InvalidInput,
+             ::Claims::RuleAudits::ContextBuilder::TooLarge => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      rescue ::Claims::RuleAudits::Configuration::Unavailable,
+             ::Claims::RuleAudits::Guidance::Unavailable => e
+        render json: { error: e.message }, status: :service_unavailable
+      rescue ::Claims::RuleAudits::Audit::InvalidResponse => e
+        render json: { error: e.message }, status: :bad_gateway
+      rescue ::Claims::Genai::NodeClient::Error => e
+        status, message = audit_failure(e)
+        render json: { error: message, **e.analytics_payload }, status: status
+      rescue Timeout::Error
+        render json: {
+                 error: "The AI audit timed out. Please try again."
+               },
+               status: :gateway_timeout
+      rescue Errno::ECONNREFUSED, Errno::ECONNRESET, SocketError, EOFError
+        render json: {
+                 error: "The AI service is unavailable. Please try again later."
+               },
+               status: :service_unavailable
+      end
+
       rescue_from ActiveRecord::RecordNotFound do |error|
         render json: { error: error.message }, status: :not_found
       end
 
       private
+
+      def audit_failure(error)
+        case error.error_code
+        when "rule_audit_timeout", "rule_audit_cancelled"
+          [
+            :gateway_timeout,
+            "The AI audit did not finish within its time limit. Please try again."
+          ]
+        when "rule_audit_source_unavailable"
+          [
+            :unprocessable_entity,
+            "A source document could not be read. Check the invoice package documents before retrying."
+          ]
+        when "rule_audit_source_changed", "rule_audit_source_mismatch",
+             "rule_audit_source_integrity_mismatch"
+          [
+            :unprocessable_entity,
+            "A source document differs from its stored evidence identity. Resolve the document mismatch before auditing."
+          ]
+        when "rule_audit_context_too_large", "rule_audit_attachment_limit",
+             "rule_audit_files_too_large"
+          [
+            :payload_too_large,
+            "This package exceeds the supported audit size. No documents or history were silently omitted."
+          ]
+        when "rule_audit_unsupported_source", "rule_audit_invalid_attachment"
+          [
+            :unprocessable_entity,
+            "The package contains a source file the audit cannot read. Supported files are PDF, JPEG and PNG."
+          ]
+        when "rule_audit_responses_required", "rule_audit_missing_deployment",
+             "rule_audit_invalid_configuration"
+          [
+            :service_unavailable,
+            "The AI audit service needs a supported model and Responses configuration. Check System Config and the AI service settings."
+          ]
+        when "rule_audit_refused", "rule_audit_incomplete",
+             "rule_audit_invalid_output"
+          [
+            :bad_gateway,
+            "The model did not return a complete valid audit. Please try again; no proposed changes were applied."
+          ]
+        else
+          if error.http_status == 429 ||
+               error.error_category == "provider_throttled"
+            [
+              :too_many_requests,
+              "The AI service is busy. Please wait before retrying this audit."
+            ]
+          else
+            [
+              :bad_gateway,
+              "The AI audit could not complete. Please try again or use the diagnostic ID to investigate."
+            ]
+          end
+        end
+      end
 
       def filters
         @filters ||= ::Claims::RuleImprovementReporting::Filters.new(params)

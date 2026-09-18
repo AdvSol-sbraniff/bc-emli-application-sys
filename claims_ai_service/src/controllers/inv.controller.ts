@@ -207,6 +207,30 @@ export class InvController {
     );
   }
 
+  @Post('rule-audit')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async ruleAudit(@Body() dto: GenAiDto, @Req() req: Request): Promise<any> {
+    const cancellation = new AbortController();
+    const abort = () => cancellation.abort();
+    const closed = () => {
+      if (!req.res?.writableEnded) abort();
+    };
+    req.once('aborted', abort);
+    req.res?.once('close', closed);
+    try {
+      return await this.invService.ruleAudit(
+        dto.contextwindowjson,
+        dto.attachments || [],
+        dto.diagnostic_context || {},
+        dto.deployment_name,
+        cancellation.signal,
+      );
+    } finally {
+      req.removeListener('aborted', abort);
+      req.res?.removeListener('close', closed);
+    }
+  }
+
   @Post('upload-pdf')
   @UseInterceptors(FileInterceptor('file'))
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))

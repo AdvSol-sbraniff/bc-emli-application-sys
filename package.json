@@ -99,6 +99,8 @@
   "scripts": {
     "dev": "bin/vite dev",
     "build": "bundle exec vite build",
+    "rule-audit:guidance": "node scripts/export-rule-audit-guidance.cjs",
+    "rule-audit:guidance:check": "node scripts/export-rule-audit-guidance.cjs --check",
     "lint": "eslint app/frontend/**/*.ts[x]",
     "prepare": "husky install",
     "gen:theme-typings": "chakra-cli tokens app/frontend/styles/theme/index.ts",

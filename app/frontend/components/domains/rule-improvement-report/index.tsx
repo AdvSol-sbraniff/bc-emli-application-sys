@@ -136,8 +136,8 @@ export default function RuleImprovementReportScreen() {
                 onChange={(event) => replaceParams({ sort: event.target.value, page: '1' })}
               >
                 <option value="complaint_count:desc">Most complaints</option>
-                <option value="candidate_false_positive_count:desc">Most false-positive candidates</option>
-                <option value="candidate_false_negative_count:desc">Most false-negative candidates</option>
+                <option value="candidate_false_positive_count:desc">Most false-positives</option>
+                <option value="candidate_false_negative_count:desc">Most false-negatives</option>
                 <option value="average_rounds:desc">Highest average workflow rounds</option>
                 <option value="invoice_count:desc">Most invoices assessed</option>
                 <option value="last_changed_at:desc">Most recently changed</option>
@@ -155,8 +155,8 @@ export default function RuleImprovementReportScreen() {
                   <Th whiteSpace="nowrap">Metrics since</Th>
                   <Th isNumeric>Invoice versions assessed</Th>
                   <Th isNumeric>Complaints</Th>
-                  <Th isNumeric>False-positive candidates</Th>
-                  <Th isNumeric>False-negative candidates</Th>
+                  <Th isNumeric>False-positives</Th>
+                  <Th isNumeric>False-negatives</Th>
                   <Th isNumeric>Average workflow rounds</Th>
                   <Th aria-label="Open rule" />
                 </Tr>

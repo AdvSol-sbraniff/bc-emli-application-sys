@@ -30,6 +30,7 @@ type ConfigDto = {
   system_record: string | null;
   document_triage_system_record: string | null;
   supporting_document_extraction_system_record: string | null;
+  rule_audit_system_record: string | null;
   user_record0: string | null;
   admin_advice_intro: string | null;
   admin_advice_closing: string | null;
@@ -50,6 +51,7 @@ export default function RulesetConfigEditorScreen() {
   const [systemRecord, setSystemRecord] = useState<string>('');
   const [documentTriageSystemRecord, setDocumentTriageSystemRecord] = useState<string>('');
   const [supportingDocumentExtractionSystemRecord, setSupportingDocumentExtractionSystemRecord] = useState<string>('');
+  const [ruleAuditSystemRecord, setRuleAuditSystemRecord] = useState('');
   const [userRecord0, setUserRecord0] = useState<string>('');
   const [adminAdviceIntro, setAdminAdviceIntro] = useState<string>('');
   const [adminAdviceClosing, setAdminAdviceClosing] = useState<string>('');
@@ -63,6 +65,7 @@ export default function RulesetConfigEditorScreen() {
     systemRecord: '',
     documentTriageSystemRecord: '',
     supportingDocumentExtractionSystemRecord: '',
+    ruleAuditSystemRecord: '',
     userRecord0: '',
     adminAdviceIntro: '',
     adminAdviceClosing: '',
@@ -78,6 +81,7 @@ export default function RulesetConfigEditorScreen() {
     systemRecord !== initialValues.systemRecord ||
     documentTriageSystemRecord !== initialValues.documentTriageSystemRecord ||
     supportingDocumentExtractionSystemRecord !== initialValues.supportingDocumentExtractionSystemRecord ||
+    ruleAuditSystemRecord !== initialValues.ruleAuditSystemRecord ||
     userRecord0 !== initialValues.userRecord0 ||
     adminAdviceIntro !== initialValues.adminAdviceIntro ||
     adminAdviceClosing !== initialValues.adminAdviceClosing ||
@@ -93,6 +97,7 @@ export default function RulesetConfigEditorScreen() {
       systemRecord: data.system_record ?? '',
       documentTriageSystemRecord: data.document_triage_system_record ?? '',
       supportingDocumentExtractionSystemRecord: data.supporting_document_extraction_system_record ?? '',
+      ruleAuditSystemRecord: data.rule_audit_system_record ?? '',
       userRecord0: data.user_record0 ?? '',
       adminAdviceIntro: data.admin_advice_intro ?? '',
       adminAdviceClosing: data.admin_advice_closing ?? '',
@@ -108,6 +113,7 @@ export default function RulesetConfigEditorScreen() {
     setSystemRecord(values.systemRecord);
     setDocumentTriageSystemRecord(values.documentTriageSystemRecord);
     setSupportingDocumentExtractionSystemRecord(values.supportingDocumentExtractionSystemRecord);
+    setRuleAuditSystemRecord(values.ruleAuditSystemRecord);
     setUserRecord0(values.userRecord0);
     setAdminAdviceIntro(values.adminAdviceIntro);
     setAdminAdviceClosing(values.adminAdviceClosing);
@@ -158,6 +164,9 @@ export default function RulesetConfigEditorScreen() {
           system_record: systemRecord,
           document_triage_system_record: documentTriageSystemRecord,
           supporting_document_extraction_system_record: supportingDocumentExtractionSystemRecord,
+          ...(ruleAuditSystemRecord !== initialValues.ruleAuditSystemRecord
+            ? { rule_audit_system_record: ruleAuditSystemRecord }
+            : {}),
           user_record0: userRecord0,
           admin_advice_intro: adminAdviceIntro,
           admin_advice_closing: adminAdviceClosing,
@@ -252,6 +261,7 @@ export default function RulesetConfigEditorScreen() {
                 <Tab>Advice Close</Tab>
                 <Tab>Admin PDF Viewer</Tab>
                 <Tab>AI Models</Tab>
+                <Tab>Rule Audit</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel px={0} pt={3}>
@@ -413,16 +423,34 @@ export default function RulesetConfigEditorScreen() {
                       <FormHelperText>Used for upgrade-type rules, findings, and advice.</FormHelperText>
                     </FormControl>
                     <FormControl isRequired>
-                      <FormLabel>Test comparison model</FormLabel>
+                      <FormLabel>Comparison and rule audit model</FormLabel>
                       <Input
                         value={comparisonDeploymentName}
                         onChange={(event) => setComparisonDeploymentName(event.target.value)}
                       />
                       <FormHelperText>
-                        Used only by the test harness to evaluate baseline and candidate results.
+                        Used by the test harness to compare results and by Rule Improvement Detail to audit a package.
                       </FormHelperText>
                     </FormControl>
                   </Stack>
+                </TabPanel>
+                <TabPanel px={0} pt={3}>
+                  <FormControl>
+                    <FormLabel htmlFor="rule-audit-system-record">Rule package audit system record</FormLabel>
+                    <FormHelperText mb={3}>
+                      Instructions for auditing one selected rule against an invoice package, its documents and history.
+                      The human process guidance is supplied separately from the same guidance shown on Rule Improvement
+                      Detail. Keep the four output field names unchanged; the advice text can use any useful structure.
+                      Leaving this blank uses the application default. Suggested changes are not applied automatically.
+                    </FormHelperText>
+                    <Textarea
+                      id="rule-audit-system-record"
+                      value={ruleAuditSystemRecord}
+                      onChange={(event) => setRuleAuditSystemRecord(event.target.value)}
+                      maxLength={60000}
+                      minH="520px"
+                    />
+                  </FormControl>
                 </TabPanel>
               </TabPanels>
             </Tabs>

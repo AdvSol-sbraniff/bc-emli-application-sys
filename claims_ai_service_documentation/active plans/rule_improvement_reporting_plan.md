@@ -73,11 +73,12 @@ For a code rule, define the measurement start as `code_rules.created_at`. The da
 - **Invoice versions assessed:** distinct invoice-version IDs checked during the rule's measurement period. This is the sample-size context for every other count.
 - **Complaints:** current-period rulechecks with a complaint category.
 - **False-positive candidate:** current-period `warn` or `fail` whose rule workflow issue closed as `closed_no_contractor_action_required`.
-- **False-negative candidate:** current-period `pass` or `info` followed by a rule workflow issue that was not closed as no-action-required or withdrawn.
+- **False-negative candidate:** current-period `pass` or `info` with a workflow issue opened from that exact rulecheck. Every issue status and closure outcome is included.
 - **Total contractor rounds:** sum of distinct sent revision rounds linked to this rule's workflow issues.
 - **Invoice versions with follow-up:** distinct current-period invoice versions linked to at least one rule workflow issue.
 - **Workflow issues:** distinct rule workflow issues linked to the current-period rulechecks.
 - **Closure outcome:** current issue state or terminal close type, used to interpret why follow-up occurred and how it ended.
+- **% of invoices (action signals):** distinct invoices matching a signal divided by all distinct invoices assessed by the selected rule in the current period and report filters. The detail API returns `rule.invoice_coverage` separately from event counts. Repeated versions, upgrades, rounds and grouped complaint/request categories count each invoice once per signal. Pre-check signals use their existing distinct-package counts with the same invoice denominator. Average, median and maximum round statistics have no invoice percentage; missing coverage or an empty denominator displays a dash. Percentages overlap across signals and must not be summed.
 
 All candidates remain directional. The administrator must inspect the exact invoice, reason, later workflow, and disposition comment.
 

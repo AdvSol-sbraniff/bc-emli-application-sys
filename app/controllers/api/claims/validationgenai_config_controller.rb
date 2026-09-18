@@ -35,6 +35,7 @@ module Api
             system_record: "",
             document_triage_system_record: "",
             supporting_document_extraction_system_record: "",
+            rule_audit_system_record: nil,
             user_record0: "",
             admin_advice_intro: "",
             admin_advice_closing: "",
@@ -52,6 +53,7 @@ module Api
           system_record
           document_triage_system_record
           supporting_document_extraction_system_record
+          rule_audit_system_record
           user_record0
           admin_advice_intro
           admin_advice_closing
@@ -73,6 +75,9 @@ module Api
           document_triage_system_record: config.document_triage_system_record,
           supporting_document_extraction_system_record:
             config.supporting_document_extraction_system_record,
+          rule_audit_system_record:
+            config.rule_audit_system_record.presence ||
+              ::Claims::RuleAudits::Configuration.default_system_record,
           user_record0: config.user_record0,
           admin_advice_intro: config.admin_advice_intro,
           admin_advice_closing: config.admin_advice_closing,

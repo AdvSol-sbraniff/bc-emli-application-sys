@@ -102,13 +102,32 @@ module Claims
         )
       end
 
-      def call(
+      def self.rule_audit(
         contextwindowjson:,
         attachments: [],
         diagnostic_context: {},
         deployment_name: nil
       )
-        uri = URI("#{ENV.fetch("INV_NODE_BASE_URL")}/inv/genai")
+        new.call(
+          contextwindowjson: contextwindowjson,
+          attachments: attachments,
+          diagnostic_context: diagnostic_context,
+          deployment_name: deployment_name,
+          endpoint: "rule-audit"
+        )
+      end
+
+      def call(
+        contextwindowjson:,
+        attachments: [],
+        diagnostic_context: {},
+        deployment_name: nil,
+        endpoint: "genai"
+      )
+        unless %w[genai rule-audit].include?(endpoint)
+          raise ArgumentError, "Unsupported Node GenAI endpoint"
+        end
+        uri = URI("#{ENV.fetch("INV_NODE_BASE_URL")}/inv/#{endpoint}")
         request = Net::HTTP::Post.new(uri)
         request["Content-Type"] = "application/json"
         request.body =
