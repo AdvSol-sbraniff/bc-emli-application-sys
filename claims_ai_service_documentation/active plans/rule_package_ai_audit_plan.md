@@ -2,6 +2,8 @@
 
 Status: implementation, local verification, real AI evaluation and cleanup completed on 2026-09-18. Remaining proposal-quality and policy-authority limitations are documented below and in the evaluation report. No proposed business rule has been applied.
 
+Follow-up planning: [Background execution with Sidekiq](rule_package_audit_sidekiq_plan.md) proposes durable audit-run tracking and polling independently of the ingest pipeline. That follow-up is planned, not implemented; the completed synchronous implementation below remains the historical record.
+
 ## Objective and boundaries
 
 Replace the Rule Improvement Detail / Step 4 mock audit with an authenticated real AI audit of one selected rule against one processed invoice package and its history. Finish planning, implementation, automated checks, actual local AI evaluation and up to three evidence-driven refinement cycles. The user is away and has authorised continuing without phase approvals.

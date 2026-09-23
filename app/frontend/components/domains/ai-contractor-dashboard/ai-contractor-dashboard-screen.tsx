@@ -59,6 +59,8 @@ type ContractorPortalRow = {
   latestDiOcrVendorName?: string | null;
   latestDiOcrCustomerName?: string | null;
   latestDiOcrCustomerAddress?: string | null;
+  latestDiOcrServiceAddress?: string | null;
+  latestDiOcrBillingAddress?: string | null;
   submitterName?: string | null;
   latestDetectedUpgradeTypeKeys?: string[] | null;
   latestIngestRunId?: string | null;
@@ -232,7 +234,12 @@ function sortRows(rows: ContractorPortalRow[], sort: string) {
 }
 
 function AiContractorInvoiceCard({ row }: { row: ContractorPortalRow }) {
-  const title = row.latestDiOcrCustomerAddress || 'Service address unavailable';
+  const address = [
+    { label: 'Service address', value: row.latestDiOcrServiceAddress?.trim() },
+    { label: 'Customer address', value: row.latestDiOcrCustomerAddress?.trim() },
+    { label: 'Billing address', value: row.latestDiOcrBillingAddress?.trim() },
+  ].find((candidate) => candidate.value);
+  const title = address?.value || 'Address unavailable';
   const statusCopy = contractorInvoicePresentation(row);
   const statusHint = `${statusCopy.hint} Technical status: ${row.status || 'unknown'}.`;
   const isProcessing = ['queued', 'running'].includes(String(row.latestIngestRunStatus || ''));
@@ -462,7 +469,9 @@ export const AiContractorDashboardScreen = observer(function AiContractorDashboa
       const haystack = [
         row.referenceNumber,
         formatClaimsReferenceNumber(row.referenceNumber),
+        row.latestDiOcrServiceAddress,
         row.latestDiOcrCustomerAddress,
+        row.latestDiOcrBillingAddress,
         row.submitterName,
         row.invoiceId,
         row.sessionId,

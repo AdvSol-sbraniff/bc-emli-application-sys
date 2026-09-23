@@ -7,7 +7,7 @@ RSpec.describe "Claims contractor portal index", type: :request do
     )
   end
 
-  it "returns the stable reference number, service address, and submitter name" do
+  it "returns the stable reference number, address fields, and submitter name" do
     host! "localhost"
     submitter = create(:user, first_name: "Jordan", last_name: "Lee")
     contractor = Contractor.create!(business_name: "Reference Number Test")
@@ -27,7 +27,9 @@ RSpec.describe "Claims contractor portal index", type: :request do
         storage_key: "contractor-portal/invoice.pdf",
         original_filename: "Less useful filename.pdf",
         content_type: "application/pdf",
-        di_ocr_customer_address: "123 Main Street, Victoria, BC"
+        di_ocr_customer_address: "123 Main Street, Victoria, BC",
+        di_ocr_service_address: "456 Installation Road, Victoria, BC",
+        di_ocr_billing_address: "789 Billing Road, Victoria, BC"
       )
 
     allow_any_instance_of(Api::ApplicationController).to receive(
@@ -51,7 +53,33 @@ RSpec.describe "Claims contractor portal index", type: :request do
     expect(row.fetch("latest_di_ocr_customer_address")).to eq(
       "123 Main Street, Victoria, BC"
     )
+    expect(row.fetch("latest_di_ocr_service_address")).to eq(
+      "456 Installation Road, Victoria, BC"
+    )
     expect(row.fetch("submitter_name")).to eq("Jordan Lee")
+    expect(row.fetch("latest_di_ocr_billing_address")).to eq(
+      "789 Billing Road, Victoria, BC"
+    )
+
+    # Service address must remain available when OCR has no customer address.
+    invoice_version.update!(di_ocr_customer_address: nil)
+    get "/api/claims/contractor/invoices"
+    expect(response).to have_http_status(:ok)
+    row = json_response.fetch("rows").sole
+    expect(row.fetch("latest_di_ocr_customer_address")).to be_nil
+    expect(row.fetch("latest_di_ocr_service_address")).to eq(
+      "456 Installation Road, Victoria, BC"
+    )
+
+    invoice_version.update!(di_ocr_service_address: nil)
+    get "/api/claims/contractor/invoices"
+    expect(response).to have_http_status(:ok)
+    row = json_response.fetch("rows").sole
+    expect(row.fetch("latest_di_ocr_customer_address")).to be_nil
+    expect(row.fetch("latest_di_ocr_service_address")).to be_nil
+    expect(row.fetch("latest_di_ocr_billing_address")).to eq(
+      "789 Billing Road, Victoria, BC"
+    )
   end
 
   it "returns unread admin-message counts for each contractor invoice" do

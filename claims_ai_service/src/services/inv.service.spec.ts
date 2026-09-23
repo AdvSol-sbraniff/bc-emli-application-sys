@@ -103,6 +103,29 @@ describe('InvService Responses API attachments', () => {
     expect(service.genaiDeployment).toBe('test-deployment');
   });
 
+  it('runs processing and the legacy diagnostic with an explicit model and no env default', async () => {
+    service.genaiDeployment = '';
+    await service.genai(prompt(), [], {}, 'selected-model');
+    await service.genaiHelloWorld('selected-model');
+    expect(responsesCreate).toHaveBeenCalledTimes(2);
+    expect(
+      responsesCreate.mock.calls.every(
+        ([body]) => body.model === 'selected-model',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects missing deployment configuration before calling the provider', async () => {
+    service.genaiDeployment = '';
+    await expect(service.genai(prompt())).rejects.toThrow(
+      'deployment_name is required',
+    );
+    await expect(service.genaiHelloWorld()).rejects.toThrow(
+      'deployment_name is required',
+    );
+    expect(responsesCreate).not.toHaveBeenCalled();
+  });
+
   it('keeps PDF attachments inline without a provider file upload', async () => {
     service.downloadBlob.mockResolvedValue({
       content_type: 'application/pdf',

@@ -1,5 +1,18 @@
-import React, { useState } from 'react';
-import { Box, Button, Container, Flex, Heading, Spinner, Text, Textarea } from '@chakra-ui/react';
+import React, { useEffect, useState } from 'react';
+import {
+  Box,
+  Button,
+  Container,
+  Flex,
+  FormControl,
+  FormHelperText,
+  FormLabel,
+  Heading,
+  Input,
+  Spinner,
+  Text,
+  Textarea,
+} from '@chakra-ui/react';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 
 type HelloAiResponse = {
@@ -13,9 +26,41 @@ export default function HelloAiAdminScreen() {
   const [reply, setReply] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [deploymentName, setDeploymentName] = useState('');
+  const [loadingDefault, setLoadingDefault] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadDefault = async () => {
+      try {
+        const res = await fetch('/api/claims/admin/hello_ai', {
+          headers: { Accept: 'application/json' },
+          credentials: 'include',
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setDeploymentName(data.deployment_name || '');
+      } catch (e) {
+        if (!controller.signal.aborted) {
+          setError('Could not load the comparison deployment. Enter a model deployment name below.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoadingDefault(false);
+      }
+    };
+    void loadDefault();
+    return () => controller.abort();
+  }, []);
 
   const handleSend = async () => {
     const cleanPrompt = prompt.trim();
+    const cleanDeployment = deploymentName.trim();
+    if (!cleanDeployment) {
+      setError('Enter a model deployment name first.');
+      setReply('');
+      return;
+    }
     if (!cleanPrompt) {
       setError('Enter a prompt first.');
       setReply('');
@@ -33,7 +78,7 @@ export default function HelloAiAdminScreen() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ prompt: cleanPrompt }),
+        body: JSON.stringify({ prompt: cleanPrompt, deployment_name: cleanDeployment }),
       });
 
       const data: HelloAiResponse = await res.json().catch(() => ({}));
@@ -58,8 +103,23 @@ export default function HelloAiAdminScreen() {
             Simple chat smoke test
           </Heading>
           <Text fontSize="sm" opacity={0.8} mb={4}>
-            Type one short user prompt, send it to the configured assistant, and inspect the raw reply.
+            Type one short user prompt, send it to the selected model deployment, and inspect the raw reply.
           </Text>
+
+          <FormControl mb={4} isRequired>
+            <FormLabel htmlFor="connectivity-deployment">Model deployment name</FormLabel>
+            <Input
+              id="connectivity-deployment"
+              value={deploymentName}
+              onChange={(e) => setDeploymentName(e.target.value)}
+              isDisabled={loadingDefault || loading}
+              maxLength={200}
+              placeholder={loadingDefault ? 'Loading comparison deployment...' : 'Enter a deployment name'}
+            />
+            <FormHelperText>
+              Defaults to the rule comparison deployment. Changes here apply only to this test.
+            </FormHelperText>
+          </FormControl>
 
           <Textarea
             value={prompt}
@@ -71,7 +131,13 @@ export default function HelloAiAdminScreen() {
           />
 
           <Flex align="center" gap={3} mb={4}>
-            <Button colorScheme="blue" onClick={handleSend} isLoading={loading} loadingText="Sending...">
+            <Button
+              colorScheme="blue"
+              onClick={handleSend}
+              isDisabled={loadingDefault}
+              isLoading={loading}
+              loadingText="Sending..."
+            >
               Send
             </Button>
             {loading ? <Spinner size="sm" /> : null}

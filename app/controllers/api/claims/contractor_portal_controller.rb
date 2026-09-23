@@ -75,13 +75,21 @@ module Api
         card_facts_by_version =
           ::Claims::InvoiceVersion
             .where(id: latest_version_ids)
-            .pluck(:id, :di_ocr_customer_name, :di_ocr_customer_address)
+            .pluck(
+              :id,
+              :di_ocr_customer_name,
+              :di_ocr_customer_address,
+              :di_ocr_service_address,
+              :di_ocr_billing_address
+            )
             .each_with_object(
               {}
-            ) do |(id, customer_name, customer_address), facts|
+            ) do |(id, customer_name, customer_address, service_address, billing_address), facts|
               facts[id] = {
                 customer_name: customer_name,
-                customer_address: customer_address
+                customer_address: customer_address,
+                service_address: service_address,
+                billing_address: billing_address
               }
             end
 
@@ -125,6 +133,16 @@ module Api
                 card_facts_by_version.dig(
                   invoice.latest_invoice_version_id,
                   :customer_address
+                ),
+              latest_di_ocr_service_address:
+                card_facts_by_version.dig(
+                  invoice.latest_invoice_version_id,
+                  :service_address
+                ),
+              latest_di_ocr_billing_address:
+                card_facts_by_version.dig(
+                  invoice.latest_invoice_version_id,
+                  :billing_address
                 ),
               submitter_name: invoice.submitter_name,
               latest_detected_upgrade_type_keys:

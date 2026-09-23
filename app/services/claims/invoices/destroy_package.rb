@@ -3,6 +3,9 @@
 module Claims
   module Invoices
     class DestroyPackage
+      class ReferencedByTest < StandardError
+      end
+
       def self.call(invoice_id:)
         new(invoice_id: invoice_id).call
       end
@@ -17,12 +20,15 @@ module Claims
         counts = empty_counts(invoice.id)
 
         ::Claims::Invoice.transaction do
+          invoice.lock!
           version_ids = invoice.invoice_versions.pluck(:id)
           supporting_document_ids =
             ::Claims::SupportingDocument.where(
               invoice_version_id: version_ids
             ).pluck(:id)
           run_ids = invoice.ingest_runs.pluck(:id)
+
+          release_test_references!(version_ids, run_ids)
 
           counts[:lineitems] = delete_where(
             ::Claims::Lineitem,
@@ -72,6 +78,58 @@ module Claims
       end
 
       private
+
+      def release_test_references!(version_ids, run_ids)
+        baselines =
+          ::Claims::TestSuiteCase.where(
+            baseline_invoice_version_id: version_ids
+          ).or(::Claims::TestSuiteCase.where(baseline_ingest_run_id: run_ids))
+        if baselines.exists?
+          raise ReferencedByTest,
+                "This package is a test-suite baseline. Remove its dependent test runs " \
+                  "and baseline case before deleting the package."
+        end
+
+        regressions =
+          ::Claims::TestRunRegressionCase.where(
+            invoice_version_id: version_ids
+          ).or(::Claims::TestRunRegressionCase.where(ingest_run_id: run_ids))
+        if regressions.exists?
+          raise ReferencedByTest,
+                "This package is retained by a regression test. Delete the associated " \
+                  "regression test run before deleting the package."
+        end
+
+        [
+          ::Claims::TestRunModelCompareCase,
+          ::Claims::TestRunRuleCompareCase
+        ].each do |model|
+          cases =
+            model.where(candidate_invoice_version_id: version_ids).or(
+              model.where(candidate_ingest_run_id: run_ids)
+            )
+          cases
+            .order(:id)
+            .each do |test_case|
+              # Match the comparison rerun lock order: parent, then case.
+              test_case.test_run.lock!
+              test_case.lock!
+              if %w[draft queued running].include?(test_case.test_run.status) ||
+                   %w[queued running].include?(test_case.status)
+                raise ReferencedByTest,
+                      "This package is used by an active comparison. Wait for the " \
+                        "comparison to finish or cancel it before deleting the package."
+              end
+
+              # Keep the comparison's written results, but remove links to the
+              # generated evidence being explicitly deleted by the administrator.
+              test_case.update!(
+                candidate_invoice_version_id: nil,
+                candidate_ingest_run_id: nil
+              )
+            end
+        end
+      end
 
       def delete_where(model, conditions)
         return 0 if empty_collection?(conditions.values)

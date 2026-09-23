@@ -40,8 +40,31 @@ type ConfigDto = {
   supporting_document_extraction_deployment_name: string | null;
   upgrade_analysis_deployment_name: string | null;
   comparison_deployment_name: string | null;
+  hardcoded_prompts?: {
+    case_comparison: string;
+    model_summary: string;
+    rule_summary: string;
+  };
   updated_at?: string | null;
 };
+
+const hardcodedPromptTabs = [
+  {
+    key: 'case_comparison',
+    label: 'Hardcoded - Case Comparison',
+    description: 'Shared instructions for each case in model comparisons and rule comparisons.',
+  },
+  {
+    key: 'model_summary',
+    label: 'Hardcoded - Model Comparison Summary',
+    description: 'Instructions for combining all model comparison case reports into the overall summary.',
+  },
+  {
+    key: 'rule_summary',
+    label: 'Hardcoded - Rule Comparison Summary',
+    description: 'Instructions for combining all rule comparison case reports into the overall summary.',
+  },
+] as const;
 
 export default function RulesetConfigEditorScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -202,7 +225,7 @@ export default function RulesetConfigEditorScreen() {
     <Box>
       <ThinBlueTitleBar title="System Config" />
 
-      <Container maxW="6xl" py={6}>
+      <Container maxW="full" py={6} px={{ base: 4, md: 6 }}>
         <Flex align="center" justify="space-between" mb={4}>
           <Box>
             <Heading size="md">System Config</Heading>
@@ -250,18 +273,21 @@ export default function RulesetConfigEditorScreen() {
         )}
 
         {!isLoading && !error && (
-          <Box borderWidth="1px" borderRadius="lg" p={3} bg="white">
-            <Tabs variant="line" isFitted colorScheme="gray">
-              <TabList>
-                <Tab>Main</Tab>
-                <Tab>Document Triage</Tab>
-                <Tab>Support Extract</Tab>
-                <Tab>DI Guidance</Tab>
-                <Tab>Advice Intro</Tab>
-                <Tab>Advice Close</Tab>
-                <Tab>Admin PDF Viewer</Tab>
+          <>
+            <Tabs variant="line" colorScheme="gray">
+              <TabList flexWrap="wrap">
+                <Tab>Upgrade Analysis</Tab>
+                <Tab>Document Classification</Tab>
+                <Tab>Supporting Document Extraction</Tab>
+                <Tab>OCR Guidance</Tab>
+                <Tab>Advice Introduction</Tab>
+                <Tab>Advice Closing</Tab>
+                <Tab>PDF Viewer</Tab>
                 <Tab>AI Models</Tab>
                 <Tab>Rule Audit</Tab>
+                {hardcodedPromptTabs.map((tab) => (
+                  <Tab key={tab.key}>{tab.label}</Tab>
+                ))}
               </TabList>
               <TabPanels>
                 <TabPanel px={0} pt={3}>
@@ -397,6 +423,11 @@ export default function RulesetConfigEditorScreen() {
                     Deployment names are configuration, not credentials. New processing runs snapshot these values so
                     their exact model provenance remains inspectable after this screen changes.
                   </Text>
+                  <Text fontWeight="bold" mb={4}>
+                    Reasoning effort is not configurable here. GPT-6 Sol and GPT-6 Luna currently use their default of
+                    medium. For future model changes, consider testing a lower-cost model with higher reasoning effort,
+                    comparing accuracy, response time, and total cost before switching.
+                  </Text>
                   <Stack spacing={5} maxW="760px">
                     <FormControl isRequired>
                       <FormLabel>Document classification model</FormLabel>
@@ -452,6 +483,24 @@ export default function RulesetConfigEditorScreen() {
                     />
                   </FormControl>
                 </TabPanel>
+                {hardcodedPromptTabs.map((tab) => (
+                  <TabPanel key={tab.key} px={0} pt={3}>
+                    <FormControl>
+                      <FormLabel htmlFor={`hardcoded-${tab.key}`}>{tab.label}</FormLabel>
+                      <FormHelperText mb={3}>
+                        {tab.description} Read only. These instructions are defined in application code and cannot be
+                        changed by saving this screen.
+                      </FormHelperText>
+                      <Textarea
+                        id={`hardcoded-${tab.key}`}
+                        value={config?.hardcoded_prompts?.[tab.key] ?? 'Prompt unavailable. Reload the configuration.'}
+                        isReadOnly
+                        minH="420px"
+                        bg="gray.50"
+                      />
+                    </FormControl>
+                  </TabPanel>
+                ))}
               </TabPanels>
             </Tabs>
 
@@ -463,7 +512,7 @@ export default function RulesetConfigEditorScreen() {
                 {config?.updated_at ? `updated_at: ${config.updated_at}` : ''}
               </Text>
             </Flex>
-          </Box>
+          </>
         )}
       </Container>
     </Box>

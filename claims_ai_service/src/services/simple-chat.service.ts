@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import {
   GenAiApiStyle,
@@ -16,12 +16,10 @@ export class SimpleChatService {
   constructor() {
     const baseURL = process.env.GENAI_BASE_URL;
     const apiKey = process.env.GENAI_KEY;
-    const deployment = process.env.GENAI_DEPLOYMENT;
+    const deployment = process.env.GENAI_DEPLOYMENT?.trim() || '';
 
-    if (!baseURL || !apiKey || !deployment) {
-      throw new Error(
-        'Missing GENAI_BASE_URL and/or GENAI_KEY and/or GENAI_DEPLOYMENT',
-      );
+    if (!baseURL || !apiKey) {
+      throw new Error('Missing GENAI_BASE_URL and/or GENAI_KEY');
     }
 
     this.deployment = deployment;
@@ -32,13 +30,19 @@ export class SimpleChatService {
     });
   }
 
-  async simpleChat(prompt: string): Promise<{ message: string }> {
+  async simpleChat(
+    prompt: string,
+    deploymentName?: string,
+  ): Promise<{ message: string }> {
     const cleanPrompt = String(prompt || '').trim();
     if (!cleanPrompt) return { message: '' };
+    const deployment = deploymentName?.trim() || this.deployment;
+    if (!deployment)
+      throw new BadRequestException('A model deployment_name is required.');
 
     if (this.apiStyle === 'responses') {
       const resp = await this.client.responses.create({
-        model: this.deployment,
+        model: deployment,
         input: [
           {
             role: 'user',
@@ -51,7 +55,7 @@ export class SimpleChatService {
     }
 
     const resp = await this.client.chat.completions.create({
-      model: this.deployment,
+      model: deployment,
       messages: [
         {
           role: 'system',

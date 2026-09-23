@@ -71,6 +71,14 @@ module Api
         deployments = ::Claims::Genai::DeploymentConfig.current
         {
           id: config.id,
+          hardcoded_prompts: {
+            case_comparison:
+              ::Claims::TestHarness::Evaluator::CASE_COMPARISON_SYSTEM_RECORD,
+            model_summary:
+              ::Claims::TestHarness::Evaluator::MODEL_SUMMARY_SYSTEM_RECORD,
+            rule_summary:
+              ::Claims::TestHarness::Evaluator::RULE_SUMMARY_SYSTEM_RECORD
+          },
           system_record: config.system_record,
           document_triage_system_record: config.document_triage_system_record,
           supporting_document_extraction_system_record:

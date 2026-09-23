@@ -43,7 +43,13 @@ class RetryOcrWithSasUrlDto {
   modelId?: string; // defaulted in controller
 }
 
-class GenAiDto {
+class DeploymentDto {
+  @IsOptional()
+  @IsString()
+  deployment_name?: string;
+}
+
+class GenAiDto extends DeploymentDto {
   @IsArray()
   contextwindowjson!: any[];
 
@@ -54,10 +60,6 @@ class GenAiDto {
   @IsOptional()
   @IsObject()
   diagnostic_context?: Record<string, any>;
-
-  @IsOptional()
-  @IsString()
-  deployment_name?: string;
 }
 
 class MintSasDto {
@@ -177,8 +179,11 @@ export class InvController {
 
   // for test only
   @Post('genaiHelloWorld')
-  async genaiHelloWorld(): Promise<{ message: string }> {
-    return await this.invService.genaiHelloWorld();
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async genaiHelloWorld(
+    @Body() dto: DeploymentDto,
+  ): Promise<{ message: string }> {
+    return await this.invService.genaiHelloWorld(dto.deployment_name);
   }
 
   // ============================================================

@@ -50,6 +50,7 @@ import {
 import { Eye, Info, Trash } from '@phosphor-icons/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { formatClaimsReferenceNumber } from '../../../utils/format-claims-reference-number';
 import { ThinBlueTitleBar } from '../../shared/base/thin-blue-title-bar';
 import { RouterLink } from '../../shared/navigation/router-link';
 
@@ -472,8 +473,7 @@ export function TestSuiteCasesScreen() {
                 <Tr>
                   <Th>Name</Th>
                   <Th>Description</Th>
-                  <Th>Baseline Invoice Version</Th>
-                  <Th>Baseline Ingest Run</Th>
+                  <Th>Reference #</Th>
                   <Th />
                 </Tr>
               </Thead>
@@ -485,13 +485,12 @@ export function TestSuiteCasesScreen() {
                     <Td>
                       <Text as="span" color="blue.600" fontWeight="600">
                         <RouterLink to={`/invoice-versions-by-version/${testCase.baseline_invoice_version_id}/read`}>
-                          {testCase.invoice_reference_number
-                            ? `#${testCase.invoice_reference_number}`
-                            : testCase.baseline_invoice_version_id}
+                          {testCase.invoice_reference_number != null
+                            ? formatClaimsReferenceNumber(testCase.invoice_reference_number)
+                            : '—'}
                         </RouterLink>
                       </Text>
                     </Td>
-                    <Td fontSize="xs">{testCase.baseline_ingest_run_id}</Td>
                     <Td>
                       <Flex gap={2} justify="flex-end">
                         <Button size="sm" variant="outline" onClick={() => updateCase(testCase)}>
@@ -519,11 +518,12 @@ export function TestSuiteCasesScreen() {
                 <Stack spacing={5}>
                   <Box borderWidth="1px" borderRadius="md" p={4} bg="gray.50">
                     <Text fontWeight="700">
-                      {selectedVersion.invoice_reference_number
-                        ? `Invoice #${selectedVersion.invoice_reference_number}`
-                        : 'Invoice version'}{' '}
-                      · Version {selectedVersion.invoice_versionno}
+                      Reference #:{' '}
+                      {selectedVersion.invoice_reference_number != null
+                        ? formatClaimsReferenceNumber(selectedVersion.invoice_reference_number)
+                        : '—'}
                     </Text>
+                    <Text>Version {selectedVersion.invoice_versionno}</Text>
                     <Text>{selectedVersion.original_filename || selectedVersion.invoice_version_id}</Text>
                     <Text fontSize="xs" color="gray.600" mt={2}>
                       Ingest run: {selectedVersion.ingest_run_id}
@@ -559,7 +559,7 @@ export function TestSuiteCasesScreen() {
                       <Table size="sm">
                         <Thead>
                           <Tr>
-                            <Th>Invoice</Th>
+                            <Th>Reference #</Th>
                             <Th>Version</Th>
                             <Th>Original File Name</Th>
                             <Th>Baseline Models</Th>
@@ -574,7 +574,9 @@ export function TestSuiteCasesScreen() {
                             return (
                               <Tr key={`${version.invoice_version_id}-${version.ingest_run_id}`}>
                                 <Td>
-                                  {version.invoice_reference_number ? `#${version.invoice_reference_number}` : '—'}
+                                  {version.invoice_reference_number != null
+                                    ? formatClaimsReferenceNumber(version.invoice_reference_number)
+                                    : '—'}
                                 </Td>
                                 <Td>{version.invoice_versionno}</Td>
                                 <Td>{version.original_filename || '—'}</Td>

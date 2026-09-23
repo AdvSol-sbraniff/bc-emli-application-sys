@@ -295,10 +295,10 @@ Rules:
 - Do not make final eligibility decisions. Extract document evidence only.
 - If the DI text is too poor to locate a field, return null for that field rather than guessing.
 $supporting_document_extraction$,
-    'gpt-5.6-terra',
-    'gpt-5.6-terra',
-    'gpt-5.6-terra',
-    'gpt-5.6-terra',
+    'gpt-6-sol',
+    'gpt-6-sol',
+    'gpt-6-sol',
+    'gpt-6-sol',
     $user0$
 User record 0 (Document Intelligence / OCR context):
 The user message includes Azure Document Intelligence raw JSON from the invoice OCR result.

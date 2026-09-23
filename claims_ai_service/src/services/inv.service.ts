@@ -1,6 +1,6 @@
 // 2023 standard - old
 // import { AzureKeyCredential, DocumentAnalysisClient } from '@azure/ai-form-recognizer';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 
 import { Injectable } from '@nestjs/common';
 import DocumentIntelligence, {
@@ -63,12 +63,10 @@ export class InvService {
     // ---- GenAI (OpenAI SDK, Responses API) ----
     const genaiBaseUrl = process.env.GENAI_BASE_URL;
     const genaiKey = process.env.GENAI_KEY;
-    const genaiDeployment = process.env.GENAI_DEPLOYMENT;
+    const genaiDeployment = process.env.GENAI_DEPLOYMENT?.trim() || '';
 
-    if (!genaiBaseUrl || !genaiKey || !genaiDeployment) {
-      throw new Error(
-        'Missing GENAI_BASE_URL and/or GENAI_KEY and/or GENAI_DEPLOYMENT',
-      );
+    if (!genaiBaseUrl || !genaiKey) {
+      throw new Error('Missing GENAI_BASE_URL and/or GENAI_KEY');
     }
 
     this.genaiDeployment = genaiDeployment;
@@ -742,7 +740,15 @@ export class InvService {
   }
 
   // called from curl for troubleshooting
-  async genaiHelloWorld(): Promise<{ message: string }> {
+  private resolveDeployment(deploymentName?: string): string {
+    const deployment = deploymentName?.trim() || this.genaiDeployment;
+    if (!deployment)
+      throw new BadRequestException('A model deployment_name is required.');
+    return deployment;
+  }
+
+  async genaiHelloWorld(deploymentName?: string): Promise<{ message: string }> {
+    const deployment = this.resolveDeployment(deploymentName);
     const arrConversation: any[] = [];
 
     const recConversationSystem = {
@@ -767,7 +773,7 @@ export class InvService {
     if (this.genaiApiStyle === 'responses') {
       const resp = await this.withGenAiRetries(() =>
         this.genaiClient.responses.create({
-          model: this.genaiDeployment,
+          model: deployment,
           input: arrConversation,
         }),
       );
@@ -775,7 +781,7 @@ export class InvService {
     } else {
       const resp = await this.withGenAiRetries(() =>
         this.genaiClient.chat.completions.create({
-          model: this.genaiDeployment,
+          model: deployment,
           messages: [
             {
               role: 'system',
@@ -790,7 +796,7 @@ export class InvService {
       );
       message = extractChatCompletionText(resp);
     }
-    console.log('genaiDeployment was', this.genaiDeployment);
+    console.log('genaiDeployment was', deployment);
     console.log('service.genaiHelloWorld: exiting');
     return { message: stripThinkBlocks(message).trim() };
   }
@@ -801,8 +807,7 @@ export class InvService {
     diagnosticContext: Record<string, any> = {},
     deploymentName?: string,
   ): Promise<any> {
-    const selectedDeployment =
-      (deploymentName || '').trim() || this.genaiDeployment;
+    const selectedDeployment = this.resolveDeployment(deploymentName);
     const diagnosticId = this.genAiDiagnosticId();
     const startedAt = Date.now();
     const diagnosticBase = this.genAiInputSummary(

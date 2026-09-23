@@ -5,20 +5,36 @@ module Claims
     class Evaluator
       MAX_EVIDENCE_CHARACTERS = 180_000
 
+      CASE_COMPARISON_SYSTEM_RECORD = <<~TEXT.strip.freeze
+        You evaluate two AI processing results for a government invoice program.
+        BASELINE is the human-reviewed, accepted answer key. Treat it as the expected
+        result and assess whether CANDIDATE is materially equivalent to it.
+        Compare accuracy, completeness, unsupported claims, traceability, and material
+        business impact. Be direct and evidence based. Reply as strict JSON with one
+        string field named summary. Do not penalize harmless wording or formatting
+        differences. If candidate evidence suggests the baseline may be wrong, flag the
+        discrepancy for human review rather than silently preferring the candidate.
+      TEXT
+
+      MODEL_SUMMARY_SYSTEM_RECORD = <<~TEXT.strip.freeze
+        You summarize a completed suite-wide model comparison for government administrators.
+        Synthesize material patterns across cases, noting improvements, regressions, and
+        uncertainty. Reply as strict JSON with exactly three string fields:
+        document_classification, supporting_document_extraction, and upgrade_analysis.
+      TEXT
+
+      RULE_SUMMARY_SYSTEM_RECORD = <<~TEXT.strip.freeze
+        You summarize a suite-wide comparison of accepted baseline evidence with fresh
+        results from the current definition of one government program rule. Identify
+        material improvements, regressions, consistency, and uncertainty.
+        Reply as strict JSON with one string field named summary.
+      TEXT
+
       def self.compare(domain:, baseline:, candidate:, deployment_name:)
         payload =
           call(
             deployment_name: deployment_name,
-            system_text: <<~TEXT,
-              You evaluate two AI processing results for a government invoice program.
-              BASELINE is the human-reviewed, accepted answer key. Treat it as the expected
-              result and assess whether CANDIDATE is materially equivalent to it.
-              Compare accuracy, completeness, unsupported claims, traceability, and material
-              business impact. Be direct and evidence based. Reply as strict JSON with one
-              string field named summary. Do not penalize harmless wording or formatting
-              differences. If candidate evidence suggests the baseline may be wrong, flag the
-              discrepancy for human review rather than silently preferring the candidate.
-            TEXT
+            system_text: CASE_COMPARISON_SYSTEM_RECORD,
             user_text: <<~TEXT
               Comparison domain: #{domain.to_s.humanize}
 
@@ -35,12 +51,7 @@ module Claims
       def self.finalize_model(case_rows:, deployment_name:)
         call(
           deployment_name: deployment_name,
-          system_text: <<~TEXT,
-            You summarize a completed suite-wide model comparison for government administrators.
-            Synthesize material patterns across cases, noting improvements, regressions, and
-            uncertainty. Reply as strict JSON with exactly three string fields:
-            document_classification, supporting_document_extraction, and upgrade_analysis.
-          TEXT
+          system_text: MODEL_SUMMARY_SYSTEM_RECORD,
           user_text:
             bounded_json(
               case_rows.map do |row|
@@ -70,12 +81,7 @@ module Claims
         payload =
           call(
             deployment_name: deployment_name,
-            system_text: <<~TEXT,
-              You summarize a suite-wide comparison of accepted baseline evidence with fresh
-              results from the current definition of one government program rule. Identify
-              material improvements, regressions, consistency, and uncertainty.
-              Reply as strict JSON with one string field named summary.
-            TEXT
+            system_text: RULE_SUMMARY_SYSTEM_RECORD,
             user_text:
               bounded_json(
                 case_rows.map do |row|

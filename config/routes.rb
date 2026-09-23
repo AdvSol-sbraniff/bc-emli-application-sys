@@ -329,6 +329,7 @@ Rails.application.routes.draw do
       post "admin/contractors", to: "contractors_admin#create"
       patch "admin/contractors/:id", to: "contractors_admin#update"
       delete "admin/contractors/:id", to: "contractors_admin#destroy"
+      get "admin/hello_ai", to: "hello_ai#show"
       post "admin/hello_ai", to: "hello_ai#create"
 
       get "admin/sessions/:id", to: "sessions_admin#show"
